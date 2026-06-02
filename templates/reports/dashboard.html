@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block page_title %}Аналитика{% endblock %}
+
+{% block extra_head %}
+{{ visits_chart_json|json_script:"visits-data" }}
+{{ income_chart_json|json_script:"income-data" }}
+{{ visits_by_hour_json|json_script:"hour-data" }}
+{{ age_groups_json|json_script:"age-data" }}
+{{ service_donut_json|json_script:"svcrev-data" }}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-5" x-data="{tab:'finance'}">
+
+  <!-- Tabs + period -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="pill-tabs">
+      <button class="pill-tab" :class="tab==='finance' && 'active'" @click="tab='finance'">Финансы</button>
+      <button class="pill-tab" :class="tab==='visits' && 'active'" @click="tab='visits'">Визиты</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="pill-tabs">
+        <a href="?period=week" class="pill-tab {% if period == 'week' %}active{% endif %}">Неделя</a>
+        <a href="?period=month" class="pill-tab {% if period == 'month' %}active{% endif %}">Месяц</a>
+        <a href="?period=year" class="pill-tab {% if period == 'year' %}active{% endif %}">Год</a>
+      </div>
+      <a href="/reports/export/treatments/" class="btn btn-ghost btn-sm">⬇ Excel</a>
+    </div>
+  </div>
+
+  <!-- ═══ FINANCE ═══ -->
+  <div x-show="tab==='finance'" class="space-y-5">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div><p class="stat-label">Приёмов</p><p class="stat-value">{{ treatments|length }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div><div><p class="stat-label">Выручка</p><p class="stat-value">{{ total_amount|floatformat:0 }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div><div><p class="stat-label">Оплачено</p><p class="stat-value">{{ total_paid|floatformat:0 }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-3 3"/></svg></div><div><p class="stat-label">Прибыль</p><p class="stat-value">{{ net|floatformat:0 }}</p></div></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 card card-pad">
+        <div class="flex items-center justify-between mb-4"><h3 class="font-bold" style="color:var(--text)">Доходы по дням</h3></div>
+        <canvas id="incomeChart" height="100"></canvas>
+      </div>
+      <div class="card card-pad">
+        <h3 class="font-bold mb-4" style="color:var(--text)">Топ услуг</h3>
+        <canvas id="serviceDonut" height="160"></canvas>
+        <div class="mt-4 space-y-2">
+          {% for s in service_revenue|slice:":5" %}
+          <div class="flex items-center justify-between text-sm">
+            <span class="muted truncate">{{ s.service__name|truncatechars:20 }}</span>
+            <span class="font-bold">{{ s.revenue|floatformat:0 }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="card">
+        <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Доходы по врачам</h3></div>
+        <table class="tbl">
+          <thead><tr><th>Врач</th><th>Приёмов</th><th>Выручка</th></tr></thead>
+          <tbody>
+            {% for d in doctors %}
+            <tr><td class="font-semibold">{{ d.name }}</td><td style="color:var(--primary)" class="font-bold">{{ d.treatments_count|default:0 }}</td><td class="text-green-500 font-bold">{{ d.total_revenue|default:0|floatformat:0 }} сом</td></tr>
+            {% empty %}<tr><td colspan="3" class="text-center py-8 muted">Нет данных</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Доходы по услугам</h3></div>
+        <table class="tbl">
+          <thead><tr><th>Услуга</th><th>Кол.</th><th>Выручка</th></tr></thead>
+          <tbody>
+            {% for s in service_revenue %}
+            <tr><td class="font-semibold">{{ s.service__name }}</td><td class="muted">{{ s.cnt }}</td><td class="text-green-500 font-bold">{{ s.revenue|floatformat:0 }} сом</td></tr>
+            {% empty %}<tr><td colspan="3" class="text-center py-8 muted">Нет данных</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ VISITS ═══ -->
+  <div x-show="tab==='visits'" class="space-y-5" x-cloak>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div><p class="stat-label">Всего пациентов</p><p class="stat-value">{{ total_patients }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="11" cy="7" r="4"/></svg></div><div><p class="stat-label">Новые</p><p class="stat-value">{{ new_patients }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/></svg></div><div><p class="stat-label">Вернулись</p><p class="stat-value">{{ returning }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><p class="stat-label">Удержание</p><p class="stat-value">{{ retention_pct }}%</p></div></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 card card-pad">
+        <h3 class="font-bold mb-4" style="color:var(--text)">Визиты по дням</h3>
+        <canvas id="visitsChart" height="100"></canvas>
+      </div>
+      <div class="card card-pad">
+        <h3 class="font-bold mb-4" style="color:var(--text)">Возрастной состав</h3>
+        <canvas id="ageChart" height="160"></canvas>
+        <div class="flex justify-center gap-6 mt-4">
+          <div class="text-center"><p class="text-lg font-bold text-blue-500">{{ male }}</p><p class="text-xs muted">♂ Муж</p></div>
+          <div class="text-center"><p class="text-lg font-bold" style="color:#EC4899">{{ female }}</p><p class="text-xs muted">♀ Жен</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="card card-pad">
+        <h3 class="font-bold mb-4" style="color:var(--text)">Визиты по часам</h3>
+        <canvas id="hourChart" height="90"></canvas>
+      </div>
+      <div class="card">
+        <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Источники обращений</h3></div>
+        <table class="tbl">
+          <thead><tr><th>Источник</th><th>Пациентов</th></tr></thead>
+          <tbody>
+            {% for s in sources %}
+            <tr><td class="font-semibold">{{ s.name }}</td><td style="color:var(--primary)" class="font-bold">{{ s.cnt }}</td></tr>
+            {% empty %}<tr><td colspan="2" class="text-center py-8 muted">Источники не заданы</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PALETTE = ['#6366F1','#22C55E','#F59E0B','#EF4444','#8B5CF6','#3B82F6'];
+let _charts = [];
+function buildCharts() {
+  _charts.forEach(c=>c.destroy()); _charts=[];
+  const cc = chartColors();
+  const J = id => { const el=document.getElementById(id); return el?JSON.parse(el.textContent):null; };
+  const mk = (id,cfg) => { const el=document.getElementById(id); if(el) _charts.push(new Chart(el,cfg)); };
+
+  const visits = J('visits-data')||[], income = J('income-data')||[], hours = J('hour-data')||[], ages = J('age-data')||{}, svcrev = J('svcrev-data')||[];
+  const baseScale = { x:{grid:{display:false},ticks:{color:cc.text}}, y:{grid:{color:cc.grid},ticks:{color:cc.text},beginAtZero:true} };
+
+  mk('incomeChart', { type:'line', data:{labels:income.map(v=>v[0].slice(5)),datasets:[{data:income.map(v=>v[1]),borderColor:'#22C55E',backgroundColor:'rgba(34,197,94,.12)',fill:true,tension:.4,borderWidth:2,pointRadius:0}]}, options:{plugins:{legend:{display:false}},scales:baseScale} });
+  mk('visitsChart', { type:'line', data:{labels:visits.map(v=>v[0].slice(5)),datasets:[{data:visits.map(v=>v[1]),borderColor:'#6366F1',backgroundColor:'rgba(99,102,241,.12)',fill:true,tension:.4,borderWidth:2,pointRadius:0}]}, options:{plugins:{legend:{display:false}},scales:baseScale} });
+  mk('hourChart', { type:'bar', data:{labels:hours.map((_,i)=>i),datasets:[{data:hours,backgroundColor:'#8B5CF6',borderRadius:5}]}, options:{plugins:{legend:{display:false}},scales:baseScale} });
+  if (svcrev.length) mk('serviceDonut', { type:'doughnut', data:{labels:svcrev.map(v=>v[0]),datasets:[{data:svcrev.map(v=>v[1]),backgroundColor:PALETTE,borderWidth:0}]}, options:{cutout:'68%',plugins:{legend:{display:false}}} });
+  mk('ageChart', { type:'doughnut', data:{labels:Object.keys(ages),datasets:[{data:Object.values(ages),backgroundColor:PALETTE,borderWidth:0}]}, options:{cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:cc.text,boxWidth:10,padding:8,font:{size:11}}}}} });
+}
+document.addEventListener('DOMContentLoaded', buildCharts);
+window.addEventListener('themechange', buildCharts);
+</script>
+{% endblock %}

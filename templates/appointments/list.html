@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block page_title %}Записи на приём{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{cancelOpen:false, cancelId:null}">
+  <!-- Cancel modal with reason -->
+  <div x-show="cancelOpen" x-cloak class="modal-overlay" @click.self="cancelOpen=false">
+    <div class="modal-box" style="max-width:420px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Отмена записи</h2>
+        <button @click="cancelOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" :action="'/appointments/'+cancelId+'/status/'" class="p-6 space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="cancelled">
+        <div>
+          <label class="fld">Причина отмены</label>
+          <select name="cancellation_reason" class="no-tom">
+            {% for r in cancel_reasons %}<option value="{{ r.pk }}">{{ r.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><label class="fld">Комментарий (необязательно)</label><input type="text" name="cancel_note" placeholder="Детали..."></div>
+        <div class="flex gap-3"><button type="submit" class="btn btn-primary flex-1" style="background:linear-gradient(135deg,#EF4444,#DC2626)">Отменить запись</button><button type="button" @click="cancelOpen=false" class="btn btn-ghost">Назад</button></div>
+      </form>
+    </div>
+  </div>
+
+
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="pill-tabs">
+      <a href="?status=" class="pill-tab {% if not current_status %}active{% endif %}">Все</a>
+      <a href="?status=scheduled" class="pill-tab {% if current_status == 'scheduled' %}active{% endif %}">Записан</a>
+      <a href="?status=confirmed" class="pill-tab {% if current_status == 'confirmed' %}active{% endif %}">Подтверждён</a>
+      <a href="?status=completed" class="pill-tab {% if current_status == 'completed' %}active{% endif %}">Завершён</a>
+      <a href="?status=no_show" class="pill-tab {% if current_status == 'no_show' %}active{% endif %}">Не пришёл</a>
+    </div>
+    <div class="flex gap-2">
+      <a href="/calendar/" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Расписание</a>
+      <a href="/calendar/" class="btn btn-primary btn-sm">+ Новая запись</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="tbl">
+      <thead><tr><th>Пациент</th><th>Врач</th><th>Дата/Время</th><th>Услуга</th><th>Статус</th><th class="text-right">Действия</th></tr></thead>
+      <tbody>
+        {% for a in appointments %}
+        <tr>
+          <td>
+            {% if a.patient %}
+            <div class="flex items-center gap-3"><div class="avatar w-9 h-9 text-xs">{{ a.patient.first_name|first|upper }}</div><a href="/patients/{{ a.patient.pk }}/" class="font-semibold" style="color:var(--text)">{{ a.patient.full_name }}</a></div>
+            {% else %}<span class="muted">Без пациента</span>{% endif %}
+          </td>
+          <td class="muted">{{ a.doctor.name }}</td>
+          <td><p class="font-semibold">{{ a.start_at|date:"d.m.Y" }}</p><p class="text-xs muted">{{ a.start_at|time:"H:i" }} – {{ a.end_at|time:"H:i" }}</p></td>
+          <td class="muted text-xs">{{ a.service.name|default:"—" }}</td>
+          <td>
+            <span class="badge {% if a.status == 'completed' %}badge-green{% elif a.status == 'in_progress' or a.status == 'arrived' %}badge-blue{% elif a.status == 'no_show' or a.status == 'cancelled' %}badge-red{% else %}badge-orange{% endif %}">{{ a.get_status_display }}</span>
+            {% if a.status == 'cancelled' and a.cancellation_reason %}<p class="text-xs muted mt-1">{{ a.cancellation_reason.name }}{% if a.cancel_note %}: {{ a.cancel_note }}{% endif %}</p>{% endif %}
+          </td>
+          <td>
+            <div class="flex items-center justify-end gap-1.5" x-data="{open:false}">
+              {% if a.patient %}<a href="/treatments/create/?patient={{ a.patient.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
+              <div class="relative" @click.outside="open=false">
+                <button @click="open=!open" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+                <div x-show="open" x-cloak class="dropdown right-0 top-full mt-1 w-48">
+                  <a href="/appointments/{{ a.pk }}/edit/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/></svg>Изменить</a>
+                  <form method="post" action="/appointments/{{ a.pk }}/status/"><input type="hidden" name="status" value="confirmed">{% csrf_token %}<button>✓ Подтвердить</button></form>
+                  <form method="post" action="/appointments/{{ a.pk }}/status/"><input type="hidden" name="status" value="completed">{% csrf_token %}<button>✓ Завершить</button></form>
+                  <form method="post" action="/appointments/{{ a.pk }}/status/"><input type="hidden" name="status" value="no_show">{% csrf_token %}<button>✕ Не пришёл</button></form>
+                  <button type="button" @click="cancelId={{ a.pk }}; cancelOpen=true; open=false" style="color:var(--red)">Отменить</button>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-14">
+          <p class="muted mb-1">Записей пока нет</p>
+          <p class="text-xs faint mb-3">«Записи» — это бронирования времени в расписании. Создайте запись в календаре.</p>
+          <a href="/calendar/" class="btn btn-primary btn-sm">Открыть расписание</a>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+.env
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.installed.cfg
+lib/
+lib64/
+*.sqlite3
+*.db
+
+# Django
+media/
+staticfiles/
+*.log
+local_settings.py
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.nuxt/
+frontend/.output/
+*.lock
+!package-lock.json
+
+# Certificates
+nginx/certs/

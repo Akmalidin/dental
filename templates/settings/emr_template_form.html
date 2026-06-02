@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать шаблон ЭМК{% else %}Новый шаблон ЭМК{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card card-pad max-w-4xl">
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div>
+      <label class="fld">Название шаблона *</label>
+      <input type="text" name="name" required value="{{ object.name|default:'' }}" placeholder="Напр. Средний кариес">
+    </div>
+
+    {% for s in sections %}
+    <div>
+      <label class="fld">{{ s.label }}</label>
+      <textarea name="{{ s.key }}" rows="3" placeholder="{{ s.label }}...">{{ s.value }}</textarea>
+    </div>
+    {% endfor %}
+
+    <div class="flex gap-3 pt-2">
+      <button type="submit" class="btn btn-primary px-8">Сохранить</button>
+      <a href="/settings/emr-templates/" class="btn btn-ghost">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

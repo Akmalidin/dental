@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать пациента{% else %}Новый пациент{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">{% if object %}{{ object.full_name }}{% else %}Новый пациент{% endif %}</h2>
+      <p class="text-indigo-200 text-sm mt-0.5">Заполните данные пациента</p>
+    </div>
+
+    <form method="post" class="p-6 space-y-5">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        {% for field in form %}{% for e in field.errors %}<p>• {{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+        {% for e in form.non_field_errors %}<p>• {{ e }}</p>{% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Name row -->
+      <div>
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+          Персональные данные
+        </h3>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Фамилия *</label>
+            {{ form.last_name }}
+            {% if form.last_name.errors %}<p class="text-red-500 text-xs mt-1">{{ form.last_name.errors|join:", " }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Имя *</label>
+            {{ form.first_name }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Отчество</label>
+            {{ form.middle_name }}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4 mt-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Дата рождения</label>
+            {{ form.birth_date }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пол</label>
+            {{ form.gender }}
+          </div>
+        </div>
+      </div>
+
+      <hr class="border-slate-100">
+
+      <!-- Contact -->
+      <div>
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+          Контакты
+        </h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Телефон *</label>
+            {{ form.phone }}
+            {% if form.phone.errors %}<p class="text-red-500 text-xs mt-1">{{ form.phone.errors|join:", " }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Доп. телефон</label>
+            {{ form.phone2 }}
+          </div>
+        </div>
+        <div class="mt-4">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Адрес</label>
+          {{ form.address }}
+        </div>
+      </div>
+
+      <hr class="border-slate-100">
+
+      <!-- Clinic info -->
+      <div>
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+          Клиника
+        </h3>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиал *</label>
+            {{ form.branch }}
+            {% if form.branch.errors %}<p class="text-red-500 text-xs mt-1">{{ form.branch.errors|join:", " }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Источник</label>
+            {{ form.source }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Лечащий врач</label>
+            {{ form.primary_doctor }}
+          </div>
+        </div>
+        <div class="mt-4">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Теги</label>
+          <div class="flex flex-wrap gap-2 tags-group">{{ form.tags }}</div>
+        </div>
+      </div>
+
+      <hr class="border-slate-100">
+
+      <!-- Insurance / DMS -->
+      <div>
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+          Страхование (ДМС)
+        </h3>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Страховая компания</label>
+            {{ form.insurance }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Номер полиса</label>
+            {{ form.insurance_policy }}
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Действует до</label>
+            {{ form.insurance_valid_until }}
+          </div>
+        </div>
+      </div>
+
+      <hr class="border-slate-100">
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Заметки</label>
+        {{ form.notes }}
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">
+          {% if object %}Сохранить изменения{% else %}Добавить пациента{% endif %}
+        </button>
+        <a href="{% if object %}/patients/{{ object.pk }}/{% else %}/patients/{% endif %}" class="btn-ghost">Отмена</a>
+        {% if object %}
+        <a href="/patients/{{ object.pk }}/delete/" class="btn-ghost text-red-500 ml-auto">Удалить</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

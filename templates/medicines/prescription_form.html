@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block page_title %}Новое назначение{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">Назначение лекарства</h2>
+      <p class="text-indigo-200 text-sm mt-0.5">Заполните данные назначения</p>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+        {% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Пациент *</label>
+          {{ form.patient }}
+          {% if form.patient.errors %}<p class="text-red-500 text-xs mt-1">{{ form.patient.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Приём</label>
+          {{ form.treatment }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Лекарство *</label>
+          {{ form.medicine }}
+          {% if form.medicine.errors %}<p class="text-red-500 text-xs mt-1">{{ form.medicine.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Дозировка</label>
+          {{ form.dosage }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Длительность</label>
+          {{ form.duration }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Врач</label>
+          {{ form.doctor }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Дата</label>
+          {{ form.date }}
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Заметки</label>
+        {{ form.notes }}
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Создать назначение</button>
+        <a href="/medicines/" class="btn-ghost">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

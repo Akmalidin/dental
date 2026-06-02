@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать услугу{% else %}Новая услуга{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card card-pad" x-data="serviceForm()">
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <h3 class="font-bold text-lg" style="color:var(--text)">{% if object %}{{ object.name }}{% else %}Новая услуга{% endif %}</h3>
+      <p class="muted text-sm">Позиция прейскуранта клиники</p>
+    </div>
+    {% if object %}<span class="badge {% if object.is_active %}badge-green{% else %}badge-gray{% endif %}">{% if object.is_active %}Активна{% else %}Отключена{% endif %}</span>{% endif %}
+  </div>
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="badge-red px-4 py-3 rounded-xl text-sm">
+      {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="fld">Название *</label>{{ form.name }}</div>
+      <div><label class="fld">Код услуги</label>{{ form.code }}</div>
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="fld mb-0">Категория</label>
+        <button type="button" @click="showCat=!showCat" class="text-xs font-semibold" style="color:var(--primary)">+ Новая категория</button>
+      </div>
+      <div id="cat-wrap">{{ form.category }}</div>
+
+      <div x-show="showCat" x-cloak class="mt-2 flex gap-2 items-end p-3 rounded-xl" style="background:var(--surface-2)">
+        <div class="flex-1"><label class="fld">Название категории</label><input type="text" x-model="catName" placeholder="Терапия, Хирургия..." class="no-tom"></div>
+        <div><label class="fld">Цвет</label><input type="color" x-model="catColor" style="width:48px;height:42px;padding:4px"></div>
+        <button type="button" @click="addCategory()" :disabled="saving" class="btn btn-primary btn-sm">Добавить</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div><label class="fld">Цена для пациента (сом) *</label>{{ form.price }}</div>
+      <div><label class="fld">Цена по ДМС (сом)</label>{{ form.dms_price }}</div>
+      <div><label class="fld">Длительность (мин)</label>{{ form.duration }}</div>
+    </div>
+
+    <div><label class="fld">Описание</label>{{ form.description }}</div>
+
+    <label class="flex items-center gap-2 text-sm cursor-pointer" style="color:var(--text)">
+      {{ form.is_active }} <span>Активна (видна в прайс-листе)</span>
+    </label>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="btn btn-primary px-8">Сохранить</button>
+      <a href="/services/" class="btn btn-ghost">Отмена</a>
+      {% if object %}<a href="/services/{{ object.pk }}/delete/" class="btn btn-ghost ml-auto" style="color:var(--red)">Деактивировать</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function serviceForm() {
+  return {
+    showCat: false, catName: '', catColor: '#6366F1', saving: false,
+    async addCategory() {
+      if (!this.catName.trim()) return;
+      this.saving = true;
+      try {
+        const fd = new FormData();
+        fd.append('name', this.catName); fd.append('color', this.catColor);
+        const r = await fetch('/services/category/create/', {
+          method: 'POST', headers: {'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest'}, body: fd,
+        });
+        const res = await r.json();
+        if (res.ok) {
+          const sel = document.querySelector('#cat-wrap select');
+          if (sel) {
+            if (sel.tomselect) { sel.tomselect.addOption({value: String(res.id), text: res.name}); sel.tomselect.setValue(String(res.id)); }
+            else { const o = document.createElement('option'); o.value = res.id; o.text = res.name; o.selected = true; sel.add(o); }
+          }
+          toast('Категория «' + res.name + '» добавлена');
+          this.showCat = false; this.catName = '';
+        } else { toast('Ошибка', 'error'); }
+      } catch (e) { toast('Ошибка сети', 'error'); }
+      finally { this.saving = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

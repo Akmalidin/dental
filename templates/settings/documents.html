@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block page_title %}Шаблоны документов{% endblock %}
+{% block breadcrumb %}Настройки · Документы{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <h3 class="font-bold text-slate-800">Шаблоны печатных форм</h3>
+      <a href="/settings/documents/create/" class="btn-primary text-xs py-1.5">+ Новый шаблон</a>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Название</th><th>Тип</th><th>Статус</th><th class="text-right pr-5">Действия</th></tr>
+      </thead>
+      <tbody>
+        {% for tpl in templates %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ tpl.name }}</td>
+          <td><span class="badge badge-blue">{{ tpl.get_doc_type_display }}</span></td>
+          <td>{% if tpl.is_active %}<span class="badge badge-green">Активен</span>{% else %}<span class="badge badge-gray">Отключён</span>{% endif %}</td>
+          <td>
+            <div class="flex items-center justify-end gap-1 pr-3">
+              <a href="/settings/documents/{{ tpl.pk }}/edit/" class="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 flex items-center justify-center" title="Редактировать">
+                <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </a>
+              <form method="post" action="/settings/documents/{{ tpl.pk }}/delete/" onsubmit="return confirm('Удалить шаблон?')">
+                {% csrf_token %}
+                <button class="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center" title="Удалить">
+                  <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center py-12 text-slate-400">Шаблонов нет. Создайте первый.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card p-5 bg-indigo-50 border-indigo-100">
+    <p class="text-sm font-bold text-indigo-700 mb-2">Доступные переменные</p>
+    <div class="grid grid-cols-3 gap-2 text-xs text-indigo-600">
+      <code>{% templatetag openvariable %}patient_name{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}patient_dob{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}patient_phone{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}patient_address{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}doctor_name{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}clinic_name{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}clinic_phone{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}clinic_address{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}date{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}services{% templatetag closevariable %}</code>
+      <code>{% templatetag openvariable %}tooth_numbers{% templatetag closevariable %}</code>
+    </div>
+  </div>
+</div>
+{% endblock %}

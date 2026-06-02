@@ -1,0 +1,5 @@
+{% load i18n %}
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+  <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">{% trans title %}</p>
+  <p class="mt-2 text-2xl font-bold text-gray-900">{{ value|default:"0" }}{% if suffix %}{{ suffix }}{% endif %}</p>
+</div>

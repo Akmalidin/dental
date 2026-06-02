@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Чек #{{ treatment.pk }}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
+  h1 { font-size: 18px; text-align: center; }
+  .clinic { text-align: center; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th { background: #2563EB; color: white; padding: 6px 8px; text-align: left; }
+  td { padding: 6px 8px; border-bottom: 1px solid #eee; }
+  .total { font-weight: bold; font-size: 14px; }
+  .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #888; }
+</style>
+</head>
+<body>
+
+<div class="clinic">
+  <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}AKM SOFT — CLINIC{% endif %}</h1>
+  {% if clinic_settings %}
+  <p>{{ clinic_settings.address }} · {{ clinic_settings.phone }}</p>
+  {% endif %}
+</div>
+
+<hr>
+<p><strong>Чек №{{ treatment.pk }}</strong></p>
+<p>Дата: {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
+<p>Пациент: {{ treatment.patient.full_name }}</p>
+<p>Врач: {{ treatment.doctor.name }}</p>
+<p>Филиал: {{ treatment.branch.name }}</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Услуга</th>
+      <th>Зуб</th>
+      <th>Кол-во</th>
+      <th>Цена</th>
+      <th>Сумма</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cure in treatment.cures.all %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ cure.service.name }}</td>
+      <td>{{ cure.tooth_number|default:"—" }}</td>
+      <td>{{ cure.quantity }}</td>
+      <td>{{ cure.price }} сом</td>
+      <td>{{ cure.subtotal }} сом</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr class="total">
+      <td colspan="5" style="text-align: right;">Итого:</td>
+      <td>{{ treatment.total_amount }} сом</td>
+    </tr>
+    {% if treatment.discount %}
+    <tr class="total">
+      <td colspan="5" style="text-align: right;">Скидка:</td>
+      <td>-{{ treatment.discount }} сом</td>
+    </tr>
+    <tr class="total">
+      <td colspan="5" style="text-align: right;">К оплате:</td>
+      <td>{{ treatment.final_amount }} сом</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td colspan="5" style="text-align: right;">Оплачено:</td>
+      <td>{{ treatment.paid_amount }} сом</td>
+    </tr>
+    {% if treatment.debt %}
+    <tr style="color: red;">
+      <td colspan="5" style="text-align: right;">Долг:</td>
+      <td>{{ treatment.debt }} сом</td>
+    </tr>
+    {% endif %}
+  </tfoot>
+</table>
+
+{% if treatment.notes %}
+<p style="margin-top: 15px;"><strong>Заметки:</strong> {{ treatment.notes }}</p>
+{% endif %}
+
+<div class="footer">
+  Спасибо за визит! Сохраните чек для контроля оплаты.
+</div>
+
+</body>
+</html>

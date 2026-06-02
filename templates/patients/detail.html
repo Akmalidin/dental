@@ -1,0 +1,980 @@
+{% extends "base.html" %}
+{% block page_title %}{{ patient.full_name }}{% endblock %}
+
+{% block extra_head %}
+{{ all_services_json|json_script:"all-services-data" }}
+{{ service_categories_json|json_script:"service-categories-data" }}
+<script>
+const ALL_SERVICES = JSON.parse(document.getElementById('all-services-data').textContent);
+const SERVICE_CATEGORIES = JSON.parse(document.getElementById('service-categories-data').textContent);
+const PATIENT_ID = {{ patient.pk }};
+const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.branches.first.pk }}{% endif %}";
+</script>
+{% endblock %}
+
+{% block content %}
+<div x-data="patientDetail()">
+<div class="flex gap-5 min-h-full">
+
+  <!-- ═══ LEFT SIDEBAR ═════════════════════════════════════════════════════ -->
+  <aside class="w-72 shrink-0 space-y-3">
+
+    <!-- Header card -->
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <p class="text-xs font-semibold text-slate-500">Информация о пациенте <span class="text-slate-800">#{{ patient.pk }}</span></p>
+        <a href="/patients/{{ patient.pk }}/edit/" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        </a>
+      </div>
+
+      <!-- Avatar + Name -->
+      <div class="px-4 py-4 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black text-white shrink-0"
+             style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+          {{ patient.first_name|first|upper }}
+        </div>
+        <div>
+          <p class="font-bold text-slate-900 text-sm leading-tight">{{ patient.full_name }}</p>
+          <p class="text-xs text-slate-400 mt-0.5">
+            {% for tag in patient.tags.all %}
+            <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium" style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
+            {% empty %}
+            Информация
+            {% endfor %}
+          </p>
+        </div>
+      </div>
+
+      <!-- Debt block -->
+      {% with debt=patient.debt %}
+      {% if debt > 0 %}
+      <div class="mx-4 mb-4 rounded-xl px-4 py-3 text-center" style="background:#FEF2F2">
+        <p class="text-xs font-bold text-red-400 uppercase tracking-widest mb-0.5">ДОЛГ</p>
+        <p class="text-xl font-black text-red-600">{{ debt|floatformat:0 }} <span class="text-sm font-semibold">сом</span></p>
+      </div>
+      {% elif patient.balance > 0 %}
+      <div class="mx-4 mb-4 rounded-xl px-4 py-3 text-center" style="background:#ECFDF5">
+        <p class="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-0.5">БАЛАНС</p>
+        <p class="text-xl font-black text-emerald-600">+{{ patient.balance|floatformat:0 }} <span class="text-sm font-semibold">сом</span></p>
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      <!-- Info rows -->
+      <div class="px-4 pb-4 space-y-3">
+        {% if patient.birth_date %}
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">Дата рождения</p>
+            <p class="text-sm font-semibold text-slate-800">{{ patient.birth_date|date:"d.m.Y" }}{% if patient.age %} <span class="text-slate-400 font-normal">({{ patient.age }} л)</span>{% endif %}</p>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.8 19.8 0 01-8.63-3.07A19.5 19.5 0 014.62 12a19.8 19.8 0 01-3.07-8.67A2 2 0 013.53 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.55a16 16 0 006.29 6.29l1.42-1.42a2 2 0 012.11-.45c.907.34 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">Телефон</p>
+            <a href="tel:{{ patient.phone }}" class="text-sm font-semibold text-indigo-600 hover:underline">{{ patient.phone }}</a>
+            {% if patient.phone2 %}<p class="text-xs text-slate-500">{{ patient.phone2 }}</p>{% endif %}
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">Счёт</p>
+            <p class="text-sm font-semibold text-indigo-600">{{ patient.full_name }}</p>
+          </div>
+        </div>
+
+        {% if patient.address %}
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">Адрес</p>
+            <p class="text-sm text-slate-800">{{ patient.address }}</p>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if patient.source %}
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">Источник</p>
+            <p class="text-sm text-slate-800">{{ patient.source }}</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex gap-2 px-4 pb-4">
+        <button @click="showPayment=true"
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold text-white"
+                style="background:linear-gradient(135deg,#10B981,#059669)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+          Оплата
+        </button>
+        <button @click="showCashier=true"
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold text-white"
+                style="background:linear-gradient(135deg,#F59E0B,#D97706)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+          В кассу
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick stats -->
+    <div class="card p-4 grid grid-cols-2 gap-3 text-center">
+      <div>
+        <p class="text-2xl font-black text-slate-800">{{ treatments|length }}</p>
+        <p class="text-xs text-slate-400 font-medium">Приёмов</p>
+      </div>
+      <div>
+        <p class="text-2xl font-black text-slate-800">{{ payments|length }}</p>
+        <p class="text-xs text-slate-400 font-medium">Платежей</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN CONTENT ═══════════════════════════════════════════════════ -->
+  <div class="flex-1 min-w-0 space-y-4">
+
+    <!-- Tab bar + action buttons -->
+    <div class="card px-4 py-2 flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex gap-0">
+        <button @click="tab='procedures'" :class="tab==='procedures'?'tab-btn active':'tab-btn'" class="flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z"/></svg>
+          Процедуры
+        </button>
+        <button @click="tab='plan'" :class="tab==='plan'?'tab-btn active':'tab-btn'" class="flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          План лечения
+        </button>
+        <button @click="tab='payments'" :class="tab==='payments'?'tab-btn active':'tab-btn'" class="flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+          Оплаты
+        </button>
+        <button @click="tab='files'" :class="tab==='files'?'tab-btn active':'tab-btn'" class="flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          Файлы
+        </button>
+        <button @click="tab='card043'" :class="tab==='card043'?'tab-btn active':'tab-btn'">Карта 043</button>
+        <button @click="tab='info'" :class="tab==='info'?'tab-btn active':'tab-btn'">Подробнее</button>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button @click="showPayment=true" class="btn-primary text-xs py-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+          Оплата
+        </button>
+        <button @click="showCashier=true" class="text-xs py-1.5 px-3 rounded-xl font-semibold text-white" style="background:linear-gradient(135deg,#F59E0B,#D97706)">
+          <svg class="w-3.5 h-3.5 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+          Отправить в кассу
+        </button>
+        <a href="/treatments/create/?patient={{ patient.pk }}" class="btn-success text-xs py-1.5">
+          + Процедура
+        </a>
+      </div>
+    </div>
+
+    <!-- ─── TAB: Процедуры (приёмы) ─────────────────────────────────────── -->
+    <div x-show="tab==='procedures'" class="space-y-3">
+      {% if treatments %}
+      {% for t in treatments %}
+      <!-- Treatment card -->
+      <div class="card overflow-hidden">
+        <!-- Header (clickable → treatment detail) -->
+        <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-indigo-50/40"
+             style="border-bottom:1px solid var(--border)"
+             onclick="window.location='/treatments/{{ t.pk }}/'">
+          <span class="font-extrabold text-base" style="color:var(--text)">#{{ t.pk }}</span>
+          <span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'in_progress' %}badge-purple{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span>
+          <span class="text-xs muted flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            {{ t.created_at|date:"d.m.Y H:i" }}
+          </span>
+          <span class="text-xs muted flex items-center gap-1.5">
+            <span class="avatar w-5 h-5 text-[10px]">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
+          </span>
+          <span class="ml-auto text-sm">
+            <span class="muted">Итого:</span> <span class="font-bold" style="color:var(--text)">{{ t.total_amount|floatformat:0 }} сом</span>
+            {% if t.debt > 0 %}<span class="mx-1 faint">·</span><span class="muted">долг:</span> <span class="font-bold text-red-500">{{ t.debt|floatformat:0 }} сом</span>{% endif %}
+          </span>
+          <div class="flex gap-1.5 ml-2" onclick="event.stopPropagation()">
+            <a href="/treatments/{{ t.pk }}/receipt/" target="_blank" class="row-act ra-view" title="Чек">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </a>
+            <a href="/treatments/{{ t.pk }}/" class="row-act ra-edit" title="Открыть">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </a>
+          </div>
+        </div>
+        <!-- Procedures list -->
+        <table class="tbl">
+          <tbody>
+            {% for cure in t.cures.all %}
+            <tr class="cursor-pointer" onclick="window.location='/treatments/{{ t.pk }}/'">
+              <td class="font-semibold">{{ cure.service.name }}</td>
+              <td class="muted text-xs">{% if cure.tooth_number %}🦷 {{ cure.tooth_number }}{% else %}—{% endif %}</td>
+              <td class="text-center muted">×{{ cure.quantity }}</td>
+              <td class="font-bold">{{ cure.subtotal|floatformat:0 }} сом</td>
+              <td class="muted text-xs">{{ cure.doctor.name }}</td>
+            </tr>
+            {% empty %}
+            <tr><td class="muted text-sm py-3">Нет процедур в этом приёме</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="card p-16 text-center">
+        <svg class="w-12 h-12 mx-auto mb-3" style="color:var(--border)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z"/></svg>
+        <p class="muted font-medium mb-3">Приёмов пока нет</p>
+        <a href="/treatments/create/?patient={{ patient.pk }}" class="btn btn-primary text-sm">+ Добавить приём</a>
+      </div>
+      {% endif %}
+
+      <!-- ── TOOTH CHART + SERVICE SELECTION ─────────────────────────── -->
+      <div class="card overflow-hidden">
+        <!-- Tooth chart header -->
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+          <div class="flex">
+            <button @click="toothView='chart'" :class="toothView==='chart'?'tab-btn active':'tab-btn'">Зубы</button>
+            <button @click="toothView='buttons'" :class="toothView==='buttons'?'tab-btn active':'tab-btn'">Кнопка</button>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-slate-600">
+            <span class="text-xs font-medium">Взрослые</span>
+            <button @click="isChildren=!isChildren"
+                    class="w-10 h-5 rounded-full relative transition-all duration-200"
+                    :class="isChildren?'bg-indigo-500':'bg-slate-300'">
+              <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+                    :class="isChildren?'translate-x-5':'translate-x-0.5'"></span>
+            </button>
+            <span class="text-xs font-medium">Дети</span>
+          </div>
+        </div>
+
+        <!-- Chart view -->
+        <div x-show="toothView==='chart'" class="px-4 py-5">
+          <!-- Upper teeth -->
+          <div class="flex justify-center items-end gap-0.5 mb-1">
+            <template x-for="n in upperTeeth()" :key="n">
+              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)">
+                <div class="relative"
+                     :class="teeth.includes(n)?'tooth-selected':'tooth-normal'"
+                     :style="`width:${toothW(n)}px;height:${toothH(n,'upper')}px`">
+                  <svg :viewBox="`0 0 ${toothW(n)} ${toothH(n,'upper')}`" class="w-full h-full overflow-visible">
+                    <path :d="toothPath(n,'upper')"
+                          :fill="teeth.includes(n)?'#EEF2FF':'white'"
+                          :stroke="teeth.includes(n)?'#6366F1':'#93C5FD'"
+                          stroke-width="1.5" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+                <span class="text-[10px] mt-0.5"
+                      :class="teeth.includes(n)?'text-indigo-600 font-bold':'text-slate-400'" x-text="n"></span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Gum line -->
+          <div class="border-t-2 border-dashed border-slate-200 my-1 mx-4"></div>
+
+          <!-- Lower teeth -->
+          <div class="flex justify-center items-start gap-0.5 mt-1">
+            <template x-for="n in lowerTeeth()" :key="n">
+              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)">
+                <span class="text-[10px] mb-0.5"
+                      :class="teeth.includes(n)?'text-indigo-600 font-bold':'text-slate-400'" x-text="n"></span>
+                <div class="relative"
+                     :class="teeth.includes(n)?'tooth-selected':'tooth-normal'"
+                     :style="`width:${toothW(n)}px;height:${toothH(n,'lower')}px`">
+                  <svg :viewBox="`0 0 ${toothW(n)} ${toothH(n,'lower')}`" class="w-full h-full overflow-visible">
+                    <path :d="toothPath(n,'lower')"
+                          :fill="teeth.includes(n)?'#EEF2FF':'white'"
+                          :stroke="teeth.includes(n)?'#6366F1':'#93C5FD'"
+                          stroke-width="1.5" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Button view -->
+        <div x-show="toothView==='buttons'" class="p-4">
+          <p class="text-xs text-slate-400 mb-2 font-semibold uppercase">Верхние</p>
+          <div class="flex flex-wrap gap-1.5 mb-4">
+            <template x-for="n in upperTeeth()" :key="n">
+              <button @click="toggleTooth(n)"
+                      class="w-10 h-8 rounded-lg border text-xs font-bold transition-all"
+                      :class="teeth.includes(n)?'bg-indigo-600 border-indigo-600 text-white shadow-md':'border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'"
+                      x-text="n"></button>
+            </template>
+          </div>
+          <p class="text-xs text-slate-400 mb-2 font-semibold uppercase">Нижние</p>
+          <div class="flex flex-wrap gap-1.5">
+            <template x-for="n in lowerTeeth()" :key="n">
+              <button @click="toggleTooth(n)"
+                      class="w-10 h-8 rounded-lg border text-xs font-bold transition-all"
+                      :class="teeth.includes(n)?'bg-indigo-600 border-indigo-600 text-white shadow-md':'border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'"
+                      x-text="n"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Selected teeth + service button -->
+        <div class="border-t border-slate-100 px-5 py-4 flex items-center gap-3 flex-wrap">
+          <template x-if="teeth.length > 0">
+            <div class="flex flex-wrap gap-1.5 flex-1">
+              <template x-for="n in teeth" :key="n">
+                <span class="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z"/></svg>
+                  <span x-text="n"></span>
+                  <button @click="toggleTooth(n)" class="hover:text-red-500 leading-none text-base font-normal">&times;</button>
+                </span>
+              </template>
+            </div>
+          </template>
+          <button @click="modalMode='treatment'; showServiceModal=true"
+                  class="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm text-white ml-auto"
+                  style="background:linear-gradient(135deg,#6366F1,#8B5CF6);box-shadow:0 4px 14px rgba(99,102,241,0.4)">
+            + Выберите услугу
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB: План лечения ──────────────────────────────────────────── -->
+    <div x-show="tab==='plan'" class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-slate-800">Планы лечения</h3>
+        <button @click="openPlanModal()" class="btn-primary text-xs py-1.5">+ Создать план</button>
+      </div>
+
+      {% for plan in treatment_plans %}
+      <div class="card overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+          <div>
+            <a href="/treatments/plans/{{ plan.pk }}/" class="font-bold hover:underline" style="color:var(--primary)">{{ plan.title }}</a>
+            <p class="text-xs text-slate-400">{{ plan.doctor.name }} · {{ plan.created_at|date:"d.m.Y" }} · <a href="/treatments/plans/{{ plan.pk }}/" style="color:var(--primary)">открыть редактор →</a></p>
+          </div>
+          <div class="flex items-center gap-3">
+            <!-- Progress -->
+            <div class="text-right">
+              <p class="text-xs text-slate-400 mb-0.5">{{ plan.completion_pct }}% выполнено</p>
+              <div class="w-32 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full" style="width: {{ plan.completion_pct }}%"></div>
+              </div>
+            </div>
+            <span class="badge {% if plan.status == 'completed' %}badge-green{% elif plan.status == 'approved' %}badge-blue{% elif plan.status == 'in_progress' %}badge-purple{% else %}badge-gray{% endif %}">{{ plan.get_status_display }}</span>
+            <form method="post" action="/treatments/plans/{{ plan.pk }}/delete/" onsubmit="return confirm('Удалить план?')">
+              {% csrf_token %}
+              <button class="text-slate-300 hover:text-red-500 text-lg leading-none">&times;</button>
+            </form>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr><th class="w-10"></th><th>Услуга</th><th>Зуб</th><th>Кол.</th><th>Цена</th><th>Врач</th></tr>
+          </thead>
+          <tbody>
+            {% for item in plan.items.all %}
+            <tr>
+              <td class="pl-5">
+                <button onclick="togglePlanItem({{ item.pk }}, this)"
+                        class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors
+                        {% if item.status == 'done' %}bg-emerald-500 border-emerald-500{% else %}border-slate-300 hover:border-emerald-400{% endif %}"
+                        data-done="{% if item.status == 'done' %}1{% else %}0{% endif %}">
+                  <svg class="w-3.5 h-3.5 text-white {% if item.status != 'done' %}hidden{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </td>
+              <td class="font-semibold text-slate-800 {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.service.name }}</td>
+              <td class="text-slate-500">{{ item.tooth_number|default:"—" }}</td>
+              <td class="text-slate-600">{{ item.quantity }}</td>
+              <td class="font-bold text-slate-800">{{ item.subtotal|floatformat:0 }} сом</td>
+              <td class="text-slate-500 text-xs">{{ item.doctor.name|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center py-6 text-slate-400">Пунктов нет</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="bg-slate-50 border-t-2 border-slate-200">
+              <td colspan="4" class="px-5 py-3 text-right font-bold text-slate-600">Итого по плану:</td>
+              <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ plan.total_price|floatformat:0 }} сом</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% empty %}
+      <div class="card p-12 text-center">
+        <svg class="w-12 h-12 text-slate-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/></svg>
+        <p class="text-slate-400 font-medium mb-3">Планов лечения нет</p>
+        <button @click="openPlanModal()" class="btn-primary text-sm">+ Создать первый план</button>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- ─── TAB: Оплаты ────────────────────────────────────────────────── -->
+    <div x-show="tab==='payments'" class="card overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">История оплат</h3>
+        <button @click="showPayment=true" class="btn-success text-xs py-1.5">+ Оплата</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Сумма</th><th>Метод</th><th>Тип</th><th>Принял</th><th>Дата</th></tr>
+        </thead>
+        <tbody>
+          {% for pay in payments %}
+          <tr>
+            <td class="font-bold {% if pay.type == 'income' %}text-emerald-600{% else %}text-red-600{% endif %}">
+              {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} сом
+            </td>
+            <td>{{ pay.get_method_display }}</td>
+            <td><span class="badge {% if pay.type == 'income' %}badge-green{% else %}badge-red{% endif %}">{{ pay.get_type_display }}</span></td>
+            <td class="text-slate-600">{{ pay.received_by.name|default:"—" }}</td>
+            <td class="text-slate-400 text-xs">{{ pay.created_at|date:"d.m.Y H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center py-12 text-slate-400">Нет платежей</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ─── TAB: Файлы ─────────────────────────────────────────────────── -->
+    <div x-show="tab==='files'" class="card overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Файлы и документы</h3>
+      </div>
+      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-3">
+        {% for t in treatments %}
+          {% for f in t.files.all %}
+          <a href="{{ f.file.url }}" target="_blank"
+             class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-colors group">
+            <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-700">{{ f.name }}</p>
+              <p class="text-xs text-slate-400">{{ f.uploaded_at|date:"d.m.Y" }}</p>
+            </div>
+          </a>
+          {% endfor %}
+        {% endfor %}
+        {% with total_files=0 %}{% endwith %}
+        <div class="flex items-center justify-center p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-500 cursor-pointer col-span-full mt-1">
+          <span class="text-sm font-medium">+ Загрузить файл</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB: Карта 043 / Документы ─────────────────────────────────── -->
+    <div x-show="tab==='card043'" class="space-y-4">
+      <!-- Dental chart summary (read-only) -->
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100">
+          <h3 class="font-bold text-slate-800">Зубная формула</h3>
+        </div>
+        <div class="p-5 text-center">
+          <p class="text-sm text-slate-500 mb-1">Лечившиеся зубы (из истории приёмов):</p>
+          <div class="flex flex-wrap gap-1.5 justify-center mt-2">
+            {% for t in treatments %}{% for c in t.cures.all %}{% if c.tooth_number %}
+            <span class="px-2 py-1 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold">{{ c.tooth_number }} · {{ c.service.name|truncatechars:20 }}</span>
+            {% endif %}{% endfor %}{% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Printable documents -->
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800">Документы для печати</h3>
+          <a href="/settings/documents/" class="text-xs text-indigo-600 hover:underline">Управление шаблонами →</a>
+        </div>
+        <div class="p-5 grid grid-cols-2 md:grid-cols-3 gap-3">
+          {% for tpl in doc_templates %}
+          <a href="/settings/documents/{{ tpl.pk }}/render/{{ patient.pk }}/" target="_blank"
+             class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 group">
+            <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-700">{{ tpl.name }}</p>
+              <p class="text-xs text-slate-400">{{ tpl.get_doc_type_display }}</p>
+            </div>
+          </a>
+          {% empty %}
+          <div class="col-span-full text-center py-8">
+            <p class="text-slate-400 text-sm mb-2">Шаблоны документов не созданы</p>
+            <a href="/settings/documents/create/" class="btn-primary text-xs">+ Создать шаблон</a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB: Подробнее ─────────────────────────────────────────────── -->
+    <div x-show="tab==='info'" class="card p-6">
+      <div class="grid grid-cols-2 gap-6">
+        <div class="space-y-4">
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Полное имя</p>
+            <p class="text-sm font-semibold text-slate-800">{{ patient.full_name }}</p>
+          </div>
+          {% if patient.birth_date %}
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Дата рождения</p>
+            <p class="text-sm text-slate-800">{{ patient.birth_date|date:"d.m.Y" }}{% if patient.age %} ({{ patient.age }} лет){% endif %}</p>
+          </div>
+          {% endif %}
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Пол</p>
+            <p class="text-sm text-slate-800">{{ patient.get_gender_display|default:"—" }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Филиал</p>
+            <p class="text-sm text-slate-800">{{ patient.branch.name }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Добавил</p>
+            <p class="text-sm text-slate-800">{{ patient.created_by.name|default:"—" }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Дата регистрации</p>
+            <p class="text-sm text-slate-800">{{ patient.created_at|date:"d.m.Y H:i" }}</p>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Адрес</p>
+            <p class="text-sm text-slate-800">{{ patient.address|default:"—" }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Заметки</p>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ patient.notes|default:"Нет заметок" }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Теги</p>
+            <div class="flex flex-wrap gap-1.5 mt-1">
+              {% for tag in patient.tags.all %}
+              <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
+              {% empty %}<span class="text-sm text-slate-400">Нет тегов</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-6 pt-5 border-t border-slate-100">
+        <a href="/patients/{{ patient.pk }}/edit/" class="btn-ghost">Редактировать</a>
+        <a href="/patients/{{ patient.pk }}/delete/" class="btn-ghost text-red-500 ml-auto">Удалить пациента</a>
+      </div>
+    </div>
+
+  </div><!-- end main content -->
+</div><!-- end flex -->
+
+<!-- ─── PAYMENT MODAL (inside patientDetail() scope) ─────────────────────── -->
+<div x-show="showPayment" x-cloak class="modal-overlay" @click.self="showPayment=false">
+  <div class="modal-box max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+      <h2 class="font-bold text-slate-800">Принять оплату</h2>
+      <button @click="showPayment=false" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+    </div>
+    <form action="/finance/payments/create/" method="post" class="px-6 py-5 space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="patient" value="{{ patient.pk }}">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Сумма (сом) *</label>
+        <input type="number" name="amount" required placeholder="0.00" step="0.01">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Метод</label>
+          <select name="method">
+            <option value="cash">Наличные</option>
+            <option value="card">Карта</option>
+            <option value="transfer">Перевод</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Тип</label>
+          <select name="type">
+            <option value="income">Оплата</option>
+            <option value="refund">Возврат</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Филиал</label>
+        <select name="branch" required>
+          {% for b in request.user.branches.all %}
+          <option value="{{ b.pk }}">{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-success flex-1 justify-center">Принять платёж</button>
+        <button type="button" @click="showPayment=false" class="btn-ghost">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ─── CASHIER MODAL ─────────────────────────────────────────────────────── -->
+<div x-show="showCashier" x-cloak class="modal-overlay" @click.self="showCashier=false">
+  <div class="modal-box max-w-sm">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+      <h2 class="font-bold text-slate-800">Отправить в кассу</h2>
+      <button @click="showCashier=false" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+    </div>
+    <div class="px-6 py-6 text-center">
+      <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style="background:linear-gradient(135deg,#F59E0B,#D97706)">
+        <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+      </div>
+      <p class="font-semibold text-slate-800 mb-1">Отправить чек в кассу?</p>
+      <p class="text-slate-500 text-sm mb-1">Пациент: <span class="font-semibold">{{ patient.full_name }}</span></p>
+      {% with debt=patient.debt %}
+      {% if debt > 0 %}
+      <p class="text-red-600 font-bold">Долг: {{ debt|floatformat:0 }} сом</p>
+      {% endif %}
+      {% endwith %}
+      <div class="flex gap-3 mt-5">
+        <button @click="showCashier=false" class="btn-ghost flex-1 justify-center">Отмена</button>
+        <a href="/finance/payments/?patient={{ patient.pk }}" class="flex-1 flex items-center justify-center py-2 px-4 rounded-xl font-semibold text-white text-sm" style="background:linear-gradient(135deg,#F59E0B,#D97706)">Перейти в кассу</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── SERVICE SELECTION MODAL ───────────────────────────────────────────── -->
+<div x-show="showServiceModal" x-cloak class="modal-overlay" @click.self="showServiceModal=false">
+  <div class="modal-box flex flex-col" style="max-width:900px;max-height:88vh">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+      <h2 class="font-bold text-slate-800 text-lg" x-text="modalMode==='plan' ? 'Новый план лечения' : 'Оказание услуг'"></h2>
+      <button @click="showServiceModal=false" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div x-show="modalMode==='plan'" class="px-6 pt-3 shrink-0">
+      <input type="text" x-model="planTitle" placeholder="Название плана (напр. Лечение кариеса)"
+             class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-400">
+    </div>
+    <div class="flex flex-1 overflow-hidden min-h-0">
+      <!-- LEFT: search + service grid -->
+      <div class="flex-1 flex flex-col border-r border-slate-100 min-w-0">
+        <div class="p-4 border-b border-slate-100 shrink-0 space-y-2">
+          <div class="relative w-full">
+            <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" x-model="svcSearch" placeholder="Поиск услуги по названию..."
+                   style="padding-left:42px" class="w-full pr-3 py-2.5 text-sm">
+          </div>
+          <select x-model="svcCat" class="no-tom w-full text-sm">
+            <option value="">Все категории</option>
+            {% for cat in service_categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <template x-for="group in filteredServiceGroups()" :key="group.cat">
+            <div class="mb-5">
+              <p class="text-xs font-black text-slate-700 uppercase tracking-wider mb-2" x-text="group.cat"></p>
+              <div class="grid grid-cols-3 gap-2">
+                <template x-for="svc in group.items" :key="svc.id">
+                  <div @click="toggleSvc(svc)"
+                       class="border rounded-xl p-3 cursor-pointer transition-all hover:border-indigo-300"
+                       :class="isSvcSelected(svc.id)?'border-indigo-400 bg-indigo-50':'border-slate-200 bg-white'">
+                    <div class="flex items-start justify-between gap-1">
+                      <p class="text-xs font-semibold text-slate-800 leading-tight flex-1" x-text="svc.name"></p>
+                      <span x-show="isSvcSelected(svc.id)"
+                            class="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            x-text="getSvcQty(svc.id)"></span>
+                    </div>
+                    <p class="text-xs font-bold text-emerald-600 mt-1.5">
+                      <span x-text="Math.round(svc.price).toLocaleString('ru-RU')"></span> сом
+                    </p>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div x-show="filteredServiceGroups().length===0" class="text-center py-10 text-slate-400 text-sm">
+            Услуги не найдены
+          </div>
+        </div>
+      </div>
+      <!-- RIGHT: doctor + selected -->
+      <div class="w-72 shrink-0 flex flex-col">
+        <div class="p-4 border-b border-slate-100 shrink-0">
+          <p class="text-xs font-bold text-slate-600 uppercase mb-2">Врач</p>
+          <select x-model="svcDoctor" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+            {% for doc in doctors %}
+            <option value="{{ doc.pk }}">{{ doc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-2">
+          <p class="text-xs font-bold text-slate-600 uppercase mb-2 flex items-center gap-2">
+            Выбранные услуги
+            <span x-show="selectedSvcs.length>0" class="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold" x-text="selectedSvcs.length"></span>
+          </p>
+          <template x-if="selectedSvcs.length===0">
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+              <svg class="w-10 h-10 text-slate-200 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>
+              <p class="text-slate-400 text-xs">Услуги не выбраны</p>
+            </div>
+          </template>
+          <template x-for="item in selectedSvcs" :key="item.id">
+            <div class="p-2.5 border border-slate-200 rounded-xl">
+              <div class="flex items-start justify-between gap-1.5 mb-1.5">
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-semibold text-slate-800 leading-tight" x-text="item.name"></p>
+                  <p class="text-xs text-slate-400" x-text="item.cat"></p>
+                </div>
+                <button @click="removeSvc(item.id)" class="text-red-400 hover:text-red-600 shrink-0">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1">
+                  <button @click="changeSvcQty(item.id,-1)" class="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 font-bold">−</button>
+                  <span class="text-xs font-bold w-5 text-center" x-text="item.qty"></span>
+                  <button @click="changeSvcQty(item.id,1)" class="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 font-bold">+</button>
+                </div>
+                <span class="text-xs font-bold text-emerald-600">
+                  <span x-text="Math.round(item.price*item.qty).toLocaleString('ru-RU')"></span> сом
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="border-t border-slate-100 p-4 shrink-0 space-y-3">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-bold text-slate-700">Итого:</p>
+            <p class="font-black text-emerald-600">
+              <span x-text="Math.round(svcTotal()).toLocaleString('ru-RU')"></span> сом
+            </p>
+          </div>
+          <div x-show="teeth.length>0">
+            <p class="text-xs font-bold text-slate-500 uppercase mb-1.5">Зубы</p>
+            <div class="flex flex-wrap gap-1">
+              <template x-for="n in teeth" :key="n">
+                <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold" x-text="n"></span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
+      <button @click="showServiceModal=false" class="btn-ghost">Отменить</button>
+      <button @click="modalMode==='plan' ? savePlan() : saveServices()" :disabled="savingServices||selectedSvcs.length===0"
+              class="btn-primary" :class="selectedSvcs.length===0?'opacity-50 cursor-not-allowed':''">
+        <svg x-show="savingServices" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+        Сохранить
+      </button>
+    </div>
+  </div>
+</div><!-- ← closes x-data="patientDetail()" -->
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function patientDetail() {
+  return {
+    tab: 'procedures',
+    showPayment: false,
+    showCashier: false,
+    showServiceModal: false,
+    savingServices: false,
+    modalMode: 'treatment',
+    planTitle: '',
+    toothView: 'chart',
+    isChildren: false,
+    teeth: [],
+    svcSearch: '',
+    svcCat: '',
+    svcDoctor: '{% if doctors.first %}{{ doctors.first.pk }}{% endif %}',
+    selectedSvcs: [],
+
+    openPlanModal() {
+      this.modalMode = 'plan';
+      this.planTitle = '';
+      this.selectedSvcs = [];
+      this.showServiceModal = true;
+    },
+
+    upperTeeth() {
+      return this.isChildren
+        ? [55,54,53,52,51,61,62,63,64,65]
+        : [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+    },
+    lowerTeeth() {
+      return this.isChildren
+        ? [85,84,83,82,81,71,72,73,74,75]
+        : [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+    },
+    toggleTooth(n) {
+      const i = this.teeth.indexOf(n);
+      i >= 0 ? this.teeth.splice(i,1) : this.teeth.push(n);
+    },
+
+    toothType(n) {
+      if ([16,17,18,26,27,28,36,37,38,46,47,48,55,65,75,85].includes(n)) return 'molar';
+      if ([14,15,24,25,34,35,44,45,54,64,74,84].includes(n)) return 'premolar';
+      if ([13,23,33,43,53,63,73,83].includes(n)) return 'canine';
+      return 'incisor';
+    },
+    toothW(n) { return {molar:28,premolar:22,canine:18,incisor:16}[this.toothType(n)]; },
+    toothH(n) { return {molar:38,premolar:40,canine:42,incisor:40}[this.toothType(n)]; },
+
+    toothPath(n, row) {
+      const t = this.toothType(n);
+      const w = this.toothW(n), h = this.toothH(n), hw = w/2;
+      if (row==='upper') {
+        if (t==='incisor')  return `M2,2 Q${hw},0 ${w-2},2 L${w-2},${h*.55} Q${hw},${h} 2,${h*.55} Z`;
+        if (t==='canine')   return `M2,3 Q${hw},0 ${w-2},3 L${w-3},${h*.5} Q${hw},${h} 3,${h*.5} Z`;
+        if (t==='premolar') return `M2,4 Q${hw*.5},0 ${hw},2 Q${hw},0 ${hw*1.5},2 Q${w-2},0 ${w-2},4 L${w-3},${h*.52} Q${hw},${h} 3,${h*.52} Z`;
+        return `M2,5 Q${hw*.4},0 ${hw*.8},2 Q${hw},0 ${hw*1.2},2 Q${hw*1.6},0 ${w-2},5 L${w-3},${h*.5} Q${hw},${h} 3,${h*.5} Z`;
+      } else {
+        if (t==='incisor')  return `M2,${h-2} Q${hw},${h} ${w-2},${h-2} L${w-2},${h*.45} Q${hw},0 2,${h*.45} Z`;
+        if (t==='canine')   return `M2,${h-3} Q${hw},${h} ${w-2},${h-3} L${w-3},${h*.5} Q${hw},0 3,${h*.5} Z`;
+        if (t==='premolar') return `M2,${h-4} Q${hw*.5},${h} ${hw},${h-2} Q${hw},${h} ${hw*1.5},${h-2} Q${w-2},${h} ${w-2},${h-4} L${w-3},${h*.48} Q${hw},0 3,${h*.48} Z`;
+        return `M2,${h-5} Q${hw*.4},${h} ${hw*.8},${h-2} Q${hw},${h} ${hw*1.2},${h-2} Q${hw*1.6},${h} ${w-2},${h-5} L${w-3},${h*.5} Q${hw},0 3,${h*.5} Z`;
+      }
+    },
+
+    filteredServiceGroups() {
+      const q = this.svcSearch.toLowerCase();
+      const catId = this.svcCat ? parseInt(this.svcCat) : null;
+      const filtered = ALL_SERVICES.filter(s =>
+        (!q || s.name.toLowerCase().includes(q)) &&
+        (!catId || s.category__id === catId)
+      );
+      const groups = {};
+      filtered.forEach(s => {
+        const cat = s.category__name || 'Без категории';
+        if (!groups[cat]) groups[cat] = {cat, items:[]};
+        groups[cat].items.push(s);
+      });
+      return Object.values(groups);
+    },
+
+    isSvcSelected(id) { return this.selectedSvcs.some(s=>s.id===id); },
+    getSvcQty(id) { return (this.selectedSvcs.find(s=>s.id===id)||{qty:0}).qty; },
+    toggleSvc(svc) {
+      const idx = this.selectedSvcs.findIndex(s=>s.id===svc.id);
+      idx>=0 ? this.selectedSvcs.splice(idx,1)
+             : this.selectedSvcs.push({id:svc.id, name:svc.name, price:parseFloat(svc.price), cat:svc.category__name||'—', qty:1});
+    },
+    removeSvc(id) { this.selectedSvcs = this.selectedSvcs.filter(s=>s.id!==id); },
+    changeSvcQty(id,d) {
+      const s = this.selectedSvcs.find(s=>s.id===id);
+      if (s) s.qty = Math.max(1, s.qty+d);
+    },
+    svcTotal() { return this.selectedSvcs.reduce((sum,s)=>sum+s.price*s.qty,0); },
+
+    async saveServices() {
+      if (!this.selectedSvcs.length) return;
+      this.savingServices = true;
+      try {
+        const res = await fetch('/treatments/create-quick/', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({
+            patient_id: PATIENT_ID,
+            doctor_id: this.svcDoctor,
+            branch_id: DEFAULT_BRANCH,
+            cures: this.selectedSvcs.map(s=>({service_id:s.id, qty:s.qty, tooth:this.teeth.join(',')})),
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          toast('Процедура добавлена');
+          this.showServiceModal = false;
+          this.selectedSvcs = [];
+          this.teeth = [];
+          setTimeout(()=>location.reload(), 700);
+        } else {
+          toast(data.error||'Ошибка', 'error');
+        }
+      } catch(e) { toast('Ошибка сети','error'); }
+      finally { this.savingServices = false; }
+    },
+
+    async savePlan() {
+      if (!this.selectedSvcs.length) return;
+      this.savingServices = true;
+      try {
+        const res = await fetch('/treatments/plans/create/', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({
+            patient_id: PATIENT_ID,
+            doctor_id: this.svcDoctor,
+            title: this.planTitle || 'План лечения',
+            items: this.selectedSvcs.map(s=>({service_id:s.id, qty:s.qty, tooth:this.teeth.join(',')})),
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          toast('План лечения создан');
+          this.showServiceModal = false;
+          this.selectedSvcs = [];
+          this.teeth = [];
+          setTimeout(()=>location.reload(), 700);
+        } else {
+          toast(data.error||'Ошибка', 'error');
+        }
+      } catch(e) { toast('Ошибка сети','error'); }
+      finally { this.savingServices = false; }
+    },
+  };
+}
+
+/* ── Plan item toggle (outside Alpine, called by onclick) ─────────────── */
+async function togglePlanItem(itemId, btn) {
+  try {
+    const res = await fetch(`/treatments/plans/items/${itemId}/toggle/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCsrf()},
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const done = data.status === 'done';
+      const row = btn.closest('tr');
+      const check = btn.querySelector('svg');
+      const nameCell = row.querySelector('td:nth-child(2)');
+      if (done) {
+        btn.classList.add('bg-emerald-500','border-emerald-500');
+        btn.classList.remove('border-slate-300');
+        check.classList.remove('hidden');
+        nameCell.classList.add('line-through','text-slate-400');
+      } else {
+        btn.classList.remove('bg-emerald-500','border-emerald-500');
+        btn.classList.add('border-slate-300');
+        check.classList.add('hidden');
+        nameCell.classList.remove('line-through','text-slate-400');
+      }
+      toast(done ? 'Пункт выполнен' : 'Отмечен как ожидающий');
+    }
+  } catch(e) { toast('Ошибка', 'error'); }
+}
+</script>
+{% endblock %}

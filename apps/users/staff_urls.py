@@ -1,0 +1,18 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("", views.staff_list, name="staff_list"),
+    path("create/", views.staff_create, name="staff_create"),
+    path("<int:pk>/edit/", views.staff_edit, name="staff_edit"),
+    path("<int:pk>/delete/", views.staff_delete, name="staff_delete"),
+    path("branches/", views.branch_list, name="branch_list"),
+    path("branches/create/", views.branch_create, name="branch_create"),
+    path("branches/<int:pk>/edit/", views.branch_edit, name="branch_edit"),
+    path("salary/", views.salary_report, name="salary_report"),
+    path("salary/<int:pk>/scheme/", views.salary_scheme_edit, name="salary_scheme_edit"),
+    path("schedule/", views.schedule_list, name="schedule_list"),
+    path("schedule/<int:pk>/edit/", views.schedule_edit, name="schedule_edit"),
+    path("superadmin/", views.superadmin_panel, name="superadmin_panel"),
+    path("superadmin/seed-dental/", views.seed_dental_view, name="seed_dental"),
+]

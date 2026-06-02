@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать приём #{{ object.pk }}{% else %}Новый приём{% endif %}{% endblock %}
+
+{% block extra_head %}
+{{ services_json|json_script:"svc-data" }}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <form method="post" id="treatment-form">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    {% if form.errors or formset.errors or formset.non_form_errors %}
+    <div class="badge-red px-4 py-3 rounded-xl text-sm space-y-1">
+      {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+      {% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}
+      {% for e in formset.non_form_errors %}<p>{{ e }}</p>{% endfor %}
+      {% for cf in formset %}{% for field in cf %}{% for e in field.errors %}<p>Процедура: {{ field.label }} — {{ e }}</p>{% endfor %}{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main fields -->
+    <div class="card card-pad">
+      <p class="text-xs font-bold faint uppercase tracking-wider mb-4">Основное</p>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div><label class="fld">Пациент *</label>{{ form.patient }}</div>
+        <div><label class="fld">Врач *</label>{{ form.doctor }}</div>
+        <div><label class="fld">Филиал</label>{{ form.branch }}</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Статус</label>{{ form.status }}</div>
+          <div><label class="fld">Скидка</label>{{ form.discount }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tooth chart (full width) -->
+    <div class="card card-pad" id="tooth-section">
+      <div class="flex items-center justify-between mb-3">
+        <div class="u-tabs" style="border:none">
+          <button type="button" id="btn-chart" onclick="setToothView('chart')" class="u-tab active">Зубы</button>
+          <button type="button" id="btn-btns" onclick="setToothView('buttons')" class="u-tab">Кнопка</button>
+        </div>
+        <div class="flex items-center gap-2 text-xs muted">
+          <span>Взрослые</span>
+          <button type="button" id="teeth-toggle" onclick="toggleAdult()" class="w-9 h-5 rounded-full relative transition-colors" style="background:var(--border)">
+            <span id="teeth-toggle-dot" class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full shadow transition-transform" style="background:#fff"></span>
+          </button>
+          <span>Дети</span>
+        </div>
+      </div>
+
+      <div id="view-chart">
+        <div id="upper-row" class="flex justify-center items-end gap-1 mb-1.5 flex-wrap"></div>
+        <div style="border-top:1.5px dashed var(--border);margin:8px 40px"></div>
+        <div id="lower-row" class="flex justify-center items-start gap-1 mt-1.5 flex-wrap"></div>
+      </div>
+      <div id="view-buttons" class="hidden">
+        <div id="btn-upper" class="flex flex-wrap gap-1.5 mb-2"></div>
+        <div style="border-top:1px solid var(--border);margin:8px 0"></div>
+        <div id="btn-lower" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <div id="selected-teeth-display" class="mt-3 flex flex-wrap gap-1.5 min-h-6"></div>
+      <input type="hidden" id="selected-teeth-input" name="_selected_teeth" value="">
+    </div>
+
+    <!-- Procedures (full width) -->
+    <div class="card">
+      <div class="flex items-center justify-between px-5 py-4">
+        <h3 class="font-bold" style="color:var(--text)">Процедуры</h3>
+        <button type="button" onclick="addCureRow()" class="btn btn-primary btn-sm">+ Добавить процедуру</button>
+      </div>
+      <table class="w-full text-sm" id="cures-table">
+        <thead style="background:var(--surface-2)">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:45%">Услуга</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase">Зуб</th>
+            <th class="px-4 py-2.5 text-center text-xs font-bold muted uppercase" style="width:110px">Кол.</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Цена</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Итого</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="cures-tbody">
+          {% for cure_form in formset %}
+          <tr class="cure-row" style="border-top:1px solid var(--border-2)">
+            <td class="px-4 py-2">
+              {{ cure_form.id }}
+              <input type="checkbox" name="{{ cure_form.DELETE.html_name }}" class="cure-delete-cb hidden">
+              <select name="{{ cure_form.service.html_name }}" class="cure-service-select" onchange="onServiceChange(this)" data-selected="{{ cure_form.service.value|default:'' }}"><option value="">— Выберите услугу —</option></select>
+            </td>
+            <td class="px-4 py-2"><input type="text" name="{{ cure_form.tooth_number.html_name }}" value="{{ cure_form.tooth_number.value|default:'' }}" placeholder="зубы" class="cure-tooth text-center"></td>
+            <td class="px-4 py-2"><input type="number" name="{{ cure_form.quantity.html_name }}" value="{{ cure_form.quantity.value|default:'' }}" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
+            <td class="px-4 py-2"><input type="number" name="{{ cure_form.price.html_name }}" value="{{ cure_form.price.value|default:'' }}" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
+            <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
+            <td class="px-2 text-center"><button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
+            <td colspan="4" class="px-4 py-3 text-right font-bold muted">Итого:</td>
+            <td class="px-4 py-3 font-extrabold" style="color:var(--primary)" id="grand-total">0 сом</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Notes -->
+    <div class="card card-pad"><label class="fld">Заметки</label>{{ form.notes }}</div>
+
+    <!-- Buttons -->
+    <div class="flex items-center gap-3 pb-4">
+      <button type="submit" class="btn btn-primary px-8">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+        Сохранить приём
+      </button>
+      {% if object %}
+      <a href="/patients/{{ object.patient.pk }}/" class="btn btn-ghost">Отмена</a>
+      <a href="/treatments/{{ object.pk }}/print/" target="_blank" class="btn btn-ghost ml-auto">Печать чека</a>
+      {% else %}<a href="/treatments/" class="btn btn-ghost">Отмена</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- Empty cure row template -->
+<template id="empty-cure-row">
+  <tr class="cure-row" style="border-top:1px solid var(--border-2)">
+    <td class="px-4 py-2"><input type="checkbox" class="cure-delete-cb hidden"><select class="cure-service-select" onchange="onServiceChange(this)"><option value="">— Выберите услугу —</option></select></td>
+    <td class="px-4 py-2"><input type="text" placeholder="зубы" class="cure-tooth text-center"></td>
+    <td class="px-4 py-2"><input type="number" value="1" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
+    <td class="px-4 py-2"><input type="number" value="" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
+    <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
+    <td class="px-2 text-center"><button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button></td>
+  </tr>
+</template>
+
+<style>
+.tooth-btn { display:flex; flex-direction:column; align-items:center; cursor:pointer; padding:2px; border-radius:6px; transition:transform .12s; }
+.tooth-btn:hover { transform: scale(1.12); }
+.tooth-btn .tooth-num { font-size:11px; color:var(--text-faint); margin-top:1px; }
+.tooth-btn.active .tooth-num { color:var(--primary); font-weight:700; }
+.tooth-num-btn { width:38px; height:34px; border-radius:9px; border:1.5px solid var(--border); font-size:12px; font-weight:600; color:var(--text-soft); cursor:pointer; transition:all .12s; background:var(--surface); }
+.tooth-num-btn:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
+.tooth-num-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 2px 8px rgba(99,102,241,.4); }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SERVICES = (() => { try { return JSON.parse(document.getElementById('svc-data').textContent) || []; } catch(e){ return []; } })();
+const SVC_MAP = {}; SERVICES.forEach(s => SVC_MAP[String(s.id)] = s);
+let formCount = parseInt(document.getElementById('id_cures-TOTAL_FORMS')?.value || '0');
+
+function buildOptionsHTML() {
+  if (!SERVICES.length) return '<option value="">— услуги не найдены —</option>';
+  const groups = {};
+  SERVICES.forEach(s => { const c = s.cat || 'Без категории'; (groups[c] = groups[c]||[]).push(s); });
+  let html = '<option value="">— Выберите услугу —</option>';
+  for (const [cat, list] of Object.entries(groups)) {
+    html += `<optgroup label="${cat}">`;
+    list.forEach(s => { html += `<option value="${s.id}" data-price="${s.price}">${s.name} — ${Math.round(s.price).toLocaleString('ru-RU')} сом</option>`; });
+    html += '</optgroup>';
+  }
+  return html;
+}
+const optionsHTML = buildOptionsHTML();
+
+/* searchable service select per row */
+function initRowSelect(sel) {
+  if (!sel || sel.tomselect || typeof TomSelect === 'undefined') return;
+  new TomSelect(sel, {
+    create:false, allowEmptyOption:true, maxOptions:1000,
+    placeholder:'Поиск услуги...',
+    onChange(){ onServiceChange(sel); },
+  });
+}
+
+function onServiceChange(sel) {
+  const row = sel.closest('tr');
+  const svc = SVC_MAP[String(sel.value)];
+  if (svc) {
+    row.querySelector('.cure-price').value = Math.round(svc.price);
+    const teeth = getSelectedTeeth();
+    const tf = row.querySelector('.cure-tooth') || row.querySelector('input[name$="-tooth_number"]');
+    if (tf && !tf.value && teeth.length) tf.value = teeth.sort((a,b)=>a-b).join(', ');
+    // ensure quantity has a value (teeth count, else 1)
+    const qf = row.querySelector('.cure-qty');
+    if (qf && !qf.value) qf.value = teeth.length || 1;
+  }
+  updateRowTotal(row);
+}
+
+function updateRowTotal(row) {
+  const qty = parseFloat(row.querySelector('.cure-qty')?.value) || 1;
+  const price = parseFloat(row.querySelector('.cure-price')?.value) || 0;
+  const t = row.querySelector('.cure-total'); if (t) t.textContent = Math.round(qty*price).toLocaleString('ru-RU') + ' сом';
+  updateGrandTotal();
+}
+function updateGrandTotal() {
+  let total = 0;
+  document.querySelectorAll('#cures-tbody .cure-row').forEach(row => {
+    if (row.style.display === 'none') return;
+    const cb = row.querySelector('.cure-delete-cb'); if (cb && cb.checked) return;
+    total += (parseFloat(row.querySelector('.cure-qty')?.value)||1) * (parseFloat(row.querySelector('.cure-price')?.value)||0);
+  });
+  const el = document.getElementById('grand-total'); if (el) el.textContent = Math.round(total).toLocaleString('ru-RU') + ' сом';
+}
+
+function addCureRow() {
+  const tmpl = document.getElementById('empty-cure-row');
+  const tr = tmpl.content.cloneNode(true).querySelector('tr');
+  const idx = formCount;
+  tr.querySelector('.cure-service-select').innerHTML = optionsHTML;
+  tr.querySelector('.cure-service-select').setAttribute('name', `cures-${idx}-service`);
+  tr.querySelector('.cure-tooth').setAttribute('name', `cures-${idx}-tooth_number`);
+  tr.querySelector('.cure-qty').setAttribute('name', `cures-${idx}-quantity`);
+  tr.querySelector('.cure-price').setAttribute('name', `cures-${idx}-price`);
+  tr.querySelector('.cure-delete-cb').setAttribute('name', `cures-${idx}-DELETE`);
+  // prefill tooth + qty from current selection (teeth count = quantity)
+  const teeth = getSelectedTeeth().sort((a,b)=>a-b);
+  if (teeth.length) {
+    tr.querySelector('.cure-tooth').value = teeth.join(', ');
+    tr.querySelector('.cure-qty').value = teeth.length;
+  }
+  document.getElementById('cures-tbody').appendChild(tr);
+  initRowSelect(document.querySelector('#cures-tbody .cure-row:last-child .cure-service-select'));
+  document.getElementById('id_cures-TOTAL_FORMS').value = ++formCount;
+}
+function removeCureRow(btn) {
+  const row = btn.closest('tr');
+  const cb = row.querySelector('.cure-delete-cb'); if (cb) cb.checked = true;
+  row.style.display = 'none'; updateGrandTotal();
+}
+
+/* ── Tooth chart ── */
+const ADULT_UPPER=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+const ADULT_LOWER=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+const CHILD_UPPER=[55,54,53,52,51,61,62,63,64,65];
+const CHILD_LOWER=[85,84,83,82,81,71,72,73,74,75];
+let selectedTeeth = new Set(), isChildMode = false;
+function getSelectedTeeth(){ return [...selectedTeeth]; }
+
+function toggleTooth(n) {
+  selectedTeeth.has(n) ? selectedTeeth.delete(n) : selectedTeeth.add(n);
+  renderSelectedTeeth(); renderChart(); syncTeethToRows();
+}
+function syncTeethToRows() {
+  const arr = getSelectedTeeth().sort((a,b)=>a-b);
+  const teeth = arr.join(', ');
+  document.querySelectorAll('#cures-tbody .cure-row').forEach(row => {
+    if (row.style.display === 'none') return;
+    const sel = row.querySelector('.cure-service-select');
+    if (!sel || !sel.value) return;   // skip empty rows (don't make them required)
+    const tf = row.querySelector('.cure-tooth') || row.querySelector('input[name$="-tooth_number"]');
+    if (tf) tf.value = teeth;
+    const qf = row.querySelector('.cure-qty');   // teeth count = quantity
+    if (qf && arr.length) qf.value = arr.length;
+    updateRowTotal(row);
+  });
+}
+function renderSelectedTeeth() {
+  const inp = document.getElementById('selected-teeth-input');
+  const arr = [...selectedTeeth].sort((a,b)=>a-b); inp.value = arr.join(',');
+  document.getElementById('selected-teeth-display').innerHTML = arr.map(n =>
+    `<span class="badge badge-purple cursor-pointer" onclick="toggleTooth(${n})">🦷 ${n} <span class="font-normal">&times;</span></span>`).join('');
+}
+function toothType(n) {
+  if ([16,17,18,26,27,28,36,37,38,46,47,48,55,65,75,85].includes(n)) return 'molar';
+  if ([14,15,24,25,34,35,44,45,54,64,74,84].includes(n)) return 'premolar';
+  if ([13,23,33,43,53,63,73,83].includes(n)) return 'canine';
+  return 'incisor';
+}
+function toothSVG(n, row) {
+  const t = toothType(n), W={molar:28,premolar:22,canine:19,incisor:17}[t], H=46, hw=W/2;
+  const sel = selectedTeeth.has(n);
+  const fill = sel ? '#818CF8' : 'transparent';
+  const stroke = sel ? '#4F46E5' : '#A9C0F0';
+  const sw = sel ? 2 : 1.4;
+  let path;
+  if (row === 'upper') {
+    if (t==='incisor') path=`M2,2 C2,0.5 5,0 ${hw},0 C${W-5},0 ${W-2},0.5 ${W-2},2 L${W-2},${H*0.55} Q${hw},${H} 2,${H*0.55} Z`;
+    else if (t==='canine') path=`M2,2 C2,0.5 5,0 ${hw},0 C${W-5},0 ${W-2},0.5 ${W-2},2 L${W-3},${H*0.5} Q${hw},${H} 3,${H*0.5} Z`;
+    else if (t==='premolar') path=`M2,4 C2,1 5,0 ${hw*0.7},0 C${hw*0.7},0 ${hw},2 ${hw},2 C${hw},2 ${hw*1.3},0 ${hw*1.3},0 C${W-5},0 ${W-2},1 ${W-2},4 L${W-3},${H*0.52} Q${hw},${H} 3,${H*0.52} Z`;
+    else path=`M1,5 C1,2 4,0 ${hw*0.5},0 C${hw*0.5},0 ${hw*0.8},2 ${hw},2 C${hw*1.2},2 ${hw*1.5},0 ${hw*1.5},0 C${W-4},0 ${W-1},2 ${W-1},5 L${W-2},${H*0.5} Q${hw},${H} 2,${H*0.5} Z`;
+  } else {
+    if (t==='incisor') path=`M2,${H-2} C2,${H-0.5} 5,${H} ${hw},${H} C${W-5},${H} ${W-2},${H-0.5} ${W-2},${H-2} L${W-2},${H*0.45} Q${hw},0 2,${H*0.45} Z`;
+    else if (t==='canine') path=`M2,${H-2} C2,${H-0.5} 5,${H} ${hw},${H} C${W-5},${H} ${W-2},${H-0.5} ${W-2},${H-2} L${W-3},${H*0.5} Q${hw},0 3,${H*0.5} Z`;
+    else if (t==='premolar') path=`M2,${H-4} C2,${H-1} 5,${H} ${hw*0.7},${H} C${hw*0.7},${H} ${hw},${H-2} ${hw},${H-2} C${hw},${H-2} ${hw*1.3},${H} ${hw*1.3},${H} C${W-5},${H} ${W-2},${H-1} ${W-2},${H-4} L${W-3},${H*0.48} Q${hw},0 3,${H*0.48} Z`;
+    else path=`M1,${H-5} C1,${H-2} 4,${H} ${hw*0.5},${H} C${hw*0.5},${H} ${hw*0.8},${H-2} ${hw},${H-2} C${hw*1.2},${H-2} ${hw*1.5},${H} ${hw*1.5},${H} C${W-4},${H} ${W-1},${H-2} ${W-1},${H-5} L${W-2},${H*0.5} Q${hw},0 2,${H*0.5} Z`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/></svg>`;
+}
+function renderToothRow(container, nums, row) {
+  container.innerHTML = '';
+  nums.forEach(n => {
+    const div = document.createElement('div');
+    div.className = `tooth-btn ${selectedTeeth.has(n)?'active':''}`; div.dataset.tooth = n;
+    div.onclick = () => toggleTooth(n);
+    div.innerHTML = row==='upper' ? toothSVG(n,row)+`<span class="tooth-num">${n}</span>` : `<span class="tooth-num">${n}</span>`+toothSVG(n,row);
+    container.appendChild(div);
+  });
+}
+function renderBtnRow(container, nums) {
+  container.innerHTML = '';
+  nums.forEach(n => { const b=document.createElement('button'); b.type='button'; b.className=`tooth-num-btn ${selectedTeeth.has(n)?'active':''}`; b.dataset.tooth=n; b.textContent=n; b.onclick=()=>toggleTooth(n); container.appendChild(b); });
+}
+function renderChart() {
+  const up = isChildMode?CHILD_UPPER:ADULT_UPPER, lo = isChildMode?CHILD_LOWER:ADULT_LOWER;
+  renderToothRow(document.getElementById('upper-row'), up, 'upper');
+  renderToothRow(document.getElementById('lower-row'), lo, 'lower');
+  renderBtnRow(document.getElementById('btn-upper'), up);
+  renderBtnRow(document.getElementById('btn-lower'), lo);
+}
+function setToothView(v) {
+  document.getElementById('view-chart').classList.toggle('hidden', v!=='chart');
+  document.getElementById('view-buttons').classList.toggle('hidden', v!=='buttons');
+  document.getElementById('btn-chart').classList.toggle('active', v==='chart');
+  document.getElementById('btn-btns').classList.toggle('active', v==='buttons');
+}
+function toggleAdult() {
+  isChildMode = !isChildMode;
+  const tog=document.getElementById('teeth-toggle'), dot=document.getElementById('teeth-toggle-dot');
+  tog.style.background = isChildMode?'#6366F1':'var(--border)';
+  dot.style.transform = isChildMode?'translateX(16px)':'';
+  selectedTeeth.clear(); renderSelectedTeeth(); renderChart();
+}
+
+/* ── Init (robust) ── */
+function initTreatmentForm() {
+  document.querySelectorAll('.cure-service-select').forEach(sel => {
+    const cur = sel.dataset.selected || ''; sel.innerHTML = optionsHTML; if (cur) sel.value = cur;
+    initRowSelect(sel);
+  });
+  try { renderChart(); } catch(e){ console.error(e); }
+  document.querySelectorAll('#cures-tbody .cure-row').forEach(r => updateRowTotal(r));
+  if (formCount === 0) addCureRow();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initTreatmentForm);
+else initTreatmentForm();
+
+/* On submit: clear rows without a service so they're treated as empty (not required) */
+document.getElementById('treatment-form').addEventListener('submit', function() {
+  document.querySelectorAll('#cures-tbody .cure-row').forEach(row => {
+    const sel = row.querySelector('.cure-service-select');
+    if (!sel || !sel.value) {
+      ['.cure-tooth', '.cure-qty', '.cure-price'].forEach(c => {
+        const el = row.querySelector(c); if (el) el.value = '';
+      });
+    }
+  });
+});
+</script>
+{% endblock %}

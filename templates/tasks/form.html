@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать задачу{% else %}Новая задача{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">{% if object %}Редактировать задачу{% else %}Новая задача{% endif %}</h2>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+      </div>
+      {% endif %}
+      {% for field in form %}
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}<p class="text-red-500 text-xs mt-1">{{ field.errors|join:", " }}</p>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Сохранить</button>
+        <a href="/tasks/" class="btn-ghost">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

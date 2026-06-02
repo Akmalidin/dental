@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block page_title %}Новое поступление{% endblock %}
+{% block content %}
+<div class="card card-pad">
+  <h3 class="font-bold text-lg mb-1" style="color:var(--text)">Поступление материалов</h3>
+  <p class="muted text-sm mb-5">Приход товара на склад. Можно добавить сразу несколько позиций.</p>
+
+  <form method="post" class="space-y-4" id="entry-form">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="fld">Поставщик</label>
+        <select name="supplier" class="searchable">
+          <option value="">— Не указан —</option>
+          {% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="fld">Дата поставки</label>
+        <input type="date" name="date" value="{% now 'Y-m-d' %}">
+      </div>
+    </div>
+
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border)">
+        <h4 class="font-bold text-sm" style="color:var(--text)">Позиции</h4>
+        <button type="button" onclick="addEntryRow()" class="btn btn-soft btn-sm">+ Добавить позицию</button>
+      </div>
+      <table class="w-full text-sm">
+        <thead style="background:var(--surface-2)">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase">Материал</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Количество</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:160px">Цена за ед.</th>
+            <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Сумма</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="entry-tbody"></tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
+            <td colspan="3" class="px-4 py-3 text-right font-bold muted">Итого приход:</td>
+            <td class="px-4 py-3 font-extrabold" style="color:var(--green)" id="entry-total">0 сом</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div><label class="fld">Примечание</label><textarea name="notes" rows="2"></textarea></div>
+    <div class="flex gap-3 pt-2">
+      <button type="submit" class="btn btn-success">Зафиксировать поступление</button>
+      <a href="/warehouse/" class="btn btn-ghost">Отмена</a>
+    </div>
+  </form>
+</div>
+
+<!-- row template -->
+<template id="entry-row-tmpl">
+  <tr class="entry-row" style="border-top:1px solid var(--border-2)">
+    <td class="px-3 py-2">
+      <select name="product" class="ent-prod">
+        <option value="">— Материал —</option>
+        {% for p in products %}<option value="{{ p.pk }}">{{ p.name }} ({{ p.unit }})</option>{% endfor %}
+      </select>
+    </td>
+    <td class="px-3 py-2"><input type="number" name="quantity" step="0.001" min="0" placeholder="0" class="ent-qty text-center" oninput="entryRecalc()"></td>
+    <td class="px-3 py-2"><input type="number" name="price" step="1" min="0" placeholder="0" class="ent-price text-center" oninput="entryRecalc()"></td>
+    <td class="px-3 py-2 font-semibold ent-sum whitespace-nowrap" style="color:var(--text)">0 сом</td>
+    <td class="px-2 text-center"><button type="button" onclick="this.closest('tr').remove(); entryRecalc()" class="text-xl muted hover:text-red-500">&times;</button></td>
+  </tr>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addEntryRow() {
+  const tr = document.getElementById('entry-row-tmpl').content.cloneNode(true).querySelector('tr');
+  document.getElementById('entry-tbody').appendChild(tr);
+  const sel = document.querySelector('#entry-tbody .entry-row:last-child .ent-prod');
+  if (sel && window.TomSelect && !sel.tomselect) {
+    new TomSelect(sel, { create:false, allowEmptyOption:true, maxOptions:1000, placeholder:'Поиск материала...' });
+  }
+}
+function entryRecalc() {
+  let t = 0;
+  document.querySelectorAll('#entry-tbody .entry-row').forEach(tr => {
+    const q = parseFloat(tr.querySelector('.ent-qty')?.value)||0;
+    const p = parseFloat(tr.querySelector('.ent-price')?.value)||0;
+    const s = tr.querySelector('.ent-sum'); if (s) s.textContent = Math.round(q*p).toLocaleString('ru-RU')+' сом';
+    t += q*p;
+  });
+  const el = document.getElementById('entry-total'); if (el) el.textContent = Math.round(t).toLocaleString('ru-RU')+' сом';
+}
+(function init(){ addEntryRow(); })();
+</script>
+{% endblock %}

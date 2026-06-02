@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block page_title %}Деактивировать сотрудника{% endblock %}
+{% block content %}
+<div class="max-w-md">
+  <div class="card p-6">
+    <div class="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      <svg class="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <h2 class="font-bold text-slate-800 text-center text-lg mb-1">Деактивировать сотрудника?</h2>
+    <p class="text-slate-500 text-center text-sm mb-6"><strong>{{ object.name }}</strong> потеряет доступ к системе.</p>
+    <form method="post" class="flex gap-3">
+      {% csrf_token %}
+      <button type="submit" class="flex-1 py-2.5 rounded-xl text-white font-semibold text-sm" style="background:linear-gradient(135deg,#F43F5E,#DC2626)">Деактивировать</button>
+      <a href="/users/" class="btn-ghost flex-1 text-center py-2.5">Отмена</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

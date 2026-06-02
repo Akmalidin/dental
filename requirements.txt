@@ -1,0 +1,11 @@
+Django==5.1.4
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+django-filter==24.3
+drf-spectacular==0.27.2
+django-simple-history==3.7.0
+django-cors-headers==4.6.0
+whitenoise==6.8.2
+Pillow==11.0.0
+openpyxl==3.1.5
+python-decouple==3.8

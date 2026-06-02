@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block page_title %}Сотрудники{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{showCreate:false}">
+  <div class="flex items-center justify-between">
+    <h2 class="text-slate-700 text-sm">Персонал клиники</h2>
+    <button @click="showCreate=true" class="btn-primary">+ Добавить сотрудника</button>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for u in users %}
+    <div class="card p-5 flex items-center gap-4">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0"
+           style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+        {{ u.name|first|upper }}
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="font-bold text-slate-800 truncate">{{ u.name }}</p>
+        <p class="text-xs text-slate-500">{{ u.role }}</p>
+        <p class="text-xs text-slate-400 mt-0.5">{{ u.phone|default:u.email }}</p>
+      </div>
+      <a href="/users/{{ u.pk }}/edit/" class="badge badge-gray hover:bg-slate-200 shrink-0">Ред.</a>
+    </div>
+    {% empty %}
+    <div class="card p-12 text-center col-span-3">
+      <p class="text-slate-400">Нет сотрудников</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
+    <div class="modal-box max-w-lg">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 text-lg">Новый сотрудник</h2>
+        <button @click="showCreate=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <form action="/users/create/" method="post" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        {% for field in form %}
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<p class="text-red-500 text-xs mt-1">{{ field.errors|join:", " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="btn-primary flex-1 justify-center">Добавить</button>
+          <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

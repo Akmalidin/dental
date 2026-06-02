@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block page_title %}План лечения{% endblock %}
+
+{% block extra_head %}
+{{ services_json|json_script:"plan-svc-data" }}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4" x-data="planEditor()">
+
+  <!-- Header -->
+  <div class="card card-pad">
+    <div class="flex items-start justify-between flex-wrap gap-3">
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <h2 class="text-xl font-extrabold" style="color:var(--text)">{{ plan.title }}</h2>
+          <span class="badge {% if plan.status == 'completed' %}badge-green{% elif plan.status == 'approved' %}badge-blue{% else %}badge-orange{% endif %}">{{ plan.get_status_display }}</span>
+        </div>
+        <div class="text-sm muted space-y-0.5">
+          <p>Пациент: <a href="/patients/{{ plan.patient.pk }}/" class="font-semibold" style="color:var(--primary)">{{ plan.patient.full_name }}</a></p>
+          <p>Врач: <strong style="color:var(--text)">{{ plan.doctor.name }}</strong> · {{ plan.created_at|date:"d.m.Y H:i" }}</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <a href="/patients/{{ plan.patient.pk }}/" class="btn btn-ghost btn-sm">← Назад</a>
+        <a href="/treatments/plans/{{ plan.pk }}/print/" target="_blank" class="btn btn-ghost btn-sm">🖨 Печать</a>
+        <form method="post" action="/treatments/plans/{{ plan.pk }}/stage/add/">{% csrf_token %}<button class="btn btn-primary btn-sm">+ Добавить этап</button></form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stages -->
+  {% for stage in plan.stages.all %}
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3" style="background:var(--surface-2);border-bottom:1px solid var(--border)">
+      <div class="flex items-center gap-4 text-sm">
+        <span class="font-bold" style="color:var(--text)">{{ stage.title }}</span>
+        <span class="muted">Продолжительность: {% if stage.duration_min %}{{ stage.duration_min }} мин{% else %}не задано{% endif %}</span>
+        <span class="muted">Визит: {% if stage.visit %}#{{ stage.visit.pk }}{% else %}не назначен{% endif %}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="font-bold" style="color:var(--text)">{{ stage.total|floatformat:0 }} сом</span>
+        <div class="relative" x-data="{o:false}" @click.outside="o=false">
+          <button @click="o=!o" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+          <div x-show="o" x-cloak class="dropdown right-0 top-full mt-1 w-52">
+            <button @click="openAdd({{ stage.pk }}); o=false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Добавить услугу</button>
+            <div class="divider my-1"></div>
+            <form method="post" action="/treatments/plans/stages/{{ stage.pk }}/delete/" onsubmit="return confirm('Удалить этап со всеми услугами?')">{% csrf_token %}<button style="color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Удалить этап</button></form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Услуга</th><th>№ зуба</th><th class="text-center">Кол-во</th><th>Цена</th><th>Скидка</th><th>Итого</th><th class="text-right pr-5"></th></tr></thead>
+      <tbody>
+        {% for item in stage.items.all %}
+        <tr>
+          <td class="font-semibold">{{ item.service.name }}</td>
+          <td class="muted">{{ item.tooth_number|default:"—" }}</td>
+          <td class="text-center muted">{{ item.quantity }}</td>
+          <td class="muted">{{ item.price|floatformat:0 }}</td>
+          <td class="muted">{{ item.discount|floatformat:0 }}%</td>
+          <td class="font-bold">{{ item.subtotal|floatformat:0 }} сом</td>
+          <td>
+            <div class="flex items-center justify-end gap-1.5 pr-3">
+              <button @click="openMove({{ item.pk }})" class="row-act ra-view" title="Переместить/дублировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"/></svg></button>
+              <form method="post" action="/treatments/plans/items/{{ item.pk }}/delete/">{% csrf_token %}<button class="row-act ra-del" title="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center py-4 muted text-sm">Нет услуг — добавьте через меню этапа</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% empty %}
+  <div class="card p-12 text-center">
+    <p class="muted mb-3">Этапов пока нет</p>
+    <form method="post" action="/treatments/plans/{{ plan.pk }}/stage/add/">{% csrf_token %}<button class="btn btn-primary">+ Добавить первый этап</button></form>
+  </div>
+  {% endfor %}
+
+  <!-- Grand total -->
+  {% if plan.stages.all %}
+  <div class="card card-pad flex items-center justify-between">
+    <span class="font-bold muted uppercase text-sm">Итого по плану</span>
+    <span class="text-2xl font-extrabold" style="color:var(--primary)">{{ plan.total_price|floatformat:0 }} сом</span>
+  </div>
+  {% endif %}
+
+  <!-- Add service modal -->
+  <div x-show="showAdd" x-cloak class="modal-overlay" @click.self="showAdd=false">
+    <div class="modal-box" style="max-width:520px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg" style="color:var(--text)">Услуга</h2>
+        <button @click="showAdd=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <div><label class="fld">Услуга *</label><select x-ref="svcSel" class="no-tom"></select></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">№ зуба</label><input type="text" x-model="add.tooth" placeholder="напр. 24"></div>
+          <div><label class="fld">Кол-во *</label><input type="number" x-model="add.qty" min="1"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Цена</label><input type="number" x-model="add.price"></div>
+          <div><label class="fld">Скидка %</label><input type="number" x-model="add.discount" min="0" max="100"></div>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <span class="muted text-sm">Итого:</span>
+          <span class="font-bold text-lg" style="color:var(--primary)" x-text="addTotal()"></span>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4" style="border-top:1px solid var(--border)">
+        <button @click="saveAdd()" class="btn btn-primary">Сохранить</button>
+        <button @click="showAdd=false" class="btn btn-ghost">Отменить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Move/duplicate modal -->
+  <div x-show="showMove" x-cloak class="modal-overlay" @click.self="showMove=false">
+    <div class="modal-box" style="max-width:420px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Переместить услугу</h2>
+        <button @click="showMove=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form :action="'/treatments/plans/items/' + moveItemId + '/move/'" method="post" class="p-6 space-y-3">
+        {% csrf_token %}
+        <div><label class="fld">В этап</label>
+          <select name="stage_id" class="no-tom">
+            {% for stage in plan.stages.all %}<option value="{{ stage.pk }}">{{ stage.title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" name="mode" value="move" class="btn btn-primary flex-1">Переместить</button>
+          <button type="submit" name="mode" value="copy" class="btn btn-soft flex-1">Дублировать</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function planEditor() {
+  return {
+    SERVICES: JSON.parse(document.getElementById('plan-svc-data').textContent),
+    showAdd: false, showMove: false, moveItemId: null, svcTS: null,
+    add: { stage:null, service:'', tooth:'', qty:1, price:0, discount:0 },
+
+    openAdd(stageId) {
+      this.add = { stage: stageId, service:'', tooth:'', qty:1, price:0, discount:0 };
+      this.showAdd = true;
+      this.$nextTick(() => {
+        if (!this.svcTS && window.TomSelect) {
+          this.svcTS = new TomSelect(this.$refs.svcSel, {
+            options: this.SERVICES.map(s => ({ value:String(s.id), text: s.name + ' · ' + Math.round(s.price) + ' сом' })),
+            placeholder:'Выберите услугу...',
+            onChange: (v) => { const s = this.SERVICES.find(x=>String(x.id)===String(v)); if (s) this.add.price = Math.round(s.price); this.add.service = v; },
+          });
+        } else if (this.svcTS) { this.svcTS.clear(); }
+      });
+    },
+    addTotal() {
+      const g = (this.add.price||0) * (this.add.qty||1);
+      return Math.round(g - g*(this.add.discount||0)/100).toLocaleString('ru-RU') + ' сом';
+    },
+    async saveAdd() {
+      if (!this.add.service) { toast('Выберите услугу','error'); return; }
+      try {
+        const r = await fetch('/treatments/plans/items/add/', {
+          method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({ stage_id:this.add.stage, service_id:this.add.service, tooth:this.add.tooth, qty:this.add.qty, price:this.add.price, discount:this.add.discount }),
+        });
+        const data = await r.json();
+        if (data.ok) { toast('Услуга добавлена'); location.reload(); }
+        else toast(data.error||'Ошибка','error');
+      } catch(e){ toast('Ошибка сети','error'); }
+    },
+    openMove(itemId) { this.moveItemId = itemId; this.showMove = true; },
+  };
+}
+</script>
+{% endblock %}

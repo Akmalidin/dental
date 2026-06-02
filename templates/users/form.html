@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать сотрудника{% else %}Новый сотрудник{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-xl">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">{% if object %}{{ object.name }}{% else %}Новый сотрудник{% endif %}</h2>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="p-6 space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        {% for f in form %}{% for e in f.errors %}<p>{{ f.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+      </div>
+      {% endif %}
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Логин *</label>{{ form.login }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">ФИО *</label>{{ form.name }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Email</label>{{ form.email }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Телефон</label>{{ form.phone }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Роль</label>{{ form.role }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пароль {% if object %}(оставьте пустым){% endif %}</label>{{ form.password }}</div>
+        <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиалы</label>{{ form.branches }}</div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Аватар</label>{{ form.avatar }}</div>
+        <div class="flex items-center gap-3 self-end pb-2">
+          <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            {{ form.is_active }} <span>Активен</span>
+          </label>
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Сохранить</button>
+        <a href="/users/" class="btn-ghost">Отмена</a>
+        {% if object %}
+        <a href="/users/{{ object.pk }}/delete/" class="btn-ghost text-red-500 ml-auto">Деактивировать</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

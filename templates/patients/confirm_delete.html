@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% block page_title %}{% trans "Удаление" %}{% endblock %}
+{% block content %}
+<div class="max-w-md">
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <h2 class="font-semibold text-gray-800 mb-2">{% trans "Подтвердить удаление" %}</h2>
+    <p class="text-sm text-gray-600 mb-6">{% trans "Вы уверены, что хотите удалить" %} <strong>{{ object }}</strong>?</p>
+    <form method="post" class="flex gap-3">
+      {% csrf_token %}
+      <button type="submit" class="bg-red-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-red-700">{% trans "Удалить" %}</button>
+      <a href="javascript:history.back()" class="text-sm px-6 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50">{% trans "Отмена" %}</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

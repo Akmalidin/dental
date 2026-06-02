@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать шаблон{% else %}Новый шаблон{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">{% if object %}{{ object.name }}{% else %}Новый шаблон документа{% endif %}</h2>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Название *</label>
+          <input type="text" name="name" required value="{{ object.name|default:'' }}" placeholder="Информированное согласие">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Тип документа</label>
+          <select name="doc_type">
+            {% for val, label in doc_types %}
+            <option value="{{ val }}" {% if object.doc_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Содержимое</label>
+        <textarea name="content" rows="16" class="font-mono text-sm" placeholder="Я, {% templatetag openvariable %}patient_name{% templatetag closevariable %}, даю согласие на лечение в клинике {% templatetag openvariable %}clinic_name{% templatetag closevariable %}...">{{ object.content|default:'' }}</textarea>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <input type="checkbox" name="is_active" {% if not object or object.is_active %}checked{% endif %}> <span>Активен</span>
+        </label>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Сохранить</button>
+        <a href="/settings/documents/" class="btn-ghost">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

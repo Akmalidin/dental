@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Уведомления{% endblock %}
+{% block content %}
+<div class="max-w-2xl space-y-3">
+  <div class="flex items-center justify-between">
+    <h2 class="text-slate-700 text-sm">Ваши уведомления</h2>
+    <a href="/notifications/read-all/" class="btn-ghost text-xs py-1.5">Отметить все прочитанными</a>
+  </div>
+
+  {% for n in notifications %}
+  <div class="card p-4 flex items-start gap-4 {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}">
+    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0
+                {% if n.type == 'appointment' %}bg-gradient-to-br from-blue-500 to-indigo-600
+                {% elif n.type == 'payment' %}bg-gradient-to-br from-emerald-500 to-green-600
+                {% elif n.type == 'task' %}bg-gradient-to-br from-amber-400 to-orange-500
+                {% else %}bg-gradient-to-br from-slate-400 to-slate-500{% endif %}">
+      {% if n.type == 'appointment' %}📅{% elif n.type == 'payment' %}💰{% elif n.type == 'task' %}✅{% else %}🔔{% endif %}
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <p class="font-semibold text-slate-800 {% if n.is_read %}opacity-60{% endif %}">{{ n.title }}</p>
+        {% if not n.is_read %}<span class="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>{% endif %}
+      </div>
+      {% if n.body %}<p class="text-sm text-slate-500 mt-0.5">{{ n.body }}</p>{% endif %}
+      <p class="text-xs text-slate-400 mt-1">{{ n.created_at|date:"d.m.Y H:i" }}</p>
+    </div>
+    {% if not n.is_read %}
+    <a href="/notifications/{{ n.pk }}/read/" class="badge badge-gray hover:bg-slate-200 shrink-0 text-xs">Прочитано</a>
+    {% endif %}
+  </div>
+  {% empty %}
+  <div class="card p-14 text-center">
+    <div class="text-5xl mb-3">🔔</div>
+    <p class="text-slate-500 font-medium">Нет уведомлений</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

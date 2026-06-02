@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block page_title %}Приём #{{ treatment.pk }}{% endblock %}
+
+{% block extra_head %}
+{{ treated_teeth_json|json_script:"treated-teeth" }}
+{{ emr_templates_json|json_script:"emr-templates" }}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false}">
+
+  <!-- Header card -->
+  <div class="card card-pad">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <h2 class="text-xl font-extrabold" style="color:var(--text)">Приём #{{ treatment.pk }}</h2>
+          <span class="badge {% if treatment.status == 'paid' %}badge-green{% elif treatment.status == 'completed' %}badge-blue{% elif treatment.status == 'cancelled' %}badge-gray{% elif treatment.status == 'in_progress' %}badge-purple{% else %}badge-orange{% endif %}">{{ treatment.get_status_display }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm muted">
+          <a href="/patients/{{ treatment.patient.pk }}/" class="font-semibold" style="color:var(--primary)">{{ treatment.patient.full_name }}</a>
+          <span>Врач: <strong style="color:var(--text)">{{ treatment.doctor.name }}</strong></span>
+          <span>{{ treatment.created_at|date:"d.m.Y H:i" }}</span>
+          <span>{{ treatment.branch.name }}</span>
+        </div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button @click="showStatus=true" class="btn btn-ghost btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Статус
+        </button>
+        <a href="/treatments/{{ treatment.pk }}/edit/" class="btn btn-ghost btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z"/></svg>
+          Изменить
+        </a>
+        <a href="/treatments/{{ treatment.pk }}/print/" target="_blank" class="btn btn-primary btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Чек
+        </a>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-4 gap-3 mt-5">
+      <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--surface-2)">
+        <p class="text-xs muted font-semibold uppercase mb-1">Сумма</p>
+        <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.total_amount|floatformat:0 }} <span class="text-sm muted">сом</span></p>
+      </div>
+      <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--orange-bg)">
+        <p class="text-xs font-semibold uppercase mb-1" style="color:var(--orange)">Скидка</p>
+        <p class="text-xl font-extrabold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} <span class="text-sm">сом</span></p>
+      </div>
+      <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--green-bg)">
+        <p class="text-xs font-semibold uppercase mb-1" style="color:var(--green)">Оплачено</p>
+        <p class="text-xl font-extrabold" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} <span class="text-sm">сом</span></p>
+      </div>
+      <div class="rounded-2xl px-4 py-3 text-center" style="background:{% if treatment.debt > 0 %}var(--red-bg){% else %}var(--surface-2){% endif %}">
+        <p class="text-xs font-semibold uppercase mb-1" style="color:{% if treatment.debt > 0 %}var(--red){% else %}var(--text-soft){% endif %}">Долг</p>
+        <p class="text-xl font-extrabold" style="color:{% if treatment.debt > 0 %}var(--red){% else %}var(--text-faint){% endif %}">{{ treatment.debt|floatformat:0 }} <span class="text-sm">сом</span></p>
+      </div>
+    </div>
+
+    {% if treatment.debt > 0 %}
+    <div class="mt-4"><button @click="showPay=true" class="btn btn-success btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+      Принять оплату {{ treatment.debt|floatformat:0 }} сом
+    </button></div>
+    {% endif %}
+  </div>
+
+  <!-- Tabs -->
+  <div class="card">
+    <div class="u-tabs px-2">
+      <button @click="tab='cures'" class="u-tab" :class="tab==='cures' && 'active'">Процедуры ({{ treatment.cures.count }})</button>
+      <button @click="tab='teeth'" class="u-tab" :class="tab==='teeth' && 'active'">Зубная схема</button>
+      <button @click="tab='plan'" class="u-tab" :class="tab==='plan' && 'active'">План лечения</button>
+      <button @click="tab='emr'" class="u-tab" :class="tab==='emr' && 'active'">ЭМК</button>
+      <button @click="tab='files'" class="u-tab" :class="tab==='files' && 'active'">Файлы ({{ treatment.files.count }})</button>
+      <button @click="tab='notes'" class="u-tab" :class="tab==='notes' && 'active'">Заметки</button>
+    </div>
+
+    <!-- Procedures -->
+    <div x-show="tab==='cures'">
+      <table class="tbl">
+        <thead><tr><th>Услуга</th><th>Зуб</th><th>Кол.</th><th>Цена</th><th>Итого</th><th>Врач</th></tr></thead>
+        <tbody>
+          {% for cure in treatment.cures.all %}
+          <tr>
+            <td class="font-semibold">{{ cure.service.name }}</td>
+            <td class="muted text-center">{{ cure.tooth_number|default:"—" }}</td>
+            <td class="muted text-center">{{ cure.quantity }}</td>
+            <td class="muted">{{ cure.price|floatformat:0 }} сом</td>
+            <td class="font-bold">{{ cure.subtotal|floatformat:0 }} сом</td>
+            <td class="muted text-xs">{{ cure.doctor.name }}</td>
+          </tr>
+          {% empty %}<tr><td colspan="6" class="text-center py-10 muted">Нет процедур</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tooth scheme (read-only) -->
+    <div x-show="tab==='teeth'" class="p-6" x-cloak>
+      <p class="text-center muted text-sm mb-4">Лечившиеся зубы выделены</p>
+      <div id="tooth-view" class="space-y-2"></div>
+    </div>
+
+    <!-- Plan -->
+    <div x-show="tab==='plan'" class="p-5 space-y-3" x-cloak>
+      {% for plan in plans %}
+      <div class="card">
+        <div class="flex items-center justify-between px-5 py-3" style="background:var(--surface-2);border-radius:18px 18px 0 0">
+          <div><p class="font-bold" style="color:var(--text)">{{ plan.title }}</p><p class="text-xs muted">{{ plan.doctor.name }} · {{ plan.created_at|date:"d.m.Y" }}</p></div>
+          <div class="flex items-center gap-3">
+            <div class="text-right"><p class="text-xs muted">{{ plan.completion_pct }}%</p><div class="progress w-28"><div style="width:{{ plan.completion_pct }}%"></div></div></div>
+            <span class="badge {% if plan.status == 'completed' %}badge-green{% else %}badge-orange{% endif %}">{{ plan.get_status_display }}</span>
+          </div>
+        </div>
+        <table class="tbl">
+          <tbody>
+            {% for item in plan.items.all %}
+            <tr><td class="font-semibold {% if item.status == 'done' %}line-through muted{% endif %}">{{ item.service.name }}</td><td class="muted">{{ item.tooth_number|default:"—" }}</td><td class="font-bold">{{ item.subtotal|floatformat:0 }} сом</td><td>{% if item.status == 'done' %}<span class="badge badge-green">Выполнен</span>{% else %}<span class="badge badge-gray">Ожидает</span>{% endif %}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% empty %}
+      <div class="text-center py-12">
+        <p class="muted mb-3">У пациента нет планов лечения</p>
+        <a href="/patients/{{ treatment.patient.pk }}/" class="btn btn-primary btn-sm">Создать план в карточке пациента</a>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Files -->
+    <div x-show="tab==='files'" class="p-5" x-cloak>
+      {% if treatment.files.all %}
+      <div class="grid grid-cols-3 gap-3">
+        {% for f in treatment.files.all %}
+        <a href="{{ f.file.url }}" target="_blank" class="flex items-center gap-3 p-3 rounded-xl" style="border:1px solid var(--border)">
+          <div class="w-10 h-10 rounded-lg ic-purple flex items-center justify-center"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div>
+          <div class="min-w-0"><p class="text-sm font-semibold truncate">{{ f.name }}</p><p class="text-xs muted">{{ f.uploaded_at|date:"d.m.Y" }}</p></div>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}<p class="text-center muted py-8">Файлов нет</p>{% endif %}
+    </div>
+
+    <!-- ЭМК (medical record) -->
+    <div x-show="tab==='emr'" class="p-5" x-cloak x-data="emrEditor()">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <label class="text-sm muted">Применить шаблон:</label>
+          <select class="no-tom w-64" @change="applyTemplate($event.target.value)">
+            <option value="">— Выберите шаблон —</option>
+            <template x-for="t in templates" :key="t.id"><option :value="t.id" x-text="t.name"></option></template>
+          </select>
+        </div>
+        <a href="/treatments/{{ treatment.pk }}/emr/print/" target="_blank" class="btn btn-ghost btn-sm">🖨 Печать ЭМК</a>
+      </div>
+      <form method="post" action="/treatments/{{ treatment.pk }}/emr/save/" class="space-y-3">
+        {% csrf_token %}
+        {% for s in emr_sections %}
+        <div>
+          <label class="fld">{{ s.label }}</label>
+          <textarea name="{{ s.key }}" rows="2" data-emr="{{ s.key }}">{{ s.value }}</textarea>
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary px-8">Сохранить медкарту</button>
+      </form>
+    </div>
+
+    <!-- Notes -->
+    <div x-show="tab==='notes'" class="p-6" x-cloak>
+      <p class="whitespace-pre-line text-sm" style="color:var(--text)">{{ treatment.notes|default:"Заметок нет" }}</p>
+    </div>
+  </div>
+
+  <!-- Status modal -->
+  <div x-show="showStatus" x-cloak class="modal-overlay" @click.self="showStatus=false">
+    <div class="modal-box" style="max-width:380px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Изменить статус</h2>
+        <button @click="showStatus=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" action="/treatments/{{ treatment.pk }}/status/" class="p-6 space-y-3">
+        {% csrf_token %}
+        <select name="status">
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if treatment.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div class="flex gap-3"><button type="submit" class="btn btn-primary flex-1">Сохранить</button><button type="button" @click="showStatus=false" class="btn btn-ghost">Отмена</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Payment modal -->
+  <div x-show="showPay" x-cloak class="modal-overlay" @click.self="showPay=false">
+    <div class="modal-box" style="max-width:440px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Принять оплату</h2><button @click="showPay=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form action="/finance/payments/create/" method="post" class="p-6 space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="patient" value="{{ treatment.patient.pk }}">
+        <input type="hidden" name="treatment" value="{{ treatment.pk }}">
+        <div><label class="fld">Сумма (сом)</label><input type="number" name="amount" value="{{ treatment.debt|floatformat:0 }}" required></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="fld">Метод</label><select name="method" class="no-tom"><option value="cash">Наличные</option><option value="card">Карта</option><option value="transfer">Перевод</option></select></div>
+          <div><label class="fld">Тип</label><select name="type" class="no-tom"><option value="income">Оплата</option><option value="refund">Возврат</option></select></div>
+        </div>
+        <div><label class="fld">Филиал</label><select name="branch" class="no-tom" required>{% for b in request.user.branches.all %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select></div>
+        <div class="flex gap-3"><button type="submit" class="btn btn-success flex-1">Принять</button><button type="button" @click="showPay=false" class="btn btn-ghost">Отмена</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const treated = new Set(JSON.parse(document.getElementById('treated-teeth').textContent));
+  const upper = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+  const lower = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+  const tooth = n => {
+    const on = treated.has(n);
+    return `<div class="flex flex-col items-center"><svg width="20" height="34" viewBox="0 0 20 34"><path d="M2,3 Q10,0 18,3 L17,20 Q10,34 3,20 Z" fill="${on?'#EEF0FF':'transparent'}" stroke="${on?'#6366F1':'#C7C9E0'}" stroke-width="${on?2:1.3}"/></svg><span style="font-size:10px;color:${on?'#6366F1':'#9CA3AF'};font-weight:${on?700:400}">${n}</span></div>`;
+  };
+  const wrap = document.getElementById('tooth-view');
+  if (wrap) wrap.innerHTML =
+    '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+upper.map(tooth).join('')+'</div>'+
+    '<div style="border-top:1.5px dashed var(--border);margin:8px 40px"></div>'+
+    '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+lower.map(tooth).join('')+'</div>';
+});
+
+function emrEditor() {
+  return {
+    templates: JSON.parse(document.getElementById('emr-templates').textContent),
+    applyTemplate(id) {
+      if (!id) return;
+      const t = this.templates.find(x => String(x.id) === String(id));
+      if (!t) return;
+      // fill each textarea (only if empty, to not overwrite existing text)
+      document.querySelectorAll('[data-emr]').forEach(ta => {
+        const key = ta.dataset.emr;
+        if (t[key] !== undefined) {
+          if (!ta.value.trim()) ta.value = t[key];
+          else ta.value = ta.value + '\n' + t[key];
+        }
+      });
+      toast('Шаблон применён');
+    },
+  };
+}
+</script>
+{% endblock %}

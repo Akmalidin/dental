@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block page_title %}Филиалы{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-slate-700 text-sm">Филиалы клиники</h2>
+    <a href="/users/branches/create/" class="btn-primary">+ Новый филиал</a>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for b in branches %}
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+            {{ b.name|first|upper }}
+          </div>
+          <div>
+            <p class="font-bold text-slate-800">{{ b.name }}</p>
+            {% if b.is_main %}<span class="badge badge-green text-xs">Главный</span>{% endif %}
+          </div>
+        </div>
+        <a href="/users/branches/{{ b.pk }}/edit/" class="badge badge-gray hover:bg-slate-200">Ред.</a>
+      </div>
+      <p class="text-sm text-slate-500">📍 {{ b.address|default:"Адрес не указан" }}</p>
+      <p class="text-sm text-slate-500 mt-1">📞 {{ b.phone }}</p>
+    </div>
+    {% empty %}
+    <div class="card p-10 text-center col-span-3">
+      <p class="text-slate-400">Нет филиалов</p>
+      <a href="/users/branches/create/" class="btn-primary mt-4 inline-flex">+ Добавить филиал</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

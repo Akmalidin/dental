@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block page_title %}Технические специалисты{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{tab:'technicians', showCreate:false}">
+  <div class="flex gap-0 border-b border-slate-200 items-end">
+    <button @click="tab='technicians'" :class="tab==='technicians'?'tab-btn active':'tab-btn'">Техники</button>
+    <button @click="tab='tasks'" :class="tab==='tasks'?'tab-btn active':'tab-btn'">Задания</button>
+    <button @click="showCreate=true" class="btn-primary ml-auto mb-1 text-xs py-1.5">+ Добавить техника</button>
+  </div>
+
+  <div x-show="tab==='technicians'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for t in technicians %}
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold" style="background:linear-gradient(135deg,#8B5CF6,#A855F7)">
+          {{ t.name|first|upper }}
+        </div>
+        <div>
+          <p class="font-bold text-slate-800">{{ t.name }}</p>
+          <p class="text-xs text-slate-500">{{ t.phone }}</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-1 mb-3">
+        {% for a in t.agreements.all %}
+        <span class="badge badge-blue text-xs">{{ a.service.name }} — {{ a.price }} сом</span>
+        {% empty %}
+        <span class="text-xs text-slate-400">Нет соглашений</span>
+        {% endfor %}
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="font-semibold {% if t.balance < 0 %}text-red-500{% else %}text-emerald-600{% endif %}">{{ t.balance|floatformat:0 }} сом</span>
+      </div>
+    </div>
+    {% empty %}
+    <div class="card p-10 text-center col-span-3"><p class="text-slate-400">Нет технических специалистов</p></div>
+    {% endfor %}
+  </div>
+
+  <div x-show="tab==='tasks'" class="card overflow-hidden">
+    <table class="data-table">
+      <thead><tr><th>Техник</th><th>Услуга</th><th>Статус</th><th>Сумма</th><th>Срок</th></tr></thead>
+      <tbody>
+        {% for task in tech_tasks %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ task.technician.name }}</td>
+          <td class="text-slate-600">{{ task.service.name }}</td>
+          <td><span class="badge {% if task.status == 'done' %}badge-green{% elif task.status == 'in_progress' %}badge-blue{% else %}badge-yellow{% endif %}">{{ task.get_status_display }}</span></td>
+          <td class="font-semibold">{{ task.amount|floatformat:0 }} сом</td>
+          <td class="text-slate-400 text-xs">{{ task.deadline|date:"d.m.Y"|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-10 text-slate-400">Нет заданий</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Create modal -->
+  <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 text-lg">Новый техник</h2>
+        <button @click="showCreate=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <form action="/technicians/create/" method="post" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">ФИО *</label><input type="text" name="name" required></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Телефон</label><input type="text" name="phone"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Заметки</label><textarea name="notes" rows="2"></textarea></div>
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="btn-primary flex-1 justify-center">Добавить</button>
+          <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

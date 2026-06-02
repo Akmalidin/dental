@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block page_title %}Справочники{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+  {% for ref in refs %}
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3.5" style="border-bottom:1px solid var(--border)">
+      <h3 class="font-bold" style="color:var(--text)">{{ ref.label }}</h3>
+      <span class="badge badge-gray">{{ ref.items|length }}</span>
+    </div>
+
+    <div class="max-h-64 overflow-y-auto">
+      {% for item in ref.items %}
+      <div class="flex items-center justify-between px-5 py-2.5" style="border-bottom:1px solid var(--border-2)">
+        <span class="text-sm" style="color:var(--text)">{{ item.name }}</span>
+        <form method="post" action="/settings/references/{{ ref.key }}/{{ item.pk }}/delete/" onsubmit="return confirm('Удалить «{{ item.name|escapejs }}»?')">
+          {% csrf_token %}
+          <button class="row-act ra-del" title="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+        </form>
+      </div>
+      {% empty %}
+      <p class="px-5 py-6 text-center muted text-sm">Пусто</p>
+      {% endfor %}
+    </div>
+
+    <form method="post" action="/settings/references/{{ ref.key }}/add/" class="flex gap-2 p-3" style="border-top:1px solid var(--border)">
+      {% csrf_token %}
+      <input type="text" name="name" placeholder="Новое значение..." required class="flex-1">
+      <button type="submit" class="btn btn-primary btn-sm">+</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

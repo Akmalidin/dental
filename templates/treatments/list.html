@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block page_title %}Приёмы{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <div class="flex gap-2">
+      {% for s, label in statuses %}
+      <a href="?status={{ s }}" class="badge {% if current_status == s %}badge-blue{% else %}badge-gray{% endif %} hover:bg-slate-200 cursor-pointer">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <a href="/treatments/create/" class="btn-primary">+ Новый приём</a>
+  </div>
+
+  <div class="card overflow-hidden">
+    <table class="data-table">
+      <thead><tr><th>#</th><th>Пациент</th><th>Врач</th><th>Сумма</th><th>Оплачено</th><th>Долг</th><th>Статус</th><th>Дата</th><th></th></tr></thead>
+      <tbody>
+        {% for t in treatments %}
+        <tr>
+          <td class="text-slate-400">{{ t.pk }}</td>
+          <td><a href="/patients/{{ t.patient.pk }}/" class="font-semibold text-slate-800 hover:text-indigo-600">{{ t.patient.full_name }}</a></td>
+          <td class="text-slate-600">{{ t.doctor.name }}</td>
+          <td class="font-semibold text-slate-800">{{ t.total_amount|floatformat:0 }} сом</td>
+          <td class="text-emerald-600 font-medium">{{ t.paid_amount|floatformat:0 }} сом</td>
+          <td class="{% if t.debt > 0 %}text-red-600 font-bold{% else %}text-slate-400{% endif %}">{{ t.debt|floatformat:0 }} сом</td>
+          <td><span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-yellow{% endif %}">{{ t.get_status_display }}</span></td>
+          <td class="text-slate-400 text-xs">{{ t.created_at|date:"d.m.Y" }}</td>
+          <td>
+            <div class="flex gap-1.5">
+              <a href="/treatments/{{ t.pk }}/" class="badge badge-blue hover:bg-indigo-100">Открыть</a>
+              <a href="/treatments/{{ t.pk }}/print/" target="_blank" class="badge badge-gray hover:bg-slate-200">Чек</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center py-14 text-slate-400">Нет приёмов</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

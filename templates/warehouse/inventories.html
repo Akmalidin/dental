@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block page_title %}Инвентаризация{% endblock %}
+
+{% block content %}
+<div class="card overflow-hidden">
+  <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <h3 class="font-bold text-slate-800">Инвентаризации</h3>
+    <div class="flex gap-2">
+      <a href="/warehouse/inventories/create/" class="btn-primary text-xs py-1.5">+ Новая инвентаризация</a>
+      <a href="/warehouse/" class="btn-ghost text-xs py-1.5">← Склад</a>
+    </div>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Дата</th><th>Филиал</th><th>Позиций</th><th>Статус</th><th>Создал</th><th class="text-right pr-5">Действия</th></tr>
+    </thead>
+    <tbody>
+      {% for inv in inventories %}
+      <tr>
+        <td class="text-slate-400 text-xs">{{ inv.date|date:"d.m.Y" }}</td>
+        <td class="font-semibold text-slate-800">{{ inv.branch.name }}</td>
+        <td class="text-slate-600">{{ inv.items.count }}</td>
+        <td>
+          {% if inv.status == 'posted' %}<span class="badge badge-green">Проведена</span>
+          {% else %}<span class="badge badge-yellow">Черновик</span>{% endif %}
+        </td>
+        <td class="text-slate-500 text-xs">{{ inv.created_by.name }}</td>
+        <td>
+          <div class="flex justify-end pr-3">
+            {% if inv.status != 'posted' %}
+            <form method="post" action="/warehouse/inventories/{{ inv.pk }}/post/" onsubmit="return confirm('Провести инвентаризацию? Остатки будут скорректированы.')">
+              {% csrf_token %}
+              <button class="btn-success text-xs py-1">Провести</button>
+            </form>
+            {% else %}
+            <span class="text-xs text-slate-400">—</span>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center py-12 text-slate-400">Инвентаризаций нет</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

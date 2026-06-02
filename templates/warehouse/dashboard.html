@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block page_title %}Склад{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{tab:'products'}">
+
+  <!-- Tabs -->
+  <div class="flex gap-0 border-b border-slate-200 items-center">
+    <button @click="tab='products'" :class="tab==='products'?'tab-btn active':'tab-btn'">Материалы</button>
+    <button @click="tab='entries'" :class="tab==='entries'?'tab-btn active':'tab-btn'">Поступления</button>
+    <button @click="tab='distributions'" :class="tab==='distributions'?'tab-btn active':'tab-btn'">Списания</button>
+    <div class="ml-auto flex gap-2">
+      <a href="/warehouse/transfers/" class="btn-ghost text-xs py-1.5">⇄ Перемещения</a>
+      <a href="/warehouse/inventories/" class="btn-ghost text-xs py-1.5">📋 Инвентаризация</a>
+    </div>
+  </div>
+
+  <!-- Products -->
+  <div x-show="tab==='products'">
+    {% if low_stock %}
+    <div class="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 mb-4 flex items-center gap-3">
+      <span class="text-amber-600 font-bold text-lg">⚠️</span>
+      <div>
+        <p class="font-semibold text-amber-800">Низкий остаток у {{ low_stock|length }} позиций</p>
+        <p class="text-amber-600 text-sm">{% for p in low_stock %}{{ p.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Все материалы</h3>
+        <a href="/warehouse/entries/create/" class="btn-success text-xs py-1.5">+ Поступление</a>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Материал</th><th>Категория</th><th>Остаток</th><th>Ед. изм.</th><th>Мин. остаток</th><th>Поставщик</th><th>Статус</th></tr></thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td class="font-semibold text-slate-800">{{ p.name }}</td>
+            <td class="text-slate-500 text-xs">{{ p.category.name|default:"—" }}</td>
+            <td class="font-bold {% if p.is_low_stock %}text-red-600{% else %}text-slate-800{% endif %}">{{ p.quantity }}</td>
+            <td class="text-slate-500">{{ p.unit }}</td>
+            <td class="text-slate-400">{{ p.min_qty }}</td>
+            <td class="text-slate-500 text-xs">{{ p.supplier.name|default:"—" }}</td>
+            <td>
+              {% if p.is_low_stock %}
+              <span class="badge badge-red">Мало</span>
+              {% else %}
+              <span class="badge badge-green">Норма</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center py-12 text-slate-400">Материалов нет</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Entries -->
+  <div x-show="tab==='entries'">
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Поступления</h3>
+        <a href="/warehouse/entries/create/" class="btn-primary text-xs py-1.5">+ Добавить</a>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Материал</th><th>Кол-во</th><th>Цена/ед.</th><th>Поставщик</th><th>Дата</th></tr></thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td class="font-semibold text-slate-800">{{ e.product.name }}</td>
+            <td class="text-emerald-600 font-bold">+{{ e.quantity }} {{ e.product.unit }}</td>
+            <td class="text-slate-600">{{ e.price }} сом</td>
+            <td class="text-slate-500 text-xs">{{ e.supplier.name }}</td>
+            <td class="text-slate-400 text-xs">{{ e.date|date:"d.m.Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center py-12 text-slate-400">Нет поступлений</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Distributions -->
+  <div x-show="tab==='distributions'">
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Списания / выдача</h3>
+        <a href="/warehouse/distributions/create/" class="btn-primary text-xs py-1.5">+ Списание</a>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Материал</th><th>Кол-во</th><th>Филиал</th><th>Кому</th><th>Дата</th></tr></thead>
+        <tbody>
+          {% for d in distributions %}
+          <tr>
+            <td class="font-semibold text-slate-800">{{ d.product.name }}</td>
+            <td class="text-red-500 font-bold">−{{ d.quantity }} {{ d.product.unit }}</td>
+            <td class="text-slate-500 text-xs">{{ d.branch.name }}</td>
+            <td class="text-slate-500 text-xs">{{ d.issued_to.name|default:"—" }}</td>
+            <td class="text-slate-400 text-xs">{{ d.date|date:"d.m.Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center py-12 text-slate-400">Нет списаний</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block page_title %}Новый расход{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#F43F5E,#DC2626)">
+      <h2 class="font-bold text-white text-lg">Добавить расход</h2>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+      </div>
+      {% endif %}
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Категория</label>
+        {{ form.category }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label>
+        {{ form.amount }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Дата</label>
+        {{ form.date }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Описание</label>
+        {{ form.description }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиал</label>
+        {{ form.branch }}
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Сохранить</button>
+        <a href="/finance/expenses/" class="btn-ghost">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block page_title %}Расходы{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{showCreate:false}">
+  <div class="flex items-center justify-between">
+    <h2 class="text-slate-700 text-sm">Расходы клиники</h2>
+    <button @click="showCreate=true" class="btn-primary">+ Добавить расход</button>
+  </div>
+  <div class="card overflow-hidden">
+    <table class="data-table">
+      <thead><tr><th>Категория</th><th>Описание</th><th>Сумма</th><th>Филиал</th><th>Дата</th></tr></thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr>
+          <td><span class="badge badge-yellow">{{ e.category.name }}</span></td>
+          <td class="text-slate-700">{{ e.description|truncatechars:60 }}</td>
+          <td class="font-bold text-red-600">{{ e.amount|floatformat:0 }} сом</td>
+          <td class="text-slate-500 text-xs">{{ e.branch.name }}</td>
+          <td class="text-slate-400 text-xs">{{ e.date|date:"d.m.Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-12 text-slate-400">Нет расходов</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 text-lg">Новый расход</h2>
+        <button @click="showCreate=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <form action="/finance/expenses/create/" method="post" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        {% for field in form %}
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">{{ field.label }}</label>
+          {{ field }}
+        </div>
+        {% endfor %}
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="btn-primary flex-1 justify-center">Добавить</button>
+          <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block page_title %}Зарплата{% endblock %}
+{% block breadcrumb %}Сотрудники · Зарплата{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+  <div class="grid grid-cols-3 gap-4">
+    <div class="card-gradient stat-indigo p-5 rounded-2xl">
+      <p class="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-2">Период</p>
+      <p class="text-2xl font-black text-white">{{ period|date:"F Y" }}</p>
+    </div>
+    <div class="card-gradient stat-emerald p-5 rounded-2xl">
+      <p class="text-emerald-100 text-xs font-semibold uppercase tracking-wide mb-2">Врачей</p>
+      <p class="text-3xl font-black text-white">{{ rows|length }}</p>
+    </div>
+    <div class="card-gradient stat-amber p-5 rounded-2xl">
+      <p class="text-amber-100 text-xs font-semibold uppercase tracking-wide mb-2">Итого к выплате</p>
+      <p class="text-3xl font-black text-white">{{ total_salary|floatformat:0 }} <span class="text-sm">сом</span></p>
+    </div>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <h3 class="font-bold text-slate-800">Расчёт зарплаты</h3>
+      <form method="get" class="flex items-center gap-2">
+        <input type="month" name="period" value="{{ period|date:'Y-m' }}"
+               class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm" onchange="this.form.submit()">
+      </form>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Врач</th><th>Схема</th><th>Выручка</th><th>Оплачено</th><th>К выплате</th><th class="text-right pr-5">Настройка</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ row.doctor.name }}</td>
+          <td>
+            {% if row.scheme %}
+            <span class="badge badge-blue">{{ row.scheme.get_scheme_type_display }}</span>
+            {% if row.scheme.percent %}<span class="text-xs text-slate-400 ml-1">{{ row.scheme.percent }}%</span>{% endif %}
+            {% else %}
+            <span class="badge badge-gray">Не задана</span>
+            {% endif %}
+          </td>
+          <td class="text-slate-600">{{ row.revenue|floatformat:0 }} сом</td>
+          <td class="text-emerald-600">{{ row.paid|floatformat:0 }} сом</td>
+          <td class="font-black text-indigo-600">{{ row.salary|floatformat:0 }} сом</td>
+          <td>
+            <div class="flex justify-end pr-3">
+              <a href="/users/salary/{{ row.doctor.pk }}/scheme/" class="btn-ghost text-xs py-1">Настроить</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-12 text-slate-400">Врачей нет</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="bg-slate-50 border-t-2 border-slate-200">
+          <td colspan="4" class="px-5 py-3 text-right font-bold text-slate-600">Итого к выплате:</td>
+          <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ total_salary|floatformat:0 }} сом</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block page_title %}Деактивировать услугу{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#F43F5E,#DC2626)">
+      <h2 class="font-bold text-white text-lg">Деактивировать услугу</h2>
+    </div>
+    <div class="p-6">
+      <p class="text-slate-700 mb-2">Вы уверены, что хотите деактивировать услугу?</p>
+      <p class="font-bold text-slate-900 text-lg mb-4">{{ object.name }}</p>
+      <p class="text-slate-400 text-sm mb-6">Услуга будет скрыта из прайс-листа, но останется в истории приёмов.</p>
+      <form method="post" class="flex gap-3">
+        {% csrf_token %}
+        <button type="submit" class="btn-primary" style="background:linear-gradient(135deg,#F43F5E,#DC2626)">Деактивировать</button>
+        <a href="/services/" class="btn-ghost">Отмена</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

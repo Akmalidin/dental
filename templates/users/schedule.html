@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block page_title %}График работы{% endblock %}
+{% block breadcrumb %}Сотрудники · График{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h3 class="font-bold text-slate-800">График работы врачей</h3>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Врач</th>
+          {% for num, label in days %}<th class="text-center text-xs">{{ label|truncatechars:3 }}</th>{% endfor %}
+          <th class="text-right pr-5"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in doctors %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ doc.name }}</td>
+          {% for num, label in days %}
+          <td class="text-center">
+            {% with sched=doc.schedules.all %}
+            {% for s in sched %}{% if s.day_of_week == num %}
+            <span class="inline-block text-xs font-semibold text-emerald-600">{{ s.start_time|time:"H:i" }}<br>{{ s.end_time|time:"H:i" }}</span>
+            {% endif %}{% endfor %}
+            {% endwith %}
+          </td>
+          {% endfor %}
+          <td>
+            <div class="flex justify-end pr-3">
+              <a href="/users/schedule/{{ doc.pk }}/edit/" class="btn-ghost text-xs py-1">Изменить</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center py-12 text-slate-400">Врачей нет</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

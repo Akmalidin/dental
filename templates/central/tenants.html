@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block page_title %}Клиники{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <div class="flex justify-between items-center">
+    <h2 class="font-semibold text-gray-800">Все клиники</h2>
+    <a href="/central/tenants/create/" class="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">+ Новая клиника</a>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+        <tr>
+          <th class="px-6 py-3 text-left">Название</th>
+          <th class="px-6 py-3 text-left">Поддомен</th>
+          <th class="px-6 py-3 text-left">Владелец</th>
+          <th class="px-6 py-3 text-left">Тариф</th>
+          <th class="px-6 py-3 text-left">Статус</th>
+          <th class="px-6 py-3 text-left">Создана</th>
+          <th class="px-6 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for tenant in tenants %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-3 font-medium text-gray-800">{{ tenant.name }}</td>
+          <td class="px-6 py-3 text-gray-500">{{ tenant.slug }}</td>
+          <td class="px-6 py-3 text-gray-500">{{ tenant.owner_email }}</td>
+          <td class="px-6 py-3">
+            {% if tenant.subscription %}
+            <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">{{ tenant.subscription.get_plan_display }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-6 py-3">
+            {% if tenant.is_active %}
+            <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">Активна</span>
+            {% else %}
+            <span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Заблокирована</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-3 text-gray-400 text-xs">{{ tenant.created_at|date:"d.m.Y" }}</td>
+          <td class="px-6 py-3 text-right">
+            {% if tenant.is_active %}
+            <a href="/central/tenants/{{ tenant.pk }}/block/" class="text-xs text-red-500 hover:underline">Заблокировать</a>
+            {% else %}
+            <a href="/central/tenants/{{ tenant.pk }}/unblock/" class="text-xs text-green-600 hover:underline">Разблокировать</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="px-6 py-8 text-center text-gray-400">Клиник нет</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

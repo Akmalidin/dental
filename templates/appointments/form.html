@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block page_title %}{% if object %}Редактировать запись #{{ object.pk }}{% else %}Новая запись{% endif %}{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <!-- Main form -->
+  <div class="lg:col-span-2 card card-pad">
+    <h3 class="font-bold text-lg mb-4" style="color:var(--text)">{% if object %}Запись на приём{% else %}Новая запись{% endif %}</h3>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {% if form.errors %}
+      <div class="badge-red px-4 py-3 rounded-xl text-sm">
+        {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+        {% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div><label class="fld">Пациент</label>{{ form.patient }}</div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="fld">Врач *</label>{{ form.doctor }}</div>
+        <div><label class="fld">Кабинет</label>{{ form.cabinet }}</div>
+      </div>
+
+      <div><label class="fld">Услуги (можно несколько)</label>{{ form.services }}</div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="fld">Начало *</label>{{ form.start_at }}</div>
+        <div><label class="fld">Конец *</label>{{ form.end_at }}</div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="fld">Статус</label>{{ form.status }}</div>
+        <div><label class="fld">Филиал</label>{{ form.branch }}</div>
+      </div>
+
+      <div><label class="fld">Заметки</label>{{ form.notes }}</div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button type="submit" class="btn btn-primary px-8">Сохранить</button>
+        <a href="/calendar/" class="btn btn-ghost">К расписанию</a>
+        {% if object %}
+        <a href="/appointments/{{ object.pk }}/delete/" class="btn btn-ghost ml-auto" style="color:var(--red)">Отменить запись</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Sidebar: patient + quick actions -->
+  {% if object %}
+  <div class="space-y-4">
+    {% if object.patient %}
+    <div class="card card-pad">
+      <p class="text-xs font-bold faint uppercase mb-3">Пациент</p>
+      <div class="flex items-center gap-3 mb-3">
+        <div class="avatar w-11 h-11 text-sm">{{ object.patient.first_name|first|upper }}</div>
+        <div>
+          <a href="/patients/{{ object.patient.pk }}/" class="font-bold" style="color:var(--primary)">{{ object.patient.full_name }}</a>
+          <p class="text-xs muted">{{ object.patient.phone }}</p>
+        </div>
+      </div>
+      <a href="/treatments/create/?patient={{ object.patient.pk }}" class="btn btn-success btn-sm w-full">→ Начать приём</a>
+    </div>
+    {% endif %}
+
+    <div class="card card-pad">
+      <p class="text-xs font-bold faint uppercase mb-3">Быстрая смена статуса</p>
+      <div class="grid grid-cols-2 gap-2">
+        {% for val, label in object.STATUS_CHOICES %}
+        <form method="post" action="/appointments/{{ object.pk }}/status/">{% csrf_token %}<input type="hidden" name="status" value="{{ val }}"><button class="btn btn-ghost btn-sm w-full {% if object.status == val %}btn-soft{% endif %}">{{ label }}</button></form>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function initApptSelects() {
+  if (typeof TomSelect === 'undefined') return;
+  // multi services
+  document.querySelectorAll('select.searchable-multi').forEach(sel => {
+    if (!sel.tomselect) new TomSelect(sel, { plugins:['remove_button'], placeholder:'Выберите услуги...', maxOptions:1000 });
+  });
+  // single searchable (patient, doctor, etc.)
+  document.querySelectorAll('select.searchable').forEach(sel => {
+    if (!sel.tomselect && !sel.multiple) new TomSelect(sel, { allowEmptyOption:true, maxOptions:1000 });
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initApptSelects);
+else initApptSelects();
+</script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block page_title %}Новая инвентаризация{% endblock %}
+
+{% block extra_head %}
+{{ products_json|json_script:"prod-data" }}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">Инвентаризация склада</h2>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиал</label>
+          <select name="branch">
+            {% for b in branches %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Дата</label>
+          <input type="date" name="date" value="{% now 'Y-m-d' %}">
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase">Материал</th>
+              <th class="px-4 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-32">По системе</th>
+              <th class="px-4 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-32">Фактически</th>
+              <th class="px-4 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-28">Расхождение</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in products %}
+            <tr class="border-t border-slate-100">
+              <td class="px-4 py-2 font-medium text-slate-800">
+                {{ p.name }}
+                <input type="hidden" name="product" value="{{ p.pk }}">
+                <input type="hidden" name="system_qty" value="{{ p.quantity }}">
+              </td>
+              <td class="px-4 py-2 text-center text-slate-500">{{ p.quantity }} {{ p.unit }}</td>
+              <td class="px-4 py-2">
+                <input type="number" name="actual_qty" value="{{ p.quantity }}" step="0.001" min="0"
+                       class="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm text-center inv-actual"
+                       data-system="{{ p.quantity }}" oninput="updateDiff(this)">
+              </td>
+              <td class="px-4 py-2 text-center font-semibold inv-diff text-slate-400">0</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center py-8 text-slate-400">Материалов нет</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Примечание</label>
+        <textarea name="notes" rows="2"></textarea>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" name="post" value="1" class="btn-success"
+                onclick="return confirm('Провести инвентаризацию? Остатки будут скорректированы до фактических.')">
+          Провести (скорректировать остатки)
+        </button>
+        <button type="submit" class="btn-ghost">Сохранить черновик</button>
+        <a href="/warehouse/inventories/" class="btn-ghost ml-auto">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function updateDiff(input) {
+  const system = parseFloat(input.dataset.system) || 0;
+  const actual = parseFloat(input.value) || 0;
+  const diff = actual - system;
+  const cell = input.closest('tr').querySelector('.inv-diff');
+  cell.textContent = (diff > 0 ? '+' : '') + diff.toFixed(2).replace(/\.?0+$/, '');
+  cell.className = 'px-4 py-2 text-center font-semibold inv-diff ' +
+    (diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-red-600' : 'text-slate-400');
+}
+</script>
+{% endblock %}

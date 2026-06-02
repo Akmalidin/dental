@@ -1,0 +1,23 @@
+[Unit]
+Description=SADAF Clinic (Django/gunicorn)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/sadaf
+EnvironmentFile=/var/www/sadaf/.env
+ExecStart=/var/www/sadaf/venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8021 \
+    --workers 3 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
+Restart=always
+RestartSec=3
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

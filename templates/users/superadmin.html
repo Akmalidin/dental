@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block page_title %}Панель суперадмина{% endblock %}
+
+{% block content %}
+<div class="space-y-5 max-w-3xl">
+
+  <div class="grid grid-cols-3 gap-4">
+    <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><div><p class="stat-label">Услуг</p><p class="stat-value">{{ services_count }}</p></div></div>
+    <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/></svg></div><div><p class="stat-label">Категорий услуг</p><p class="stat-value">{{ service_cats_count }}</p></div></div>
+    <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg></div><div><p class="stat-label">Материалов</p><p class="stat-value">{{ materials_count }}</p></div></div>
+  </div>
+
+  <div class="card card-pad">
+    <div class="flex items-start gap-4">
+      <div class="w-12 h-12 rounded-2xl ic-purple flex items-center justify-center shrink-0">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <div class="flex-1">
+        <h3 class="font-bold text-lg" style="color:var(--text)">Заполнить базу стоматологии</h3>
+        <p class="muted text-sm mt-1 mb-4">
+          Одним кликом создаёт полный набор стоматологических <strong>услуг</strong> (терапия, хирургия,
+          ортопедия, ортодонтия, имплантология, гигиена) и заполняет <strong>склад материалами</strong>
+          (анестезия, пломбы, эндодонтия, боры, расходники) с количеством 0.
+          Уже существующие позиции не дублируются.
+        </p>
+        <form method="post" action="/users/superadmin/seed-dental/" onsubmit="return confirm('Заполнить базу услугами и материалами?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Заполнить услуги и склад
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tariff / modules -->
+  <div class="card card-pad">
+    <h3 class="font-bold mb-1" style="color:var(--text)">Тариф и доступные модули</h3>
+    <p class="muted text-sm mb-4">Отметьте функции, доступные клинике. Снятые — скрываются из меню у всех.</p>
+    <form method="post">
+      {% csrf_token %}<input type="hidden" name="action" value="save_modules">
+      <div class="mb-4 max-w-xs">
+        <label class="fld">Тарифный план</label>
+        <select name="tariff_plan" class="no-tom">
+          <option value="full" {% if tariff_plan == 'full' %}selected{% endif %}>Полный</option>
+          <option value="standard" {% if tariff_plan == 'standard' %}selected{% endif %}>Стандарт</option>
+          <option value="basic" {% if tariff_plan == 'basic' %}selected{% endif %}>Базовый</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        {% for key, label in all_modules %}
+        <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
+          <input type="checkbox" name="modules" value="{{ key }}" {% if key in enabled_modules %}checked{% endif %}> {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Сохранить модули</button>
+    </form>
+  </div>
+
+  <!-- Manage data quick links -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <a href="/services/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Услуги</p><p class="text-xs muted">Прейскурант</p></a>
+    <a href="/warehouse/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Склад</p><p class="text-xs muted">Материалы</p></a>
+    <a href="/settings/documents/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Шаблоны</p><p class="text-xs muted">Документы</p></a>
+    <a href="/settings/references/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Справочники</p><p class="text-xs muted">Поставщики и др.</p></a>
+  </div>
+
+  <!-- Clinics (branches) + Users -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <!-- Clinics / branches -->
+    <div class="card overflow-hidden">
+      <div class="px-5 py-3.5" style="border-bottom:1px solid var(--border)"><h3 class="font-bold" style="color:var(--text)">Клиники / филиалы</h3></div>
+      <div class="max-h-52 overflow-y-auto">
+        {% for b in branches %}
+        <div class="flex items-center justify-between px-5 py-2.5" style="border-bottom:1px solid var(--border-2)">
+          <div><p class="text-sm font-semibold" style="color:var(--text)">{{ b.name }} {% if b.is_main %}<span class="badge badge-green">основной</span>{% endif %}</p><p class="text-xs muted">{{ b.address }} · {{ b.phone }}</p></div>
+        </div>
+        {% empty %}<p class="px-5 py-6 text-center muted text-sm">Нет клиник</p>{% endfor %}
+      </div>
+      <form method="post" class="p-4 space-y-2" style="border-top:1px solid var(--border)">
+        {% csrf_token %}<input type="hidden" name="action" value="create_branch">
+        <input type="text" name="name" placeholder="Название клиники/филиала *" required>
+        <div class="grid grid-cols-2 gap-2"><input type="text" name="address" placeholder="Адрес"><input type="text" name="phone" placeholder="Телефон"></div>
+        <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" name="is_main"> Основной филиал</label>
+        <button type="submit" class="btn btn-primary btn-sm w-full">+ Создать клинику</button>
+      </form>
+    </div>
+
+    <!-- Users / access -->
+    <div class="card overflow-hidden">
+      <div class="px-5 py-3.5" style="border-bottom:1px solid var(--border)"><h3 class="font-bold" style="color:var(--text)">Сотрудники и доступы</h3></div>
+      <div class="max-h-52 overflow-y-auto">
+        {% for s in staff %}
+        <div class="flex items-center gap-3 px-5 py-2.5" style="border-bottom:1px solid var(--border-2)">
+          <div class="avatar w-8 h-8 text-xs">{{ s.name|first|upper }}</div>
+          <div class="flex-1"><p class="text-sm font-semibold" style="color:var(--text)">{{ s.name }}</p><p class="text-xs muted">{{ s.login }} · {{ s.role|default:"без роли" }}</p></div>
+          <a href="/users/{{ s.pk }}/edit/" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/></svg></a>
+        </div>
+        {% endfor %}
+      </div>
+      <form method="post" class="p-4 space-y-2" style="border-top:1px solid var(--border)">
+        {% csrf_token %}<input type="hidden" name="action" value="create_user">
+        <div class="grid grid-cols-2 gap-2"><input type="text" name="name" placeholder="ФИО *" required><input type="text" name="login" placeholder="Логин *" required></div>
+        <div class="grid grid-cols-2 gap-2"><input type="password" name="password" placeholder="Пароль *" required><input type="email" name="email" placeholder="Email"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <select name="role" class="no-tom"><option value="">Роль</option>{% for r in roles %}<option value="{{ r.pk }}">{{ r.get_name_display }}</option>{% endfor %}</select>
+          <select name="branch" class="no-tom"><option value="">Филиал</option>{% for b in branches %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm w-full">+ Создать сотрудника</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

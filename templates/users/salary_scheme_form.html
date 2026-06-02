@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block page_title %}Схема зарплаты — {{ object.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg" x-data="{type:'{{ scheme.scheme_type }}'}">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+      <h2 class="font-bold text-white text-lg">{{ object.name }}</h2>
+      <p class="text-indigo-200 text-sm">Схема расчёта зарплаты</p>
+    </div>
+    <form method="post" class="p-6 space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Тип схемы</label>
+        <select name="scheme_type" x-model="type">
+          {% for val, label in scheme_types %}
+          <option value="{{ val }}" {% if scheme.scheme_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div x-show="type==='fixed' || type==='combined'">
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Фиксированная ставка (сом/мес)</label>
+        <input type="number" name="fixed_amount" value="{{ scheme.fixed_amount|floatformat:0 }}" step="1" min="0">
+      </div>
+
+      <div x-show="type==='percent_revenue' || type==='percent_paid' || type==='combined'">
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Процент (%)</label>
+        <input type="number" name="percent" value="{{ scheme.percent }}" step="0.5" min="0" max="100">
+        <p class="text-xs text-slate-400 mt-1" x-show="type==='percent_revenue'">% от стоимости выполненных услуг</p>
+        <p class="text-xs text-slate-400 mt-1" x-show="type==='percent_paid'">% от фактически оплаченных сумм (кассовый метод)</p>
+        <p class="text-xs text-slate-400 mt-1" x-show="type==='combined'">Ставка + % от выручки</p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Описание</label>
+        <input type="text" name="description" value="{{ scheme.description }}" placeholder="Примечание">
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary">Сохранить</button>
+        <a href="/users/salary/" class="btn-ghost">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

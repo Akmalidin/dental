@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}Задания техников{% endblock %}
+
+{% block content %}
+<div class="card overflow-hidden">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+    <h3 class="font-bold text-slate-800">Все задания</h3>
+    <a href="/technicians/" class="btn-ghost text-xs py-1.5">← Техники</a>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Техник</th><th>Услуга</th><th>Приём</th><th>Статус</th><th>Сумма</th><th>Срок</th></tr>
+    </thead>
+    <tbody>
+      {% for task in tasks %}
+      <tr>
+        <td class="font-semibold text-slate-800">{{ task.technician.name }}</td>
+        <td class="text-slate-600">{{ task.service.name }}</td>
+        <td class="text-slate-500 text-xs">{% if task.treatment %}#{{ task.treatment.pk }}{% else %}—{% endif %}</td>
+        <td><span class="badge {% if task.status == 'done' %}badge-green{% elif task.status == 'in_progress' %}badge-blue{% else %}badge-yellow{% endif %}">{{ task.get_status_display }}</span></td>
+        <td class="font-semibold">{{ task.amount|floatformat:0 }} сом</td>
+        <td class="text-slate-400 text-xs">{{ task.deadline|date:"d.m.Y"|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center py-12 text-slate-400">Нет заданий</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

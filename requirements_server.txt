@@ -1,0 +1,5 @@
+# Single-tenant production deps (PostgreSQL + gunicorn, без django-tenants/celery)
+-r requirements.txt
+
+psycopg2-binary==2.9.10
+gunicorn==23.0.0

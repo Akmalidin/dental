@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block page_title %}{% if unblock %}Разблокировать{% else %}Заблокировать{% endif %} клинику{% endblock %}
+
+{% block content %}
+<div class="max-w-md">
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <h2 class="font-semibold text-gray-800 mb-2">
+      {% if unblock %}Разблокировать клинику?{% else %}Заблокировать клинику?{% endif %}
+    </h2>
+    <p class="text-sm text-gray-600 mb-6">
+      Клиника: <strong>{{ tenant.name }}</strong>
+    </p>
+    <form method="post" class="flex gap-3">
+      {% csrf_token %}
+      {% if unblock %}
+      <button type="submit" class="bg-green-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-green-700">Разблокировать</button>
+      {% else %}
+      <button type="submit" class="bg-red-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-red-700">Заблокировать</button>
+      {% endif %}
+      <a href="/central/tenants/" class="text-sm px-6 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50">Отмена</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

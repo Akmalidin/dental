@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block page_title %}Отменить запись{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#F43F5E,#DC2626)">
+      <h2 class="font-bold text-white text-lg">Отменить запись</h2>
+    </div>
+    <div class="p-6">
+      <div class="flex items-start gap-4 mb-6">
+        <div class="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+          <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-slate-800 mb-1">Вы уверены, что хотите отменить эту запись?</p>
+          {% if object.patient %}
+          <p class="text-slate-500 text-sm">Пациент: <span class="font-medium text-slate-700">{{ object.patient.full_name }}</span></p>
+          {% endif %}
+          <p class="text-slate-500 text-sm">Врач: <span class="font-medium text-slate-700">{{ object.doctor.name }}</span></p>
+          <p class="text-slate-500 text-sm">Время: <span class="font-medium text-slate-700">{{ object.start_at|date:"d.m.Y H:i" }}</span></p>
+          <p class="text-slate-400 text-xs mt-2">Запись получит статус «Отменена» и останется в истории.</p>
+        </div>
+      </div>
+      <form method="post" class="flex gap-3">
+        {% csrf_token %}
+        <button type="submit" class="btn-primary" style="background:linear-gradient(135deg,#F43F5E,#DC2626);box-shadow:0 4px 12px rgba(244,63,94,0.35)">
+          Да, отменить
+        </button>
+        <a href="/appointments/" class="btn-ghost">Назад</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

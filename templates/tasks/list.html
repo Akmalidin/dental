@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block page_title %}Задачи{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{showCreate:false, filter:'all'}">
+  <div class="flex items-center justify-between">
+    <div class="flex gap-2">
+      <button @click="filter='all'" :class="filter==='all'?'badge badge-blue':'badge badge-gray'">Все</button>
+      <button @click="filter='pending'" :class="filter==='pending'?'badge badge-yellow':'badge badge-gray'">Ожидают</button>
+      <button @click="filter='in_progress'" :class="filter==='in_progress'?'badge badge-blue':'badge badge-gray'">В процессе</button>
+      <button @click="filter='done'" :class="filter==='done'?'badge badge-green':'badge badge-gray'">Выполнены</button>
+    </div>
+    <button @click="showCreate=true" class="btn-primary">+ Новая задача</button>
+  </div>
+
+  <div class="grid grid-cols-1 gap-3">
+    {% for task in tasks %}
+    <div class="card p-4 flex items-start gap-4"
+         x-show="filter==='all' || filter==='{{ task.status }}'">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold
+                  {% if task.priority == 'high' %}bg-gradient-to-br from-red-500 to-rose-600
+                  {% elif task.priority == 'medium' %}bg-gradient-to-br from-amber-400 to-orange-500
+                  {% else %}bg-gradient-to-br from-slate-400 to-slate-500{% endif %}">
+        {% if task.priority == 'high' %}!{% elif task.priority == 'medium' %}~{% else %}·{% endif %}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="font-bold text-slate-800 {% if task.status == 'done' %}line-through text-slate-400{% endif %}">{{ task.title }}</p>
+          <span class="badge {% if task.status == 'done' %}badge-green{% elif task.status == 'in_progress' %}badge-blue{% else %}badge-yellow{% endif %}">{{ task.get_status_display }}</span>
+        </div>
+        {% if task.description %}<p class="text-sm text-slate-500 mt-0.5 truncate">{{ task.description }}</p>{% endif %}
+        <div class="flex items-center gap-3 mt-1 text-xs text-slate-400">
+          {% if task.due_date %}<span>⏰ {{ task.due_date|date:"d.m.Y H:i" }}</span>{% endif %}
+          <span>от {{ task.created_by.name }}</span>
+        </div>
+      </div>
+      <div class="flex gap-2 shrink-0">
+        {% if task.status != 'done' %}
+        <a href="/tasks/{{ task.pk }}/done/" class="badge badge-green hover:bg-emerald-100">✓ Готово</a>
+        {% endif %}
+        <a href="/tasks/{{ task.pk }}/edit/" class="badge badge-gray hover:bg-slate-200">Ред.</a>
+      </div>
+    </div>
+    {% empty %}
+    <div class="card p-12 text-center">
+      <div class="text-4xl mb-3">✅</div>
+      <p class="text-slate-500 font-medium">Задач нет</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Create modal -->
+  <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
+    <div class="modal-box max-w-lg">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 text-lg">Новая задача</h2>
+        <button @click="showCreate=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <form action="/tasks/create/" method="post" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Заголовок *</label><input type="text" name="title" required placeholder="Что нужно сделать?"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Описание</label><textarea name="description" rows="2" placeholder="Подробнее..."></textarea></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Приоритет</label>
+            <select name="priority"><option value="low">Низкий</option><option value="medium" selected>Средний</option><option value="high">Высокий</option></select></div>
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Срок</label><input type="datetime-local" name="due_date"></div>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="btn-primary flex-1 justify-center">Создать задачу</button>
+          <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
