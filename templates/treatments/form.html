@@ -36,7 +36,7 @@
 
     <!-- Tooth chart (full width) -->
     <div class="card card-pad" id="tooth-section">
-      <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center justify-between mb-1">
         <div class="u-tabs" style="border:none">
           <button type="button" id="btn-chart" onclick="setToothView('chart')" class="u-tab active">Зубы</button>
           <button type="button" id="btn-btns" onclick="setToothView('buttons')" class="u-tab">Кнопка</button>
@@ -49,6 +49,9 @@
           <span>Дети</span>
         </div>
       </div>
+      <p class="text-xs mb-3" style="color:var(--text-soft)">Зубы для процедуры:
+        <span id="active-proc-label" class="font-bold" style="color:var(--primary)">— выберите процедуру —</span>
+      </p>
 
       <div id="view-chart">
         <div id="upper-row" class="flex justify-center items-end gap-1 mb-1.5 flex-wrap"></div>
@@ -90,7 +93,7 @@
               <input type="checkbox" name="{{ cure_form.DELETE.html_name }}" class="cure-delete-cb hidden">
               <select name="{{ cure_form.service.html_name }}" class="cure-service-select" onchange="onServiceChange(this)" data-selected="{{ cure_form.service.value|default:'' }}"><option value="">— Выберите услугу —</option></select>
             </td>
-            <td class="px-4 py-2"><input type="text" name="{{ cure_form.tooth_number.html_name }}" value="{{ cure_form.tooth_number.value|default:'' }}" placeholder="зубы" class="cure-tooth text-center"></td>
+            <td class="px-4 py-2"><input type="text" name="{{ cure_form.tooth_number.html_name }}" value="{{ cure_form.tooth_number.value|default:'' }}" placeholder="клик → выбор" class="cure-tooth text-center" readonly onclick="setActiveRow(this.closest('tr'))" style="cursor:pointer"></td>
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.quantity.html_name }}" value="{{ cure_form.quantity.value|default:'' }}" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.price.html_name }}" value="{{ cure_form.price.value|default:'' }}" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
             <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
@@ -129,7 +132,7 @@
 <template id="empty-cure-row">
   <tr class="cure-row" style="border-top:1px solid var(--border-2)">
     <td class="px-4 py-2"><input type="checkbox" class="cure-delete-cb hidden"><select class="cure-service-select" onchange="onServiceChange(this)"><option value="">— Выберите услугу —</option></select></td>
-    <td class="px-4 py-2"><input type="text" placeholder="зубы" class="cure-tooth text-center"></td>
+    <td class="px-4 py-2"><input type="text" placeholder="клик → выбор" class="cure-tooth text-center" readonly onclick="setActiveRow(this.closest('tr'))" style="cursor:pointer"></td>
     <td class="px-4 py-2"><input type="number" value="1" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
     <td class="px-4 py-2"><input type="number" value="" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
     <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
@@ -145,6 +148,8 @@
 .tooth-num-btn { width:38px; height:34px; border-radius:9px; border:1.5px solid var(--border); font-size:12px; font-weight:600; color:var(--text-soft); cursor:pointer; transition:all .12s; background:var(--surface); }
 .tooth-num-btn:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
 .tooth-num-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 2px 8px rgba(99,102,241,.4); }
+.cure-row.row-active { background:var(--primary-light); }
+.cure-row.row-active .cure-tooth { border-color:var(--primary); color:var(--primary); font-weight:700; }
 </style>
 {% endblock %}
 
@@ -183,12 +188,9 @@ function onServiceChange(sel) {
   const svc = SVC_MAP[String(sel.value)];
   if (svc) {
     row.querySelector('.cure-price').value = Math.round(svc.price);
-    const teeth = getSelectedTeeth();
-    const tf = row.querySelector('.cure-tooth') || row.querySelector('input[name$="-tooth_number"]');
-    if (tf && !tf.value && teeth.length) tf.value = teeth.sort((a,b)=>a-b).join(', ');
-    // ensure quantity has a value (teeth count, else 1)
     const qf = row.querySelector('.cure-qty');
-    if (qf && !qf.value) qf.value = teeth.length || 1;
+    if (qf && !qf.value) qf.value = 1;
+    setActiveRow(row);   // выбрали услугу → редактируем зубы именно этой процедуры
   }
   updateRowTotal(row);
 }
@@ -219,20 +221,22 @@ function addCureRow() {
   tr.querySelector('.cure-qty').setAttribute('name', `cures-${idx}-quantity`);
   tr.querySelector('.cure-price').setAttribute('name', `cures-${idx}-price`);
   tr.querySelector('.cure-delete-cb').setAttribute('name', `cures-${idx}-DELETE`);
-  // prefill tooth + qty from current selection (teeth count = quantity)
-  const teeth = getSelectedTeeth().sort((a,b)=>a-b);
-  if (teeth.length) {
-    tr.querySelector('.cure-tooth').value = teeth.join(', ');
-    tr.querySelector('.cure-qty').value = teeth.length;
-  }
   document.getElementById('cures-tbody').appendChild(tr);
   initRowSelect(document.querySelector('#cures-tbody .cure-row:last-child .cure-service-select'));
   document.getElementById('id_cures-TOTAL_FORMS').value = ++formCount;
+  setActiveRow(tr);   // новая строка сразу активна для выбора зубов
 }
 function removeCureRow(btn) {
   const row = btn.closest('tr');
   const cb = row.querySelector('.cure-delete-cb'); if (cb) cb.checked = true;
   row.style.display = 'none'; updateGrandTotal();
+  if (activeRow === row) {   // активную удалили → переключиться на другую видимую
+    activeRow = null;
+    const next = [...document.querySelectorAll('#cures-tbody .cure-row')].find(r => r.style.display !== 'none');
+    if (next) setActiveRow(next);
+    else { selectedTeeth.clear(); renderSelectedTeeth(); renderChart();
+           const l=document.getElementById('active-proc-label'); if(l) l.textContent='— выберите процедуру —'; }
+  }
 }
 
 /* ── Tooth chart ── */
@@ -240,26 +244,46 @@ const ADULT_UPPER=[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
 const ADULT_LOWER=[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
 const CHILD_UPPER=[55,54,53,52,51,61,62,63,64,65];
 const CHILD_LOWER=[85,84,83,82,81,71,72,73,74,75];
-let selectedTeeth = new Set(), isChildMode = false;
+let selectedTeeth = new Set(), isChildMode = false, activeRow = null;
 function getSelectedTeeth(){ return [...selectedTeeth]; }
+function parseTeeth(str){ return (str||'').split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)); }
+
+/* Сделать строку активной: её зубы загружаются в схему */
+function setActiveRow(row) {
+  if (!row || row.style.display === 'none') return;
+  activeRow = row;
+  // подсветка активной строки
+  document.querySelectorAll('#cures-tbody .cure-row').forEach(r => r.classList.remove('row-active'));
+  row.classList.add('row-active');
+  // загрузить зубы этой строки в схему
+  const tf = row.querySelector('.cure-tooth');
+  selectedTeeth = new Set(parseTeeth(tf ? tf.value : ''));
+  // подпись активной процедуры
+  const sel = row.querySelector('.cure-service-select');
+  const label = document.getElementById('active-proc-label');
+  if (label) label.textContent = (sel && sel.value && SVC_MAP[sel.value]) ? SVC_MAP[sel.value].name : 'процедура без услуги';
+  renderSelectedTeeth(); renderChart();
+}
 
 function toggleTooth(n) {
+  if (!activeRow) {  // нет активной — берём первую видимую строку
+    const first = [...document.querySelectorAll('#cures-tbody .cure-row')].find(r => r.style.display !== 'none');
+    if (first) setActiveRow(first); else return;
+  }
   selectedTeeth.has(n) ? selectedTeeth.delete(n) : selectedTeeth.add(n);
-  renderSelectedTeeth(); renderChart(); syncTeethToRows();
+  writeTeethToActiveRow();
+  renderSelectedTeeth(); renderChart();
 }
-function syncTeethToRows() {
-  const arr = getSelectedTeeth().sort((a,b)=>a-b);
-  const teeth = arr.join(', ');
-  document.querySelectorAll('#cures-tbody .cure-row').forEach(row => {
-    if (row.style.display === 'none') return;
-    const sel = row.querySelector('.cure-service-select');
-    if (!sel || !sel.value) return;   // skip empty rows (don't make them required)
-    const tf = row.querySelector('.cure-tooth') || row.querySelector('input[name$="-tooth_number"]');
-    if (tf) tf.value = teeth;
-    const qf = row.querySelector('.cure-qty');   // teeth count = quantity
-    if (qf && arr.length) qf.value = arr.length;
-    updateRowTotal(row);
-  });
+
+/* Записать выбранные зубы в активную строку (зубы = количество) */
+function writeTeethToActiveRow() {
+  if (!activeRow) return;
+  const arr = [...selectedTeeth].sort((a,b)=>a-b);
+  const tf = activeRow.querySelector('.cure-tooth');
+  if (tf) tf.value = arr.join(', ');
+  const qf = activeRow.querySelector('.cure-qty');
+  if (qf) qf.value = arr.length || 1;
+  updateRowTotal(activeRow);
 }
 function renderSelectedTeeth() {
   const inp = document.getElementById('selected-teeth-input');
@@ -325,7 +349,7 @@ function toggleAdult() {
   const tog=document.getElementById('teeth-toggle'), dot=document.getElementById('teeth-toggle-dot');
   tog.style.background = isChildMode?'#6366F1':'var(--border)';
   dot.style.transform = isChildMode?'translateX(16px)':'';
-  selectedTeeth.clear(); renderSelectedTeeth(); renderChart();
+  selectedTeeth.clear(); writeTeethToActiveRow(); renderSelectedTeeth(); renderChart();
 }
 
 /* ── Init (robust) ── */
@@ -336,7 +360,13 @@ function initTreatmentForm() {
   });
   try { renderChart(); } catch(e){ console.error(e); }
   document.querySelectorAll('#cures-tbody .cure-row').forEach(r => updateRowTotal(r));
-  if (formCount === 0) addCureRow();
+  if (formCount === 0) { addCureRow(); }
+  else {
+    // активируем первую строку с услугой (или просто первую)
+    const rows = [...document.querySelectorAll('#cures-tbody .cure-row')].filter(r=>r.style.display!=='none');
+    const withSvc = rows.find(r => { const s=r.querySelector('.cure-service-select'); return s && s.value; });
+    if (withSvc || rows[0]) setActiveRow(withSvc || rows[0]);
+  }
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initTreatmentForm);
 else initTreatmentForm();

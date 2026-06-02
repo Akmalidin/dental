@@ -13,6 +13,11 @@ class TreatmentForm(forms.ModelForm):
             "doctor": forms.Select(attrs={"class": "searchable"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # branch проставляется во view (основной филиал), поэтому не обязателен в форме
+        self.fields["branch"].required = False
+
 
 class TreatmentCureForm(forms.ModelForm):
     class Meta:

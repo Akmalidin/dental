@@ -49,9 +49,10 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
       <!-- Debt block -->
       {% with debt=patient.debt %}
       {% if debt > 0 %}
-      <div class="mx-4 mb-4 rounded-xl px-4 py-3 text-center" style="background:#FEF2F2">
+      <div @click="debtModal=true" class="mx-4 mb-4 rounded-xl px-4 py-3 text-center cursor-pointer hover:ring-2 hover:ring-red-200 transition" style="background:#FEF2F2" title="Показать долг по приёмам">
         <p class="text-xs font-bold text-red-400 uppercase tracking-widest mb-0.5">ДОЛГ</p>
         <p class="text-xl font-black text-red-600">{{ debt|floatformat:0 }} <span class="text-sm font-semibold">сом</span></p>
+        <p class="text-[11px] text-red-400 mt-0.5">детали долга →</p>
       </div>
       {% elif patient.balance > 0 %}
       <div class="mx-4 mb-4 rounded-xl px-4 py-3 text-center" style="background:#ECFDF5">
@@ -834,6 +835,45 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
       </button>
     </div>
   </div>
+
+  <!-- ── Debt breakdown modal ─────────────────────────────────────────── -->
+  <div x-show="debtModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4"
+       style="background:rgba(15,23,42,.45)" @click.self="debtModal=false">
+    <div class="card w-full max-w-lg overflow-hidden" @click.stop>
+      <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border)">
+        <h3 class="font-bold" style="color:var(--text)">Долг по приёмам — {{ patient.full_name }}</h3>
+        <button @click="debtModal=false" class="text-2xl leading-none muted hover:text-red-500">&times;</button>
+      </div>
+      <div class="max-h-[60vh] overflow-y-auto">
+        <table class="tbl">
+          <thead><tr><th>Приём</th><th>Дата</th><th class="text-right">Итого</th><th class="text-right">Оплачено</th><th class="text-right pr-5">Долг</th></tr></thead>
+          <tbody>
+            {% for t in treatments %}{% if t.debt > 0 %}
+            <tr class="cursor-pointer hover:bg-indigo-50/40" onclick="window.location='/treatments/{{ t.pk }}/'">
+              <td class="font-bold">#{{ t.pk }} <span class="badge {% if t.status == 'cancelled' %}badge-gray{% elif t.status == 'completed' %}badge-blue{% else %}badge-orange{% endif %} ml-1">{{ t.get_status_display }}</span></td>
+              <td class="muted text-xs">{{ t.created_at|date:"d.m.Y" }}</td>
+              <td class="text-right">{{ t.total_amount|floatformat:0 }}</td>
+              <td class="text-right text-emerald-600">{{ t.paid_amount|floatformat:0 }}</td>
+              <td class="text-right pr-5 font-bold text-red-500">{{ t.debt|floatformat:0 }} сом</td>
+            </tr>
+            {% endif %}{% empty %}
+            <tr><td colspan="5" class="text-center py-8 muted">Долгов нет</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
+              <td colspan="4" class="px-4 py-3 text-right font-bold muted">Общий долг:</td>
+              <td class="px-4 py-3 text-right pr-5 font-extrabold text-red-600">{{ patient.debt|floatformat:0 }} сом</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="px-5 py-3 flex justify-between items-center" style="border-top:1px solid var(--border)">
+        <p class="text-xs muted">Нажмите на приём, чтобы открыть его</p>
+        <button @click="debtModal=false; showPayment=true" class="btn btn-primary btn-sm">Принять оплату</button>
+      </div>
+    </div>
+  </div>
 </div><!-- ← closes x-data="patientDetail()" -->
 
 {% endblock %}
@@ -845,6 +885,7 @@ function patientDetail() {
     tab: 'procedures',
     showPayment: false,
     showCashier: false,
+    debtModal: false,
     showServiceModal: false,
     savingServices: false,
     modalMode: 'treatment',

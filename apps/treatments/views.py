@@ -56,7 +56,10 @@ def treatment_create(request):
     })
     formset = TreatmentCureFormSet(request.POST or None, prefix="cures")
     if request.method == "POST" and form.is_valid() and formset.is_valid():
-        treatment = form.save()
+        treatment = form.save(commit=False)
+        if not treatment.branch_id:
+            treatment.branch = main_branch
+        treatment.save()
         cures = formset.save(commit=False)
         for cure in cures:
             cure.treatment = treatment

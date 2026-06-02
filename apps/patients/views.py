@@ -83,11 +83,21 @@ def patient_create(request):
 @login_required
 def patient_detail(request, pk):
     patient = get_object_or_404(Patient.objects.prefetch_related("tags"), pk=pk)
+    from django.db.models import Case, When, IntegerField, Value
+    # Порядок: запланированные → в процессе → завершённые → оплаченные → отменённые
+    status_order = Case(
+        When(status="planned", then=Value(0)),
+        When(status="in_progress", then=Value(1)),
+        When(status="completed", then=Value(2)),
+        When(status="paid", then=Value(3)),
+        When(status="cancelled", then=Value(4)),
+        default=Value(9), output_field=IntegerField(),
+    )
     treatments = Treatment.objects.filter(patient=patient).select_related(
         "doctor", "branch"
     ).prefetch_related(
         "cures__service", "cures__doctor", "files"
-    ).order_by("-created_at")
+    ).annotate(_status_order=status_order).order_by("_status_order", "-created_at")
     payments = Payment.objects.filter(patient=patient).select_related("received_by").order_by("-created_at")
     from apps.services.models import Service, ServiceCategory
     from apps.users.models import User as StaffUser
