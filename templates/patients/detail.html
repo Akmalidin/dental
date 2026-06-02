@@ -212,7 +212,7 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
             <span class="avatar w-5 h-5 text-[10px]">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
           </span>
           <span class="ml-auto text-sm">
-            <span class="muted">Итого:</span> <span class="font-bold" style="color:var(--text)">{{ t.total_amount|floatformat:0 }} сом</span>
+            <span class="muted">Итого:</span> <span class="font-bold" style="color:var(--text)">{{ t.display_total|floatformat:0 }} сом</span>
             {% if t.debt > 0 %}<span class="mx-1 faint">·</span><span class="muted">долг:</span> <span class="font-bold text-red-500">{{ t.debt|floatformat:0 }} сом</span>{% endif %}
           </span>
           <div class="flex gap-1.5 ml-2" onclick="event.stopPropagation()">
@@ -837,9 +837,8 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
   </div>
 
   <!-- ── Debt breakdown modal ─────────────────────────────────────────── -->
-  <div x-show="debtModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4"
-       style="background:rgba(15,23,42,.45)" @click.self="debtModal=false">
-    <div class="card w-full max-w-lg overflow-hidden" @click.stop>
+  <div x-show="debtModal" x-cloak class="modal-overlay" @click.self="debtModal=false">
+    <div class="modal-box overflow-hidden" style="max-width:560px" @click.stop>
       <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border)">
         <h3 class="font-bold" style="color:var(--text)">Долг по приёмам — {{ patient.full_name }}</h3>
         <button @click="debtModal=false" class="text-2xl leading-none muted hover:text-red-500">&times;</button>

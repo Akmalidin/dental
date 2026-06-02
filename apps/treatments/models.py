@@ -54,11 +54,24 @@ class Treatment(models.Model):
         return f"Приём #{self.pk} — {self.patient}"
 
     @property
+    def is_cancelled(self):
+        return self.status == self.STATUS_CANCELLED
+
+    @property
+    def display_total(self):
+        """Сумма для отображения: отменённый приём = 0."""
+        return Decimal(0) if self.is_cancelled else self.total_amount
+
+    @property
     def debt(self):
+        if self.is_cancelled:
+            return Decimal(0)
         return max(Decimal(0), self.total_amount - self.discount - self.paid_amount)
 
     @property
     def final_amount(self):
+        if self.is_cancelled:
+            return Decimal(0)
         return max(Decimal(0), self.total_amount - self.discount)
 
     def recalculate_total(self):
@@ -119,6 +132,11 @@ class TreatmentFile(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_image(self):
+        name = (self.file.name or "").lower()
+        return name.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"))
 
 
 class TreatmentFollowUp(models.Model):

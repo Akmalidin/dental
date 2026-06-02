@@ -437,6 +437,37 @@ def treatment_emr_save(request, pk):
 
 
 @login_required
+@require_POST
+def treatment_file_upload(request, pk):
+    """Загрузка файлов/рентген-снимков к приёму (поддержка нескольких файлов)."""
+    from .models import TreatmentFile
+    treatment = get_object_or_404(Treatment, pk=pk)
+    files = request.FILES.getlist("files") or request.FILES.getlist("file")
+    n = 0
+    for f in files:
+        TreatmentFile.objects.create(
+            treatment=treatment, file=f,
+            name=request.POST.get("name") or f.name,
+            uploaded_by=request.user,
+        )
+        n += 1
+    if n:
+        messages.success(request, _("Загружено файлов: %(n)d") % {"n": n})
+    else:
+        messages.warning(request, _("Файл не выбран"))
+    return redirect("treatment_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def treatment_file_delete(request, pk, file_pk):
+    from .models import TreatmentFile
+    TreatmentFile.objects.filter(pk=file_pk, treatment_id=pk).delete()
+    messages.success(request, _("Файл удалён"))
+    return redirect("treatment_detail", pk=pk)
+
+
+@login_required
 def treatment_emr_print(request, pk):
     """Printable EMR document."""
     from .models_emr import MedicalRecord, EMR_SECTIONS

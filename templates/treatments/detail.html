@@ -44,7 +44,7 @@
     <div class="grid grid-cols-4 gap-3 mt-5">
       <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--surface-2)">
         <p class="text-xs muted font-semibold uppercase mb-1">Сумма</p>
-        <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.total_amount|floatformat:0 }} <span class="text-sm muted">сом</span></p>
+        <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.display_total|floatformat:0 }} <span class="text-sm muted">сом</span></p>
       </div>
       <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--orange-bg)">
         <p class="text-xs font-semibold uppercase mb-1" style="color:var(--orange)">Скидка</p>
@@ -133,16 +133,43 @@
 
     <!-- Files -->
     <div x-show="tab==='files'" class="p-5" x-cloak>
+      <!-- Загрузка рентген-снимков / файлов -->
+      <form method="post" action="/treatments/{{ treatment.pk }}/files/upload/" enctype="multipart/form-data"
+            class="flex flex-wrap items-end gap-3 mb-5 p-4 rounded-xl" style="border:1px dashed var(--border);background:var(--surface-2)">
+        {% csrf_token %}
+        <div class="flex-1 min-w-[200px]">
+          <label class="fld">Рентген-снимки / документы (можно несколько)</label>
+          <input type="file" name="files" multiple accept="image/*,.pdf" required
+                 class="block w-full text-sm" style="padding:6px">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">⬆ Загрузить</button>
+      </form>
+
       {% if treatment.files.all %}
-      <div class="grid grid-cols-3 gap-3">
+      <!-- Снимки (изображения) -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         {% for f in treatment.files.all %}
-        <a href="{{ f.file.url }}" target="_blank" class="flex items-center gap-3 p-3 rounded-xl" style="border:1px solid var(--border)">
-          <div class="w-10 h-10 rounded-lg ic-purple flex items-center justify-center"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div>
-          <div class="min-w-0"><p class="text-sm font-semibold truncate">{{ f.name }}</p><p class="text-xs muted">{{ f.uploaded_at|date:"d.m.Y" }}</p></div>
-        </a>
+        <div class="relative group rounded-xl overflow-hidden" style="border:1px solid var(--border)">
+          {% if f.is_image %}
+          <a href="{{ f.file.url }}" target="_blank" title="{{ f.name }}">
+            <img src="{{ f.file.url }}" alt="{{ f.name }}" class="w-full h-32 object-cover" loading="lazy">
+          </a>
+          {% else %}
+          <a href="{{ f.file.url }}" target="_blank" class="flex flex-col items-center justify-center h-32 gap-2 p-2" title="{{ f.name }}">
+            <svg class="w-8 h-8 muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span class="text-xs muted truncate w-full text-center">{{ f.name }}</span>
+          </a>
+          {% endif %}
+          <div class="px-2 py-1.5 flex items-center justify-between" style="border-top:1px solid var(--border)">
+            <span class="text-[11px] muted truncate">{{ f.uploaded_at|date:"d.m.Y" }}</span>
+            <form method="post" action="/treatments/{{ treatment.pk }}/files/{{ f.pk }}/delete/" onsubmit="return confirm('Удалить файл?')">{% csrf_token %}
+              <button class="text-xs muted hover:text-red-500" title="Удалить">✕</button>
+            </form>
+          </div>
+        </div>
         {% endfor %}
       </div>
-      {% else %}<p class="text-center muted py-8">Файлов нет</p>{% endif %}
+      {% else %}<p class="text-center muted py-8">Снимков и файлов пока нет</p>{% endif %}
     </div>
 
     <!-- ЭМК (medical record) -->

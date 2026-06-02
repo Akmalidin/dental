@@ -82,7 +82,7 @@
             <th class="px-4 py-2.5 text-center text-xs font-bold muted uppercase" style="width:110px">Кол.</th>
             <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Цена</th>
             <th class="px-4 py-2.5 text-left text-xs font-bold muted uppercase" style="width:140px">Итого</th>
-            <th style="width:40px"></th>
+            <th style="width:70px"></th>
           </tr>
         </thead>
         <tbody id="cures-tbody">
@@ -97,7 +97,10 @@
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.quantity.html_name }}" value="{{ cure_form.quantity.value|default:'' }}" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.price.html_name }}" value="{{ cure_form.price.value|default:'' }}" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
             <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
-            <td class="px-2 text-center"><button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button></td>
+            <td class="px-2 text-center whitespace-nowrap">
+              <button type="button" onclick="splitRowByTeeth(this)" title="Разбить: отдельная запись на каждый зуб" class="text-sm muted hover:text-indigo-500 mr-1">⫶⫶</button>
+              <button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -136,7 +139,10 @@
     <td class="px-4 py-2"><input type="number" value="1" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
     <td class="px-4 py-2"><input type="number" value="" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
     <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
-    <td class="px-2 text-center"><button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button></td>
+    <td class="px-2 text-center whitespace-nowrap">
+      <button type="button" onclick="splitRowByTeeth(this)" title="Разбить: отдельная запись на каждый зуб" class="text-sm muted hover:text-indigo-500 mr-1">⫶⫶</button>
+      <button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button>
+    </td>
   </tr>
 </template>
 
@@ -226,6 +232,45 @@ function addCureRow() {
   document.getElementById('id_cures-TOTAL_FORMS').value = ++formCount;
   setActiveRow(tr);   // новая строка сразу активна для выбора зубов
 }
+/* Разбить процедуру на отдельные записи — по одной на каждый зуб */
+function splitRowByTeeth(btn) {
+  const row = btn.closest('tr');
+  const sel = row.querySelector('.cure-service-select');
+  const svcId = sel ? sel.value : '';
+  if (!svcId) { alert('Сначала выберите услугу в этой строке'); return; }
+  const teeth = parseTeeth(row.querySelector('.cure-tooth')?.value);
+  if (teeth.length < 2) { alert('Нужно минимум 2 зуба, чтобы разбить'); return; }
+  const price = row.querySelector('.cure-price')?.value || '';
+  // первый зуб оставляем в текущей строке
+  const tf = row.querySelector('.cure-tooth'); if (tf) tf.value = String(teeth[0]);
+  const qf = row.querySelector('.cure-qty'); if (qf) qf.value = 1;
+  updateRowTotal(row);
+  // остальные зубы → новые строки
+  for (let i = 1; i < teeth.length; i++) {
+    const tr = makeCureRow(svcId, String(teeth[i]), price);
+    document.getElementById('cures-tbody').appendChild(tr);
+    initRowSelect(document.querySelector('#cures-tbody .cure-row:last-child .cure-service-select'));
+    document.getElementById('id_cures-TOTAL_FORMS').value = ++formCount;
+  }
+  setActiveRow(row);
+  if (typeof toast === 'function') toast(`Разбито на ${teeth.length} записи`);
+}
+
+/* Построить готовую строку процедуры с заданными значениями */
+function makeCureRow(svcId, tooth, price) {
+  const tmpl = document.getElementById('empty-cure-row');
+  const tr = tmpl.content.cloneNode(true).querySelector('tr');
+  const idx = formCount;
+  const s = tr.querySelector('.cure-service-select');
+  s.innerHTML = optionsHTML; s.setAttribute('name', `cures-${idx}-service`); if (svcId) s.value = svcId;
+  const setN = (cls, name, val) => { const el = tr.querySelector(cls); el.setAttribute('name', name); if (val!=null) el.value = val; };
+  setN('.cure-tooth', `cures-${idx}-tooth_number`, tooth);
+  setN('.cure-qty', `cures-${idx}-quantity`, 1);
+  setN('.cure-price', `cures-${idx}-price`, price);
+  tr.querySelector('.cure-delete-cb').setAttribute('name', `cures-${idx}-DELETE`);
+  return tr;
+}
+
 function removeCureRow(btn) {
   const row = btn.closest('tr');
   const cb = row.querySelector('.cure-delete-cb'); if (cb) cb.checked = true;

@@ -20,7 +20,7 @@
           <td class="text-slate-400">{{ t.pk }}</td>
           <td><a href="/patients/{{ t.patient.pk }}/" class="font-semibold text-slate-800 hover:text-indigo-600">{{ t.patient.full_name }}</a></td>
           <td class="text-slate-600">{{ t.doctor.name }}</td>
-          <td class="font-semibold text-slate-800">{{ t.total_amount|floatformat:0 }} сом</td>
+          <td class="font-semibold text-slate-800">{{ t.display_total|floatformat:0 }} сом</td>
           <td class="text-emerald-600 font-medium">{{ t.paid_amount|floatformat:0 }} сом</td>
           <td class="{% if t.debt > 0 %}text-red-600 font-bold{% else %}text-slate-400{% endif %}">{{ t.debt|floatformat:0 }} сом</td>
           <td><span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-yellow{% endif %}">{{ t.get_status_display }}</span></td>

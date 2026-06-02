@@ -119,6 +119,9 @@ class Patient(models.Model):
     def debt(self):
         from django.db.models import Sum
         from decimal import Decimal
-        total = self.treatments.aggregate(total=Sum("total_amount"))["total"] or Decimal(0)
-        paid = self.treatments.aggregate(paid=Sum("paid_amount"))["paid"] or Decimal(0)
-        return max(Decimal(0), total - paid)
+        # отменённые приёмы не создают долг
+        qs = self.treatments.exclude(status="cancelled")
+        total = qs.aggregate(total=Sum("total_amount"))["total"] or Decimal(0)
+        disc = qs.aggregate(disc=Sum("discount"))["disc"] or Decimal(0)
+        paid = qs.aggregate(paid=Sum("paid_amount"))["paid"] or Decimal(0)
+        return max(Decimal(0), total - disc - paid)
