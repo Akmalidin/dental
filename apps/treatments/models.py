@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import models
 from .models_plan import TreatmentPlan, TreatmentPlanItem  # noqa: F401
 from .models_emr import MedicalRecordTemplate, MedicalRecord  # noqa: F401
+from .models_teeth import ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES  # noqa: F401
 from django.conf import settings
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch

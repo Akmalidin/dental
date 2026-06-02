@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
+from django.views.decorators.http import require_POST
 
 from .models import Patient, Tag, LeadSource
 from .forms import PatientForm
@@ -105,6 +106,20 @@ def patient_detail(request, pk):
     ).order_by("-created_at")
     from apps.settings_clinic.models_documents import DocumentTemplate
     doc_templates = DocumentTemplate.objects.filter(is_active=True)
+    # Зубная карта: справочник статусов + текущие состояния зубов пациента
+    from apps.treatments.models_teeth import ToothStatus
+    tooth_statuses_json = list(
+        ToothStatus.objects.filter(is_active=True).values("id", "name", "color")
+    )
+    tooth_conditions_json = {
+        tc.tooth_number: {
+            "status_id": tc.status_id,
+            "color": tc.status.color if tc.status else "",
+            "name": tc.status.name if tc.status else "",
+            "note": tc.note,
+        }
+        for tc in patient.tooth_conditions.select_related("status").all()
+    }
     return render(request, "patients/detail.html", {
         "doc_templates": doc_templates,
         "patient": patient,
@@ -115,6 +130,38 @@ def patient_detail(request, pk):
         "service_categories_json": service_categories_json,
         "service_categories": ServiceCategory.objects.order_by("name"),
         "doctors": doctors,
+        "tooth_statuses_json": tooth_statuses_json,
+        "tooth_conditions_json": tooth_conditions_json,
+    })
+
+
+@login_required
+@require_POST
+def patient_tooth_set(request, pk):
+    """AJAX: установить/снять статус конкретного зуба пациента."""
+    from django.http import JsonResponse
+    from apps.treatments.models_teeth import ToothStatus, ToothCondition
+    patient = get_object_or_404(Patient, pk=pk)
+    try:
+        tooth = int(request.POST.get("tooth_number"))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "bad tooth"}, status=400)
+    status_id = request.POST.get("status_id") or None
+    note = request.POST.get("note", "").strip()
+
+    if not status_id:
+        # пустой статус → удаляем состояние (зуб «здоров по умолчанию»)
+        ToothCondition.objects.filter(patient=patient, tooth_number=tooth).delete()
+        return JsonResponse({"ok": True, "tooth": tooth, "cleared": True})
+
+    status = get_object_or_404(ToothStatus, pk=status_id)
+    cond, _created = ToothCondition.objects.update_or_create(
+        patient=patient, tooth_number=tooth,
+        defaults={"status": status, "note": note, "updated_by": request.user},
+    )
+    return JsonResponse({
+        "ok": True, "tooth": tooth,
+        "status_id": status.id, "color": status.color, "name": status.name, "note": note,
     })
 
 

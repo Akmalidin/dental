@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block page_title %}Статусы зубов{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
+    <h3 class="font-bold">Статусы зубной карты</h3>
+    <p class="muted text-sm mt-0.5">Состояния зуба и цвета для зубной карты пациента.</p>
+  </div>
+
+  <!-- Добавить -->
+  <form method="post" action="/settings/tooth-statuses/" class="flex items-end gap-3 px-5 py-4" style="border-bottom:1px solid var(--border)">
+    {% csrf_token %}
+    <div>
+      <label class="fld">Название</label>
+      <input type="text" name="name" required placeholder="Напр. Винир" class="w-56">
+    </div>
+    <div>
+      <label class="fld">Цвет</label>
+      <input type="color" name="color" value="#6366F1" style="width:48px;height:38px;padding:2px;border-radius:8px;border:1px solid var(--border)">
+    </div>
+    <button class="btn btn-primary btn-sm">+ Добавить</button>
+  </form>
+
+  <table class="tbl">
+    <thead><tr><th class="w-16">Цвет</th><th>Название</th><th class="w-24">Активен</th><th class="text-right pr-5">Действия</th></tr></thead>
+    <tbody>
+      {% for s in statuses %}
+      <tr>
+        <td>
+          <form id="ts-{{ s.pk }}" method="post" action="/settings/tooth-statuses/{{ s.pk }}/edit/">{% csrf_token %}</form>
+          <input form="ts-{{ s.pk }}" type="color" name="color" value="{{ s.color }}" style="width:40px;height:32px;padding:2px;border-radius:6px;border:1px solid var(--border)">
+        </td>
+        <td><input form="ts-{{ s.pk }}" type="text" name="name" value="{{ s.name }}" class="w-64"></td>
+        <td><input form="ts-{{ s.pk }}" type="checkbox" name="is_active" {% if s.is_active %}checked{% endif %}></td>
+        <td>
+          <div class="flex items-center justify-end gap-1.5 pr-3">
+            <button form="ts-{{ s.pk }}" class="btn btn-sm">Сохранить</button>
+            <form method="post" action="/settings/tooth-statuses/{{ s.pk }}/delete/" onsubmit="return confirm('Удалить статус «{{ s.name }}»?')">{% csrf_token %}<button class="row-act ra-del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-center py-12 muted">Статусов нет.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -129,6 +129,50 @@ def emr_template_delete(request, pk):
     return redirect("emr_template_list")
 
 
+# ─── Статусы зубов (tooth statuses) ──────────────────────────────────────────
+
+@login_required
+@role_required("superadmin", "admin_main")
+def tooth_status_list(request):
+    from apps.treatments.models_teeth import ToothStatus
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        color = request.POST.get("color", "").strip() or "#6366F1"
+        if name:
+            ToothStatus.objects.create(
+                name=name, color=color,
+                sort_order=ToothStatus.objects.count(),
+            )
+            messages.success(request, _("Статус добавлен"))
+        return redirect("tooth_status_list")
+    statuses = ToothStatus.objects.all()
+    return render(request, "settings/tooth_statuses.html", {"statuses": statuses})
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+@require_POST
+def tooth_status_edit(request, pk):
+    from apps.treatments.models_teeth import ToothStatus
+    s = get_object_or_404(ToothStatus, pk=pk)
+    s.name = request.POST.get("name", s.name).strip() or s.name
+    s.color = request.POST.get("color", s.color).strip() or s.color
+    s.is_active = bool(request.POST.get("is_active"))
+    s.save()
+    messages.success(request, _("Статус обновлён"))
+    return redirect("tooth_status_list")
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+@require_POST
+def tooth_status_delete(request, pk):
+    from apps.treatments.models_teeth import ToothStatus
+    ToothStatus.objects.filter(pk=pk).delete()
+    messages.success(request, _("Статус удалён"))
+    return redirect("tooth_status_list")
+
+
 # ─── Document templates ──────────────────────────────────────────────────────
 
 @login_required

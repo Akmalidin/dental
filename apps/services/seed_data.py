@@ -250,4 +250,19 @@ def seed_dental(get_user=None):
     created["emr"] = extra["emr"]
     created["docs"] = extra["docs"]
 
+    created["tooth_statuses"] = seed_tooth_statuses()
+
     return created
+
+
+def seed_tooth_statuses():
+    """Create default tooth-chart statuses (idempotent)."""
+    from apps.treatments.models_teeth import ToothStatus, DEFAULT_TOOTH_STATUSES
+    n = 0
+    for order, (code, name, color) in enumerate(DEFAULT_TOOTH_STATUSES):
+        _, made = ToothStatus.objects.get_or_create(
+            code=code, defaults={"name": name, "color": color, "sort_order": order}
+        )
+        if made:
+            n += 1
+    return n

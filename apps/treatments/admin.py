@@ -3,6 +3,19 @@ from simple_history.admin import SimpleHistoryAdmin
 from .models import Treatment, TreatmentCure, TreatmentFile, TreatmentFollowUp
 from .models_plan import TreatmentPlan, TreatmentPlanItem
 from .models_emr import MedicalRecordTemplate, MedicalRecord
+from .models_teeth import ToothStatus, ToothCondition
+
+
+@admin.register(ToothStatus)
+class ToothStatusAdmin(admin.ModelAdmin):
+    list_display = ["name", "code", "color", "sort_order", "is_active"]
+    list_editable = ["color", "sort_order", "is_active"]
+
+
+@admin.register(ToothCondition)
+class ToothConditionAdmin(admin.ModelAdmin):
+    list_display = ["patient", "tooth_number", "status", "updated_at"]
+    list_filter = ["status"]
 
 
 @admin.register(MedicalRecordTemplate)

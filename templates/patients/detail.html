@@ -487,17 +487,61 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
 
     <!-- ─── TAB: Карта 043 / Документы ─────────────────────────────────── -->
     <div x-show="tab==='card043'" class="space-y-4">
-      <!-- Dental chart summary (read-only) -->
-      <div class="card overflow-hidden">
-        <div class="px-5 py-3.5 border-b border-slate-100">
-          <h3 class="font-bold text-slate-800">Зубная формула</h3>
+      <!-- Interactive dental chart (статусы зубов) -->
+      {{ tooth_statuses_json|json_script:"tooth-statuses" }}
+      {{ tooth_conditions_json|json_script:"tooth-conditions" }}
+      <div class="card overflow-hidden" x-data="toothChart({{ patient.pk }})">
+        <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800">Зубная карта</h3>
+          <a href="/settings/tooth-statuses/" class="text-xs text-indigo-600 hover:underline">Статусы →</a>
         </div>
-        <div class="p-5 text-center">
-          <p class="text-sm text-slate-500 mb-1">Лечившиеся зубы (из истории приёмов):</p>
-          <div class="flex flex-wrap gap-1.5 justify-center mt-2">
-            {% for t in treatments %}{% for c in t.cures.all %}{% if c.tooth_number %}
-            <span class="px-2 py-1 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold">{{ c.tooth_number }} · {{ c.service.name|truncatechars:20 }}</span>
-            {% endif %}{% endfor %}{% endfor %}
+        <div class="p-5">
+          <!-- легенда -->
+          <div class="flex flex-wrap gap-2 mb-4 justify-center">
+            <template x-for="s in statuses" :key="s.id">
+              <span class="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                <span class="w-3 h-3 rounded-full" :style="`background:${s.color}`"></span>
+                <span x-text="s.name"></span>
+              </span>
+            </template>
+          </div>
+          <!-- верхняя челюсть -->
+          <div class="flex justify-center gap-1 flex-wrap">
+            <template x-for="n in upper" :key="n">
+              <button @click="open(n, $event)" type="button"
+                class="w-8 h-9 rounded-md border text-[11px] font-bold flex items-center justify-center transition hover:ring-2 hover:ring-indigo-300"
+                :style="cond[n] ? `background:${cond[n].color};border-color:${cond[n].color};color:#fff` : 'background:#fff;border-color:#D8DAE8;color:#64748b'"
+                :title="cond[n] ? cond[n].name : ''" x-text="n"></button>
+            </template>
+          </div>
+          <div class="border-t border-dashed border-slate-200 my-2 mx-10"></div>
+          <!-- нижняя челюсть -->
+          <div class="flex justify-center gap-1 flex-wrap">
+            <template x-for="n in lower" :key="n">
+              <button @click="open(n, $event)" type="button"
+                class="w-8 h-9 rounded-md border text-[11px] font-bold flex items-center justify-center transition hover:ring-2 hover:ring-indigo-300"
+                :style="cond[n] ? `background:${cond[n].color};border-color:${cond[n].color};color:#fff` : 'background:#fff;border-color:#D8DAE8;color:#64748b'"
+                :title="cond[n] ? cond[n].name : ''" x-text="n"></button>
+            </template>
+          </div>
+
+          <!-- поповер выбора статуса -->
+          <div x-show="sel" x-cloak @click.outside="sel=null"
+               class="mt-4 mx-auto max-w-sm border border-slate-200 rounded-xl p-3 bg-white shadow-lg">
+            <p class="text-sm font-bold text-slate-700 mb-2">Зуб <span x-text="sel"></span> — выберите статус</p>
+            <div class="grid grid-cols-2 gap-1.5">
+              <template x-for="s in statuses" :key="s.id">
+                <button type="button" @click="setStatus(s)"
+                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-slate-100 hover:bg-slate-50 text-left text-xs">
+                  <span class="w-3 h-3 rounded-full shrink-0" :style="`background:${s.color}`"></span>
+                  <span x-text="s.name"></span>
+                </button>
+              </template>
+            </div>
+            <button type="button" @click="setStatus(null)"
+              class="mt-2 w-full text-xs text-slate-500 hover:text-red-500 py-1.5 border border-slate-100 rounded-lg">
+              Очистить статус
+            </button>
           </div>
         </div>
       </div>
@@ -975,6 +1019,37 @@ async function togglePlanItem(itemId, btn) {
       toast(done ? 'Пункт выполнен' : 'Отмечен как ожидающий');
     }
   } catch(e) { toast('Ошибка', 'error'); }
+}
+
+function toothChart(patientId) {
+  return {
+    patientId,
+    upper: [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28],
+    lower: [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38],
+    statuses: JSON.parse(document.getElementById('tooth-statuses').textContent),
+    cond: JSON.parse(document.getElementById('tooth-conditions').textContent),
+    sel: null,
+    open(n) { this.sel = (this.sel === n) ? null : n; },
+    async setStatus(s) {
+      const tooth = this.sel;
+      const body = new URLSearchParams();
+      body.set('tooth_number', tooth);
+      if (s) body.set('status_id', s.id);
+      try {
+        const r = await fetch(`/patients/${this.patientId}/tooth-set/`, {
+          method: 'POST',
+          headers: {'X-CSRFToken': getCsrf()},
+          body,
+        });
+        const d = await r.json();
+        if (!d.ok) { toast('Ошибка', 'error'); return; }
+        if (d.cleared) { delete this.cond[tooth]; }
+        else { this.cond[tooth] = {status_id: d.status_id, color: d.color, name: d.name, note: d.note || ''}; }
+        toast(s ? `Зуб ${tooth}: ${s.name}` : `Зуб ${tooth} очищен`);
+      } catch(e) { toast('Ошибка сети', 'error'); }
+      this.sel = null;
+    },
+  };
 }
 </script>
 {% endblock %}
