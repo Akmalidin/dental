@@ -4,10 +4,12 @@
 {% block extra_head %}
 {{ treated_teeth_json|json_script:"treated-teeth" }}
 {{ emr_templates_json|json_script:"emr-templates" }}
+{{ services_json|json_script:"svc-data" }}
+{{ medicines_json|json_script:"med-data" }}
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false}">
+<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false, showPlan:false}">
 
   <!-- Header card -->
   <div class="card card-pad">
@@ -106,6 +108,9 @@
 
     <!-- Plan -->
     <div x-show="tab==='plan'" class="p-5 space-y-3" x-cloak>
+      <div class="flex justify-end">
+        <button type="button" @click="showPlan=true" class="btn btn-primary btn-sm">+ Создать план лечения</button>
+      </div>
       {% for plan in plans %}
       <div class="card">
         <div class="flex items-center justify-between px-5 py-3" style="background:var(--surface-2);border-radius:18px 18px 0 0">
@@ -126,7 +131,7 @@
       {% empty %}
       <div class="text-center py-12">
         <p class="muted mb-3">У пациента нет планов лечения</p>
-        <a href="/patients/{{ treatment.patient.pk }}/" class="btn btn-primary btn-sm">Создать план в карточке пациента</a>
+        <button type="button" @click="showPlan=true" class="btn btn-primary btn-sm">+ Создать план лечения</button>
       </div>
       {% endfor %}
     </div>
@@ -137,8 +142,18 @@
       <form method="post" action="/treatments/{{ treatment.pk }}/files/upload/" enctype="multipart/form-data"
             class="flex flex-wrap items-end gap-3 mb-5 p-4 rounded-xl" style="border:1px dashed var(--border);background:var(--surface-2)">
         {% csrf_token %}
+        <div>
+          <label class="fld">Тип</label>
+          <select name="kind" class="no-tom" style="width:160px">
+            <option value="xray">Рентген</option>
+            <option value="before">Фото «до»</option>
+            <option value="after">Фото «после»</option>
+            <option value="document">Документ</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
         <div class="flex-1 min-w-[200px]">
-          <label class="fld">Рентген-снимки / документы (можно несколько)</label>
+          <label class="fld">Файлы (можно несколько)</label>
           <input type="file" name="files" multiple accept="image/*,.pdf" required
                  class="block w-full text-sm" style="padding:6px">
         </div>
@@ -150,6 +165,7 @@
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         {% for f in treatment.files.all %}
         <div class="relative group rounded-xl overflow-hidden" style="border:1px solid var(--border)">
+          <span class="absolute top-1.5 left-1.5 z-10 badge {% if f.kind == 'before' %}badge-orange{% elif f.kind == 'after' %}badge-green{% elif f.kind == 'xray' %}badge-blue{% else %}badge-gray{% endif %}" style="font-size:10px">{{ f.get_kind_display }}</span>
           {% if f.is_image %}
           <a href="{{ f.file.url }}" target="_blank" title="{{ f.name }}">
             <img src="{{ f.file.url }}" alt="{{ f.name }}" class="w-full h-32 object-cover" loading="lazy">
@@ -199,6 +215,78 @@
     <!-- Notes -->
     <div x-show="tab==='notes'" class="p-6" x-cloak>
       <p class="whitespace-pre-line text-sm" style="color:var(--text)">{{ treatment.notes|default:"Заметок нет" }}</p>
+    </div>
+  </div>
+
+  <!-- Plan modal -->
+  <div x-show="showPlan" x-cloak class="modal-overlay" @click.self="showPlan=false" x-data="planModal()">
+    <div class="modal-box flex flex-col" style="max-width:760px;max-height:88vh">
+      <div class="flex items-center justify-between px-6 py-4 shrink-0" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Новый план лечения</h2>
+        <button @click="showPlan=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-5 overflow-y-auto">
+        <div>
+          <label class="fld">Название плана</label>
+          <input type="text" x-model="title" placeholder="Напр. Лечение кариеса, протезирование">
+        </div>
+
+        <!-- Услуги -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="font-bold text-sm" style="color:var(--text)">Услуги плана</p>
+            <div class="flex items-center gap-2">
+              <select x-ref="svcpick" class="no-tom" style="width:240px"><option value="">— выбрать услугу —</option>
+                <template x-for="s in services" :key="s.id"><option :value="s.id" x-text="s.name + ' — ' + Math.round(s.price)"></option></template>
+              </select>
+              <button type="button" @click="addItem()" class="btn btn-sm">+ Добавить</button>
+            </div>
+          </div>
+          <table class="w-full text-sm">
+            <template x-for="(it,idx) in items" :key="idx">
+              <tr style="border-top:1px solid var(--border-2)">
+                <td class="py-1.5 font-semibold" x-text="it.name"></td>
+                <td class="py-1.5" style="width:90px"><input type="text" x-model="it.tooth" placeholder="зуб" class="text-center"></td>
+                <td class="py-1.5" style="width:70px"><input type="number" x-model.number="it.qty" min="1" class="text-center"></td>
+                <td class="py-1.5 text-right pr-2 font-bold" x-text="Math.round(it.price*it.qty)+' сом'"></td>
+                <td class="py-1.5 text-center" style="width:30px"><button type="button" @click="items.splice(idx,1)" class="text-red-500">&times;</button></td>
+              </tr>
+            </template>
+          </table>
+          <p x-show="!items.length" class="text-xs muted py-2">Услуги не добавлены</p>
+        </div>
+
+        <!-- Лекарства -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="font-bold text-sm" style="color:var(--text)">Назначить лекарства <span class="muted font-normal">(необязательно)</span></p>
+            <div class="flex items-center gap-2">
+              <select x-ref="medpick" class="no-tom" style="width:240px"><option value="">— выбрать лекарство —</option>
+                <template x-for="m in medicines" :key="m.id"><option :value="m.id" x-text="m.name"></option></template>
+              </select>
+              <button type="button" @click="addMed()" class="btn btn-sm">+ Добавить</button>
+            </div>
+          </div>
+          <table class="w-full text-sm">
+            <template x-for="(m,idx) in meds" :key="idx">
+              <tr style="border-top:1px solid var(--border-2)">
+                <td class="py-1.5 font-semibold" x-text="m.name"></td>
+                <td class="py-1.5"><input type="text" x-model="m.dosage" placeholder="дозировка (1т 2р/день)"></td>
+                <td class="py-1.5" style="width:140px"><input type="text" x-model="m.duration" placeholder="длительность"></td>
+                <td class="py-1.5 text-center" style="width:30px"><button type="button" @click="meds.splice(idx,1)" class="text-red-500">&times;</button></td>
+              </tr>
+            </template>
+          </table>
+          <p x-show="!meds.length" class="text-xs muted py-2">Лекарства не назначены</p>
+        </div>
+      </div>
+      <div class="px-6 py-4 flex justify-between items-center shrink-0" style="border-top:1px solid var(--border)">
+        <span class="font-bold" style="color:var(--text)">Итого: <span x-text="total()"></span> сом</span>
+        <div class="flex gap-3">
+          <button type="button" @click="showPlan=false" class="btn btn-ghost">Отмена</button>
+          <button type="button" @click="save()" :disabled="saving || !items.length" class="btn btn-primary px-6" :class="(!items.length||saving)?'opacity-50':''">Сохранить план</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -260,6 +348,46 @@ document.addEventListener('DOMContentLoaded', () => {
     '<div style="border-top:1.5px dashed var(--border);margin:8px 40px"></div>'+
     '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+lower.map(tooth).join('')+'</div>';
 });
+
+function planModal() {
+  return {
+    title: '',
+    services: JSON.parse(document.getElementById('svc-data').textContent || '[]'),
+    medicines: JSON.parse(document.getElementById('med-data').textContent || '[]'),
+    items: [], meds: [], saving: false,
+    addItem() {
+      const sel = this.$refs.svcpick; const id = sel.value; if (!id) return;
+      const s = this.services.find(x => String(x.id) === String(id)); if (!s) return;
+      this.items.push({ service_id: s.id, name: s.name, price: s.price, tooth: '', qty: 1 });
+      sel.value = '';
+    },
+    addMed() {
+      const sel = this.$refs.medpick; const id = sel.value; if (!id) return;
+      const m = this.medicines.find(x => String(x.id) === String(id)); if (!m) return;
+      this.meds.push({ medicine_id: m.id, name: m.name, dosage: '', duration: '' });
+      sel.value = '';
+    },
+    total() { return this.items.reduce((s, i) => s + Math.round(i.price * i.qty), 0).toLocaleString('ru-RU'); },
+    async save() {
+      if (!this.items.length) return;
+      this.saving = true;
+      try {
+        const r = await fetch('/treatments/plans/create/', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+          body: JSON.stringify({
+            patient_id: {{ treatment.patient.pk }}, doctor_id: {{ doctor_id }},
+            treatment_id: {{ treatment.pk }}, title: this.title,
+            items: this.items.map(i => ({ service_id: i.service_id, tooth: i.tooth, qty: i.qty })),
+            medicines: this.meds.map(m => ({ medicine_id: m.medicine_id, dosage: m.dosage, duration: m.duration })),
+          }),
+        });
+        const d = await r.json();
+        if (d.ok) { toast('План создан'); location.reload(); }
+        else { toast(d.error || 'Ошибка', 'error'); this.saving = false; }
+      } catch (e) { toast('Ошибка сети', 'error'); this.saving = false; }
+    },
+  };
+}
 
 function emrEditor() {
   return {

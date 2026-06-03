@@ -120,8 +120,17 @@ class TreatmentCure(models.Model):
 class TreatmentFile(models.Model):
     """X-rays, documents, and other files attached to a treatment."""
 
+    KIND_CHOICES = [
+        ("xray", "Рентген"),
+        ("before", "Фото «до»"),
+        ("after", "Фото «после»"),
+        ("document", "Документ"),
+        ("other", "Другое"),
+    ]
+
     treatment = models.ForeignKey(Treatment, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="treatments/%Y/%m/")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="xray", verbose_name="Тип")
     name = models.CharField(max_length=200, verbose_name="Название")
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, verbose_name="Загрузил"

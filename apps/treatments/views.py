@@ -161,6 +161,12 @@ def treatment_detail(request, pk):
         for k, lbl in EMR_SECTIONS
     ]
     emr_templates = MedicalRecordTemplate.objects.filter(is_active=True)
+    from apps.services.models import Service
+    from apps.medicines.models import Medicine
+    services_json = [{"id": s.pk, "name": s.name, "price": float(s.price)}
+                     for s in Service.objects.filter(is_active=True).order_by("name")]
+    medicines_json = [{"id": m.pk, "name": m.name, "unit": m.unit}
+                      for m in Medicine.objects.filter(is_active=True).order_by("name")]
     return render(request, "treatments/detail.html", {
         "treatment": treatment,
         "treated_teeth": sorted(treated_teeth),
@@ -172,6 +178,9 @@ def treatment_detail(request, pk):
         "emr_templates_json": [
             {"id": t.pk, "name": t.name, **t.as_dict()} for t in emr_templates
         ],
+        "services_json": services_json,
+        "medicines_json": medicines_json,
+        "doctor_id": treatment.doctor_id,
     })
 
 
@@ -311,6 +320,23 @@ def plan_create(request):
                 doctor=doctor,
                 sort_order=i,
             )
+        # назначения лекарств (опционально)
+        meds = data.get("medicines", [])
+        if meds:
+            from apps.medicines.models import Medicine, PatientMedicine
+            from datetime import date as _date
+            treatment_id = data.get("treatment_id")
+            for m in meds:
+                if not m.get("medicine_id"):
+                    continue
+                medicine = Medicine.objects.filter(pk=m["medicine_id"]).first()
+                if not medicine:
+                    continue
+                PatientMedicine.objects.create(
+                    patient=patient, treatment_id=treatment_id, medicine=medicine,
+                    dosage=m.get("dosage", ""), duration=m.get("duration", ""),
+                    doctor=doctor, date=_date.today(), notes=m.get("notes", ""),
+                )
         return JsonResponse({"ok": True, "plan_id": plan.pk})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -506,10 +532,11 @@ def treatment_file_upload(request, pk):
     from .models import TreatmentFile
     treatment = get_object_or_404(Treatment, pk=pk)
     files = request.FILES.getlist("files") or request.FILES.getlist("file")
+    kind = request.POST.get("kind", "xray")
     n = 0
     for f in files:
         TreatmentFile.objects.create(
-            treatment=treatment, file=f,
+            treatment=treatment, file=f, kind=kind,
             name=request.POST.get("name") or f.name,
             uploaded_by=request.user,
         )
