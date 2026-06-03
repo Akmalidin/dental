@@ -1,8 +1,9 @@
 """Document templates with variable substitution for printing."""
 from django.db import models
+from apps.tenancy import ClinicScopedModel
 
 
-class DocumentTemplate(models.Model):
+class DocumentTemplate(ClinicScopedModel):
     TYPE_CONSENT = "consent"
     TYPE_CONTRACT = "contract"
     TYPE_PRESCRIPTION = "prescription"

@@ -1,9 +1,10 @@
 from django.db import models
 from django.conf import settings
 from apps.patients.models import Patient
+from apps.tenancy import ClinicScopedModel
 
 
-class Medicine(models.Model):
+class Medicine(ClinicScopedModel):
     FORM_CHOICES = [
         ("tablets", "Таблетки"),
         ("capsules", "Капсулы"),

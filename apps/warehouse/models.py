@@ -1,9 +1,10 @@
 from django.db import models
 from django.conf import settings
 from apps.users.models import Branch
+from apps.tenancy import ClinicScopedModel
 
 
-class Supplier(models.Model):
+class Supplier(ClinicScopedModel):
     name = models.CharField(max_length=200, verbose_name="Поставщик")
     phone = models.CharField(max_length=30, verbose_name="Телефон")
     address = models.CharField(max_length=500, blank=True, verbose_name="Адрес")
@@ -18,7 +19,7 @@ class Supplier(models.Model):
         return self.name
 
 
-class ProductCategory(models.Model):
+class ProductCategory(ClinicScopedModel):
     name = models.CharField(max_length=150, verbose_name="Категория")
 
     class Meta:
@@ -29,7 +30,7 @@ class ProductCategory(models.Model):
         return self.name
 
 
-class Product(models.Model):
+class Product(ClinicScopedModel):
     name = models.CharField(max_length=200, verbose_name="Материал / товар")
     category = models.ForeignKey(
         ProductCategory,

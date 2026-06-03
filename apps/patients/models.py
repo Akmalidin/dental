@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
-from apps.softdelete import SoftDeleteModel
+from apps.tenancy import ClinicSoftDeleteModel
 from .models_insurance import InsuranceCompany  # noqa: F401 — re-exported
 
 
@@ -33,7 +33,7 @@ class Tag(models.Model):
         return self.name
 
 
-class Patient(SoftDeleteModel):
+class Patient(ClinicSoftDeleteModel):
     GENDER_CHOICES = [("male", "Мужской"), ("female", "Женский")]
 
     first_name = models.CharField(max_length=100, verbose_name="Имя")

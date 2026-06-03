@@ -2,9 +2,10 @@ from django.db import models
 from django.conf import settings
 from apps.users.models import Branch
 from apps.patients.models import Patient
+from apps.tenancy import ClinicScopedModel
 
 
-class ExpenseCategory(models.Model):
+class ExpenseCategory(ClinicScopedModel):
     name = models.CharField(max_length=150, verbose_name="Категория расхода")
 
     class Meta:
@@ -15,7 +16,7 @@ class ExpenseCategory(models.Model):
         return self.name
 
 
-class Payment(models.Model):
+class Payment(ClinicScopedModel):
     METHOD_CASH = "cash"
     METHOD_CARD = "card"
     METHOD_TRANSFER = "transfer"
@@ -90,7 +91,7 @@ class Payment(models.Model):
         Treatment.objects.filter(pk=self.treatment_id).update(paid_amount=paid - refund)
 
 
-class Expense(models.Model):
+class Expense(ClinicScopedModel):
     category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name="expenses", verbose_name="Категория")
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма")
     description = models.TextField(verbose_name="Описание")

@@ -1,7 +1,8 @@
 from django.db import models
+from apps.tenancy import ClinicScopedModel
 
 
-class ServiceCategory(models.Model):
+class ServiceCategory(ClinicScopedModel):
     name = models.CharField(max_length=150, verbose_name="Категория")
     color = models.CharField(max_length=7, default="#6366F1", verbose_name="Цвет")
     sort_order = models.PositiveIntegerField(default=0)
@@ -15,7 +16,7 @@ class ServiceCategory(models.Model):
         return self.name
 
 
-class Service(models.Model):
+class Service(ClinicScopedModel):
     name = models.CharField(max_length=200, verbose_name="Услуга")
     code = models.CharField(max_length=50, blank=True, verbose_name="Код услуги")
     category = models.ForeignKey(

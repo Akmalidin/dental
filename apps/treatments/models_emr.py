@@ -1,6 +1,7 @@
 """Electronic Medical Record (ЭМК) — templates + per-visit records."""
 from django.db import models
 from django.conf import settings
+from apps.tenancy import ClinicScopedModel
 
 
 # Sections of a dental medical record
@@ -15,7 +16,7 @@ EMR_SECTIONS = [
 ]
 
 
-class MedicalRecordTemplate(models.Model):
+class MedicalRecordTemplate(ClinicScopedModel):
     """Reusable EMR template (e.g. «Средний кариес»)."""
 
     name = models.CharField(max_length=300, verbose_name="Название")

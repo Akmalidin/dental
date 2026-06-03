@@ -8,10 +8,10 @@ from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
 from apps.patients.models import Patient
 from apps.services.models import Service
-from apps.softdelete import SoftDeleteModel
+from apps.tenancy import ClinicSoftDeleteModel
 
 
-class Treatment(SoftDeleteModel):
+class Treatment(ClinicSoftDeleteModel):
     STATUS_PLANNED = "planned"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_COMPLETED = "completed"

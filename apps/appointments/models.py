@@ -3,7 +3,7 @@ from django.conf import settings
 from apps.users.models import Branch
 from apps.patients.models import Patient
 from apps.services.models import Service
-from apps.softdelete import SoftDeleteModel
+from apps.tenancy import ClinicSoftDeleteModel
 
 
 class CancellationReason(models.Model):
@@ -39,7 +39,7 @@ class Cabinet(models.Model):
         return f"{self.branch} — {self.name}"
 
 
-class Appointment(SoftDeleteModel):
+class Appointment(ClinicSoftDeleteModel):
     STATUS_SCHEDULED = "scheduled"
     STATUS_CONFIRMED = "confirmed"
     STATUS_ARRIVED = "arrived"

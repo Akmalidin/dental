@@ -1,8 +1,25 @@
 from django.contrib.auth.models import AbstractUser, Permission
 from django.db import models
+from apps.tenancy import ClinicScopedModel
 
 
-class Branch(models.Model):
+class Clinic(models.Model):
+    """Клиника (арендатор). Изоляция данных по полю clinic в одной БД."""
+    name = models.CharField(max_length=200, verbose_name="Название клиники")
+    slug = models.SlugField(max_length=120, unique=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Клиника"
+        verbose_name_plural = "Клиники"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Branch(ClinicScopedModel):
     """Physical branch / location of a clinic."""
 
     name = models.CharField(max_length=200, verbose_name="Название")
@@ -60,6 +77,10 @@ class User(AbstractUser):
     login = models.CharField(max_length=150, unique=True, verbose_name="Логин")
     name = models.CharField(max_length=200, verbose_name="Имя")
     phone = models.CharField(max_length=30, blank=True, verbose_name="Телефон")
+    clinic = models.ForeignKey(
+        "users.Clinic", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="users", verbose_name="Клиника",
+    )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True, verbose_name="Аватар")
     role = models.ForeignKey(
         Role,
