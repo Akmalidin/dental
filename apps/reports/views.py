@@ -70,6 +70,48 @@ def report_dashboard(request):
     refunds = Payment.objects.filter(created_at__date__gte=start, type="refund").aggregate(s=Sum("amount"))["s"] or Decimal(0)
     expenses_total = Expense.objects.filter(date__gte=start).aggregate(s=Sum("amount"))["s"] or Decimal(0)
 
+    # ── Средний чек (по приёмам с суммой) ──
+    paid_treatments = treatments.exclude(status="cancelled").filter(total_amount__gt=0)
+    pt_count = paid_treatments.count()
+    avg_check = (total_amount / pt_count) if pt_count else Decimal(0)
+
+    # ── Конверсия: записи → завершённые приёмы ──
+    appts_count = Appointment.objects.filter(start_at__date__gte=start).count()
+    completed_count = treatments.filter(status__in=["completed", "paid"]).count()
+    conversion_pct = int(completed_count / appts_count * 100) if appts_count else 0
+
+    # ── Методы оплат ──
+    pay_methods = list(
+        Payment.objects.filter(created_at__date__gte=start, type="income")
+        .values("method").annotate(s=Sum("amount")).order_by("-s")
+    )
+    method_labels = {"cash": "Наличные", "card": "Карта", "transfer": "Перевод", "online": "Онлайн"}
+    pay_methods_donut = [[method_labels.get(m["method"], m["method"]), float(m["s"] or 0)] for m in pay_methods]
+
+    # ── Расходы по категориям ──
+    expense_by_cat = list(
+        Expense.objects.filter(date__gte=start).values("category__name")
+        .annotate(s=Sum("amount")).order_by("-s")[:8]
+    )
+
+    # ── Топ должников ──
+    top_debtors = []
+    for p in Patient.objects.all()[:500]:
+        d = p.debt
+        if d and d > 0:
+            top_debtors.append({"patient": p, "debt": d})
+    top_debtors.sort(key=lambda x: x["debt"], reverse=True)
+    top_debtors = top_debtors[:10]
+    total_debt = sum(x["debt"] for x in top_debtors)
+
+    # ── Сравнение с прошлым периодом (выручка) ──
+    period_len = (today - start).days or 1
+    prev_start = start - timedelta(days=period_len)
+    prev_revenue = Treatment.objects.filter(
+        created_at__date__gte=prev_start, created_at__date__lt=start
+    ).exclude(status="cancelled").aggregate(s=Sum("total_amount"))["s"] or Decimal(0)
+    revenue_growth = int((total_amount - prev_revenue) / prev_revenue * 100) if prev_revenue else 0
+
     # ── Income by day (chart) ──
     income_by_day = {}
     for p in Payment.objects.filter(created_at__date__gte=start, type="income"):
@@ -129,6 +171,17 @@ def report_dashboard(request):
         "returning": returning,
         "retention_pct": retention_pct,
         "total_patients": all_patients.count(),
+        # расширенная статистика
+        "avg_check": avg_check,
+        "appts_count": appts_count,
+        "completed_count": completed_count,
+        "conversion_pct": conversion_pct,
+        "pay_methods_donut_json": pay_methods_donut,
+        "expense_by_cat": expense_by_cat,
+        "top_debtors": top_debtors,
+        "total_debt": total_debt,
+        "prev_revenue": prev_revenue,
+        "revenue_growth": revenue_growth,
     })
 
 

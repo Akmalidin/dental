@@ -8,7 +8,7 @@
   <div class="grid grid-cols-3 gap-4">
     <div class="card-gradient stat-indigo p-5 rounded-2xl">
       <p class="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-2">Период</p>
-      <p class="text-2xl font-black text-white">{{ period|date:"F Y" }}</p>
+      <p class="text-lg font-black text-white">{{ date_from }} — {{ date_to }}</p>
     </div>
     <div class="card-gradient stat-emerald p-5 rounded-2xl">
       <p class="text-emerald-100 text-xs font-semibold uppercase tracking-wide mb-2">Врачей</p>
@@ -21,16 +21,21 @@
   </div>
 
   <div class="card overflow-hidden">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-3">
       <h3 class="font-bold text-slate-800">Расчёт зарплаты</h3>
-      <form method="get" class="flex items-center gap-2">
-        <input type="month" name="period" value="{{ period|date:'Y-m' }}"
-               class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm" onchange="this.form.submit()">
+      <form method="get" class="flex items-end gap-2 flex-wrap">
+        <div><label class="fld">С даты</label><input type="date" name="from" value="{{ date_from }}"></div>
+        <div><label class="fld">По дату</label><input type="date" name="to" value="{{ date_to }}"></div>
+        <label class="flex items-center gap-2 text-sm pb-1.5" style="color:var(--text-soft)">
+          <input type="checkbox" name="completed" value="1" {% if completed_only %}checked{% endif %}> только завершённые
+        </label>
+        <button class="btn btn-primary btn-sm">Применить</button>
+        <a href="/users/salary/export/?from={{ date_from }}&to={{ date_to }}{% if completed_only %}&completed=1{% endif %}" class="btn btn-ghost btn-sm">⬇ Excel</a>
       </form>
     </div>
     <table class="data-table">
       <thead>
-        <tr><th>Врач</th><th>Схема</th><th>Выручка</th><th>Оплачено</th><th>К выплате</th><th class="text-right pr-5">Настройка</th></tr>
+        <tr><th>Врач</th><th>Схема</th><th>Приёмов</th><th>Заверш.</th><th>Ср. чек</th><th>Выручка</th><th>Оплачено</th><th>К выплате</th><th class="text-right pr-5">Настройка</th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
@@ -44,8 +49,11 @@
             <span class="badge badge-gray">Не задана</span>
             {% endif %}
           </td>
-          <td class="text-slate-600">{{ row.revenue|floatformat:0 }} сом</td>
-          <td class="text-emerald-600">{{ row.paid|floatformat:0 }} сом</td>
+          <td class="text-slate-600">{{ row.treatments_count }}</td>
+          <td class="text-slate-600">{{ row.completed_count }}</td>
+          <td class="text-slate-600">{{ row.avg_check|floatformat:0 }}</td>
+          <td class="text-slate-600">{{ row.revenue|floatformat:0 }}</td>
+          <td class="text-emerald-600">{{ row.paid|floatformat:0 }}</td>
           <td class="font-black text-indigo-600">{{ row.salary|floatformat:0 }} сом</td>
           <td>
             <div class="flex justify-end pr-3">
@@ -54,12 +62,14 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center py-12 text-slate-400">Врачей нет</td></tr>
+        <tr><td colspan="9" class="text-center py-12 text-slate-400">Врачей нет</td></tr>
         {% endfor %}
       </tbody>
       <tfoot>
         <tr class="bg-slate-50 border-t-2 border-slate-200">
-          <td colspan="4" class="px-5 py-3 text-right font-bold text-slate-600">Итого к выплате:</td>
+          <td colspan="5" class="px-5 py-3 text-right font-bold text-slate-600">Итого:</td>
+          <td class="px-5 py-3 font-bold text-slate-700">{{ total_revenue|floatformat:0 }}</td>
+          <td class="px-5 py-3 font-bold text-emerald-600">{{ total_paid|floatformat:0 }}</td>
           <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ total_salary|floatformat:0 }} сом</td>
         </tr>
       </tfoot>

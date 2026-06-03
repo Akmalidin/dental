@@ -458,50 +458,104 @@ def branch_edit(request, pk):
 
 # ─── Salary ──────────────────────────────────────────────────────────────────
 
-@login_required
-@role_required("superadmin", "admin_main")
-def salary_report(request):
-    from datetime import date
+def _salary_rows(date_from, date_to, completed_only=False):
+    """Расчёт зарплат по врачам за период [date_from, date_to]."""
     from decimal import Decimal
-    from django.db.models import Sum, Q
-    from .models_salary import SalaryScheme
+    from django.db.models import Sum, Count, Q
     from apps.treatments.models import Treatment
     from apps.finance.models import Payment
-
-    today = date.today()
-    month_start = today.replace(day=1)
-    period = request.GET.get("period", month_start.isoformat())
-    try:
-        from datetime import datetime
-        p_start = datetime.fromisoformat(period).date().replace(day=1)
-    except (ValueError, TypeError):
-        p_start = month_start
-
     doctors = User.objects.filter(role__name="doctor", is_active=True).select_related("role")
     rows = []
     for doc in doctors:
-        revenue = Treatment.objects.filter(
-            doctor=doc, created_at__date__gte=p_start
-        ).aggregate(s=Sum("total_amount"))["s"] or Decimal(0)
+        t_qs = Treatment.objects.filter(
+            doctor=doc, created_at__date__gte=date_from, created_at__date__lte=date_to
+        ).exclude(status="cancelled")
+        rev_qs = t_qs.filter(status__in=["completed", "paid"]) if completed_only else t_qs
+        revenue = rev_qs.aggregate(s=Sum("total_amount"))["s"] or Decimal(0)
         paid = Payment.objects.filter(
-            treatment__doctor=doc, type="income", created_at__date__gte=p_start
+            treatment__doctor=doc, type="income",
+            created_at__date__gte=date_from, created_at__date__lte=date_to,
         ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        t_count = t_qs.count()
+        c_count = t_qs.filter(status__in=["completed", "paid"]).count()
+        avg = (revenue / c_count) if (completed_only and c_count) else ((revenue / t_count) if t_count else Decimal(0))
         scheme = getattr(doc, "salary_scheme", None)
         salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else Decimal(0)
         rows.append({
-            "doctor": doc,
-            "scheme": scheme,
-            "revenue": revenue,
-            "paid": paid,
-            "salary": salary,
+            "doctor": doc, "scheme": scheme, "revenue": revenue, "paid": paid,
+            "treatments_count": t_count, "completed_count": c_count,
+            "avg_check": avg, "salary": salary,
         })
+    return rows
 
+
+@login_required
+@role_required("superadmin", "admin_main")
+def salary_report(request):
+    from datetime import date, datetime, timedelta
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    # диапазон дат: ?from=&to= (по умолчанию текущий месяц)
+    def _pd(v, default):
+        try:
+            return datetime.fromisoformat(v).date()
+        except (ValueError, TypeError):
+            return default
+    date_from = _pd(request.GET.get("from"), month_start)
+    date_to = _pd(request.GET.get("to"), today)
+    completed_only = request.GET.get("completed") == "1"
+
+    rows = _salary_rows(date_from, date_to, completed_only)
     total_salary = sum(r["salary"] for r in rows)
+    total_revenue = sum(r["revenue"] for r in rows)
+    total_paid = sum(r["paid"] for r in rows)
     return render(request, "users/salary.html", {
         "rows": rows,
-        "period": p_start,
+        "period": date_from,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "completed_only": completed_only,
         "total_salary": total_salary,
+        "total_revenue": total_revenue,
+        "total_paid": total_paid,
     })
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+def salary_export(request):
+    """Экспорт зарплатной ведомости в Excel."""
+    from datetime import date, datetime
+    from openpyxl import Workbook
+    from django.http import HttpResponse
+    today = date.today()
+    def _pd(v, default):
+        try:
+            return datetime.fromisoformat(v).date()
+        except (ValueError, TypeError):
+            return default
+    date_from = _pd(request.GET.get("from"), today.replace(day=1))
+    date_to = _pd(request.GET.get("to"), today)
+    rows = _salary_rows(date_from, date_to, request.GET.get("completed") == "1")
+    wb = Workbook(); ws = wb.active; ws.title = "Зарплата"
+    ws.append([f"Зарплатная ведомость {date_from}—{date_to}"])
+    ws.append(["Врач", "Схема", "Приёмов", "Завершено", "Выручка", "Оплачено", "Средний чек", "Зарплата"])
+    for r in rows:
+        ws.append([
+            r["doctor"].name,
+            r["scheme"].get_scheme_type_display() if r["scheme"] else "—",
+            r["treatments_count"], r["completed_count"],
+            float(r["revenue"]), float(r["paid"]), float(r["avg_check"]), float(r["salary"]),
+        ])
+    ws.append([])
+    ws.append(["ИТОГО", "", "", "", "", "", "", float(sum(r["salary"] for r in rows))])
+    for i, w in enumerate([26, 20, 10, 10, 14, 14, 14, 14], start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp["Content-Disposition"] = f'attachment; filename="salary_{date_from}_{date_to}.xlsx"'
+    wb.save(resp)
+    return resp
 
 
 @login_required

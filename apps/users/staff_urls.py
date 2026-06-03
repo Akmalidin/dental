@@ -10,6 +10,7 @@ urlpatterns = [
     path("branches/create/", views.branch_create, name="branch_create"),
     path("branches/<int:pk>/edit/", views.branch_edit, name="branch_edit"),
     path("salary/", views.salary_report, name="salary_report"),
+    path("salary/export/", views.salary_export, name="salary_export"),
     path("salary/<int:pk>/scheme/", views.salary_scheme_edit, name="salary_scheme_edit"),
     path("schedule/", views.schedule_list, name="schedule_list"),
     path("schedule/<int:pk>/edit/", views.schedule_edit, name="schedule_edit"),

@@ -7,6 +7,7 @@
 {{ visits_by_hour_json|json_script:"hour-data" }}
 {{ age_groups_json|json_script:"age-data" }}
 {{ service_donut_json|json_script:"svcrev-data" }}
+{{ pay_methods_donut_json|json_script:"paymethods-data" }}
 {% endblock %}
 
 {% block content %}
@@ -35,6 +36,38 @@
       <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div><div><p class="stat-label">Выручка</p><p class="stat-value">{{ total_amount|floatformat:0 }}</p></div></div>
       <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div><div><p class="stat-label">Оплачено</p><p class="stat-value">{{ total_paid|floatformat:0 }}</p></div></div>
       <div class="stat"><div class="stat-icon ic-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-3 3"/></svg></div><div><p class="stat-label">Прибыль</p><p class="stat-value">{{ net|floatformat:0 }}</p></div></div>
+    </div>
+
+    <!-- Расширенные KPI -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14l6-6M9 8h.01M15 14h.01"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div><div><p class="stat-label">Средний чек</p><p class="stat-value">{{ avg_check|floatformat:0 }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><div><p class="stat-label">Конверсия запись→приём</p><p class="stat-value">{{ conversion_pct }}%</p></div></div>
+      <div class="stat"><div class="stat-icon ic-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div><div><p class="stat-label">Долг (топ-10)</p><p class="stat-value text-red-500">{{ total_debt|floatformat:0 }}</p></div></div>
+      <div class="stat"><div class="stat-icon {% if revenue_growth >= 0 %}ic-green{% else %}ic-red{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg></div><div><p class="stat-label">Рост выручки</p><p class="stat-value {% if revenue_growth >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}">{% if revenue_growth >= 0 %}+{% endif %}{{ revenue_growth }}%</p></div></div>
+    </div>
+
+    <!-- Методы оплат + Расходы по категориям + Должники -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="card card-pad">
+        <h3 class="font-bold mb-4" style="color:var(--text)">Методы оплат</h3>
+        <canvas id="payMethodsDonut" height="160"></canvas>
+      </div>
+      <div class="card">
+        <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Расходы по категориям</h3></div>
+        <table class="tbl"><tbody>
+          {% for e in expense_by_cat %}
+          <tr><td class="font-semibold">{{ e.category__name|default:"Без категории" }}</td><td class="text-right pr-5 font-bold text-red-500">{{ e.s|floatformat:0 }} сом</td></tr>
+          {% empty %}<tr><td class="muted py-6 text-center">Нет расходов</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      <div class="card">
+        <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Топ должников</h3></div>
+        <table class="tbl"><tbody>
+          {% for d in top_debtors %}
+          <tr><td><a href="/patients/{{ d.patient.pk }}/" class="font-semibold hover:text-indigo-600">{{ d.patient.full_name }}</a></td><td class="text-right pr-5 font-bold text-red-500">{{ d.debt|floatformat:0 }} сом</td></tr>
+          {% empty %}<tr><td class="muted py-6 text-center">Долгов нет 🎉</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -137,7 +170,7 @@ function buildCharts() {
   const J = id => { const el=document.getElementById(id); return el?JSON.parse(el.textContent):null; };
   const mk = (id,cfg) => { const el=document.getElementById(id); if(el) _charts.push(new Chart(el,cfg)); };
 
-  const visits = J('visits-data')||[], income = J('income-data')||[], hours = J('hour-data')||[], ages = J('age-data')||{}, svcrev = J('svcrev-data')||[];
+  const visits = J('visits-data')||[], income = J('income-data')||[], hours = J('hour-data')||[], ages = J('age-data')||{}, svcrev = J('svcrev-data')||[], paym = J('paymethods-data')||[];
   const baseScale = { x:{grid:{display:false},ticks:{color:cc.text}}, y:{grid:{color:cc.grid},ticks:{color:cc.text},beginAtZero:true} };
 
   mk('incomeChart', { type:'line', data:{labels:income.map(v=>v[0].slice(5)),datasets:[{data:income.map(v=>v[1]),borderColor:'#22C55E',backgroundColor:'rgba(34,197,94,.12)',fill:true,tension:.4,borderWidth:2,pointRadius:0}]}, options:{plugins:{legend:{display:false}},scales:baseScale} });
@@ -145,6 +178,7 @@ function buildCharts() {
   mk('hourChart', { type:'bar', data:{labels:hours.map((_,i)=>i),datasets:[{data:hours,backgroundColor:'#8B5CF6',borderRadius:5}]}, options:{plugins:{legend:{display:false}},scales:baseScale} });
   if (svcrev.length) mk('serviceDonut', { type:'doughnut', data:{labels:svcrev.map(v=>v[0]),datasets:[{data:svcrev.map(v=>v[1]),backgroundColor:PALETTE,borderWidth:0}]}, options:{cutout:'68%',plugins:{legend:{display:false}}} });
   mk('ageChart', { type:'doughnut', data:{labels:Object.keys(ages),datasets:[{data:Object.values(ages),backgroundColor:PALETTE,borderWidth:0}]}, options:{cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:cc.text,boxWidth:10,padding:8,font:{size:11}}}}} });
+  if (paym.length) mk('payMethodsDonut', { type:'doughnut', data:{labels:paym.map(v=>v[0]),datasets:[{data:paym.map(v=>v[1]),backgroundColor:PALETTE,borderWidth:0}]}, options:{cutout:'64%',plugins:{legend:{position:'bottom',labels:{color:cc.text,boxWidth:10,padding:8,font:{size:11}}}}} });
 }
 document.addEventListener('DOMContentLoaded', buildCharts);
 window.addEventListener('themechange', buildCharts);
