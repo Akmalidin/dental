@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.reports",
     "apps.settings_clinic",
+    "apps.sync",
 
     # Tenants app — только модели центральной БД (Tenant, Subscription)
     "apps.tenants",

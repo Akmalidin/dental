@@ -27,6 +27,7 @@ urlpatterns = [
     path("reports/", include("apps.reports.urls")),
     path("settings/", include("apps.settings_clinic.urls")),
     path("notifications/", include("apps.notifications.urls")),
+    path("sync/", include("apps.sync.urls")),
 
     # Центральная панель (работает локально без схем)
     path("central/", include("central.urls")),

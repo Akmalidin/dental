@@ -53,3 +53,7 @@ frontend/.output/
 
 # Certificates
 nginx/certs/
+
+# Offline mode (local only)
+offline_cloud.json
+offline.sqlite3
