@@ -253,6 +253,117 @@ def seed_dental(get_user=None):
     return created
 
 
+def seed_demo(reset=False):
+    """Демо-данные для показа клиентам: врачи, пациенты, записи на эту неделю,
+    приёмы с оплатами и долгами. Идемпотентно (по флагу demo в заметках/логине).
+    Запускать в контексте нужной клиники (set_current_clinic)."""
+    import random
+    from datetime import timedelta, time as dtime, datetime as dt
+    from decimal import Decimal
+    from django.utils import timezone
+    from apps.tenancy import get_current_clinic
+    from apps.users.models import User, Role, Branch
+    from apps.patients.models import Patient
+    from apps.services.models import Service
+    from apps.appointments.models import Appointment
+    from apps.treatments.models import Treatment, TreatmentCure
+    from apps.finance.models import Payment
+
+    out = {"doctors": 0, "patients": 0, "appointments": 0, "treatments": 0, "payments": 0}
+    branch = Branch.objects.filter(is_main=True).first() or Branch.objects.first()
+    if not branch:
+        branch = Branch.objects.create(name="Демо филиал", address="г. Бишкек", phone="+996", is_main=True)
+    drole, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+
+    # Врачи
+    doctor_names = ["Иванов Иван", "Петрова Анна", "Сидоров Пётр"]
+    doctors = []
+    for i, dn in enumerate(doctor_names):
+        login = f"demo_doc{i+1}"
+        u = User.objects.filter(login=login).first()
+        if not u:
+            u = User(login=login, name=dn, role=drole, clinic=get_current_clinic())
+            u.set_password("demo12345")
+            u.save()
+            u.branches.add(branch)
+            out["doctors"] += 1
+        doctors.append(u)
+
+    services = list(Service.objects.filter(is_active=True)[:20]) or []
+
+    # Пациенты
+    first = ["Алмаз", "Айгуль", "Бакыт", "Нурлан", "Жылдыз", "Эрмек", "Айдана", "Тимур",
+             "Гульнара", "Данияр", "Асель", "Руслан", "Чолпон", "Максат", "Динара"]
+    last = ["Кадыров", "Осмонова", "Турдубеков", "Сатыбалдиев", "Абдыкадырова", "Маматов",
+            "Бекова", "Усенов", "Жээнбеков", "Алиева", "Токтосунов", "Исраилова"]
+    patients = []
+    for i in range(15):
+        phone = f"+99670{random.randint(1000000,9999999)}"
+        fn, ln = first[i % len(first)], last[i % len(last)]
+        p = Patient.objects.filter(first_name=fn, last_name=ln, phone__startswith="+99670").first()
+        if not p:
+            p = Patient.objects.create(
+                first_name=fn, last_name=ln, phone=phone, branch=branch,
+                gender=random.choice(["male", "female"]),
+                birth_date=timezone.now().date() - timedelta(days=random.randint(7000, 22000)),
+            )
+            out["patients"] += 1
+        patients.append(p)
+
+    if not doctors or not services or not patients:
+        return out
+
+    today = timezone.localdate()
+    # Записи на эту неделю (±3 дня) для календаря
+    for day_off in range(-2, 4):
+        day = today + timedelta(days=day_off)
+        for _ in range(random.randint(3, 6)):
+            doc = random.choice(doctors)
+            hour = random.randint(9, 18)
+            start = timezone.make_aware(dt.combine(day, dtime(hour, random.choice([0, 30]))))
+            svc = random.choice(services)
+            end = start + timedelta(minutes=svc.duration or 30)
+            # без грубых пересечений
+            if Appointment.all_objects.filter(doctor=doc, start_at=start).exists():
+                continue
+            status = "completed" if day_off < 0 else random.choice(["scheduled", "confirmed", "scheduled"])
+            a = Appointment(patient=random.choice(patients), doctor=doc, branch=branch,
+                            service=svc, start_at=start, end_at=end, status=status,
+                            clinic=get_current_clinic())
+            a.save()
+            out["appointments"] += 1
+
+    # Приёмы с оплатами/долгами
+    for _ in range(12):
+        p = random.choice(patients)
+        doc = random.choice(doctors)
+        t = Treatment.objects.create(patient=p, doctor=doc, branch=branch,
+                                     status=random.choice(["completed", "completed", "in_progress"]))
+        total = Decimal(0)
+        for _ in range(random.randint(1, 3)):
+            svc = random.choice(services)
+            qty = random.randint(1, 2)
+            price = svc.price or Decimal(random.randint(500, 5000))
+            TreatmentCure.objects.create(treatment=t, service=svc, doctor=doc,
+                                         quantity=qty, price=price,
+                                         tooth_number=str(random.randint(11, 48)))
+            total += price * qty
+        t.total_amount = total
+        t.save(update_fields=["total_amount"])
+        out["treatments"] += 1
+        # оплата: полностью / частично / без оплаты (долг)
+        roll = random.random()
+        pay = total if roll < 0.5 else (total / 2 if roll < 0.8 else Decimal(0))
+        if pay > 0:
+            Payment.objects.create(patient=p, treatment=t, amount=pay, method="cash",
+                                   type="income", branch=branch, received_by=doc)
+            t.paid_amount = pay
+            t.save(update_fields=["paid_amount"])
+            out["payments"] += 1
+
+    return out
+
+
 def seed_tooth_statuses():
     """Create default tooth-chart statuses (idempotent)."""
     from apps.treatments.models_teeth import ToothStatus, DEFAULT_TOOTH_STATUSES
