@@ -2,14 +2,30 @@
 {% block page_title %}Приёмы{% endblock %}
 {% block content %}
 <div class="space-y-4">
-  <div class="flex items-center justify-between">
-    <div class="flex gap-2">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="flex gap-2 flex-wrap">
       {% for s, label in statuses %}
-      <a href="?status={{ s }}" class="badge {% if current_status == s %}badge-blue{% else %}badge-gray{% endif %} hover:bg-slate-200 cursor-pointer">{{ label }}</a>
+      <a href="?status={{ s }}{% if q %}&q={{ q }}{% endif %}" class="badge {% if current_status == s %}badge-blue{% else %}badge-gray{% endif %} hover:bg-slate-200 cursor-pointer">{{ label }}</a>
       {% endfor %}
     </div>
     <a href="/treatments/create/" class="btn-primary">+ Новый приём</a>
   </div>
+
+  <!-- Поиск + фильтры -->
+  <form method="get" class="card card-pad flex flex-wrap items-end gap-3">
+    {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+    <div class="search-box flex-1 min-w-56">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" name="q" value="{{ q }}" placeholder="Поиск: пациент, врач, услуга, телефон...">
+    </div>
+    <div><label class="fld">С даты</label><input type="date" name="from" value="{{ date_from }}"></div>
+    <div><label class="fld">По дату</label><input type="date" name="to" value="{{ date_to }}"></div>
+    <label class="flex items-center gap-2 text-sm" style="color:var(--text-soft)">
+      <input type="checkbox" name="debt" value="1" {% if only_debt %}checked{% endif %}> только с долгом
+    </label>
+    <button class="btn btn-primary btn-sm">Применить</button>
+    {% if q or date_from or date_to or only_debt %}<a href="?{% if current_status %}status={{ current_status }}{% endif %}" class="btn btn-ghost btn-sm">Сбросить</a>{% endif %}
+  </form>
 
   <div class="card overflow-hidden">
     <table class="data-table">

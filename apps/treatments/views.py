@@ -20,6 +20,25 @@ def treatment_list(request):
     current_status = request.GET.get("status", "")
     if current_status:
         qs = qs.filter(status=current_status)
+    q = request.GET.get("q", "").strip()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(patient__first_name__icontains=q) | Q(patient__last_name__icontains=q)
+            | Q(patient__phone__icontains=q) | Q(doctor__name__icontains=q)
+            | Q(cures__service__name__icontains=q)
+        ).distinct()
+    # фильтр «только с долгом»
+    only_debt = request.GET.get("debt") == "1"
+    if only_debt:
+        from django.db.models import F
+        qs = qs.exclude(status="cancelled").filter(total_amount__gt=F("paid_amount") + F("discount"))
+    date_from = request.GET.get("from", "")
+    date_to = request.GET.get("to", "")
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
     statuses = [
         ("", "Все"), ("planned", "Запланированы"), ("in_progress", "В процессе"),
         ("completed", "Завершены"), ("paid", "Оплачены"), ("cancelled", "Отменены"),
@@ -28,6 +47,10 @@ def treatment_list(request):
         "treatments": qs,
         "statuses": statuses,
         "current_status": current_status,
+        "q": q,
+        "date_from": date_from,
+        "date_to": date_to,
+        "only_debt": only_debt,
     })
 
 
