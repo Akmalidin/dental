@@ -53,17 +53,28 @@ def treatment_create(request):
                    or (patient.branch if patient else None)
                    or Branch.objects.first())
     # врач по умолчанию: из GET (?doctor=), иначе из записи пациента, иначе текущий
+    from apps.appointments.models import Appointment
     default_doctor = request.user
+    appt = None
+    appt_id = request.GET.get("appointment")
+    if appt_id:
+        appt = Appointment.objects.filter(pk=appt_id).select_related("service").prefetch_related("services").first()
     gdoc = request.GET.get("doctor")
     if gdoc:
         from apps.users.models import User as StaffUser
         default_doctor = StaffUser.objects.filter(pk=gdoc).first() or request.user
+    elif appt and appt.doctor_id:
+        default_doctor = appt.doctor
     elif patient:
-        from apps.appointments.models import Appointment
-        appt = (Appointment.objects.filter(patient=patient)
-                .exclude(status="cancelled").order_by("-start_at").first())
-        if appt and appt.doctor_id:
-            default_doctor = appt.doctor
+        last_appt = (Appointment.objects.filter(patient=patient)
+                     .exclude(status="cancelled").order_by("-start_at").first())
+        if last_appt and last_appt.doctor_id:
+            default_doctor = last_appt.doctor
+    # услуги из записи для предзаполнения процедур приёма
+    prefill_services = []
+    if appt:
+        svcs = list(appt.services.all()) or ([appt.service] if appt.service else [])
+        prefill_services = [{"id": s.pk, "name": s.name, "price": float(s.price)} for s in svcs if s]
     form = TreatmentForm(request.POST or None, initial={
         "patient": patient, "doctor": default_doctor, "branch": main_branch,
     })
@@ -94,6 +105,8 @@ def treatment_create(request):
         "services_json": _services_json(),
         "services_data": [{"id": s.pk, "name": s.name, "price": float(s.price),
                            "cat": s.category.name if s.category else ""} for s in services_data],
+        "patient": patient,
+        "prefill_services_json": prefill_services,
     })
 
 

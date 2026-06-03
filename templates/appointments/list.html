@@ -33,7 +33,12 @@
       <a href="?status=completed" class="pill-tab {% if current_status == 'completed' %}active{% endif %}">Завершён</a>
       <a href="?status=no_show" class="pill-tab {% if current_status == 'no_show' %}active{% endif %}">Не пришёл</a>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 items-center">
+      <form method="get" class="search-box w-64">
+        {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" name="q" value="{{ q }}" placeholder="Поиск: пациент, врач, услуга, телефон...">
+      </form>
       <a href="/calendar/" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Расписание</a>
       <button type="button" @click="bookOpen=true" class="btn btn-primary btn-sm">+ Новая запись</button>
     </div>
@@ -90,7 +95,7 @@
           </td>
           <td>
             <div class="flex items-center justify-end gap-1.5" x-data="{open:false}">
-              {% if a.patient %}<a href="/treatments/create/?patient={{ a.patient.pk }}&doctor={{ a.doctor.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
+              {% if a.patient %}<a href="/treatments/create/?patient={{ a.patient.pk }}&doctor={{ a.doctor.pk }}&appointment={{ a.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
               <div class="relative" @click.outside="open=false">
                 <button @click="open=!open" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
                 <div x-show="open" x-cloak class="dropdown right-0 top-full mt-1 w-48">

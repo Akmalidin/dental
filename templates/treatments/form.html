@@ -3,6 +3,7 @@
 
 {% block extra_head %}
 {{ services_json|json_script:"svc-data" }}
+{{ prefill_services_json|json_script:"prefill-svc" }}
 {% endblock %}
 
 {% block content %}
@@ -17,6 +18,19 @@
       {% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}
       {% for e in formset.non_form_errors %}<p>{{ e }}</p>{% endfor %}
       {% for cf in formset %}{% for field in cf %}{% for e in field.errors %}<p>Процедура: {{ field.label }} — {{ e }}</p>{% endfor %}{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if patient %}
+    <!-- Информация о пациенте -->
+    <div class="card card-pad flex flex-wrap items-center gap-4">
+      <div class="w-11 h-11 rounded-full flex items-center justify-center text-white font-black shrink-0" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ patient.first_name|first|upper }}</div>
+      <div>
+        <a href="/patients/{{ patient.pk }}/" class="font-bold" style="color:var(--text)">{{ patient.full_name }}</a>
+        <p class="text-xs muted">{{ patient.phone }}{% if patient.birth_date %} · {{ patient.birth_date|date:"d.m.Y" }}{% endif %}</p>
+      </div>
+      {% with debt=patient.debt %}{% if debt > 0 %}<span class="badge badge-red ml-2">долг {{ debt|floatformat:0 }} сом</span>{% endif %}{% endwith %}
+      <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost btn-sm ml-auto">Карта пациента →</a>
     </div>
     {% endif %}
 
@@ -405,7 +419,21 @@ function initTreatmentForm() {
   });
   try { renderChart(); } catch(e){ console.error(e); }
   document.querySelectorAll('#cures-tbody .cure-row').forEach(r => updateRowTotal(r));
-  if (formCount === 0) { addCureRow(); }
+  // предзаполнение услугами из записи на приём
+  let prefill = [];
+  try { prefill = JSON.parse(document.getElementById('prefill-svc').textContent) || []; } catch(e) {}
+  if (formCount === 0 && prefill.length) {
+    prefill.forEach(s => {
+      const tr = makeCureRow(String(s.id), '', Math.round(s.price));
+      document.getElementById('cures-tbody').appendChild(tr);
+      initRowSelect(document.querySelector('#cures-tbody .cure-row:last-child .cure-service-select'));
+      document.getElementById('id_cures-TOTAL_FORMS').value = ++formCount;
+    });
+    document.querySelectorAll('#cures-tbody .cure-row').forEach(r => updateRowTotal(r));
+    const first = document.querySelector('#cures-tbody .cure-row');
+    if (first) setActiveRow(first);
+  }
+  else if (formCount === 0) { addCureRow(); }
   else {
     // активируем первую строку с услугой (или просто первую)
     const rows = [...document.querySelectorAll('#cures-tbody .cure-row')].filter(r=>r.style.display!=='none');

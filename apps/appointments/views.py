@@ -179,10 +179,19 @@ def appointment_list(request):
     current_status = request.GET.get("status", "")
     if current_status:
         qs = qs.filter(status=current_status)
+    q = request.GET.get("q", "").strip()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(patient__first_name__icontains=q) | Q(patient__last_name__icontains=q)
+            | Q(patient__phone__icontains=q) | Q(doctor__name__icontains=q)
+            | Q(service__name__icontains=q)
+        )
     form = AppointmentForm(initial={"doctor": request.user if request.user.is_doctor else None})
     return render(request, "appointments/list.html", {
         "appointments": qs,
         "current_status": current_status,
+        "q": q,
         "form": form,
         "cancel_reasons": CancellationReason.objects.filter(is_active=True),
     })
