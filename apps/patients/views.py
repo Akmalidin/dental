@@ -119,20 +119,6 @@ def patient_detail(request, pk):
     from apps.users.models import Branch
     all_branches = Branch.objects.filter(is_active=True)
     main_branch = all_branches.filter(is_main=True).first() or all_branches.first()
-    # Зубная карта: справочник статусов + текущие состояния зубов пациента
-    from apps.treatments.models_teeth import ToothStatus
-    tooth_statuses_json = list(
-        ToothStatus.objects.filter(is_active=True).values("id", "name", "color")
-    )
-    tooth_conditions_json = {
-        tc.tooth_number: {
-            "status_id": tc.status_id,
-            "color": tc.status.color if tc.status else "",
-            "name": tc.status.name if tc.status else "",
-            "note": tc.note,
-        }
-        for tc in patient.tooth_conditions.select_related("status").all()
-    }
     return render(request, "patients/detail.html", {
         "doc_templates": doc_templates,
         "patient": patient,
@@ -143,8 +129,6 @@ def patient_detail(request, pk):
         "service_categories_json": service_categories_json,
         "service_categories": ServiceCategory.objects.order_by("name"),
         "doctors": doctors,
-        "tooth_statuses_json": tooth_statuses_json,
-        "tooth_conditions_json": tooth_conditions_json,
         "all_branches": all_branches,
         "main_branch": main_branch,
     })

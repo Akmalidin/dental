@@ -250,8 +250,6 @@ def seed_dental(get_user=None):
     created["emr"] = extra["emr"]
     created["docs"] = extra["docs"]
 
-    created["tooth_statuses"] = seed_tooth_statuses()
-
     return created
 
 
