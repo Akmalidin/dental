@@ -21,4 +21,17 @@ def clinic_settings(request):
         except Exception:
             pass
 
+        # Филиалы для переключателя в navbar
+        try:
+            from apps.users.models import Branch
+            branches = list(Branch.objects.filter(is_active=True))
+            ctx["nav_branches"] = branches
+            active_id = request.session.get("active_branch")
+            active = next((b for b in branches if b.pk == active_id), None)
+            if active is None:
+                active = next((b for b in branches if b.is_main), None) or (branches[0] if branches else None)
+            ctx["active_branch"] = active
+        except Exception:
+            pass
+
     return ctx

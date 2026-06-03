@@ -93,6 +93,21 @@ def seed_dental_view(request):
     return redirect("superadmin_panel")
 
 
+@login_required
+@require_POST
+def set_active_branch(request):
+    """Переключатель филиала в navbar — сохраняет выбор в сессии."""
+    bid = request.POST.get("branch")
+    if bid in (None, "", "all"):
+        request.session.pop("active_branch", None)
+    else:
+        try:
+            request.session["active_branch"] = int(bid)
+        except (TypeError, ValueError):
+            pass
+    return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
+
+
 # ─── Корзина (recycle bin) ───────────────────────────────────────────────────
 
 def _recycle_models():

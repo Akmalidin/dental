@@ -10,4 +10,5 @@ urlpatterns = [
     path("<int:pk>/status/", views.appointment_status, name="appointment_status"),
     path("<int:pk>/move/", views.appointment_move, name="appointment_move"),
     path("<int:pk>/delete/", views.appointment_delete, name="appointment_delete"),
+    path("<int:pk>/trash/", views.appointment_trash, name="appointment_trash"),
 ]

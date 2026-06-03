@@ -116,6 +116,9 @@ def patient_detail(request, pk):
     ).order_by("-created_at")
     from apps.settings_clinic.models_documents import DocumentTemplate
     doc_templates = DocumentTemplate.objects.filter(is_active=True)
+    from apps.users.models import Branch
+    all_branches = Branch.objects.filter(is_active=True)
+    main_branch = all_branches.filter(is_main=True).first() or all_branches.first()
     # Зубная карта: справочник статусов + текущие состояния зубов пациента
     from apps.treatments.models_teeth import ToothStatus
     tooth_statuses_json = list(
@@ -142,6 +145,8 @@ def patient_detail(request, pk):
         "doctors": doctors,
         "tooth_statuses_json": tooth_statuses_json,
         "tooth_conditions_json": tooth_conditions_json,
+        "all_branches": all_branches,
+        "main_branch": main_branch,
     })
 
 

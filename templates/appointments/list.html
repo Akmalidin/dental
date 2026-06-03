@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block page_title %}Записи на приём{% endblock %}
 {% block content %}
-<div class="space-y-4" x-data="{cancelOpen:false, cancelId:null}">
+<div class="space-y-4" x-data="{cancelOpen:false, cancelId:null, bookOpen:false}">
   <!-- Cancel modal with reason -->
   <div x-show="cancelOpen" x-cloak class="modal-overlay" @click.self="cancelOpen=false">
     <div class="modal-box" style="max-width:420px">
@@ -35,7 +35,38 @@
     </div>
     <div class="flex gap-2">
       <a href="/calendar/" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Расписание</a>
-      <a href="/calendar/" class="btn btn-primary btn-sm">+ Новая запись</a>
+      <button type="button" @click="bookOpen=true" class="btn btn-primary btn-sm">+ Новая запись</button>
+    </div>
+  </div>
+
+  <!-- Booking modal -->
+  <div x-show="bookOpen" x-cloak class="modal-overlay" @click.self="bookOpen=false">
+    <div class="modal-box" style="max-width:560px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Новая запись</h2>
+        <button @click="bookOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" action="/appointments/create/" class="p-6 space-y-3">
+        {% csrf_token %}
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Пациент</label>{{ form.patient }}</div>
+          <div><label class="fld">Врач *</label>{{ form.doctor }}</div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Начало *</label>{{ form.start_at }}</div>
+          <div><label class="fld">Конец *</label>{{ form.end_at }}</div>
+        </div>
+        <div><label class="fld">Услуги</label>{{ form.services }}</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Кабинет</label>{{ form.cabinet }}</div>
+          <div><label class="fld">Филиал</label>{{ form.branch }}</div>
+        </div>
+        <div><label class="fld">Заметки</label>{{ form.notes }}</div>
+        <div class="flex gap-3 pt-1">
+          <button type="submit" class="btn btn-primary flex-1">Создать запись</button>
+          <button type="button" @click="bookOpen=false" class="btn btn-ghost">Отмена</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -59,7 +90,7 @@
           </td>
           <td>
             <div class="flex items-center justify-end gap-1.5" x-data="{open:false}">
-              {% if a.patient %}<a href="/treatments/create/?patient={{ a.patient.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
+              {% if a.patient %}<a href="/treatments/create/?patient={{ a.patient.pk }}&doctor={{ a.doctor.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
               <div class="relative" @click.outside="open=false">
                 <button @click="open=!open" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
                 <div x-show="open" x-cloak class="dropdown right-0 top-full mt-1 w-48">
@@ -68,6 +99,7 @@
                   <form method="post" action="/appointments/{{ a.pk }}/status/"><input type="hidden" name="status" value="completed">{% csrf_token %}<button>✓ Завершить</button></form>
                   <form method="post" action="/appointments/{{ a.pk }}/status/"><input type="hidden" name="status" value="no_show">{% csrf_token %}<button>✕ Не пришёл</button></form>
                   <button type="button" @click="cancelId={{ a.pk }}; cancelOpen=true; open=false" style="color:var(--red)">Отменить</button>
+                  <form method="post" action="/appointments/{{ a.pk }}/trash/" onsubmit="return confirm('Переместить запись в корзину?')">{% csrf_token %}<button style="color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Удалить (в корзину)</button></form>
                 </div>
               </div>
             </div>

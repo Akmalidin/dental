@@ -668,9 +668,9 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Филиал</label>
-        <select name="branch" required>
-          {% for b in request.user.branches.all %}
-          <option value="{{ b.pk }}">{{ b.name }}</option>
+        <select name="branch">
+          {% for b in all_branches %}
+          <option value="{{ b.pk }}" {% if main_branch and b.pk == main_branch.pk %}selected{% endif %}>{{ b.name }}{% if b.is_main %} (осн.){% endif %}</option>
           {% endfor %}
         </select>
       </div>

@@ -50,6 +50,12 @@ def payment_create(request):
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
+        if not payment.branch_id:   # по умолчанию — активный/основной филиал
+            from apps.users.models import Branch
+            payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                              or Branch.objects.filter(is_main=True).first()
+                              or request.user.branches.first()
+                              or Branch.objects.first())
         payment.save()
         # update patient balance
         patient = payment.patient

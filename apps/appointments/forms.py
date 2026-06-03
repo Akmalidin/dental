@@ -17,6 +17,8 @@ class AppointmentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["start_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        self.fields["branch"].required = False   # проставляется во view (основной филиал)
+        self.fields["status"].required = False   # по умолчанию «Записан»
         for f in ("patient", "doctor", "service", "cabinet"):
             if f in self.fields:
                 self.fields[f].widget.attrs["class"] = "searchable"

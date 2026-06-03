@@ -48,11 +48,24 @@ def treatment_create(request):
     from apps.users.models import Branch
     patient_id = request.GET.get("patient")
     patient = get_object_or_404(Patient, pk=patient_id) if patient_id else None
-    main_branch = (Branch.objects.filter(is_main=True).first()
+    main_branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                   or Branch.objects.filter(is_main=True).first()
                    or (patient.branch if patient else None)
                    or Branch.objects.first())
+    # врач по умолчанию: из GET (?doctor=), иначе из записи пациента, иначе текущий
+    default_doctor = request.user
+    gdoc = request.GET.get("doctor")
+    if gdoc:
+        from apps.users.models import User as StaffUser
+        default_doctor = StaffUser.objects.filter(pk=gdoc).first() or request.user
+    elif patient:
+        from apps.appointments.models import Appointment
+        appt = (Appointment.objects.filter(patient=patient)
+                .exclude(status="cancelled").order_by("-start_at").first())
+        if appt and appt.doctor_id:
+            default_doctor = appt.doctor
     form = TreatmentForm(request.POST or None, initial={
-        "patient": patient, "doctor": request.user, "branch": main_branch,
+        "patient": patient, "doctor": default_doctor, "branch": main_branch,
     })
     formset = TreatmentCureFormSet(request.POST or None, prefix="cures")
     if request.method == "POST" and form.is_valid() and formset.is_valid():

@@ -210,12 +210,20 @@ def appointment_create(request):
     if form.is_valid():
         appt = form.save(commit=False)
         appt.created_by = request.user
+        if not appt.status:
+            appt.status = Appointment.STATUS_SCHEDULED
+        if not appt.branch_id:   # по умолчанию активный/основной филиал
+            from apps.users.models import Branch
+            appt.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                           or Branch.objects.filter(is_main=True).first()
+                           or request.user.branches.first() or Branch.objects.first())
         if not appt.service_id:
             from apps.services.models import Service
-            appt.service, _ = Service.objects.get_or_create(
+            appt.service, _created = Service.objects.get_or_create(
                 name="Визит к врачу", defaults={"price": 0, "duration": 30, "is_active": True}
             )
         appt.save()
+        form.save_m2m()
         messages.success(request, _("Запись добавлена"))
         return redirect("appointment_list")
     return render(request, "appointments/form.html", {"form": form})
@@ -287,3 +295,13 @@ def appointment_delete(request, pk):
         messages.success(request, _("Запись отменена"))
         return redirect("appointment_list")
     return render(request, "appointments/confirm_delete.html", {"object": appt})
+
+
+@login_required
+@require_POST
+def appointment_trash(request, pk):
+    """Мягкое удаление записи (в корзину)."""
+    appt = get_object_or_404(Appointment, pk=pk)
+    appt.soft_delete(request.user)
+    messages.success(request, _("Запись перемещена в корзину"))
+    return redirect("appointment_list")

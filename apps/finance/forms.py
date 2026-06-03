@@ -12,6 +12,11 @@ class PaymentForm(forms.ModelForm):
             "treatment": forms.Select(attrs={"class": "searchable"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # филиал проставляется во view (основной), поэтому в форме не обязателен
+        self.fields["branch"].required = False
+
 
 class ExpenseForm(forms.ModelForm):
     class Meta:
