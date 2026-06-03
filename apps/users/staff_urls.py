@@ -15,4 +15,7 @@ urlpatterns = [
     path("schedule/<int:pk>/edit/", views.schedule_edit, name="schedule_edit"),
     path("superadmin/", views.superadmin_panel, name="superadmin_panel"),
     path("superadmin/seed-dental/", views.seed_dental_view, name="seed_dental"),
+    path("recycle-bin/", views.recycle_bin, name="recycle_bin"),
+    path("recycle-bin/<str:kind>/<int:pk>/restore/", views.recycle_restore, name="recycle_restore"),
+    path("recycle-bin/<str:kind>/<int:pk>/purge/", views.recycle_purge, name="recycle_purge"),
 ]

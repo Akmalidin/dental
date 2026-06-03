@@ -8,9 +8,10 @@ from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
 from apps.patients.models import Patient
 from apps.services.models import Service
+from apps.softdelete import SoftDeleteModel
 
 
-class Treatment(models.Model):
+class Treatment(SoftDeleteModel):
     STATUS_PLANNED = "planned"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_COMPLETED = "completed"
@@ -49,6 +50,7 @@ class Treatment(models.Model):
         verbose_name = "Приём"
         verbose_name_plural = "Приёмы"
         ordering = ["-created_at"]
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return f"Приём #{self.pk} — {self.patient}"

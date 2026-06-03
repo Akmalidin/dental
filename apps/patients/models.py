@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
+from apps.softdelete import SoftDeleteModel
 from .models_insurance import InsuranceCompany  # noqa: F401 — re-exported
 
 
@@ -32,7 +33,7 @@ class Tag(models.Model):
         return self.name
 
 
-class Patient(models.Model):
+class Patient(SoftDeleteModel):
     GENDER_CHOICES = [("male", "Мужской"), ("female", "Женский")]
 
     first_name = models.CharField(max_length=100, verbose_name="Имя")
@@ -96,6 +97,7 @@ class Patient(models.Model):
         verbose_name = "Пациент"
         verbose_name_plural = "Пациенты"
         ordering = ["-created_at"]
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return f"{self.last_name} {self.first_name}"

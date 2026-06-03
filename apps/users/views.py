@@ -93,6 +93,61 @@ def seed_dental_view(request):
     return redirect("superadmin_panel")
 
 
+# ─── Корзина (recycle bin) ───────────────────────────────────────────────────
+
+def _recycle_models():
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    from apps.appointments.models import Appointment
+    return {
+        "patient": (Patient, "Пациент"),
+        "treatment": (Treatment, "Приём"),
+        "appointment": (Appointment, "Запись"),
+    }
+
+
+@login_required
+@role_required("superadmin", "admin_main", "admin")
+def recycle_bin(request):
+    items = []
+    for kind, (Model, label) in _recycle_models().items():
+        for obj in Model.all_objects.filter(is_deleted=True).order_by("-deleted_at")[:200]:
+            items.append({
+                "kind": kind, "label": label, "pk": obj.pk,
+                "title": str(obj), "deleted_at": obj.deleted_at,
+                "deleted_by": obj.deleted_by,
+            })
+    items.sort(key=lambda x: x["deleted_at"] or 0, reverse=True)
+    return render(request, "users/recycle_bin.html", {"items": items})
+
+
+@login_required
+@role_required("superadmin", "admin_main", "admin")
+@require_POST
+def recycle_restore(request, kind, pk):
+    models = _recycle_models()
+    if kind in models:
+        Model = models[kind][0]
+        obj = get_object_or_404(Model.all_objects, pk=pk)
+        obj.restore()
+        messages.success(request, _("Восстановлено: %(t)s") % {"t": str(obj)})
+    return redirect("recycle_bin")
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+@require_POST
+def recycle_purge(request, kind, pk):
+    models = _recycle_models()
+    if kind in models:
+        Model = models[kind][0]
+        obj = get_object_or_404(Model.all_objects, pk=pk)
+        title = str(obj)
+        obj.delete()   # безвозвратно
+        messages.success(request, _("Удалено безвозвратно: %(t)s") % {"t": title})
+    return redirect("recycle_bin")
+
+
 @login_required
 def profile_view(request):
     from django.contrib.auth import update_session_auth_hash
@@ -236,8 +291,18 @@ def dashboard_view(request):
 @role_required("superadmin", "admin_main")
 def staff_list(request):
     users = User.objects.select_related("role").prefetch_related("branches").filter(is_active=True)
+    # суперпользователя видит только сам суперпользователь
+    if not request.user.is_superadmin:
+        users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
     form = UserForm()
     return render(request, "users/list.html", {"users": users, "form": form})
+
+
+def _is_protected_target(target, actor):
+    """Можно ли actor'у трогать target. Суперпользователя трогает только суперпользователь."""
+    if target.is_superadmin and not actor.is_superadmin:
+        return True
+    return False
 
 
 @login_required
@@ -255,8 +320,17 @@ def staff_create(request):
 @role_required("superadmin", "admin_main")
 def staff_edit(request, pk):
     user = get_object_or_404(User, pk=pk)
+    # защита: суперпользователя редактирует только суперпользователь
+    if _is_protected_target(user, request.user):
+        messages.error(request, _("Доступ запрещён: нельзя редактировать суперпользователя"))
+        return redirect("staff_list")
     form = UserForm(request.POST or None, request.FILES or None, instance=user)
     if form.is_valid():
+        # запрет повышения роли до суперадмина не-суперпользователем
+        new_role = form.cleaned_data.get("role")
+        if (new_role and new_role.name == Role.SUPERADMIN) and not request.user.is_superadmin:
+            messages.error(request, _("Доступ запрещён: нельзя назначить роль суперадмина"))
+            return redirect("staff_list")
         form.save()
         messages.success(request, _("Данные обновлены"))
         return redirect("staff_list")
@@ -267,6 +341,9 @@ def staff_edit(request, pk):
 @role_required("superadmin", "admin_main")
 def staff_delete(request, pk):
     user = get_object_or_404(User, pk=pk)
+    if _is_protected_target(user, request.user):
+        messages.error(request, _("Доступ запрещён: нельзя удалить суперпользователя"))
+        return redirect("staff_list")
     if request.method == "POST":
         user.is_active = False
         user.save()

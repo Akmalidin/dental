@@ -214,7 +214,7 @@ def patient_edit(request, pk):
 def patient_delete(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     if request.method == "POST":
-        patient.delete()
-        messages.success(request, _("Пациент удалён"))
+        patient.soft_delete(request.user)   # в корзину, не безвозвратно
+        messages.success(request, _("Пациент перемещён в корзину"))
         return redirect("patient_list")
     return render(request, "patients/confirm_delete.html", {"object": patient})

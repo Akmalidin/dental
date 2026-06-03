@@ -123,6 +123,16 @@ def treatment_detail(request, pk):
 
 
 @login_required
+@require_POST
+def treatment_delete(request, pk):
+    treatment = get_object_or_404(Treatment, pk=pk)
+    patient_pk = treatment.patient_id
+    treatment.soft_delete(request.user)   # в корзину
+    messages.success(request, _("Приём перемещён в корзину"))
+    return redirect("patient_detail", pk=patient_pk)
+
+
+@login_required
 def treatment_edit(request, pk):
     treatment = get_object_or_404(Treatment, pk=pk)
     form = TreatmentForm(request.POST or None, instance=treatment)
