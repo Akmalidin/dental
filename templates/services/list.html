@@ -39,14 +39,18 @@
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
         Порядок
       </button>
-      <button class="btn-ghost text-xs py-1.5">
+      <a href="/services/export/" class="btn-ghost text-xs py-1.5" title="Скачать прейскурант в Excel">
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         Экспорт
-      </button>
-      <button class="btn-ghost text-xs py-1.5">
+      </a>
+      <button type="button" onclick="document.getElementById('svc-import').click()" class="btn-ghost text-xs py-1.5" title="Загрузить прейскурант из Excel">
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
         Импорт
       </button>
+      <form method="post" action="/services/import/" enctype="multipart/form-data" class="hidden">
+        {% csrf_token %}
+        <input id="svc-import" type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
+      </form>
       <button @click="showCreate=true" class="btn-primary text-xs py-1.5">+ Добавить</button>
     </div>
   </div>

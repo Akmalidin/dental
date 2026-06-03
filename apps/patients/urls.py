@@ -3,6 +3,8 @@ from . import views
 
 urlpatterns = [
     path("", views.patient_list, name="patient_list"),
+    path("export/", views.patient_export, name="patient_export"),
+    path("import/", views.patient_import, name="patient_import"),
     path("create/", views.patient_create, name="patient_create"),
     path("<int:pk>/", views.patient_detail, name="patient_detail"),
     path("<int:pk>/tooth-set/", views.patient_tooth_set, name="patient_tooth_set"),

@@ -2,8 +2,33 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.http import require_POST
 from .models import Service, ServiceCategory
 from .forms import ServiceForm, ServiceCategoryForm
+
+
+@login_required
+def service_export(request):
+    from .excel_io import export_services_xlsx
+    return export_services_xlsx()
+
+
+@login_required
+@require_POST
+def service_import(request):
+    from .excel_io import import_services_xlsx
+    f = request.FILES.get("file")
+    if not f:
+        messages.warning(request, _("Файл не выбран"))
+        return redirect("service_list")
+    try:
+        created, updated, errors = import_services_xlsx(f)
+        messages.success(request, _("Импорт: добавлено %(c)d, обновлено %(u)d") % {"c": created, "u": updated})
+        if errors:
+            messages.warning(request, "; ".join(errors[:5]))
+    except Exception as e:
+        messages.error(request, _("Ошибка импорта: %(e)s") % {"e": str(e)})
+    return redirect("service_list")
 
 
 @login_required

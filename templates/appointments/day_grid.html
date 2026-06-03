@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block page_title %}Расписание по врачам{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <!-- Toolbar -->
+  <div class="card card-pad flex flex-wrap items-center gap-3">
+    <div class="flex items-center gap-2">
+      <a href="?date={{ prev_day }}" class="btn btn-ghost btn-sm">←</a>
+      <input type="date" value="{{ day|date:'Y-m-d' }}" onchange="location.href='?date='+this.value"
+             class="text-center" style="width:160px">
+      <a href="?date={{ next_day }}" class="btn btn-ghost btn-sm">→</a>
+      <a href="?date={{ today }}" class="btn btn-ghost btn-sm">Сегодня</a>
+    </div>
+    <span class="font-bold ml-2" style="color:var(--text)">{{ day|date:"l, d E Y" }}</span>
+    <div class="ml-auto flex items-center gap-3 text-xs muted">
+      <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#6366F1"></span>Записан</span>
+      <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#F59E0B"></span>Приём</span>
+      <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#22C55E"></span>Завершён</span>
+      <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#EF4444"></span>Отменён</span>
+      <a href="/calendar/" class="btn btn-ghost btn-sm ml-2">📅 Календарь</a>
+    </div>
+  </div>
+
+  <!-- Grid -->
+  <div class="card" style="overflow:auto">
+    <div style="display:flex;min-width:max-content">
+      <!-- time axis -->
+      <div style="width:56px;flex-shrink:0;position:relative;border-right:1px solid var(--border)">
+        <div style="height:42px;border-bottom:1px solid var(--border)"></div>
+        <div style="position:relative;height:{{ grid_height }}px">
+          {% for hr in hours %}
+          <div style="position:absolute;top:{{ hr.top }}px;right:6px;font-size:11px;color:var(--text-faint);transform:translateY(-50%)">{{ hr.h }}:00</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- doctor columns -->
+      {% for col in columns %}
+      <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border)">
+        <!-- header -->
+        <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2)">
+          <span class="avatar w-6 h-6 text-[10px]">{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
+          <span class="text-sm font-semibold truncate" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
+        </div>
+        <!-- column body -->
+        <div style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border-2) 59px,var(--border-2) 60px)"
+             {% if col.doctor %}onclick="bookAt(event, {{ col.doctor.pk }})"{% endif %} title="Клик — записать">
+          {% for b in col.blocks %}
+          <div onclick="event.stopPropagation(); location.href='/appointments/?focus={{ b.id }}'"
+               style="position:absolute;left:4px;right:4px;top:{{ b.top }}px;height:{{ b.height }}px;
+                      background:{{ b.color }};border-radius:8px;padding:4px 7px;overflow:hidden;cursor:pointer;
+                      color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);{% if b.cancelled %}opacity:.5;{% endif %}">
+            <p style="font-size:11px;font-weight:700;line-height:1.1">{{ b.time }}</p>
+            <p style="font-size:12px;font-weight:600;line-height:1.2;margin-top:1px">{{ b.patient }}</p>
+            <p style="font-size:10px;opacity:.9;line-height:1.1">{{ b.services }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% empty %}
+      <div class="p-16 text-center muted">Нет активных врачей</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+const DAY_START = {{ day_start }};
+const DAY = '{{ day|date:"Y-m-d" }}';
+function bookAt(e, doctorId) {
+  const colBody = e.currentTarget;
+  const rect = colBody.getBoundingClientRect();
+  const minutes = Math.max(0, Math.round((e.clientY - rect.top)));   // 1px = 1min
+  let h = DAY_START + Math.floor(minutes / 60);
+  let m = minutes % 60;
+  m = Math.round(m / 15) * 15; if (m === 60) { h++; m = 0; }          // привязка к 15 мин
+  const hh = String(h).padStart(2,'0'), mm = String(m).padStart(2,'0');
+  // открыть форму создания записи с предзаполнением
+  location.href = `/appointments/create/?date=${DAY}&time=${hh}:${mm}&doctor=${doctorId}`;
+}
+</script>
+{% endblock %}

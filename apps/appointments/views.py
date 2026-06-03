@@ -37,6 +37,74 @@ def calendar_view(request):
 
 
 @login_required
+def appointment_day_grid(request):
+    """Кастомный посуточный вид с колонками по врачам (без FullCalendar Premium)."""
+    from datetime import datetime, date, time, timedelta
+    from django.utils import timezone
+    User = request.user.__class__
+
+    # дата
+    qd = request.GET.get("date")
+    try:
+        day = datetime.strptime(qd, "%Y-%m-%d").date() if qd else timezone.localdate()
+    except ValueError:
+        day = timezone.localdate()
+
+    DAY_START, DAY_END = 8, 21          # рабочее окно 08:00–21:00
+    PX_PER_MIN = 1.0                    # масштаб
+    total_min = (DAY_END - DAY_START) * 60
+    hours = list(range(DAY_START, DAY_END + 1))
+
+    STATUS_COLORS = {
+        "scheduled": "#6366F1", "confirmed": "#6366F1",
+        "arrived": "#F59E0B", "in_progress": "#F59E0B",
+        "completed": "#22C55E", "no_show": "#EF4444", "cancelled": "#EF4444",
+    }
+
+    doctors = list(User.objects.filter(role__name="doctor", is_active=True))
+    start_dt = timezone.make_aware(datetime.combine(day, time(0, 0)))
+    end_dt = start_dt + timedelta(days=1)
+    appts = (Appointment.objects.filter(start_at__gte=start_dt, start_at__lt=end_dt)
+             .select_related("patient", "doctor", "service")
+             .prefetch_related("services"))
+
+    by_doctor = {d.pk: [] for d in doctors}
+    unassigned = []
+    for a in appts:
+        local_start = timezone.localtime(a.start_at)
+        local_end = timezone.localtime(a.end_at)
+        start_min = (local_start.hour - DAY_START) * 60 + local_start.minute
+        dur = max(15, int((local_end - local_start).total_seconds() // 60))
+        top = max(0, start_min) * PX_PER_MIN
+        height = min(dur, total_min - start_min) * PX_PER_MIN
+        services = ", ".join(s.name for s in a.services.all()) or (a.service.name if a.service else "—")
+        block = {
+            "id": a.pk, "top": round(top, 1), "height": round(max(height, 18), 1),
+            "color": STATUS_COLORS.get(a.status, "#6366F1"),
+            "cancelled": a.status == "cancelled",
+            "time": f"{local_start:%H:%M}–{local_end:%H:%M}",
+            "patient": a.patient.full_name if a.patient else "—",
+            "services": services, "status_display": a.get_status_display(),
+        }
+        (by_doctor.get(a.doctor_id, unassigned)).append(block)
+
+    columns = [{"doctor": d, "blocks": by_doctor.get(d.pk, [])} for d in doctors]
+    if unassigned:
+        columns.append({"doctor": None, "blocks": unassigned})
+
+    return render(request, "appointments/day_grid.html", {
+        "day": day,
+        "prev_day": (day - timedelta(days=1)).isoformat(),
+        "next_day": (day + timedelta(days=1)).isoformat(),
+        "today": timezone.localdate().isoformat(),
+        "hours": [{"h": h, "top": (h - DAY_START) * 60 * PX_PER_MIN} for h in hours],
+        "grid_height": total_min * PX_PER_MIN,
+        "columns": columns,
+        "day_start": DAY_START,
+    })
+
+
+@login_required
 @require_POST
 def appointment_create_quick(request):
     """AJAX: create appointment from calendar modal."""
@@ -122,10 +190,23 @@ def appointment_list(request):
 
 @login_required
 def appointment_create(request):
-    form = AppointmentForm(request.POST or None, initial={
+    # предзаполнение из посуточной сетки: ?date=&time=&doctor=
+    initial = {
         "doctor": request.user if request.user.is_doctor else None,
         "created_by": request.user,
-    })
+    }
+    gd, gt, gdoc = request.GET.get("date"), request.GET.get("time"), request.GET.get("doctor")
+    if gd and gt:
+        from datetime import datetime, timedelta
+        try:
+            start = datetime.strptime(f"{gd} {gt}", "%Y-%m-%d %H:%M")
+            initial["start_at"] = start
+            initial["end_at"] = start + timedelta(minutes=30)
+        except ValueError:
+            pass
+    if gdoc:
+        initial["doctor"] = gdoc
+    form = AppointmentForm(request.POST or None, initial=initial)
     if form.is_valid():
         appt = form.save(commit=False)
         appt.created_by = request.user

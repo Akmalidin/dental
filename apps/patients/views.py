@@ -146,6 +146,30 @@ def patient_detail(request, pk):
 
 
 @login_required
+def patient_export(request):
+    from .excel_io import export_patients_xlsx
+    return export_patients_xlsx()
+
+
+@login_required
+@require_POST
+def patient_import(request):
+    from .excel_io import import_patients_xlsx
+    f = request.FILES.get("file")
+    if not f:
+        messages.warning(request, _("Файл не выбран"))
+        return redirect("patient_list")
+    try:
+        created, updated, errors = import_patients_xlsx(f)
+        messages.success(request, _("Импорт: добавлено %(c)d, обновлено %(u)d") % {"c": created, "u": updated})
+        if errors:
+            messages.warning(request, "; ".join(errors[:5]))
+    except Exception as e:
+        messages.error(request, _("Ошибка импорта: %(e)s") % {"e": str(e)})
+    return redirect("patient_list")
+
+
+@login_required
 @require_POST
 def patient_tooth_set(request, pk):
     """AJAX: установить/снять статус конкретного зуба пациента."""

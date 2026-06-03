@@ -40,7 +40,15 @@
         </select>
       </form>
       {% endif %}
-      <a href="/patients/create/" class="btn btn-primary btn-sm ml-auto">+ Создать</a>
+      <div class="ml-auto flex items-center gap-2">
+        <a href="/patients/export/" class="btn btn-ghost btn-sm" title="Скачать Excel">⬇ Excel</a>
+        <button type="button" onclick="document.getElementById('pat-import').click()" class="btn btn-ghost btn-sm" title="Загрузить из Excel">⬆ Импорт</button>
+        <form method="post" action="/patients/import/" enctype="multipart/form-data" class="hidden">
+          {% csrf_token %}
+          <input id="pat-import" type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
+        </form>
+        <a href="/patients/create/" class="btn btn-primary btn-sm">+ Создать</a>
+      </div>
     </div>
 
     <table class="tbl">
