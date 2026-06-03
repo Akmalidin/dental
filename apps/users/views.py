@@ -523,6 +523,44 @@ def salary_report(request):
 
 
 @login_required
+def my_earnings(request):
+    """Заработок текущего врача за день/неделю/месяц/год."""
+    from datetime import date, timedelta
+    from decimal import Decimal
+    from django.db.models import Sum
+    from apps.treatments.models import Treatment
+    from apps.finance.models import Payment
+
+    doc = request.user
+    scheme = getattr(doc, "salary_scheme", None)
+    today = date.today()
+    periods = [
+        ("Сегодня", today),
+        ("Неделя", today - timedelta(days=today.weekday())),
+        ("Месяц", today.replace(day=1)),
+        ("Год", today.replace(month=1, day=1)),
+    ]
+    cards = []
+    for label, start in periods:
+        t_qs = Treatment.objects.filter(
+            doctor=doc, created_at__date__gte=start, created_at__date__lte=today
+        ).exclude(status="cancelled")
+        revenue = t_qs.aggregate(s=Sum("total_amount"))["s"] or Decimal(0)
+        paid = Payment.objects.filter(
+            treatment__doctor=doc, type="income",
+            created_at__date__gte=start, created_at__date__lte=today,
+        ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else None
+        cards.append({
+            "label": label, "revenue": revenue, "paid": paid,
+            "count": t_qs.count(), "salary": salary,
+        })
+    return render(request, "users/my_earnings.html", {
+        "cards": cards, "scheme": scheme, "doctor": doc,
+    })
+
+
+@login_required
 @role_required("superadmin", "admin_main")
 def salary_export(request):
     """Экспорт зарплатной ведомости в Excel."""

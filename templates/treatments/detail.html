@@ -182,7 +182,7 @@
             <template x-for="t in templates" :key="t.id"><option :value="t.id" x-text="t.name"></option></template>
           </select>
         </div>
-        <a href="/treatments/{{ treatment.pk }}/emr/print/" target="_blank" class="btn btn-ghost btn-sm">🖨 Печать ЭМК</a>
+        <button type="button" @click="printEmr()" class="btn btn-ghost btn-sm">🖨 Сохранить и печать ЭМК</button>
       </div>
       <form method="post" action="/treatments/{{ treatment.pk }}/emr/save/" class="space-y-3">
         {% csrf_token %}
@@ -277,6 +277,15 @@ function emrEditor() {
         }
       });
       toast('Шаблон применён');
+    },
+    async printEmr() {
+      // сначала сохранить заполненную медкарту, потом открыть печать
+      const form = document.querySelector('form[action$="/emr/save/"]');
+      try {
+        await fetch(form.action, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() }, body: new FormData(form) });
+        toast('Медкарта сохранена');
+      } catch (e) { toast('Ошибка сохранения', 'error'); }
+      window.open('/treatments/{{ treatment.pk }}/emr/print/', '_blank');
     },
   };
 }

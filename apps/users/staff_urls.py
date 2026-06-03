@@ -11,6 +11,7 @@ urlpatterns = [
     path("branches/<int:pk>/edit/", views.branch_edit, name="branch_edit"),
     path("salary/", views.salary_report, name="salary_report"),
     path("salary/export/", views.salary_export, name="salary_export"),
+    path("my-earnings/", views.my_earnings, name="my_earnings"),
     path("salary/<int:pk>/scheme/", views.salary_scheme_edit, name="salary_scheme_edit"),
     path("schedule/", views.schedule_list, name="schedule_list"),
     path("schedule/<int:pk>/edit/", views.schedule_edit, name="schedule_edit"),

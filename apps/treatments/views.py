@@ -118,6 +118,10 @@ def treatment_create(request):
         for cure in formset.deleted_objects:
             cure.delete()
         treatment.recalculate_total()
+        # запись, из которой начали приём → отметить «Завершён» (меняет цвет в календаре)
+        if appt and appt.status not in ("cancelled", "completed"):
+            appt.status = "completed"
+            appt.save(update_fields=["status"])
         messages.success(request, _("Приём создан"))
         return redirect("treatment_detail", pk=treatment.pk)
     from apps.services.models import Service
