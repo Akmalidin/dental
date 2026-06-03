@@ -56,32 +56,87 @@
     <div id="calendar"></div>
   </div>
 
-  <!-- ── APPOINTMENT VIEW MODAL ──────────────────────────────────────── -->
+  <!-- ── APPOINTMENT VIEW MODAL (rich) ───────────────────────────────── -->
   <div x-show="showView" x-cloak class="modal-overlay" @click.self="showView=false">
-    <div class="modal-box" style="max-width:440px">
-      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
-        <h2 class="font-bold text-lg" style="color:var(--text)">Запись на приём</h2>
+    <div class="modal-box flex flex-col" style="max-width:680px;max-height:90vh">
+      <div class="flex items-center justify-between px-6 py-4 shrink-0" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg flex items-center gap-2" style="color:var(--text)">
+          <svg class="w-5 h-5" style="color:var(--primary)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2C7 2 5 5 5 9c0 3 1 5 2 8s1 5 3 5 2-3 2-5 0 0 0 0 0 3 2 5 2-2 3-5 2-5 2-8c0-4-2-7-7-7z"/></svg>
+          Детали записи
+        </h2>
         <button @click="showView=false" class="text-2xl muted">&times;</button>
       </div>
-      <div class="p-6 space-y-3">
-        <p class="font-bold text-lg" style="color:var(--text)" x-text="av.title"></p>
-        <div class="flex items-center gap-2 text-sm muted">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-          <span x-text="av.date"></span> · <span x-text="av.time"></span>
+
+      <div class="p-6 space-y-4 overflow-y-auto">
+        <!-- Пациент -->
+        <div class="card card-pad flex items-start gap-3" style="background:var(--surface-2)">
+          <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-black shrink-0" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)" x-text="(av.patient_name||'?').charAt(0)"></div>
+          <div class="flex-1 min-w-0">
+            <p class="font-bold" style="color:var(--text)"><span x-text="av.patient_name"></span> <span class="muted font-normal" x-show="av.patient_age" x-text="'('+av.patient_age+' лет)'"></span></p>
+            <p class="text-xs muted">ID пациента: #<span x-text="av.patient_id"></span></p>
+            <div x-show="av.first_visit" class="mt-1"><span class="badge badge-green">★ Первый визит</span></div>
+          </div>
+          <div class="text-right shrink-0">
+            <a :href="'tel:'+av.phone" class="text-sm font-semibold" style="color:var(--primary)" x-show="av.phone" x-text="av.phone"></a>
+            <div x-show="av.debt>0" class="mt-1"><span class="badge badge-red" x-text="'Долг: '+Math.round(av.debt).toLocaleString('ru-RU')+' сом'"></span></div>
+          </div>
         </div>
-        <div><span class="badge" :class="av.cancelled ? 'badge-red' : 'badge-orange'" x-text="av.status_display"></span></div>
-        <p x-show="av.notes" class="text-sm muted" x-text="av.notes"></p>
+
+        <!-- Инфо -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Врач</p><p class="font-semibold" style="color:var(--text)" x-text="av.doctor"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Продолжительность</p><p class="font-semibold" style="color:var(--text)" x-text="av.duration"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Дата</p><p class="font-semibold" style="color:var(--text)" x-text="av.date"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Время</p><p class="font-semibold" style="color:var(--text)" x-text="av.time"></p></div>
+        </div>
+        <div class="card card-pad"><p class="text-xs muted mb-0.5">Статус / комментарий</p>
+          <span class="badge" :class="av.cancelled ? 'badge-red' : (av.status==='completed'?'badge-green':'badge-orange')" x-text="av.status_display"></span>
+          <span class="text-sm muted ml-2" x-text="av.notes || 'Нет комментариев'"></span>
+        </div>
+
+        <!-- Подтверждение визита -->
+        <div x-show="!av.cancelled && av.status!=='completed'" class="card card-pad flex items-center justify-between">
+          <span class="font-semibold" style="color:var(--text)">Подтверждение визита</span>
+          <div class="flex gap-2">
+            <button @click="setStatus('confirmed')" class="btn btn-sm" style="background:#DCFCE7;color:#16A34A">✓ Придёт</button>
+            <button @click="setStatus('no_show')" class="btn btn-sm" style="background:#FEE2E2;color:#DC2626">✕ Не придёт</button>
+          </div>
+        </div>
+
+        <!-- Отмена -->
         <div x-show="av.cancelled" class="badge-red px-3 py-2 rounded-xl text-sm">
           Причина: <span x-text="av.cancel_reason || 'не указана'"></span><span x-show="av.cancel_note" x-text="' — ' + av.cancel_note"></span>
         </div>
+
+        <!-- Процедуры -->
+        <div x-show="av.procedures && av.procedures.length">
+          <p class="font-bold text-sm mb-2" style="color:var(--text)">Процедуры (последнее лечение)</p>
+          <table class="w-full text-sm">
+            <thead><tr class="text-xs muted"><th class="text-left py-1">Услуга</th><th class="text-right">Цена</th><th class="text-right pr-1">Статус</th></tr></thead>
+            <tbody>
+              <template x-for="(pr,i) in av.procedures" :key="i">
+                <tr style="border-top:1px solid var(--border-2)">
+                  <td class="py-1.5"><span class="font-semibold" x-text="pr.service"></span> <span class="muted text-xs" x-show="pr.tooth" x-text="'· зуб '+pr.tooth"></span></td>
+                  <td class="py-1.5 text-right font-bold" x-text="Math.round(pr.price).toLocaleString('ru-RU')"></td>
+                  <td class="py-1.5 text-right pr-1"><span class="badge" :class="pr.paid?'badge-green':'badge-orange'" x-text="pr.paid?'Оплачено':'Не оплачено'"></span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="flex flex-wrap gap-2 px-6 py-4" style="border-top:1px solid var(--border)">
-        <template x-if="av.patient_id">
-          <a :href="'/treatments/create/?patient=' + av.patient_id" class="btn btn-success btn-sm">→ Начать приём</a>
+
+      <!-- Футер -->
+      <div class="flex flex-wrap gap-2 px-6 py-4 shrink-0" style="border-top:1px solid var(--border)">
+        <template x-if="av.patient_id && !av.cancelled">
+          <a :href="'/treatments/create/?patient=' + av.patient_id + '&doctor=' + (av.doctor_id||'') + '&appointment=' + av.id" class="btn btn-success btn-sm">→ Начать приём</a>
+        </template>
+        <template x-if="av.treatment_id">
+          <a :href="'/treatments/' + av.treatment_id + '/'" class="btn btn-soft btn-sm">Перейти к лечению</a>
         </template>
         <a :href="'/appointments/' + av.id + '/edit/'" class="btn btn-ghost btn-sm">Изменить</a>
-        <template x-if="!av.cancelled">
-          <form :action="'/appointments/' + av.id + '/status/'" method="post" class="inline">{% csrf_token %}<input type="hidden" name="status" value="completed"><button class="btn btn-soft btn-sm">Завершить</button></form>
+        <template x-if="av.patient_id">
+          <a :href="'/patients/' + av.patient_id + '/'" class="btn btn-ghost btn-sm">Добавить платёж</a>
         </template>
         <button @click="showView=false" class="btn btn-ghost btn-sm ml-auto">Закрыть</button>
       </div>
@@ -173,22 +228,7 @@ function calendarPage() {
           extraParams: () => ({ doctor: document.getElementById('doctorFilter').value }),
         }],
         datesSet: (info) => { this.title = info.view.title; },
-        eventClick: (info) => {
-          const ep = info.event.extendedProps || {};
-          const s = info.event.start, e = info.event.end;
-          const pad = n => String(n).padStart(2,'0');
-          this.av = {
-            id: info.event.id,
-            title: info.event.title,
-            time: s ? `${pad(s.getHours())}:${pad(s.getMinutes())}` + (e ? ` – ${pad(e.getHours())}:${pad(e.getMinutes())}` : '') : '',
-            date: s ? `${pad(s.getDate())}.${pad(s.getMonth()+1)}.${s.getFullYear()}` : '',
-            status: ep.status, status_display: ep.status_display || '',
-            patient_id: ep.patient_id, notes: ep.notes || '',
-            cancelled: ep.status === 'cancelled',
-            cancel_reason: ep.cancel_reason || '', cancel_note: ep.cancel_note || '',
-          };
-          this.showView = true;
-        },
+        eventClick: (info) => { this.openApptDetail(info.event.id); },
         dateClick: (info) => { this.openBooking(info.dateStr); },
       });
       this.cal.render();
@@ -213,6 +253,37 @@ function calendarPage() {
         if (data.ok) { toast('Время записи обновлено'); }
         else { toast(data.error || 'Ошибка', 'error'); info.revert(); }
       } catch(e) { toast('Ошибка сети', 'error'); info.revert(); }
+    },
+
+    async openApptDetail(id) {
+      this.av = { id };
+      this.showView = true;
+      try {
+        const r = await fetch('/appointments/' + id + '/detail/');
+        const d = await r.json();
+        if (!d.ok) return;
+        const a = d.appointment, p = d.patient;
+        this.av = {
+          id: a.id, doctor_id: a.doctor_id, doctor: a.doctor,
+          date: a.date, time: a.time, duration: a.duration,
+          status: a.status, status_display: a.status_display, notes: a.notes,
+          cancelled: a.cancelled, cancel_reason: a.cancel_reason, cancel_note: a.cancel_note,
+          patient_id: p.id, patient_name: p.name, patient_age: p.age,
+          phone: p.phone, debt: p.debt, first_visit: p.first_visit,
+          treatment_id: d.treatment_id, procedures: d.procedures || [],
+        };
+      } catch (e) {}
+    },
+    async setStatus(status) {
+      const body = new URLSearchParams(); body.set('status', status);
+      try {
+        await fetch('/appointments/' + this.av.id + '/status/', {
+          method: 'POST', headers: { 'X-CSRFToken': getCsrf() }, body,
+        });
+        toast('Статус обновлён');
+        this.cal.refetchEvents();
+        this.openApptDetail(this.av.id);
+      } catch (e) { toast('Ошибка', 'error'); }
     },
 
     openBooking(dateStr) {

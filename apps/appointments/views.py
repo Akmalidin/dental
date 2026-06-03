@@ -316,6 +316,72 @@ def appointment_delete(request, pk):
 
 
 @login_required
+def appointment_detail_json(request, pk):
+    """Полные данные записи для модала в календаре."""
+    from django.http import JsonResponse
+    from django.utils import timezone as _tz
+    appt = get_object_or_404(
+        Appointment.objects.select_related("patient", "doctor", "cancellation_reason").prefetch_related("services"),
+        pk=pk,
+    )
+    p = appt.patient
+    start = _tz.localtime(appt.start_at)
+    end = _tz.localtime(appt.end_at)
+    dur_min = int((end - start).total_seconds() // 60)
+
+    procedures = []
+    treatment_id = None
+    if p:
+        from apps.treatments.models import Treatment
+        last_t = (Treatment.objects.filter(patient=p).exclude(status="cancelled")
+                  .order_by("-created_at").prefetch_related("cures__service", "cures__doctor").first())
+        if last_t:
+            treatment_id = last_t.pk
+            paid = last_t.debt <= 0
+            for c in last_t.cures.all():
+                procedures.append({
+                    "service": c.service.name if c.service else "—",
+                    "tooth": c.tooth_number or "",
+                    "doctor": c.doctor.name if c.doctor else "",
+                    "price": float(c.price),
+                    "paid": paid,
+                })
+
+    first_visit = False
+    if p:
+        from apps.treatments.models import Treatment
+        first_visit = Treatment.objects.filter(patient=p).count() <= 1
+
+    return JsonResponse({
+        "ok": True,
+        "appointment": {
+            "id": appt.pk,
+            "date": f"{start:%d.%m.%Y}",
+            "time": f"{start:%H:%M} – {end:%H:%M}",
+            "duration": f"{dur_min // 60}h {dur_min % 60}m",
+            "doctor": appt.doctor.name if appt.doctor else "",
+            "doctor_id": appt.doctor_id,
+            "status": appt.status,
+            "status_display": appt.get_status_display(),
+            "notes": appt.notes or "",
+            "cancelled": appt.status == "cancelled",
+            "cancel_reason": appt.cancellation_reason.name if appt.cancellation_reason else "",
+            "cancel_note": appt.cancel_note or "",
+        },
+        "patient": {
+            "id": p.pk if p else None,
+            "name": p.full_name if p else "Без пациента",
+            "age": p.age if p else None,
+            "phone": p.phone if p else "",
+            "debt": float(p.debt) if p else 0,
+            "first_visit": first_visit,
+        },
+        "treatment_id": treatment_id,
+        "procedures": procedures,
+    })
+
+
+@login_required
 @require_POST
 def appointment_trash(request, pk):
     """Мягкое удаление записи (в корзину)."""

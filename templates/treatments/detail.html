@@ -382,7 +382,7 @@ function planModal() {
           }),
         });
         const d = await r.json();
-        if (d.ok) { toast('План создан'); location.reload(); }
+        if (d.ok) { toast('План создан'); location.href = '/treatments/plans/' + d.plan_id + '/'; }
         else { toast(d.error || 'Ошибка', 'error'); this.saving = false; }
       } catch (e) { toast('Ошибка сети', 'error'); this.saving = false; }
     },
