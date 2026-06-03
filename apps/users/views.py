@@ -22,8 +22,46 @@ def superadmin_panel(request):
     from apps.settings_clinic.models import ClinicSettings
     clinic = ClinicSettings.get()
 
+    from apps.users.models import Clinic
     if request.method == "POST":
         action = request.POST.get("action")
+        if action == "create_clinic":
+            from apps.tenancy import set_current_clinic, clear_current_clinic
+            from apps.services.seed_data import seed_dental
+            from django.utils.text import slugify
+            cname = request.POST.get("clinic_name", "").strip()
+            alogin = request.POST.get("clinic_admin_login", "").strip()
+            apass = request.POST.get("clinic_admin_password", "").strip()
+            if not (cname and alogin and apass):
+                messages.error(request, _("Заполните название клиники, логин и пароль администратора"))
+                return redirect("superadmin_panel")
+            if User.objects.filter(login=alogin).exists():
+                messages.error(request, _("Логин администратора уже занят"))
+                return redirect("superadmin_panel")
+            base = slugify(cname) or "clinic"
+            slug, i = base, 2
+            while Clinic.objects.filter(slug=slug).exists():
+                slug, i = f"{base}-{i}", i + 1
+            new_clinic = Clinic.objects.create(name=cname, slug=slug)
+            amrole, _r = Role.objects.get_or_create(name=Role.ADMIN_MAIN)
+            au = User.objects.create(
+                login=alogin, name=request.POST.get("clinic_admin_name") or f"Админ {cname}",
+                role=amrole, clinic=new_clinic, is_staff=False,
+            )
+            au.set_password(apass)
+            au.save()
+            # филиал + автозаполнение услуг/материалов/ЭМК/документов в новой клинике
+            set_current_clinic(new_clinic)
+            try:
+                Branch.objects.create(name=cname, address="—", phone="—", is_main=True)
+                res = seed_dental()
+            finally:
+                clear_current_clinic()
+            messages.success(request, _(
+                "Клиника «%(n)s» создана. Админ: %(l)s. Заполнено: услуг %(s)s, материалов %(m)s, ЭМК %(e)s, документов %(d)s"
+            ) % {"n": cname, "l": alogin, "s": res["services"], "m": res["materials"],
+                 "e": res.get("emr", 0), "d": res.get("docs", 0)})
+            return redirect("superadmin_panel")
         if action == "save_modules":
             clinic.enabled_modules = request.POST.getlist("modules")
             clinic.tariff_plan = request.POST.get("tariff_plan", "full")
@@ -75,6 +113,7 @@ def superadmin_panel(request):
         "all_modules": ClinicSettings.ALL_MODULES,
         "enabled_modules": clinic.enabled_modules or [m[0] for m in ClinicSettings.ALL_MODULES],
         "tariff_plan": clinic.tariff_plan,
+        "clinics": Clinic.objects.all(),
     })
 
 
@@ -91,6 +130,24 @@ def seed_dental_view(request):
     ) % {"s": result["services"], "m": result["materials"],
          "e": result.get("emr", 0), "d": result.get("docs", 0)})
     return redirect("superadmin_panel")
+
+
+@login_required
+@require_POST
+def set_active_clinic(request):
+    """Суперадмин выбирает клинику для работы (или 'все')."""
+    if not request.user.is_superadmin:
+        return redirect("dashboard")
+    cid = request.POST.get("clinic")
+    if cid in (None, "", "all"):
+        request.session.pop("active_clinic", None)
+    else:
+        try:
+            request.session["active_clinic"] = int(cid)
+            request.session.pop("active_branch", None)  # сбросить филиал при смене клиники
+        except (TypeError, ValueError):
+            pass
+    return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
 
 
 @login_required

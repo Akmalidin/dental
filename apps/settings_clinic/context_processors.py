@@ -34,4 +34,15 @@ def clinic_settings(request):
         except Exception:
             pass
 
+        # Переключатель клиник — только для суперадмина
+        try:
+            if request.user.is_superadmin:
+                from apps.users.models import Clinic
+                clinics = list(Clinic.objects.filter(is_active=True))
+                ctx["nav_clinics"] = clinics
+                acid = request.session.get("active_clinic")
+                ctx["active_clinic"] = next((c for c in clinics if c.pk == acid), None)
+        except Exception:
+            pass
+
     return ctx

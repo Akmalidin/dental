@@ -16,6 +16,7 @@ urlpatterns = [
     path("superadmin/", views.superadmin_panel, name="superadmin_panel"),
     path("superadmin/seed-dental/", views.seed_dental_view, name="seed_dental"),
     path("set-branch/", views.set_active_branch, name="set_active_branch"),
+    path("set-clinic/", views.set_active_clinic, name="set_active_clinic"),
     path("recycle-bin/", views.recycle_bin, name="recycle_bin"),
     path("recycle-bin/<str:kind>/<int:pk>/restore/", views.recycle_restore, name="recycle_restore"),
     path("recycle-bin/<str:kind>/<int:pk>/purge/", views.recycle_purge, name="recycle_purge"),

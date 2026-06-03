@@ -4,6 +4,38 @@
 {% block content %}
 <div class="space-y-5 max-w-3xl">
 
+  <!-- Клиники -->
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
+      <h3 class="font-bold text-lg" style="color:var(--text)">Клиники</h3>
+      <p class="muted text-sm mt-0.5">Каждая клиника — своя изолированная база (одна СУБД). Данные клиник не пересекаются.</p>
+    </div>
+    {% if clinics %}
+    <table class="tbl">
+      <thead><tr><th>Клиника</th><th>Создана</th><th class="text-right pr-5">Работать</th></tr></thead>
+      <tbody>
+        {% for c in clinics %}
+        <tr>
+          <td class="font-semibold">{{ c.name }} {% if active_clinic and active_clinic.pk == c.pk %}<span class="badge badge-blue ml-1">активна</span>{% endif %}</td>
+          <td class="muted text-xs">{{ c.created_at|date:"d.m.Y" }}</td>
+          <td class="text-right pr-3">
+            <form method="post" action="/users/set-clinic/"><input type="hidden" name="next" value="/users/superadmin/">{% csrf_token %}<input type="hidden" name="clinic" value="{{ c.pk }}"><button class="btn btn-sm">Войти →</button></form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <form method="post" class="p-4 grid grid-cols-2 gap-2" style="border-top:1px solid var(--border)">
+      {% csrf_token %}<input type="hidden" name="action" value="create_clinic">
+      <input type="text" name="clinic_name" placeholder="Название клиники *" required class="col-span-2">
+      <input type="text" name="clinic_admin_name" placeholder="Имя администратора">
+      <input type="text" name="clinic_admin_login" placeholder="Логин администратора *" required>
+      <input type="text" name="clinic_admin_password" placeholder="Пароль администратора *" required class="col-span-2">
+      <button class="btn btn-primary col-span-2">+ Создать клинику (с услугами, ЭМК, документами)</button>
+    </form>
+  </div>
+
   <div class="grid grid-cols-3 gap-4">
     <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><div><p class="stat-label">Услуг</p><p class="stat-value">{{ services_count }}</p></div></div>
     <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/></svg></div><div><p class="stat-label">Категорий услуг</p><p class="stat-value">{{ service_cats_count }}</p></div></div>
