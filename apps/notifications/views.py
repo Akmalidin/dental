@@ -1,7 +1,11 @@
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from .models import Notification
+
+
+def _is_ajax(request):
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
 @login_required
@@ -24,10 +28,14 @@ def notification_poll(request):
 @login_required
 def mark_read(request, pk):
     Notification.objects.filter(pk=pk, user=request.user).update(is_read=True)
-    return JsonResponse({"ok": True})
+    if _is_ajax(request):
+        return JsonResponse({"ok": True})
+    return redirect("notification_list")
 
 
 @login_required
 def mark_all_read(request):
     Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-    return JsonResponse({"ok": True})
+    if _is_ajax(request):
+        return JsonResponse({"ok": True})
+    return redirect("notification_list")
