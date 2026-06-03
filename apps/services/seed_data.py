@@ -361,6 +361,25 @@ def seed_demo(reset=False):
             t.save(update_fields=["paid_amount"])
             out["payments"] += 1
 
+    # демо-уведомления для всех админов/суперадминов
+    try:
+        from apps.notifications.models import Notification
+        from apps.users.models import User as U3
+        from django.db.models import Q
+        admins = U3.objects.filter(is_active=True).filter(
+            Q(is_superuser=True) | Q(role__name__in=["superadmin", "admin_main", "admin"])
+        )
+        demo_notifs = [
+            ("Новая запись на приём", "Кадыров Алмаз — сегодня 14:30"),
+            ("Оплата получена", "Осмонова Айгуль внесла 3 500 сом"),
+            ("Низкий остаток материала", "Анестетик — осталось мало на складе"),
+        ]
+        for adm in admins:
+            for title, body in demo_notifs:
+                Notification.objects.get_or_create(user=adm, title=title, defaults={"body": body, "type": "system"})
+    except Exception:
+        pass
+
     return out
 
 

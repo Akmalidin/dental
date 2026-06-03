@@ -254,6 +254,54 @@
 {% endif %}
 
 <script src="/static/js/app.js"></script>
+{% if user.is_authenticated %}
+<script>
+/* Push-уведомления: браузерные desktop-нотификации + обновление бейджа */
+(function () {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    // запросить разрешение после первого клика пользователя
+    document.addEventListener('click', function ask() {
+      Notification.requestPermission(); document.removeEventListener('click', ask);
+    }, { once: true });
+  }
+  let seen = new Set(JSON.parse(localStorage.getItem('notif_seen') || '[]'));
+  function badge(count) {
+    let b = document.getElementById('notif-badge');
+    const bell = document.querySelector('a[href="/notifications/"]');
+    if (!bell) return;
+    if (count > 0) {
+      if (!b) {
+        b = document.createElement('span');
+        b.id = 'notif-badge';
+        b.className = 'absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold';
+        bell.appendChild(b);
+      }
+      b.textContent = count;
+    } else if (b) { b.remove(); }
+  }
+  async function poll() {
+    try {
+      const r = await fetch('/notifications/poll/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!r.ok) return;
+      const d = await r.json();
+      badge(d.count);
+      (d.items || []).forEach(function (n) {
+        if (seen.has(n.id)) return;
+        seen.add(n.id);
+        if (Notification.permission === 'granted') {
+          const note = new Notification(n.title || 'SADAF', { body: n.body || '', tag: 'sadaf-' + n.id });
+          if (n.link) note.onclick = function () { window.focus(); location.href = n.link; };
+        }
+      });
+      localStorage.setItem('notif_seen', JSON.stringify([...seen].slice(-100)));
+    } catch (e) {}
+  }
+  poll();
+  setInterval(poll, 45000);   // каждые 45 сек
+})();
+</script>
+{% endif %}
 {% block extra_js %}{% endblock %}
 </body>
 </html>

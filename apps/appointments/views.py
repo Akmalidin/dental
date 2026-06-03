@@ -224,6 +224,15 @@ def appointment_create(request):
             )
         appt.save()
         form.save_m2m()
+        try:
+            from apps.notifications.models import Notification
+            from django.utils import timezone as _tz2
+            pname = appt.patient.full_name if appt.patient else "Пациент"
+            Notification.send(appt.doctor, "Новая запись на приём",
+                              f"{pname} — {_tz2.localtime(appt.start_at):%d.%m %H:%M}",
+                              type="appointment", link="/appointments/")
+        except Exception:
+            pass
         messages.success(request, _("Запись добавлена"))
         return redirect("appointment_list")
     return render(request, "appointments/form.html", {"form": form})
