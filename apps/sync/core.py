@@ -7,6 +7,7 @@
 
 Этот модуль — ядро: сбор объектов клиники и (де)сериализация в JSON.
 """
+import json
 from django.core import serializers
 from django.apps import apps as django_apps
 
@@ -76,7 +77,9 @@ def export_clinic(clinic):
         except LookupError:
             continue
         qs = _queryset_for(model, rule, clinic)
-        data = serializers.serialize("python", qs)
+        # сериализуем в JSON-формат (даты → строки), затем в чистые dict —
+        # чтобы блоки были JSON-безопасны для отправки на сервер
+        data = json.loads(serializers.serialize("json", qs))
         blocks.append({"model": f"{app_label}.{model_name}", "objects": data, "count": len(data)})
     return blocks
 
