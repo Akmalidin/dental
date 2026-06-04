@@ -191,7 +191,7 @@ SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
 # ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
-VAPID_PUBLIC_KEY = "BDe8haq36DyKu5l-U72o0aRY2dZlyigSAUjiCT1krfx6FWiiTsIwJ41n8Ucps277Lgk9S_mBd3QlmubWedDnm0I"
+VAPID_PUBLIC_KEY = "BCa37d_93xAyPXKEsL6DNjLwTiUKYDvVTgHGcSMx8mHEMrQ6SqMcy8nHESIVSpo6atWAd_dGqUtWO7UnzFXZOjw"
 VAPID_PRIVATE_B64 = os.environ.get("VAPID_PRIVATE_B64", "")  # приватный ключ — только из env
 VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", "mailto:akmalmadakimov6@gmail.com")
 
