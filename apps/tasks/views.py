@@ -9,15 +9,28 @@ from .forms import TaskForm
 
 @login_required
 def task_list(request):
+    from django.db.models import F
     qs = Task.objects.prefetch_related("assigned_to").select_related("created_by")
     if not request.user.is_superadmin and not request.user.is_admin:
         qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
     status = request.GET.get("status", "")
     if status:
         qs = qs.filter(status=status)
+    priority = request.GET.get("priority", "")
+    if priority:
+        qs = qs.filter(priority=priority)
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q)).distinct()
+    # сортировка по дате/времени срока (ближайшие сверху), затем по дате создания
+    qs = qs.order_by(F("due_date").asc(nulls_last=True), "-created_at")
     from apps.users.models import User
     staff = User.objects.filter(is_active=True).order_by("name")
-    return render(request, "tasks/list.html", {"tasks": qs, "staff": staff})
+    statuses = [("", "Все"), ("pending", "Ожидают"), ("in_progress", "В процессе"), ("done", "Выполнены")]
+    return render(request, "tasks/list.html", {
+        "tasks": qs, "staff": staff, "q": q, "statuses": statuses,
+        "current_status": status, "current_priority": priority,
+    })
 
 
 def _notify_assignees(task, actor):
@@ -73,4 +86,16 @@ def task_done(request, pk):
     task.status = Task.STATUS_DONE
     task.save()
     messages.success(request, _("Задача отмечена выполненной"))
+    return redirect("task_list")
+
+
+@login_required
+def task_delete(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    # удалять может автор, админ или суперадмин
+    if not (request.user.is_superadmin or request.user.is_admin or task.created_by_id == request.user.pk):
+        messages.error(request, _("Нет прав удалять эту задачу"))
+        return redirect("task_list")
+    task.delete()
+    messages.success(request, _("Задача удалена"))
     return redirect("task_list")
