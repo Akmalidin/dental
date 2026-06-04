@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block page_title %}Тариф истёк{% endblock %}
+{% block content %}
+<div class="flex items-center justify-center" style="min-height:60vh">
+  <div class="card card-pad text-center" style="max-width:480px">
+    <div class="text-5xl mb-4">⏳</div>
+    <h2 class="text-xl font-bold mb-2" style="color:var(--text)">Срок тарифа истёк</h2>
+    <p class="muted mb-1">Клиника «{{ clinic.name }}»</p>
+    <p class="muted text-sm mb-5">Тариф был оплачен до {{ clinic.tariff_until|date:"d.m.Y" }}. Доступ к данным временно ограничен. Обратитесь к администратору сервиса для продления.</p>
+    <form method="post" action="/logout/">{% csrf_token %}<button class="btn btn-ghost">Выйти</button></form>
+  </div>
+</div>
+{% endblock %}

@@ -70,7 +70,16 @@ def superadmin_panel(request):
                 return redirect("superadmin_panel")
             target.enabled_modules = request.POST.getlist("modules")
             target.tariff_plan = request.POST.get("tariff_plan", "standard")
-            target.save(update_fields=["enabled_modules", "tariff_plan"])
+            until = request.POST.get("tariff_until", "").strip()
+            if until:
+                from datetime import datetime
+                try:
+                    target.tariff_until = datetime.strptime(until, "%Y-%m-%d").date()
+                except ValueError:
+                    pass
+            else:
+                target.tariff_until = None
+            target.save(update_fields=["enabled_modules", "tariff_plan", "tariff_until"])
             messages.success(request, _("Тариф клиники «%(n)s» обновлён") % {"n": target.name})
             return redirect("superadmin_panel")
         if action == "create_branch":

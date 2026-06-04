@@ -74,6 +74,25 @@ class CurrentClinicMiddleware:
             clear_current_clinic()
 
 
+class TariffGuardMiddleware:
+    """Блокирует доступ, если тариф клиники истёк (кроме суперадмина)."""
+    ALLOWED_PREFIXES = ("/login", "/logout", "/static", "/i18n", "/sw.js", "/manifest.json")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and not getattr(user, "is_superadmin", False):
+            clinic = getattr(user, "clinic", None)
+            if clinic is not None and clinic.is_expired:
+                path = request.path
+                if not any(path.startswith(p) for p in self.ALLOWED_PREFIXES):
+                    from django.shortcuts import render
+                    return render(request, "tariff_expired.html", {"clinic": clinic}, status=402)
+        return self.get_response(request)
+
+
 def _apply_clinic(qs):
     if _is_unscoped():
         return qs

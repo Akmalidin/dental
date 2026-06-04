@@ -80,13 +80,20 @@
     {{ tariff_presets_json|json_script:"tariff-presets" }}
     <form method="post">
       {% csrf_token %}<input type="hidden" name="action" value="save_modules">
-      <div class="mb-4 max-w-xs">
-        <label class="fld">Тарифный план</label>
-        <select name="tariff_plan" class="no-tom" onchange="applyTariff(this.value)">
-          {% for tk, tlabel in tariff_choices %}
-          <option value="{{ tk }}" {% if tariff_plan == tk %}selected{% endif %}>{{ tlabel }}</option>
-          {% endfor %}
-        </select>
+      <div class="mb-4 flex flex-wrap gap-4">
+        <div>
+          <label class="fld">Тарифный план</label>
+          <select name="tariff_plan" class="no-tom" onchange="applyTariff(this.value)">
+            {% for tk, tlabel in tariff_choices %}
+            <option value="{{ tk }}" {% if tariff_plan == tk %}selected{% endif %}>{{ tlabel }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="fld">Оплачен до {% if target_clinic.is_expired %}<span class="text-red-500">(истёк!)</span>{% endif %}</label>
+          <input type="date" name="tariff_until" value="{% if target_clinic.tariff_until %}{{ target_clinic.tariff_until|date:'Y-m-d' }}{% endif %}">
+          <p class="text-xs muted mt-0.5">Пусто = бессрочно</p>
+        </div>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="modules-grid">
         {% for key, label in all_modules %}

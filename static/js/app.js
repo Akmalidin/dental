@@ -226,3 +226,20 @@ function searchInput(url) {
     }
   };
 }
+
+/* Мобильные таблицы: оборачиваем в горизонтальный скролл, чтобы не ломали вёрстку */
+(function () {
+  function wrapTables() {
+    if (window.innerWidth > 900) return;
+    document.querySelectorAll('table').forEach(function (t) {
+      if (t.parentElement && t.parentElement.classList.contains('table-scroll')) return;
+      var w = document.createElement('div');
+      w.className = 'table-scroll';
+      w.style.cssText = 'overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%';
+      t.parentNode.insertBefore(w, t);
+      w.appendChild(t);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wrapTables);
+  else wrapTables();
+})();

@@ -10,7 +10,13 @@ class Clinic(models.Model):
     is_active = models.BooleanField(default=True)
     tariff_plan = models.CharField(max_length=20, default="standard", verbose_name="Тариф")
     enabled_modules = models.JSONField(default=list, blank=True, verbose_name="Включённые модули")
+    tariff_until = models.DateField(null=True, blank=True, verbose_name="Тариф оплачен до")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return bool(self.tariff_until and self.tariff_until < timezone.localdate())
 
     class Meta:
         verbose_name = "Клиника"
