@@ -1,8 +1,4 @@
 @echo off
-chcp 65001 >nul
-echo Остановка SADAF (порт 8765)...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8765" ^| findstr "LISTENING"') do (
-  taskkill /F /PID %%a >nul 2>&1
-)
-echo Готово. Сервер остановлен.
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+echo SADAF offline server stopped.
 timeout /t 2 >nul
