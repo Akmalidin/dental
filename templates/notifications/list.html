@@ -27,13 +27,15 @@
     })();
   </script>
 
+<div x-data="notifModal()">
   <div class="flex items-center justify-between">
     <h2 class="text-slate-700 text-sm">Ваши уведомления</h2>
     <a href="/notifications/read-all/" class="btn-ghost text-xs py-1.5">Отметить все прочитанными</a>
   </div>
 
   {% for n in notifications %}
-  <a href="/notifications/{{ n.pk }}/open/" class="card p-4 flex items-start gap-4 hover:border-indigo-300 transition {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}" style="text-decoration:none">
+  <div id="notif-card-{{ n.pk }}" @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
+       class="card p-4 flex items-start gap-4 hover:border-indigo-300 transition cursor-pointer mt-3 {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}">
     <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0
                 {% if n.type == 'appointment' %}bg-gradient-to-br from-blue-500 to-indigo-600
                 {% elif n.type == 'payment' %}bg-gradient-to-br from-emerald-500 to-green-600
@@ -44,18 +46,61 @@
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2">
         <p class="font-semibold text-slate-800 {% if n.is_read %}opacity-60{% endif %}">{{ n.title }}</p>
-        {% if not n.is_read %}<span class="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>{% endif %}
+        {% if not n.is_read %}<span class="notif-dot w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>{% endif %}
       </div>
-      {% if n.body %}<p class="text-sm text-slate-500 mt-0.5">{{ n.body }}</p>{% endif %}
+      {% if n.body %}<p class="text-sm text-slate-500 mt-0.5 truncate">{{ n.body }}</p>{% endif %}
       <p class="text-xs text-slate-400 mt-1">{{ n.created_at|date:"d.m.Y H:i" }}</p>
     </div>
-    {% if not n.is_read %}<span class="badge badge-gray shrink-0 text-xs">Открыть →</span>{% endif %}
-  </a>
+    <span class="badge badge-gray shrink-0 text-xs">Открыть →</span>
+  </div>
   {% empty %}
-  <div class="card p-14 text-center">
+  <div class="card p-14 text-center mt-3">
     <div class="text-5xl mb-3">🔔</div>
     <p class="text-slate-500 font-medium">Нет уведомлений</p>
   </div>
   {% endfor %}
+
+  <!-- Модал деталей уведомления -->
+  <div x-show="cur" x-cloak class="modal-overlay" @click.self="cur=null">
+    <div class="modal-box" style="max-width:480px" x-show="cur">
+      <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+        <h3 class="font-bold flex items-center gap-2" style="color:var(--text)">
+          <span x-text="icon"></span> <span x-text="typeLabel"></span>
+        </h3>
+        <button @click="cur=null" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-2">
+        <p class="font-bold text-lg" style="color:var(--text)" x-text="cur && cur.title"></p>
+        <p class="text-sm muted whitespace-pre-line" x-text="cur && cur.body" x-show="cur && cur.body"></p>
+        <p class="text-xs faint" x-text="cur && cur.date"></p>
+      </div>
+      <div class="px-6 py-4 flex gap-3" style="border-top:1px solid var(--border)">
+        <a x-show="cur && cur.link" :href="cur && cur.link" class="btn btn-primary flex-1 justify-center" x-text="actionLabel"></a>
+        <button @click="cur=null" class="btn btn-ghost">Закрыть</button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<script>
+function notifModal() {
+  const ICONS = { appointment:'📅', payment:'💰', task:'✅', system:'🔔', reminder:'⏰' };
+  const LABELS = { appointment:'Запись на приём', payment:'Платёж', task:'Задача', system:'Системное', reminder:'Напоминание' };
+  const ACTIONS = { appointment:'Открыть записи →', payment:'Открыть финансы →', task:'Перейти к задачам →' };
+  return {
+    cur: null,
+    get icon() { return this.cur ? (ICONS[this.cur.type] || '🔔') : ''; },
+    get typeLabel() { return this.cur ? (LABELS[this.cur.type] || 'Уведомление') : ''; },
+    get actionLabel() { return this.cur ? (ACTIONS[this.cur.type] || 'Перейти →') : ''; },
+    open(n) {
+      this.cur = n;
+      if (!n.read) {
+        fetch('/notifications/' + n.id + '/read/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(()=>{});
+        const card = document.getElementById('notif-card-' + n.id);
+        if (card) { card.classList.remove('border-l-4','border-indigo-500'); const d=card.querySelector('.notif-dot'); if(d)d.remove(); }
+      }
+    },
+  };
+}
+</script>
 {% endblock %}
