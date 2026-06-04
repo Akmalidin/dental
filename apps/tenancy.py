@@ -157,15 +157,26 @@ class ClinicSoftDeleteModel(_ClinicSaveMixin, models.Model):
         abstract = True
         base_manager_name = "all_objects"
 
+    def _has_updated_at(self):
+        return any(f.name == "updated_at" for f in self._meta.fields)
+
     def soft_delete(self, user=None):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         if user is not None and getattr(user, "pk", None):
             self.deleted_by = user
-        self.save(update_fields=["is_deleted", "deleted_at", "deleted_by"])
+        fields = ["is_deleted", "deleted_at", "deleted_by"]
+        if self._has_updated_at():
+            self.updated_at = timezone.now()   # важно для синхронизации (кто новее)
+            fields.append("updated_at")
+        self.save(update_fields=fields)
 
     def restore(self):
         self.is_deleted = False
         self.deleted_at = None
         self.deleted_by = None
-        self.save(update_fields=["is_deleted", "deleted_at", "deleted_by"])
+        fields = ["is_deleted", "deleted_at", "deleted_by"]
+        if self._has_updated_at():
+            self.updated_at = timezone.now()   # важно для синхронизации (кто новее)
+            fields.append("updated_at")
+        self.save(update_fields=fields)

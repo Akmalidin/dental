@@ -109,6 +109,7 @@ class Appointment(ClinicSoftDeleteModel):
     notes = models.TextField(blank=True, verbose_name="Заметки")
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="manual", verbose_name="Источник")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Обновлён")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
