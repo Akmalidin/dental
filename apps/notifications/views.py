@@ -26,6 +26,17 @@ def notification_poll(request):
 
 
 @login_required
+def notification_open(request, pk):
+    """Открыть уведомление: пометить прочитанным и перейти по ссылке."""
+    n = Notification.objects.filter(pk=pk, user=request.user).first()
+    if not n:
+        return redirect("notification_list")
+    n.is_read = True
+    n.save(update_fields=["is_read"])
+    return redirect(n.link or "notification_list")
+
+
+@login_required
 def mark_read(request, pk):
     Notification.objects.filter(pk=pk, user=request.user).update(is_read=True)
     if _is_ajax(request):

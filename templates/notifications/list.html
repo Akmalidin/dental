@@ -2,13 +2,38 @@
 {% block page_title %}Уведомления{% endblock %}
 {% block content %}
 <div class="max-w-2xl space-y-3">
+  <!-- Включить уведомления устройства -->
+  <div id="notif-enable" class="card p-4 hidden items-center justify-between gap-3" style="background:#FEF3C7;border-color:#FCD34D">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🔔</span>
+      <div><p class="font-semibold text-amber-800">Уведомления на этом устройстве выключены</p>
+        <p class="text-xs text-amber-700">Включите, чтобы видеть всплывающие уведомления Windows/телефона, когда вкладка открыта.</p></div>
+    </div>
+    <button onclick="enableDeviceNotifications()" class="btn btn-primary btn-sm shrink-0">Включить</button>
+  </div>
+  <script>
+    (function(){
+      const box = document.getElementById('notif-enable');
+      function upd(){ if (!('Notification' in window)) return; if (Notification.permission !== 'granted') box.classList.remove('hidden'); else box.classList.add('hidden'); box.classList.add('flex'); if(Notification.permission==='granted') box.classList.add('hidden'); }
+      window.enableDeviceNotifications = function(){
+        if (!('Notification' in window)) { alert('Браузер не поддерживает уведомления'); return; }
+        Notification.requestPermission().then(function(p){
+          upd();
+          if (p === 'granted') new Notification('SADAF', { body: 'Уведомления включены ✓' });
+          else if (p === 'denied') alert('Уведомления заблокированы. Разрешите их в настройках браузера для этого сайта (значок замка в адресной строке).');
+        });
+      };
+      upd();
+    })();
+  </script>
+
   <div class="flex items-center justify-between">
     <h2 class="text-slate-700 text-sm">Ваши уведомления</h2>
     <a href="/notifications/read-all/" class="btn-ghost text-xs py-1.5">Отметить все прочитанными</a>
   </div>
 
   {% for n in notifications %}
-  <div class="card p-4 flex items-start gap-4 {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}">
+  <a href="/notifications/{{ n.pk }}/open/" class="card p-4 flex items-start gap-4 hover:border-indigo-300 transition {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}" style="text-decoration:none">
     <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0
                 {% if n.type == 'appointment' %}bg-gradient-to-br from-blue-500 to-indigo-600
                 {% elif n.type == 'payment' %}bg-gradient-to-br from-emerald-500 to-green-600
@@ -24,10 +49,8 @@
       {% if n.body %}<p class="text-sm text-slate-500 mt-0.5">{{ n.body }}</p>{% endif %}
       <p class="text-xs text-slate-400 mt-1">{{ n.created_at|date:"d.m.Y H:i" }}</p>
     </div>
-    {% if not n.is_read %}
-    <a href="/notifications/{{ n.pk }}/read/" class="badge badge-gray hover:bg-slate-200 shrink-0 text-xs">Прочитано</a>
-    {% endif %}
-  </div>
+    {% if not n.is_read %}<span class="badge badge-gray shrink-0 text-xs">Открыть →</span>{% endif %}
+  </a>
   {% empty %}
   <div class="card p-14 text-center">
     <div class="text-5xl mb-3">🔔</div>
