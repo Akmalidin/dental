@@ -9,9 +9,14 @@ def clinic_settings(request):
         from .models import ClinicSettings
         cs = ClinicSettings.get()
         ctx["clinic_settings"] = cs
-        # Enabled modules (tariff). Empty list = all enabled.
+        # Доступные модули — из ТЕКУЩЕЙ клиники (per-clinic тариф). Пусто = все.
         all_keys = [m[0] for m in ClinicSettings.ALL_MODULES]
-        ctx["enabled_modules"] = cs.enabled_modules if cs.enabled_modules else all_keys
+        from apps.tenancy import get_current_clinic
+        cur = get_current_clinic()
+        if cur is not None:
+            ctx["enabled_modules"] = cur.enabled_modules if cur.enabled_modules else all_keys
+        else:
+            ctx["enabled_modules"] = all_keys
     except Exception:
         pass
 

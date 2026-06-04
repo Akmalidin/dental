@@ -40,6 +40,18 @@ class ClinicSettings(models.Model):
         ("staff", "Сотрудники"),
     ]
 
+    TARIFF_CHOICES = [
+        ("basic", "Базовый"),
+        ("standard", "Стандарт"),
+        ("premium", "Премиум"),
+    ]
+    TARIFF_PRESETS = {
+        "basic": ["calendar", "appointments", "patients", "treatments", "services", "finance"],
+        "standard": ["calendar", "appointments", "patients", "treatments", "services",
+                     "finance", "warehouse", "medicines", "tasks", "staff"],
+        "premium": [m[0] for m in ALL_MODULES],
+    }
+
     def module_enabled(self, key):
         mods = self.enabled_modules or []
         return (not mods) or (key in mods)

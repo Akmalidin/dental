@@ -94,6 +94,24 @@ body {
 .sidebar.collapsed { width: 76px; }
 .main-area { flex: 1; margin-left: 248px; transition: margin .25s; min-width: 0; }
 .main-area.expanded { margin-left: 76px; }
+.sidebar-overlay { display: none; }
+
+/* ─── Мобильная версия ─────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); width: 248px; z-index: 60; box-shadow: 0 0 40px rgba(0,0,0,.25); }
+  .sidebar.collapsed { width: 248px; }                 /* на мобильном не сжимаем, а прячем */
+  .sidebar.collapsed .nav-label, .sidebar.collapsed .nav-section, .sidebar.collapsed .brand-name { display: revert; }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .main-area, .main-area.expanded { margin-left: 0; }
+  .sidebar-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 55; }
+  .topbar { padding-left: 12px; padding-right: 12px; gap: 6px; flex-wrap: wrap; height: auto; min-height: 60px; }
+  .topbar h1 { font-size: 18px; }
+  main.page-fade, main { padding-left: 14px !important; padding-right: 14px !important; }
+  .card-pad { padding: 14px; }
+  .modal-box { max-width: 96vw !important; }
+  .tbl, table { font-size: 13px; }
+  .pill-tabs { flex-wrap: wrap; }
+}
 
 /* ── Sidebar brand ──────────────────────────────────────────────────── */
 .brand {

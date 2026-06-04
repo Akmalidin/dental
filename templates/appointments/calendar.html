@@ -215,12 +215,15 @@ function calendarPage() {
 
     init() {
       const el = document.getElementById('calendar');
+      // перетаскивание (изменение времени) — только на больших экранах (ноутбук/ПК/большой планшет)
+      const allowDrag = window.innerWidth >= 1024;
       this.cal = new FullCalendar.Calendar(el, {
-        initialView: 'timeGridWeek', locale: 'ru', firstDay: 1, height: 'auto',
+        initialView: window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek',
+        locale: 'ru', firstDay: 1, height: 'auto',
         headerToolbar: false,
         slotMinTime: '08:00:00', slotMaxTime: '20:00:00',
         allDaySlot: false, nowIndicator: true,
-        editable: true, eventStartEditable: true, eventDurationEditable: true,
+        editable: allowDrag, eventStartEditable: allowDrag, eventDurationEditable: allowDrag,
         eventDrop: (info) => this.moveEvent(info),
         eventResize: (info) => this.moveEvent(info),
         eventSources: [{

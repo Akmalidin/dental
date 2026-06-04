@@ -11,7 +11,7 @@ def role_required(*roles):
         def wrapper(request, *args, **kwargs):
             if not request.user.is_authenticated:
                 return redirect("/login/")
-            if not request.user.is_superadmin and request.user.role_name not in roles:
+            if not request.user.is_superadmin and not request.user.has_role(*roles):
                 messages.error(request, _("У вас нет доступа к этой странице"))
                 return redirect("/")
             return view_func(request, *args, **kwargs)

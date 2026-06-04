@@ -44,8 +44,10 @@
 </div>
 
 <div class="app-shell" x-data="shell()">
+  <!-- мобильный оверлей для закрытия меню -->
+  <div class="sidebar-overlay" x-show="mobileOpen" x-cloak @click="mobileOpen=false"></div>
   <!-- ══ SIDEBAR ══════════════════════════════════════════════════════ -->
-  <aside class="sidebar" :class="collapsed && 'collapsed'">
+  <aside class="sidebar" :class="{ 'collapsed': collapsed, 'mobile-open': mobileOpen }" @click="if(window.innerWidth<=900 && $event.target.closest('.nav-item')) mobileOpen=false">
     <div class="brand">
       <div class="brand-logo">
         {% if clinic_settings and clinic_settings.logo %}
@@ -169,7 +171,7 @@
   <!-- ══ MAIN ═════════════════════════════════════════════════════════ -->
   <div class="main-area" :class="collapsed && 'expanded'">
     <header class="topbar">
-      <button class="icon-btn" @click="collapsed=!collapsed" style="border:none;background:transparent">
+      <button class="icon-btn" @click="toggleSidebar()" style="border:none;background:transparent">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
       </button>
       <h1>{% block page_title %}{% endblock %}</h1>

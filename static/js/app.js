@@ -61,8 +61,13 @@ function shell() {
   return {
     collapsed: localStorage.getItem('sidebar_collapsed') === 'true',
     dark: localStorage.getItem('theme') === 'dark',
+    mobileOpen: false,
     init() {
       this.$watch('collapsed', v => localStorage.setItem('sidebar_collapsed', v));
+    },
+    toggleSidebar() {
+      if (window.innerWidth <= 900) this.mobileOpen = !this.mobileOpen;
+      else this.collapsed = !this.collapsed;
     },
     setTheme(isDark) {
       this.dark = isDark;

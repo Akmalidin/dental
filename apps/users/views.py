@@ -63,10 +63,15 @@ def superadmin_panel(request):
                  "e": res.get("emr", 0), "d": res.get("docs", 0)})
             return redirect("superadmin_panel")
         if action == "save_modules":
-            clinic.enabled_modules = request.POST.getlist("modules")
-            clinic.tariff_plan = request.POST.get("tariff_plan", "full")
-            clinic.save(update_fields=["enabled_modules", "tariff_plan"])
-            messages.success(request, _("Доступные модули обновлены"))
+            from apps.tenancy import get_current_clinic
+            target = get_current_clinic()
+            if target is None:
+                messages.error(request, _("Сначала выберите клинику (кнопка «Войти →»), затем настройте тариф"))
+                return redirect("superadmin_panel")
+            target.enabled_modules = request.POST.getlist("modules")
+            target.tariff_plan = request.POST.get("tariff_plan", "standard")
+            target.save(update_fields=["enabled_modules", "tariff_plan"])
+            messages.success(request, _("Тариф клиники «%(n)s» обновлён") % {"n": target.name})
             return redirect("superadmin_panel")
         if action == "create_branch":
             name = request.POST.get("name", "").strip()
@@ -103,6 +108,9 @@ def superadmin_panel(request):
                 messages.error(request, _("Заполните логин, имя и пароль"))
             return redirect("superadmin_panel")
 
+    from apps.tenancy import get_current_clinic
+    target = get_current_clinic()  # клиника, которую сейчас настраиваем (активная)
+    all_keys = [m[0] for m in ClinicSettings.ALL_MODULES]
     return render(request, "users/superadmin.html", {
         "services_count": Service.objects.count(),
         "service_cats_count": ServiceCategory.objects.count(),
@@ -111,8 +119,11 @@ def superadmin_panel(request):
         "staff": User.objects.select_related("role").filter(is_active=True),
         "roles": Role.objects.all(),
         "all_modules": ClinicSettings.ALL_MODULES,
-        "enabled_modules": clinic.enabled_modules or [m[0] for m in ClinicSettings.ALL_MODULES],
-        "tariff_plan": clinic.tariff_plan,
+        "enabled_modules": (target.enabled_modules or all_keys) if target else all_keys,
+        "tariff_plan": target.tariff_plan if target else "",
+        "tariff_choices": ClinicSettings.TARIFF_CHOICES,
+        "tariff_presets_json": ClinicSettings.TARIFF_PRESETS,
+        "target_clinic": target,
         "clinics": Clinic.objects.all(),
     })
 
@@ -362,7 +373,12 @@ def dashboard_view(request):
 @login_required
 @role_required("superadmin", "admin_main")
 def staff_list(request):
-    users = User.objects.select_related("role").prefetch_related("branches").filter(is_active=True)
+    from apps.tenancy import get_current_clinic
+    users = User.objects.select_related("role").prefetch_related("branches", "roles").filter(is_active=True)
+    # изоляция по клинике (User не ClinicScoped — фильтруем явно)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        users = users.filter(clinic=clinic)
     # суперпользователя видит только сам суперпользователь
     if not request.user.is_superadmin:
         users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
@@ -380,9 +396,14 @@ def _is_protected_target(target, actor):
 @login_required
 @role_required("superadmin", "admin_main")
 def staff_create(request):
+    from apps.tenancy import get_current_clinic
     form = UserForm(request.POST or None, request.FILES or None)
     if form.is_valid():
-        form.save()
+        new_user = form.save(commit=False)
+        # привязать к текущей клинике (или к клинике создателя)
+        new_user.clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+        new_user.save()
+        form.save_m2m()
         messages.success(request, _("Сотрудник добавлен"))
         return redirect("staff_list")
     return render(request, "users/form.html", {"form": form, "title": _("Добавить сотрудника")})

@@ -8,6 +8,8 @@ class Clinic(models.Model):
     name = models.CharField(max_length=200, verbose_name="Название клиники")
     slug = models.SlugField(max_length=120, unique=True, blank=True)
     is_active = models.BooleanField(default=True)
+    tariff_plan = models.CharField(max_length=20, default="standard", verbose_name="Тариф")
+    enabled_modules = models.JSONField(default=list, blank=True, verbose_name="Включённые модули")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -96,6 +98,10 @@ class User(AbstractUser):
         related_name="users",
         verbose_name="Филиалы",
     )
+    roles = models.ManyToManyField(
+        "users.Role", blank=True, related_name="users_extra",
+        verbose_name="Доп. роли",
+    )
     telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID")
     is_active = models.BooleanField(default=True)
 
@@ -113,20 +119,32 @@ class User(AbstractUser):
     def role_name(self):
         return self.role.name if self.role else None
 
+    @property
+    def all_role_names(self):
+        """Все роли пользователя: основная + дополнительные (M2M)."""
+        names = set()
+        if self.role_id:
+            names.add(self.role_name)
+        try:
+            names.update(self.roles.values_list("name", flat=True))
+        except Exception:
+            pass
+        return names
+
     def has_role(self, *role_names):
-        return self.role_name in role_names
+        return bool(self.all_role_names & set(role_names))
 
     @property
     def is_superadmin(self):
-        return self.is_superuser or self.role_name == Role.SUPERADMIN
+        return self.is_superuser or Role.SUPERADMIN in self.all_role_names
 
     @property
     def is_doctor(self):
-        return self.role_name == Role.DOCTOR
+        return Role.DOCTOR in self.all_role_names
 
     @property
     def is_admin(self):
-        return self.role_name in (Role.ADMIN, Role.ADMIN_MAIN)
+        return bool(self.all_role_names & {Role.ADMIN, Role.ADMIN_MAIN})
 
 
 class UserActivity(models.Model):

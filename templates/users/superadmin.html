@@ -66,29 +66,47 @@
     </div>
   </div>
 
-  <!-- Tariff / modules -->
+  <!-- Tariff / modules (per clinic) -->
   <div class="card card-pad">
-    <h3 class="font-bold mb-1" style="color:var(--text)">Тариф и доступные модули</h3>
-    <p class="muted text-sm mb-4">Отметьте функции, доступные клинике. Снятые — скрываются из меню у всех.</p>
+    <h3 class="font-bold mb-1" style="color:var(--text)">Тариф и доступные модули
+      {% if target_clinic %}<span class="badge badge-blue ml-1">{{ target_clinic.name }}</span>{% endif %}
+    </h3>
+    {% if not target_clinic %}
+    <div class="badge-orange px-4 py-3 rounded-xl text-sm mt-2">
+      Тариф настраивается для конкретной клиники. Нажмите «Войти →» у нужной клиники выше, затем вернитесь сюда.
+    </div>
+    {% else %}
+    <p class="muted text-sm mb-4">Выберите тариф (модули проставятся автоматически) или отметьте вручную. Снятые — скрываются из меню у этой клиники.</p>
+    {{ tariff_presets_json|json_script:"tariff-presets" }}
     <form method="post">
       {% csrf_token %}<input type="hidden" name="action" value="save_modules">
       <div class="mb-4 max-w-xs">
         <label class="fld">Тарифный план</label>
-        <select name="tariff_plan" class="no-tom">
-          <option value="full" {% if tariff_plan == 'full' %}selected{% endif %}>Полный</option>
-          <option value="standard" {% if tariff_plan == 'standard' %}selected{% endif %}>Стандарт</option>
-          <option value="basic" {% if tariff_plan == 'basic' %}selected{% endif %}>Базовый</option>
+        <select name="tariff_plan" class="no-tom" onchange="applyTariff(this.value)">
+          {% for tk, tlabel in tariff_choices %}
+          <option value="{{ tk }}" {% if tariff_plan == tk %}selected{% endif %}>{{ tlabel }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="modules-grid">
         {% for key, label in all_modules %}
         <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
           <input type="checkbox" name="modules" value="{{ key }}" {% if key in enabled_modules %}checked{% endif %}> {{ label }}
         </label>
         {% endfor %}
       </div>
-      <button type="submit" class="btn btn-primary btn-sm">Сохранить модули</button>
+      <button type="submit" class="btn btn-primary btn-sm">Сохранить тариф</button>
     </form>
+    <script>
+      function applyTariff(plan) {
+        const presets = JSON.parse(document.getElementById('tariff-presets').textContent);
+        const allowed = presets[plan] || [];
+        document.querySelectorAll('#modules-grid input[name="modules"]').forEach(cb => {
+          cb.checked = allowed.includes(cb.value);
+        });
+      }
+    </script>
+    {% endif %}
   </div>
 
   <!-- Manage data quick links -->
