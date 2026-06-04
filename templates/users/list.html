@@ -16,10 +16,16 @@
       </div>
       <div class="flex-1 min-w-0">
         <p class="font-bold text-slate-800 truncate">{{ u.name }}</p>
-        <p class="text-xs text-slate-500">{{ u.role }}</p>
-        <p class="text-xs text-slate-400 mt-0.5">{{ u.phone|default:u.email }}</p>
+        <p class="text-xs text-slate-500">{{ u.role }}{% for r in u.roles.all %}, {{ r }}{% endfor %}</p>
+        <p class="text-xs text-slate-400 mt-0.5">{{ u.phone|default:u.email }} {% if u.login %}· логин: <b>{{ u.login }}</b>{% endif %}</p>
       </div>
-      <a href="/users/{{ u.pk }}/edit/" class="badge badge-gray hover:bg-slate-200 shrink-0">Ред.</a>
+      <div class="flex gap-2 shrink-0 items-center">
+        <form method="post" action="/users/{{ u.pk }}/set-password/" onsubmit="return resetPw(this)">
+          {% csrf_token %}<input type="hidden" name="new_password">
+          <button type="submit" class="badge badge-yellow hover:bg-amber-100" title="Сбросить пароль">🔑 Пароль</button>
+        </form>
+        <a href="/users/{{ u.pk }}/edit/" class="badge badge-gray hover:bg-slate-200">Ред.</a>
+      </div>
     </div>
     {% empty %}
     <div class="card p-12 text-center col-span-3">
@@ -51,4 +57,13 @@
     </div>
   </div>
 </div>
+<script>
+function resetPw(form) {
+  const pw = prompt('Введите новый пароль для сотрудника (минимум 6 символов).\nЗапишите его — потом передадите сотруднику:');
+  if (pw === null) return false;
+  if (pw.trim().length < 6) { alert('Слишком короткий пароль (минимум 6 символов)'); return false; }
+  form.querySelector('input[name="new_password"]').value = pw.trim();
+  return true;
+}
+</script>
 {% endblock %}

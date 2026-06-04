@@ -23,7 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ asset_v }}">
   <style>body{font-family:'Plus Jakarta Sans',system-ui,sans-serif}</style>
   {% block extra_head %}{% endblock %}
 </head>
@@ -285,7 +285,7 @@
 {% block auth_content %}{% endblock %}
 {% endif %}
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v={{ asset_v }}"></script>
 {% if user.is_authenticated %}
 <script>
 /* Web Push: фоновые уведомления (телефон/закрытая вкладка) через Service Worker */

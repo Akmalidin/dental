@@ -6,6 +6,7 @@ urlpatterns = [
     path("create/", views.staff_create, name="staff_create"),
     path("<int:pk>/edit/", views.staff_edit, name="staff_edit"),
     path("<int:pk>/delete/", views.staff_delete, name="staff_delete"),
+    path("<int:pk>/set-password/", views.staff_set_password, name="staff_set_password"),
     path("branches/", views.branch_list, name="branch_list"),
     path("branches/create/", views.branch_create, name="branch_create"),
     path("branches/<int:pk>/edit/", views.branch_edit, name="branch_edit"),

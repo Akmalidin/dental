@@ -395,6 +395,26 @@ def _is_protected_target(target, actor):
 
 @login_required
 @role_required("superadmin", "admin_main")
+@require_POST
+def staff_set_password(request, pk):
+    """Сбросить (задать новый) пароль сотруднику. Пароли не показываются — только смена."""
+    user = get_object_or_404(User, pk=pk)
+    if _is_protected_target(user, request.user):
+        messages.error(request, _("Доступ запрещён: нельзя менять пароль суперпользователя"))
+        return redirect("staff_list")
+    new_pw = request.POST.get("new_password", "").strip()
+    if len(new_pw) < 6:
+        messages.error(request, _("Пароль слишком короткий (минимум 6 символов)"))
+        return redirect("staff_list")
+    user.set_password(new_pw)
+    user.save(update_fields=["password"])
+    messages.success(request, _("Пароль для «%(n)s» изменён. Передайте его сотруднику: %(p)s")
+                     % {"n": user.name, "p": new_pw})
+    return redirect("staff_list")
+
+
+@login_required
+@role_required("superadmin", "admin_main")
 def staff_create(request):
     from apps.tenancy import get_current_clinic
     form = UserForm(request.POST or None, request.FILES or None)
