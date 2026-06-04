@@ -278,13 +278,43 @@
 <script src="/static/js/app.js"></script>
 {% if user.is_authenticated %}
 <script>
-/* Push-уведомления: браузерные desktop-нотификации + обновление бейджа */
+/* Web Push: фоновые уведомления (телефон/закрытая вкладка) через Service Worker */
+const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
+function urlB64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function setupWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !VAPID_PUBLIC_KEY) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    if (Notification.permission !== 'granted') return;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    await fetch('/notifications/push/subscribe/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON ? sub.toJSON() : sub }),
+    });
+  } catch (e) { /* нет поддержки/связи */ }
+}
+window.setupWebPush = setupWebPush;
+setupWebPush();
+
+/* Локальные desktop-нотификации (когда вкладка открыта) + бейдж */
 (function () {
   if (!('Notification' in window)) return;
   if (Notification.permission === 'default') {
-    // запросить разрешение после первого клика пользователя
     document.addEventListener('click', function ask() {
-      Notification.requestPermission(); document.removeEventListener('click', ask);
+      Notification.requestPermission().then(function(p){ if (p === 'granted') setupWebPush(); });
+      document.removeEventListener('click', ask);
     }, { once: true });
   }
   let seen = new Set(JSON.parse(localStorage.getItem('notif_seen') || '[]'));

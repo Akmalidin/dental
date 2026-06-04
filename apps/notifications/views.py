@@ -1,7 +1,10 @@
+import json
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from .models import Notification
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+from .models import Notification, PushSubscription
 
 
 def _is_ajax(request):
@@ -12,6 +15,57 @@ def _is_ajax(request):
 def notification_list(request):
     notifications = Notification.objects.filter(user=request.user)
     return render(request, "notifications/list.html", {"notifications": notifications})
+
+
+@csrf_exempt
+@login_required
+def push_subscribe(request):
+    """Сохранить подписку устройства на web push."""
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    try:
+        data = json.loads(request.body)
+        sub = data.get("subscription") or data
+        endpoint = sub["endpoint"]
+        keys = sub.get("keys", {})
+        PushSubscription.objects.update_or_create(
+            endpoint=endpoint,
+            defaults={
+                "user": request.user,
+                "p256dh": keys.get("p256dh", ""),
+                "auth": keys.get("auth", ""),
+                "user_agent": request.META.get("HTTP_USER_AGENT", "")[:300],
+            },
+        )
+        return JsonResponse({"ok": True})
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+
+
+def service_worker(request):
+    """Service Worker (должен отдаваться из корня сайта для широкого scope)."""
+    js = """
+self.addEventListener('push', function(event) {
+  let d = {};
+  try { d = event.data.json(); } catch(e) { d = { title: 'SADAF', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'SADAF', {
+    body: d.body || '',
+    icon: '/static/icon-192.png',
+    badge: '/static/icon-192.png',
+    data: { url: d.url || '/' },
+    vibrate: [100, 50, 100],
+  }));
+});
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
+    for (const c of list) { if ('focus' in c) { c.navigate(url); return c.focus(); } }
+    if (clients.openWindow) return clients.openWindow(url);
+  }));
+});
+"""
+    return HttpResponse(js, content_type="application/javascript")
 
 
 @login_required

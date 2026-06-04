@@ -190,6 +190,11 @@ AXES_ENABLED = False
 SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
+# ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
+VAPID_PUBLIC_KEY = "BDe8haq36DyKu5l-U72o0aRY2dZlyigSAUjiCT1krfx6FWiiTsIwJ41n8Ucps277Lgk9S_mBd3QlmubWedDnm0I"
+VAPID_PRIVATE_B64 = os.environ.get("VAPID_PRIVATE_B64", "")  # приватный ключ — только из env
+VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", "mailto:akmalmadakimov6@gmail.com")
+
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 LOGGING = {

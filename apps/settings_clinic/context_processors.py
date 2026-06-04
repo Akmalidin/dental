@@ -2,7 +2,8 @@ def clinic_settings(request):
     """Inject clinic settings and unread notification count into every template."""
     from django.conf import settings as dj_settings
     ctx = {"clinic_settings": None, "unread_notifications_count": 0, "enabled_modules": [],
-           "offline_mode": getattr(dj_settings, "OFFLINE_MODE", False)}
+           "offline_mode": getattr(dj_settings, "OFFLINE_MODE", False),
+           "vapid_public_key": getattr(dj_settings, "VAPID_PUBLIC_KEY", "")}
 
     try:
         from .models import ClinicSettings

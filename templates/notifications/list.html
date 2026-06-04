@@ -19,7 +19,7 @@
         if (!('Notification' in window)) { alert('Браузер не поддерживает уведомления'); return; }
         Notification.requestPermission().then(function(p){
           upd();
-          if (p === 'granted') new Notification('SADAF', { body: 'Уведомления включены ✓' });
+          if (p === 'granted') { new Notification('SADAF', { body: 'Уведомления включены ✓' }); if (window.setupWebPush) window.setupWebPush(); }
           else if (p === 'denied') alert('Уведомления заблокированы. Разрешите их в настройках браузера для этого сайта (значок замка в адресной строке).');
         });
       };
