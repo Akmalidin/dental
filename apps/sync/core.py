@@ -81,14 +81,30 @@ def export_clinic(clinic):
     return blocks
 
 
-def import_blocks(blocks):
-    """Загрузить блоки в локальную БД (upsert по PK). Возвращает счётчики."""
+def import_blocks(blocks, prefer_newer=False):
+    """Загрузить блоки (upsert по PK).
+
+    prefer_newer=True — НЕ перезаписывать запись, если у получателя версия свежее
+    (по updated_at). Используется при push в облако, чтобы офлайн-копия не затирала
+    более новые данные, изменённые в облаке. Возвращает (applied, skipped) по моделям.
+    """
     counts = {}
+    skipped = {}
     for block in blocks:
-        objs = block.get("objects", [])
-        n = 0
-        for obj in serializers.deserialize("python", objs):
-            obj.save()
+        n = sk = 0
+        for d in serializers.deserialize("python", block.get("objects", [])):
+            inst = d.object
+            if prefer_newer:
+                up = getattr(inst, "updated_at", None)
+                if up is not None:
+                    existing = type(inst)._base_manager.filter(pk=inst.pk).first()
+                    ex_up = getattr(existing, "updated_at", None) if existing else None
+                    if ex_up is not None and ex_up > up:
+                        sk += 1
+                        continue  # в облаке версия свежее — не трогаем
+            d.save()
             n += 1
         counts[block["model"]] = n
-    return counts
+        if sk:
+            skipped[block["model"]] = sk
+    return counts if not prefer_newer else {"applied": counts, "skipped": skipped}

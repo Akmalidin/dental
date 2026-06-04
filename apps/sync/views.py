@@ -85,7 +85,8 @@ def sync_push(request):
         return JsonResponse({"ok": False, "error": "POST only"}, status=405)
     try:
         payload = json.loads(request.body)
-        counts = import_blocks(payload.get("blocks", []))
-        return JsonResponse({"ok": True, "applied": counts})
+        # prefer_newer: не затирать в облаке записи, которые там изменились позже
+        res = import_blocks(payload.get("blocks", []), prefer_newer=True)
+        return JsonResponse({"ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {})})
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
