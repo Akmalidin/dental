@@ -191,7 +191,7 @@ SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
 # Версия статики для cache-busting (бампать при изменении app.css/app.js)
-ASSET_VERSION = "2026060501"
+ASSET_VERSION = "2026060502"
 
 # ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
 VAPID_PUBLIC_KEY = "BCa37d_93xAyPXKEsL6DNjLwTiUKYDvVTgHGcSMx8mHEMrQ6SqMcy8nHESIVSpo6atWAd_dGqUtWO7UnzFXZOjw"

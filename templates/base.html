@@ -181,10 +181,10 @@
       <!-- Offline sync button -->
       {% if offline_mode %}
       <button id="sync-btn" onclick="runSync()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold" style="border:1px solid #F59E0B;color:#B45309">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-        <span id="sync-label">Синхронизация</span>
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        <span id="sync-label" class="hidden sm:inline">Синхронизация</span>
       </button>
-      <span class="text-xs font-bold px-2 py-1 rounded" style="background:#FEF3C7;color:#B45309">ОФФЛАЙН</span>
+      <span class="text-xs font-bold px-2 py-1 rounded hidden sm:inline" style="background:#FEF3C7;color:#B45309">ОФФЛАЙН</span>
       <script>
         async function runSync() {
           const btn = document.getElementById('sync-btn'), lbl = document.getElementById('sync-label');
@@ -203,8 +203,8 @@
       {% if nav_clinics %}
       <div class="relative" x-data="{copen:false}">
         <button @click="copen=!copen" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold" style="border:1px solid var(--primary);color:var(--primary)">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16M9 7h6M9 11h6M9 15h6"/></svg>
-          <span>{% if active_clinic %}{{ active_clinic.name }}{% else %}Все клиники{% endif %}</span>
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16M9 7h6M9 11h6M9 15h6"/></svg>
+          <span class="hidden sm:inline max-w-[120px] truncate">{% if active_clinic %}{{ active_clinic.name }}{% else %}Все клиники{% endif %}</span>
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div x-show="copen" x-cloak @click.outside="copen=false" class="dropdown right-0 top-full mt-1 w-56">
@@ -220,8 +220,8 @@
       {% if nav_branches %}
       <div class="relative" x-data="{bopen:false}">
         <button @click="bopen=!bopen" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold" style="border:1px solid var(--border);color:var(--text)">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
-          <span>{% if active_branch %}{{ active_branch.name }}{% else %}Все филиалы{% endif %}</span>
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+          <span class="hidden sm:inline max-w-[110px] truncate">{% if active_branch %}{{ active_branch.name }}{% else %}Все филиалы{% endif %}</span>
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div x-show="bopen" x-cloak @click.outside="bopen=false" class="dropdown right-0 top-full mt-1 w-52">
@@ -232,10 +232,17 @@
       </div>
       {% endif %}
 
-      <!-- Lang -->
-      <div class="flex items-center gap-1">
-        <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ru"><input type="hidden" name="next" value="{{ request.path }}"><button class="px-2 py-1 rounded-lg text-xs font-bold {% if LANGUAGE_CODE == 'ru' %}text-indigo-600{% else %}muted{% endif %}">RU</button></form>
-        <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ky"><input type="hidden" name="next" value="{{ request.path }}"><button class="px-2 py-1 rounded-lg text-xs font-bold {% if LANGUAGE_CODE == 'ky' %}text-indigo-600{% else %}muted{% endif %}">KY</button></form>
+      <!-- Lang (флаги, дропдаун) -->
+      <div class="relative" x-data="{lopen:false}">
+        <button @click="lopen=!lopen" class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold" style="border:1px solid var(--border);color:var(--text)">
+          <span class="text-base leading-none">{% if LANGUAGE_CODE == 'ky' %}🇰🇬{% else %}🇷🇺{% endif %}</span>
+          <span class="hidden sm:inline">{% if LANGUAGE_CODE == 'ky' %}KY{% else %}RU{% endif %}</span>
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div x-show="lopen" x-cloak @click.outside="lopen=false" class="dropdown right-0 top-full mt-1 w-40">
+          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ru"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left {% if LANGUAGE_CODE == 'ru' %}text-indigo-600 font-bold{% endif %}">🇷🇺 Русский</button></form>
+          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ky"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left {% if LANGUAGE_CODE == 'ky' %}text-indigo-600 font-bold{% endif %}">🇰🇬 Кыргызча</button></form>
+        </div>
       </div>
 
       <a href="/notifications/" class="icon-btn">

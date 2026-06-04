@@ -104,8 +104,10 @@ body {
   .sidebar.mobile-open { transform: translateX(0); }
   .main-area, .main-area.expanded { margin-left: 0; }
   .sidebar-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 55; }
-  .topbar { padding-left: 12px; padding-right: 12px; gap: 6px; flex-wrap: wrap; height: auto; min-height: 60px; }
-  .topbar h1 { font-size: 18px; }
+  .topbar { padding-left: 10px; padding-right: 10px; gap: 6px; height: 58px; }
+  .topbar h1 { display: none; }                      /* заголовок страницы прячем — контекст в меню */
+  .topbar .icon-btn { width: 34px; height: 34px; }
+  .user-chip { padding: 3px 4px; }
   main.page-fade, main { padding-left: 14px !important; padding-right: 14px !important; }
   .card-pad { padding: 14px; }
   .modal-box { max-width: 96vw !important; }
