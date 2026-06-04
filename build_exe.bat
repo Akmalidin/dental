@@ -1,22 +1,13 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
-REM Сборка единого .exe оффлайн-приложения (PyInstaller).
-REM Запускать на машине с установленным проектом + venv.
 call venv\Scripts\activate.bat
-pip install pyinstaller -q
-echo Сборка SADAF.exe ... (займёт пару минут)
-pyinstaller --noconfirm --onefile --noconsole ^
-  --name "SADAF" ^
-  --icon "static\icon.ico" ^
-  --collect-all django ^
-  --collect-all rest_framework ^
-  --collect-submodules apps ^
-  --add-data "templates;templates" ^
-  --add-data "static;static" ^
-  --add-data "staticfiles;staticfiles" ^
-  --hidden-import "config.settings.local" ^
-  offline_launcher.py
+echo Installing PyInstaller...
+python -m pip install pyinstaller -q
+echo Collecting static...
+set DJANGO_SETTINGS_MODULE=config.settings.local
+python manage.py collectstatic --noinput
+echo Building SADAF.exe (takes a few minutes)...
+python -m PyInstaller --noconfirm --onefile --noconsole --name SADAF --icon "static\icon.ico" --collect-all django --collect-all rest_framework --collect-all corsheaders --collect-all simple_history --collect-submodules apps --add-data "templates;templates" --add-data "static;static" --add-data "staticfiles;staticfiles" --add-data "locale;locale" --hidden-import config.settings.local --hidden-import pywebpush offline_launcher.py
 echo.
-echo Готово: dist\SADAF.exe  (иконка приложения)
+echo Done. Result: dist\SADAF.exe
 pause
