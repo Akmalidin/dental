@@ -4,7 +4,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-from apps.notifications.views import service_worker
+from apps.notifications.views import service_worker, web_manifest
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -29,6 +29,7 @@ urlpatterns = [
     path("settings/", include("apps.settings_clinic.urls")),
     path("notifications/", include("apps.notifications.urls")),
     path("sw.js", service_worker, name="service_worker"),
+    path("manifest.json", web_manifest, name="web_manifest"),
     path("sync/", include("apps.sync.urls")),
 
     # Центральная панель (работает локально без схем)

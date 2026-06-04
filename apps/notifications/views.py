@@ -42,6 +42,30 @@ def push_subscribe(request):
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
 
+def web_manifest(request):
+    """PWA-манифест (установка иконкой, нужно для iOS web push)."""
+    name = "SADAF"
+    try:
+        from apps.settings_clinic.models import ClinicSettings
+        name = ClinicSettings.get().name or "SADAF"
+    except Exception:
+        pass
+    manifest = {
+        "name": name + " — Клиника",
+        "short_name": name,
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#F8FAFC",
+        "theme_color": "#6366F1",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    return JsonResponse(manifest)
+
+
 def service_worker(request):
     """Service Worker (должен отдаваться из корня сайта для широкого scope)."""
     js = """

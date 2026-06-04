@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{% if clinic_settings %}{{ clinic_settings.name }}{% else %}Denta Clinic{% endif %}{% endblock %}</title>
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366F1">
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="{% if clinic_settings %}{{ clinic_settings.name }}{% else %}SADAF{% endif %}">
   <script>
     // Apply theme before paint to avoid flash
     (function(){ try { if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark'); } catch(e){} })();
