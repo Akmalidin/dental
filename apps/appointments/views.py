@@ -246,7 +246,7 @@ def appointment_create(request):
             pname = appt.patient.full_name if appt.patient else "Пациент"
             Notification.send(appt.doctor, "Новая запись на приём",
                               f"{pname} — {_tz2.localtime(appt.start_at):%d.%m %H:%M}",
-                              type="appointment", link="/appointments/")
+                              type="appointment", link="/appointments/", actor=request.user)
         except Exception:
             pass
         messages.success(request, _("Запись добавлена"))

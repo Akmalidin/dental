@@ -34,7 +34,7 @@
   </div>
 
   {% for n in notifications %}
-  <div id="notif-card-{{ n.pk }}" @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
+  <div id="notif-card-{{ n.pk }}" @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', from:'{% if n.actor %}{{ n.actor.name|escapejs }}{% endif %}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
        class="card p-4 flex items-start gap-4 hover:border-indigo-300 transition cursor-pointer mt-3 {% if not n.is_read %}border-l-4 border-indigo-500{% endif %}">
     <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0
                 {% if n.type == 'appointment' %}bg-gradient-to-br from-blue-500 to-indigo-600
@@ -49,7 +49,7 @@
         {% if not n.is_read %}<span class="notif-dot w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>{% endif %}
       </div>
       {% if n.body %}<p class="text-sm text-slate-500 mt-0.5 truncate">{{ n.body }}</p>{% endif %}
-      <p class="text-xs text-slate-400 mt-1">{{ n.created_at|date:"d.m.Y H:i" }}</p>
+      <p class="text-xs text-slate-400 mt-1">{{ n.created_at|date:"d.m.Y H:i" }}{% if n.actor %} · от {{ n.actor.name }}{% endif %}</p>
     </div>
     <span class="badge badge-gray shrink-0 text-xs">Открыть →</span>
   </div>
@@ -72,7 +72,7 @@
       <div class="p-6 space-y-2">
         <p class="font-bold text-lg" style="color:var(--text)" x-text="cur && cur.title"></p>
         <p class="text-sm muted whitespace-pre-line" x-text="cur && cur.body" x-show="cur && cur.body"></p>
-        <p class="text-xs faint" x-text="cur && cur.date"></p>
+        <p class="text-xs faint"><span x-text="cur && cur.date"></span><template x-if="cur && cur.from"><span> · от <span x-text="cur.from"></span></span></template></p>
       </div>
       <div class="px-6 py-4 flex gap-3" style="border-top:1px solid var(--border)">
         <a x-show="cur && cur.link" :href="cur && cur.link" class="btn btn-primary flex-1 justify-center" x-text="actionLabel"></a>

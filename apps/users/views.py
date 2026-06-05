@@ -198,12 +198,22 @@ def _recycle_models():
     }
 
 
+def _recycle_qs(Model):
+    """Удалённые записи ТЕКУЩЕЙ клиники (изоляция корзины между клиниками)."""
+    from apps.tenancy import get_current_clinic
+    qs = Model.all_objects.filter(is_deleted=True)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    return qs
+
+
 @login_required
 @role_required("superadmin", "admin_main", "admin")
 def recycle_bin(request):
     items = []
     for kind, (Model, label) in _recycle_models().items():
-        for obj in Model.all_objects.filter(is_deleted=True).order_by("-deleted_at")[:200]:
+        for obj in _recycle_qs(Model).order_by("-deleted_at")[:200]:
             items.append({
                 "kind": kind, "label": label, "pk": obj.pk,
                 "title": str(obj), "deleted_at": obj.deleted_at,
@@ -220,7 +230,7 @@ def recycle_restore(request, kind, pk):
     models = _recycle_models()
     if kind in models:
         Model = models[kind][0]
-        obj = get_object_or_404(Model.all_objects, pk=pk)
+        obj = get_object_or_404(_recycle_qs(Model), pk=pk)
         obj.restore()
         messages.success(request, _("Восстановлено: %(t)s") % {"t": str(obj)})
     return redirect("recycle_bin")
@@ -233,7 +243,7 @@ def recycle_purge(request, kind, pk):
     models = _recycle_models()
     if kind in models:
         Model = models[kind][0]
-        obj = get_object_or_404(Model.all_objects, pk=pk)
+        obj = get_object_or_404(_recycle_qs(Model), pk=pk)
         title = str(obj)
         obj.delete()   # безвозвратно
         messages.success(request, _("Удалено безвозвратно: %(t)s") % {"t": title})

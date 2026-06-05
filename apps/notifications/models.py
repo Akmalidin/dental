@@ -21,6 +21,10 @@ class Notification(models.Model):
         "users.Clinic", on_delete=models.CASCADE, null=True, blank=True,
         related_name="+", verbose_name="Клиника", db_index=True,
     )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Отправитель",
+    )
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Тип")
     title = models.CharField(max_length=300, verbose_name="Заголовок")
     body = models.TextField(blank=True, verbose_name="Сообщение")
@@ -37,10 +41,11 @@ class Notification(models.Model):
         return f"{self.user} — {self.title}"
 
     @classmethod
-    def send(cls, user, title, body="", type="system", link=""):
+    def send(cls, user, title, body="", type="system", link="", actor=None):
         from apps.tenancy import get_current_clinic
         clinic = get_current_clinic() or getattr(user, "clinic", None)
-        n = cls.objects.create(user=user, clinic=clinic, title=title, body=body, type=type, link=link)
+        n = cls.objects.create(user=user, clinic=clinic, actor=actor,
+                               title=title, body=body, type=type, link=link)
         # дополнительно — web push (телефон/фон, даже если вкладка закрыта)
         try:
             from .push import send_web_push

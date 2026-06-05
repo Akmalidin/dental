@@ -25,7 +25,12 @@ def task_list(request):
     # сортировка по дате/времени срока (ближайшие сверху), затем по дате создания
     qs = qs.order_by(F("due_date").asc(nulls_last=True), "-created_at")
     from apps.users.models import User
-    staff = User.objects.filter(is_active=True).order_by("name")
+    from apps.tenancy import get_current_clinic
+    staff = User.objects.filter(is_active=True)
+    _clinic = get_current_clinic()
+    if _clinic is not None:
+        staff = staff.filter(clinic=_clinic)
+    staff = staff.order_by("name")
     statuses = [("", "Все"), ("pending", "Ожидают"), ("in_progress", "В процессе"), ("done", "Выполнены")]
     return render(request, "tasks/list.html", {
         "tasks": qs, "staff": staff, "q": q, "statuses": statuses,
@@ -43,7 +48,7 @@ def _notify_assignees(task, actor):
             Notification.send(
                 u, "Новая задача: " + task.title,
                 task.description[:200] or "Вам назначена задача",
-                type="task", link="/tasks/",
+                type="task", link="/tasks/", actor=actor,
             )
     except Exception:
         pass
