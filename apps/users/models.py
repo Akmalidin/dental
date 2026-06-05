@@ -78,6 +78,29 @@ class Role(models.Model):
         return self.get_name_display()
 
 
+# ─── Разделы системы (для персональных доступов) ─────────────────────────────
+# (ключ, подпись, URL-префикс). dashboard всегда доступен и не блокируется.
+SECTIONS = [
+    ("dashboard",    "Дашборд",    "/"),
+    ("calendar",     "Расписание", "/calendar/"),
+    ("appointments", "Записи",     "/appointments/"),
+    ("patients",     "Пациенты",   "/patients/"),
+    ("treatments",   "Лечения",    "/treatments/"),
+    ("services",     "Услуги",     "/services/"),
+    ("finance",      "Финансы",    "/finance/"),
+    ("warehouse",    "Склад",      "/warehouse/"),
+    ("medicines",    "Лекарства",  "/medicines/"),
+    ("technicians",  "Техники",    "/technicians/"),
+    ("tasks",        "Задачи",     "/tasks/"),
+    ("reports",      "Аналитика",  "/reports/"),
+    ("staff",        "Сотрудники", "/users/"),
+    ("settings",     "Настройки",  "/settings/"),
+    ("recycle",      "Корзина",    "/users/recycle-bin/"),
+]
+SECTION_KEYS = [s[0] for s in SECTIONS]
+SECTION_LABELS = {s[0]: s[1] for s in SECTIONS}
+
+
 class User(AbstractUser):
     """Custom user model replacing username with login field."""
 
@@ -112,6 +135,10 @@ class User(AbstractUser):
     can_view_all_appointments = models.BooleanField(
         default=True, verbose_name="Видит записи всех врачей",
         help_text="Если выключено — врач видит только свои записи",
+    )
+    allowed_sections = models.JSONField(
+        null=True, blank=True, default=None, verbose_name="Разрешённые разделы",
+        help_text="Пусто (null) = все разделы по роли. Список ключей = только эти разделы.",
     )
     is_active = models.BooleanField(default=True)
 
@@ -155,6 +182,28 @@ class User(AbstractUser):
     @property
     def is_admin(self):
         return bool(self.all_role_names & {Role.ADMIN, Role.ADMIN_MAIN})
+
+    @property
+    def is_admin_main(self):
+        return Role.ADMIN_MAIN in self.all_role_names
+
+    def can_access(self, section):
+        """Персональный доступ к разделу. None в allowed_sections = всё (по роли)."""
+        if self.is_superadmin:
+            return True
+        if section == "dashboard":
+            return True  # дашборд всегда доступен (иначе некуда редиректить)
+        allowed = self.allowed_sections
+        if allowed is None:
+            return True
+        return section in allowed
+
+    @property
+    def nav_sections(self):
+        """Множество ключей разделов, доступных пользователю лично (для сайдбара)."""
+        if self.is_superadmin or self.allowed_sections is None:
+            return set(SECTION_KEYS)
+        return set(self.allowed_sections) | {"dashboard"}
 
 
 def clinic_doctors(clinic=None):

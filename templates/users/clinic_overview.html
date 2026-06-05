@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block page_title %}Обзор клиники — {{ clinic.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-5 max-w-4xl" x-data="accessMgr()">
+
+  <!-- Заголовок -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h2 class="text-xl font-bold" style="color:var(--text)">{{ clinic.name }}</h2>
+      <p class="muted text-sm">Обзор данных клиники и доступы сотрудников</p>
+    </div>
+    {% if user.is_superadmin %}
+    <a href="/users/superadmin/" class="btn btn-ghost btn-sm">← К панели</a>
+    {% endif %}
+  </div>
+
+  <!-- Сводка -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div class="stat"><div><p class="stat-label">Пациентов</p><p class="stat-value">{{ stats.patients }}</p></div></div>
+    <div class="stat"><div><p class="stat-label">Записей всего</p><p class="stat-value">{{ stats.appointments }}</p></div></div>
+    <div class="stat"><div><p class="stat-label">Записей сегодня</p><p class="stat-value">{{ stats.appointments_today }}</p></div></div>
+    <div class="stat"><div><p class="stat-label">Сотрудников</p><p class="stat-value">{{ stats.staff }}</p></div></div>
+    <div class="stat"><div><p class="stat-label">Выручка</p><p class="stat-value">{% if stats.revenue is not None %}{{ stats.revenue|floatformat:0 }}{% else %}—{% endif %}</p></div></div>
+  </div>
+
+  <!-- Персонал -->
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
+      <h3 class="font-bold text-lg" style="color:var(--text)">Персонал и доступы</h3>
+      <p class="muted text-sm mt-0.5">Нажмите на сотрудника, чтобы настроить, куда он может заходить, или заблокировать вход.</p>
+    </div>
+    <div>
+      {% for s in staff %}
+      <div class="flex items-center gap-3 px-5 py-3 hover:bg-[var(--border-2)] transition cursor-pointer"
+           style="border-bottom:1px solid var(--border-2)"
+           @click="openStaff({{ s.pk }})">
+        <div class="avatar w-9 h-9 text-sm">{{ s.name|first|upper }}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold" style="color:var(--text)">{{ s.name }}
+            {% if not s.is_active %}<span class="badge badge-gray ml-1">вход заблокирован</span>{% endif %}
+          </p>
+          <p class="text-xs muted">{{ s.login }} · {{ s.role|default:"без роли" }}
+            {% if s.full_access %} · <span class="text-emerald-600">полный доступ</span>
+            {% else %} · доступ к {{ s.checked_sections|length }} разделам{% endif %}
+          </p>
+        </div>
+        {% if s.manageable %}
+        <span class="badge badge-blue shrink-0 text-xs">Настроить →</span>
+        {% else %}
+        <span class="badge badge-gray shrink-0 text-xs">только просмотр</span>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p class="px-5 py-10 text-center muted text-sm">В клинике нет сотрудников</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  {{ staff_data|json_script:"staff-data" }}
+
+  <!-- Модал доступов -->
+  <div x-show="cur" x-cloak class="modal-overlay" @click.self="cur=null">
+    <div class="modal-box" style="max-width:560px" x-show="cur">
+      <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+        <h3 class="font-bold flex items-center gap-2" style="color:var(--text)">
+          Доступы — <span x-text="cur && cur.name"></span>
+        </h3>
+        <button @click="cur=null" class="text-2xl muted">&times;</button>
+      </div>
+
+      <form method="post" :action="'/users/' + (cur ? cur.pk : 0) + '/access/'">
+        {% csrf_token %}
+        <div class="p-6 space-y-4">
+          <template x-if="cur && !cur.manageable">
+            <div class="badge-orange px-4 py-3 rounded-xl text-sm">У вас нет прав менять доступы этого сотрудника (просмотр).</div>
+          </template>
+
+          <!-- Блокировка входа -->
+          <label class="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer"
+                 style="border:1px solid var(--border)">
+            <input type="checkbox" name="block_login" x-model="blockLogin" :disabled="cur && !cur.manageable">
+            <div>
+              <p class="text-sm font-semibold" style="color:var(--text)">Заблокировать вход полностью</p>
+              <p class="text-xs muted">Сотрудник не сможет войти в систему вообще.</p>
+            </div>
+          </label>
+
+          <!-- Полный доступ -->
+          <label class="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer"
+                 style="border:1px solid var(--border)">
+            <input type="checkbox" name="full_access" x-model="fullAccess" :disabled="cur && !cur.manageable">
+            <div>
+              <p class="text-sm font-semibold" style="color:var(--text)">Полный доступ (по роли)</p>
+              <p class="text-xs muted">Все разделы, разрешённые ролью и тарифом.</p>
+            </div>
+          </label>
+
+          <!-- Разделы -->
+          <div :class="(fullAccess || blockLogin) ? 'opacity-40 pointer-events-none' : ''">
+            <p class="fld mb-2">Разделы, куда разрешён вход:</p>
+            <div class="grid grid-cols-2 gap-2">
+              {% for key, label, prefix in sections %}
+              {% if key != 'dashboard' %}
+              <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm"
+                     style="border:1px solid var(--border)">
+                <input type="checkbox" name="sections" value="{{ key }}"
+                       :checked="hasSection('{{ key }}')"
+                       @change="toggleSection('{{ key }}', $event.target.checked)"
+                       :disabled="cur && !cur.manageable">
+                {{ label }}
+              </label>
+              {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 flex gap-3" style="border-top:1px solid var(--border)">
+          <button type="submit" class="btn btn-primary flex-1 justify-center"
+                  x-show="cur && cur.manageable">Сохранить</button>
+          <button type="button" @click="cur=null" class="btn btn-ghost">Закрыть</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function accessMgr() {
+  return {
+    data: [],
+    cur: null,
+    fullAccess: false,
+    blockLogin: false,
+    sel: new Set(),
+    init() {
+      try { this.data = JSON.parse(document.getElementById('staff-data').textContent); }
+      catch (e) { this.data = []; }
+    },
+    openStaff(pk) {
+      const s = this.data.find(x => x.pk === pk);
+      if (!s) return;
+      this.cur = s;
+      this.fullAccess = s.full;
+      this.blockLogin = !s.active;
+      this.sel = new Set(s.sections || []);
+    },
+    hasSection(key) { return this.sel.has(key); },
+    toggleSection(key, on) { if (on) this.sel.add(key); else this.sel.delete(key); },
+  };
+}
+</script>
+{% endblock %}

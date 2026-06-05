@@ -12,14 +12,17 @@
     </div>
     {% if clinics %}
     <table class="tbl">
-      <thead><tr><th>Клиника</th><th>Создана</th><th class="text-right pr-5">Работать</th></tr></thead>
+      <thead><tr><th>Клиника</th><th>Создана</th><th class="text-right pr-5">Действия</th></tr></thead>
       <tbody>
         {% for c in clinics %}
         <tr>
           <td class="font-semibold">{{ c.name }} {% if active_clinic and active_clinic.pk == c.pk %}<span class="badge badge-blue ml-1">активна</span>{% endif %}</td>
           <td class="muted text-xs">{{ c.created_at|date:"d.m.Y" }}</td>
           <td class="text-right pr-3">
-            <form method="post" action="/users/set-clinic/"><input type="hidden" name="next" value="/users/superadmin/">{% csrf_token %}<input type="hidden" name="clinic" value="{{ c.pk }}"><button class="btn btn-sm">Войти →</button></form>
+            <div class="flex items-center justify-end gap-2">
+              <a href="/users/clinic/{{ c.pk }}/overview/" class="btn btn-sm btn-ghost">Обзор и доступы</a>
+              <form method="post" action="/users/set-clinic/"><input type="hidden" name="next" value="/users/superadmin/">{% csrf_token %}<input type="hidden" name="clinic" value="{{ c.pk }}"><button class="btn btn-sm">Войти →</button></form>
+            </div>
           </td>
         </tr>
         {% endfor %}

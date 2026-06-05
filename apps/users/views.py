@@ -250,6 +250,101 @@ def recycle_purge(request, kind, pk):
     return redirect("recycle_bin")
 
 
+# ─── Обзор клиники + персональные доступы ────────────────────────────────────
+
+def _can_manage_access(actor, target):
+    """Кто может менять доступы сотрудника: суперадмин — любого; гл.админ — своих
+    (не себя, не суперадмина)."""
+    if actor.is_superadmin:
+        return True
+    if (actor.is_admin_main and target.clinic_id == actor.clinic_id
+            and target.pk != actor.pk and not target.is_superadmin):
+        return True
+    return False
+
+
+@login_required
+def clinic_overview(request, clinic_id):
+    """Сводка по клинике + управление доступами сотрудников.
+    Доступ: суперадмин (любая клиника) или гл.администратор своей клиники."""
+    from apps.users.models import Clinic, SECTIONS, SECTION_KEYS
+    from apps.tenancy import unscoped
+    from django.utils import timezone
+    from django.db.models import Sum
+
+    user = request.user
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    if not (user.is_superadmin or (user.is_admin_main and user.clinic_id == clinic.pk)):
+        messages.error(request, _("Нет доступа к обзору этой клиники"))
+        return redirect("/")
+
+    stats = {"revenue": None}
+    with unscoped():
+        from apps.patients.models import Patient
+        from apps.appointments.models import Appointment
+        stats["patients"] = Patient.all_objects.filter(clinic_id=clinic.pk, is_deleted=False).count()
+        appts = Appointment.all_objects.filter(clinic_id=clinic.pk, is_deleted=False)
+        stats["appointments"] = appts.count()
+        stats["appointments_today"] = appts.filter(start_at__date=timezone.localdate()).count()
+        try:
+            from apps.finance.models import Payment
+            rev = Payment.all_clinics.filter(clinic_id=clinic.pk).aggregate(s=Sum("amount"))["s"]
+            stats["revenue"] = rev or 0
+        except Exception:
+            pass
+
+    staff = list(
+        User.objects.filter(clinic_id=clinic.pk).select_related("role")
+        .order_by("-is_active", "name")
+    )
+    all_keys = list(SECTION_KEYS)
+    staff_data = []
+    for s in staff:
+        s.full_access = s.allowed_sections is None
+        s.checked_sections = set(all_keys) if s.full_access else set(s.allowed_sections or [])
+        s.manageable = _can_manage_access(user, s)
+        staff_data.append({
+            "pk": s.pk,
+            "name": s.name,
+            "login": s.login,
+            "role": s.role.get_name_display() if s.role else "",
+            "active": s.is_active,
+            "full": s.full_access,
+            "sections": all_keys if s.full_access else list(s.checked_sections),
+            "manageable": s.manageable,
+        })
+    stats["staff"] = len(staff)
+
+    return render(request, "users/clinic_overview.html", {
+        "clinic": clinic,
+        "stats": stats,
+        "staff": staff,
+        "staff_data": staff_data,
+        "sections": SECTIONS,
+    })
+
+
+@login_required
+@require_POST
+def save_user_access(request, pk):
+    """Сохранить персональные доступы сотрудника (из модала обзора клиники)."""
+    from apps.users.models import SECTION_KEYS
+    target = get_object_or_404(User, pk=pk)
+    if not _can_manage_access(request.user, target):
+        messages.error(request, _("Нет прав менять доступы этого сотрудника"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+
+    target.is_active = not bool(request.POST.get("block_login"))
+    if request.POST.get("full_access"):
+        target.allowed_sections = None
+    else:
+        target.allowed_sections = [s for s in request.POST.getlist("sections") if s in SECTION_KEYS]
+    target.save(update_fields=["allowed_sections", "is_active"])
+    messages.success(request, _("Доступы сотрудника «%(n)s» обновлены") % {"n": target.name})
+    return redirect(request.META.get("HTTP_REFERER")
+                    or f"/users/clinic/{target.clinic_id}/overview/")
+
+
 @login_required
 def profile_view(request):
     from django.contrib.auth import update_session_auth_hash

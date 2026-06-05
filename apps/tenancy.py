@@ -93,6 +93,57 @@ class TariffGuardMiddleware:
         return self.get_response(request)
 
 
+class SectionAccessMiddleware:
+    """Персональные доступы: блокирует заход в раздел, если он не разрешён пользователю.
+
+    Дополняет роли/тариф. allowed_sections=None у пользователя — без ограничений.
+    Регистрировать ПОСЛЕ MessageMiddleware (использует messages).
+    """
+    # (URL-префикс, ключ раздела). Длинные/частные префиксы — первыми.
+    # key=None — служебные/всегда-доступные пути (не блокируются здесь).
+    PREFIXES = [
+        ("/users/recycle-bin", "recycle"),
+        ("/users/superadmin", None),
+        ("/users/clinic", None),       # обзор клиники — проверяется во вьюхе
+        ("/users/set-clinic", None),
+        ("/users/set-branch", None),
+        ("/users/my-earnings", None),  # своя зарплата — доступна врачу
+        ("/users", "staff"),
+        ("/settings", "settings"),
+        ("/calendar", "calendar"),
+        ("/appointments", "appointments"),
+        ("/patients", "patients"),
+        ("/treatments", "treatments"),
+        ("/services", "services"),
+        ("/finance", "finance"),
+        ("/warehouse", "warehouse"),
+        ("/medicines", "medicines"),
+        ("/technicians", "technicians"),
+        ("/tasks", "tasks"),
+        ("/reports", "reports"),
+    ]
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if (user is not None and user.is_authenticated
+                and not getattr(user, "is_superadmin", False)):
+            allowed = getattr(user, "allowed_sections", None)
+            if allowed is not None:  # None = персональных ограничений нет
+                path = request.path
+                for prefix, key in self.PREFIXES:
+                    if path.startswith(prefix):
+                        if key is not None and key not in allowed:
+                            from django.shortcuts import redirect
+                            from django.contrib import messages
+                            messages.error(request, "У вас нет доступа к этому разделу")
+                            return redirect("/")
+                        break
+        return self.get_response(request)
+
+
 def _apply_clinic(qs):
     if _is_unscoped():
         return qs

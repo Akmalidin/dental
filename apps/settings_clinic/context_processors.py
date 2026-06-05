@@ -22,6 +22,13 @@ def clinic_settings(request):
         pass
 
     if request.user.is_authenticated:
+        # Персональные доступы к разделам (для сайдбара)
+        try:
+            ctx["user_sections"] = request.user.nav_sections
+        except Exception:
+            from apps.users.models import SECTION_KEYS
+            ctx["user_sections"] = set(SECTION_KEYS)
+
         try:
             from apps.notifications.models import Notification
             ncount = Notification.objects.filter(user=request.user, is_read=False)

@@ -69,6 +69,7 @@ MIDDLEWARE = [
     "apps.tenancy.CurrentClinicMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "apps.tenancy.SectionAccessMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
 ]
@@ -192,7 +193,7 @@ SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
 # Версия статики для cache-busting (бампать при изменении app.css/app.js)
-ASSET_VERSION = "2026060512"
+ASSET_VERSION = "2026060513"
 
 # ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
 VAPID_PUBLIC_KEY = "BCa37d_93xAyPXKEsL6DNjLwTiUKYDvVTgHGcSMx8mHEMrQ6SqMcy8nHESIVSpo6atWAd_dGqUtWO7UnzFXZOjw"

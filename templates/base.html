@@ -65,19 +65,25 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
         <span class="nav-label">Дашборд</span>
       </a>
+      {% if 'calendar' in user_sections %}
       <a href="/calendar/" class="nav-item {% if 'calendar' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
         <span class="nav-label">Расписание</span>
       </a>
+      {% endif %}
+      {% if 'appointments' in user_sections %}
       <a href="/appointments/" class="nav-item {% if 'appointment' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <span class="nav-label">Записи</span>
       </a>
+      {% endif %}
+      {% if 'patients' in user_sections %}
       <a href="/patients/" class="nav-item {% if 'patient' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         <span class="nav-label">Пациенты</span>
       </a>
-      {% if 'treatments' in enabled_modules %}
+      {% endif %}
+      {% if 'treatments' in enabled_modules and 'treatments' in user_sections %}
       <a href="/treatments/" class="nav-item {% if 'treatment' in u %}active{% endif %}" data-mod="treatments">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z"/></svg>
         <span class="nav-label">Лечения</span>
@@ -85,37 +91,37 @@
       {% endif %}
 
       <p class="nav-section">Управление</p>
-      {% if 'services' in enabled_modules %}
+      {% if 'services' in enabled_modules and 'services' in user_sections %}
       <a href="/services/" class="nav-item {% if 'service' in u %}active{% endif %}" data-mod="services">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <span class="nav-label">Услуги</span>
       </a>
       {% endif %}
-      {% if 'finance' in enabled_modules %}
+      {% if 'finance' in enabled_modules and 'finance' in user_sections %}
       <a href="/finance/" class="nav-item {% if 'finance' in u or 'payment' in u or 'expense' in u or 'debtor' in u %}active{% endif %}" data-mod="finance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
         <span class="nav-label">Финансы</span>
       </a>
       {% endif %}
-      {% if 'warehouse' in enabled_modules %}
+      {% if 'warehouse' in enabled_modules and 'warehouse' in user_sections %}
       <a href="/warehouse/" class="nav-item {% if 'warehouse' in u or 'transfer' in u or 'inventory' in u %}active{% endif %}" data-mod="warehouse">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         <span class="nav-label">Склад</span>
       </a>
       {% endif %}
-      {% if 'medicines' in enabled_modules %}
+      {% if 'medicines' in enabled_modules and 'medicines' in user_sections %}
       <a href="/medicines/" class="nav-item {% if 'medicine' in u %}active{% endif %}" data-mod="medicines">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.5 20.5L3.5 13.5a5 5 0 017-7l7 7a5 5 0 01-7 7zM8 8l8 8"/></svg>
         <span class="nav-label">Лекарства</span>
       </a>
       {% endif %}
-      {% if 'technicians' in enabled_modules %}
+      {% if 'technicians' in enabled_modules and 'technicians' in user_sections %}
       <a href="/technicians/" class="nav-item {% if 'technician' in u %}active{% endif %}" data-mod="technicians">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
         <span class="nav-label">Техники</span>
       </a>
       {% endif %}
-      {% if 'tasks' in enabled_modules %}
+      {% if 'tasks' in enabled_modules and 'tasks' in user_sections %}
       <a href="/tasks/" class="nav-item {% if 'task' in u %}active{% endif %}" data-mod="tasks">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <span class="nav-label">Задачи</span>
@@ -124,26 +130,36 @@
 
       {% if user.is_admin or user.is_superadmin %}
       <p class="nav-section">Администрирование</p>
-      {% if 'reports' in enabled_modules %}
+      {% if 'reports' in enabled_modules and 'reports' in user_sections %}
       <a href="/reports/" class="nav-item {% if 'report' in u %}active{% endif %}" data-mod="reports">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
         <span class="nav-label">Аналитика</span>
       </a>
       {% endif %}
-      {% if 'staff' in enabled_modules %}
+      {% if 'staff' in enabled_modules and 'staff' in user_sections %}
       <a href="/users/" class="nav-item {% if 'staff' in u or 'branch' in u or 'salary' in u or 'schedule' in u %}active{% endif %}" data-mod="staff">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
         <span class="nav-label">Сотрудники</span>
       </a>
       {% endif %}
+      {% if 'settings' in user_sections %}
       <a href="/settings/" class="nav-item {% if 'settings' in u or 'document' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <span class="nav-label">Настройки</span>
       </a>
+      {% endif %}
+      {% if 'recycle' in user_sections %}
       <a href="/users/recycle-bin/" class="nav-item {% if 'recycle' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
         <span class="nav-label">Корзина</span>
       </a>
+      {% endif %}
+      {% if user.is_admin_main and user.clinic_id %}
+      <a href="/users/clinic/{{ user.clinic_id }}/overview/" class="nav-item {% if 'clinic_overview' in u %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>
+        <span class="nav-label">Обзор и доступы</span>
+      </a>
+      {% endif %}
       {% endif %}
 
       {% if user.is_superadmin %}
