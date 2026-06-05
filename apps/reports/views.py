@@ -39,7 +39,9 @@ def report_dashboard(request):
     total_paid = treatments.aggregate(s=Sum("paid_amount"))["s"] or Decimal(0)
 
     # ── Revenue by doctor ──
-    doctors = User.objects.filter(role__name="doctor", is_active=True).annotate(
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic()).annotate(
         treatments_count=Count("treatments", filter=Q(treatments__created_at__date__gte=start)),
         total_revenue=Sum("treatments__total_amount", filter=Q(treatments__created_at__date__gte=start)),
     )
@@ -205,14 +207,11 @@ def report_treatments(request):
 @login_required
 @role_required("superadmin", "admin_main", "admin")
 def report_doctors(request):
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
     today = date.today()
     month_start = today.replace(day=1)
-    doctors = User.objects.filter(
-        role__name="doctor",
-        is_active=True,
-    ).annotate(
+    doctors = clinic_doctors(get_current_clinic()).annotate(
         treatments_count=Count(
             "treatments",
             filter=Q(treatments__created_at__date__gte=month_start),

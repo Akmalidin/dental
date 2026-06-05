@@ -19,6 +19,11 @@ class AppointmentForm(forms.ModelForm):
         self.fields["end_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["branch"].required = False   # проставляется во view (основной филиал)
         self.fields["status"].required = False   # по умолчанию «Записан»
+        # врач — только доктора текущей клиники (а не все пользователи/создатель)
+        from apps.users.models import clinic_doctors
+        from apps.tenancy import get_current_clinic
+        self.fields["doctor"].queryset = clinic_doctors(get_current_clinic())
+        self.fields["doctor"].label_from_instance = lambda u: u.name
         for f in ("patient", "doctor", "service", "cabinet"):
             if f in self.fields:
                 self.fields[f].widget.attrs["class"] = "searchable"

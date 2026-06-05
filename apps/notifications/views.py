@@ -11,9 +11,19 @@ def _is_ajax(request):
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
+def _user_notifications(request):
+    """Уведомления пользователя в рамках текущей клиники (изоляция между клиниками)."""
+    from apps.tenancy import get_current_clinic
+    qs = Notification.objects.filter(user=request.user)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    return qs
+
+
 @login_required
 def notification_list(request):
-    notifications = Notification.objects.filter(user=request.user)
+    notifications = _user_notifications(request)
     return render(request, "notifications/list.html", {"notifications": notifications})
 
 
@@ -95,7 +105,7 @@ self.addEventListener('notificationclick', function(event) {
 @login_required
 def notification_poll(request):
     """JSON для браузерных уведомлений: счётчик непрочитанных + последние."""
-    qs = Notification.objects.filter(user=request.user, is_read=False)
+    qs = _user_notifications(request).filter(is_read=False)
     items = [
         {"id": n.pk, "title": n.title, "body": n.body, "link": n.link}
         for n in qs[:5]
@@ -106,7 +116,7 @@ def notification_poll(request):
 @login_required
 def notification_open(request, pk):
     """Открыть уведомление: пометить прочитанным и перейти по ссылке."""
-    n = Notification.objects.filter(pk=pk, user=request.user).first()
+    n = _user_notifications(request).filter(pk=pk).first()
     if not n:
         return redirect("notification_list")
     n.is_read = True
@@ -116,7 +126,7 @@ def notification_open(request, pk):
 
 @login_required
 def mark_read(request, pk):
-    Notification.objects.filter(pk=pk, user=request.user).update(is_read=True)
+    _user_notifications(request).filter(pk=pk).update(is_read=True)
     if _is_ajax(request):
         return JsonResponse({"ok": True})
     return redirect("notification_list")
@@ -124,7 +134,7 @@ def mark_read(request, pk):
 
 @login_required
 def mark_all_read(request):
-    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+    _user_notifications(request).filter(is_read=False).update(is_read=True)
     if _is_ajax(request):
         return JsonResponse({"ok": True})
     return redirect("notification_list")

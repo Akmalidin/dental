@@ -514,7 +514,9 @@ def _salary_rows(date_from, date_to, completed_only=False):
     from django.db.models import Sum, Count, Q
     from apps.treatments.models import Treatment
     from apps.finance.models import Payment
-    doctors = User.objects.filter(role__name="doctor", is_active=True).select_related("role")
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic()).select_related("role")
     rows = []
     for doc in doctors:
         t_qs = Treatment.objects.filter(
@@ -673,7 +675,9 @@ def salary_scheme_edit(request, pk):
 @role_required("superadmin", "admin_main")
 def schedule_list(request):
     from .models_salary import DoctorSchedule
-    doctors = User.objects.filter(role__name="doctor", is_active=True).prefetch_related("schedules__branch")
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic()).prefetch_related("schedules__branch")
     return render(request, "users/schedule.html", {
         "doctors": doctors,
         "days": DoctorSchedule.DAY_CHOICES,

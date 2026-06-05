@@ -10,6 +10,21 @@ from .models import Appointment, Cabinet
 from .serializers import AppointmentSerializer, AppointmentCalendarSerializer, CabinetSerializer
 
 
+def apply_appt_visibility(qs, user, doctor_param=None):
+    """Кто какие записи видит.
+    • Админ/суперадмин — все (можно фильтровать по врачу).
+    • Доктор с правом «видеть всех» — все, но по умолчанию может фильтровать.
+    • Доктор без права — только свои.
+    • Прочие роли — все.
+    """
+    is_admin = user.is_admin or user.is_superadmin
+    if not is_admin and user.is_doctor and not user.can_view_all_appointments:
+        return qs.filter(doctor=user)
+    if doctor_param:
+        qs = qs.filter(doctor_id=doctor_param)
+    return qs
+
+
 class AppointmentListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = AppointmentSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -18,8 +33,8 @@ class AppointmentListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = Appointment.objects.select_related("patient", "doctor", "cabinet", "branch", "service")
-        if self.request.user.is_doctor:
-            qs = qs.filter(doctor=self.request.user)
+        qs = apply_appt_visibility(qs, self.request.user,
+                                   self.request.query_params.get("doctor"))
         start = self.request.query_params.get("start")
         end = self.request.query_params.get("end")
         if start:
@@ -53,10 +68,7 @@ class CalendarEventsAPIView(generics.ListAPIView):
             qs = qs.filter(start_at__gte=start)
         if end:
             qs = qs.filter(end_at__lte=end)
-        if doctor:
-            qs = qs.filter(doctor_id=doctor)
-        if self.request.user.is_doctor:
-            qs = qs.filter(doctor=self.request.user)
+        qs = apply_appt_visibility(qs, self.request.user, doctor)
         return qs
 
 

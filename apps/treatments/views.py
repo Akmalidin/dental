@@ -369,7 +369,9 @@ def plan_detail(request, pk):
     services = list(Service.objects.filter(is_active=True).select_related("category")
                     .order_by("category__sort_order", "name")
                     .values("id", "name", "price", "category__name"))
-    doctors = request.user.__class__.objects.filter(role__name="doctor", is_active=True)
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic())
     return render(request, "treatments/plan_detail.html", {
         "plan": plan,
         "services_json": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),

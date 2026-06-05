@@ -24,7 +24,11 @@
         <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Доп. роли (можно несколько)</label><div class="flex flex-wrap gap-3">{{ form.roles }}</div></div>
         <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиалы</label>{{ form.branches }}</div>
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Аватар</label>{{ form.avatar }}</div>
-        <div class="flex items-center gap-3 self-end pb-2">
+        <div class="col-span-2 flex flex-col gap-2 pt-1">
+          <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            {{ form.can_view_all_appointments }}
+            <span>Видит записи всех врачей <span class="text-slate-400">(если выключено — врач видит только свои)</span></span>
+          </label>
           <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
             {{ form.is_active }} <span>Активен</span>
           </label>

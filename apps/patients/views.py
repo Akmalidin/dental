@@ -110,7 +110,9 @@ def patient_detail(request, pk):
         for s in _svcs
     ]
     service_categories_json = list(ServiceCategory.objects.values("id", "name"))
-    doctors = StaffUser.objects.filter(role__name="doctor", is_active=True)
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic())
     treatment_plans = patient.treatment_plans.select_related("doctor").prefetch_related(
         "items__service", "items__doctor"
     ).order_by("-created_at")

@@ -44,9 +44,9 @@
     </div>
 
     <div class="flex items-center gap-2 ml-auto">
-      <select id="doctorFilter" class="w-48 no-tom" @change="cal.refetchEvents()">
+      <select id="doctorFilter" class="w-48 no-tom" data-default="{{ default_doctor }}">
         <option value="">Все врачи</option>
-        {% for doc in doctors %}<option value="{{ doc.pk }}">{{ doc.name }}</option>{% endfor %}
+        {% for doc in doctors %}<option value="{{ doc.pk }}" {% if default_doctor and doc.pk == default_doctor %}selected{% endif %}>{{ doc.name }}</option>{% endfor %}
       </select>
       <button class="btn btn-primary btn-sm" @click="openBooking()">+ Новая запись</button>
     </div>
@@ -236,6 +236,16 @@ function calendarPage() {
       });
       this.cal.render();
       this.title = this.cal.view.title;
+      // фильтр по врачу — с поиском (Tom Select)
+      const df = document.getElementById('doctorFilter');
+      if (df && window.TomSelect) {
+        this.doctorFilterTS = new TomSelect(df, {
+          allowEmptyOption: true, placeholder: 'Все врачи',
+          onChange: () => this.cal.refetchEvents(),
+        });
+      } else if (df) {
+        df.addEventListener('change', () => this.cal.refetchEvents());
+      }
     },
 
     setView(v) { this.view = v; this.cal.changeView(v); this.title = this.cal.view.title; },

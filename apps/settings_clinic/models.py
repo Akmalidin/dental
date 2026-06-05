@@ -5,6 +5,10 @@ from .models_documents import DocumentTemplate  # noqa: F401
 class ClinicSettings(models.Model):
     """Per-tenant clinic configuration (singleton)."""
 
+    clinic = models.OneToOneField(
+        "users.Clinic", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="settings", verbose_name="Клиника",
+    )
     logo = models.ImageField(upload_to="clinic/", null=True, blank=True, verbose_name="Логотип")
     name = models.CharField(max_length=200, verbose_name="Название клиники")
     phone = models.CharField(max_length=30, blank=True, verbose_name="Телефон")
@@ -65,5 +69,16 @@ class ClinicSettings(models.Model):
 
     @classmethod
     def get(cls):
-        obj, _ = cls.objects.get_or_create(pk=1, defaults={"name": "Clinic"})
+        """Настройки ТЕКУЩЕЙ клиники (per-tenant). Создаются по требованию."""
+        from apps.tenancy import get_current_clinic
+        clinic = get_current_clinic()
+        if clinic is not None:
+            obj, created = cls.objects.get_or_create(
+                clinic=clinic, defaults={"name": clinic.name}
+            )
+            return obj
+        # без выбранной клиники (суперадмин без выбора / сидинг) — служебная запись
+        obj = cls.objects.filter(clinic__isnull=True).order_by("pk").first()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1, defaults={"name": "SADAF"})
         return obj

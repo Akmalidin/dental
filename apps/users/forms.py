@@ -44,7 +44,8 @@ class UserForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["login", "name", "email", "phone", "role", "roles", "branches", "is_active", "avatar"]
+        fields = ["login", "name", "email", "phone", "role", "roles", "branches",
+                  "can_view_all_appointments", "is_active", "avatar"]
         widgets = {
             "branches": forms.CheckboxSelectMultiple(),
             "roles": forms.CheckboxSelectMultiple(),
@@ -56,6 +57,8 @@ class UserForm(forms.ModelForm):
         self.fields["role"].required = False
         self.fields["roles"].label = "Дополнительные роли (можно несколько)"
         self.fields["roles"].required = False
+        self.fields["can_view_all_appointments"].label = "Видит записи всех врачей"
+        self.fields["can_view_all_appointments"].required = False
 
     def save(self, commit=True):
         user = super().save(commit=False)

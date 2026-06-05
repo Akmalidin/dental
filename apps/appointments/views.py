@@ -14,8 +14,12 @@ from .forms import AppointmentForm
 @login_required
 def calendar_view(request):
     """Calendar page with booking modal."""
-    User = request.user.__class__
-    doctors = User.objects.filter(role__name="doctor", is_active=True).select_related("role")
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic())
+    # врач без права «видеть всех» — фильтр в календаре предзаполняется собой
+    default_doctor = (request.user.pk if (request.user.is_doctor and not request.user.is_admin
+                                          and not request.user.can_view_all_appointments) else "")
     branches = request.user.branches.all()
     from apps.patients.models import Patient
     from apps.services.models import Service
@@ -23,6 +27,7 @@ def calendar_view(request):
     services = Service.objects.filter(is_active=True).values("id", "name", "price", "duration")
     return render(request, "appointments/calendar.html", {
         "doctors": doctors,
+        "default_doctor": default_doctor,
         "branches": branches,
         "all_services": Service.objects.filter(is_active=True).order_by("name"),
         "patients_json": [
@@ -61,7 +66,9 @@ def appointment_day_grid(request):
         "completed": "#22C55E", "no_show": "#EF4444", "cancelled": "#EF4444",
     }
 
-    doctors = list(User.objects.filter(role__name="doctor", is_active=True))
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = list(clinic_doctors(get_current_clinic()))
     start_dt = timezone.make_aware(datetime.combine(day, time(0, 0)))
     end_dt = start_dt + timedelta(days=1)
     appts = (Appointment.objects.filter(start_at__gte=start_dt, start_at__lt=end_dt)
@@ -174,8 +181,8 @@ def appointment_list(request):
     qs = Appointment.objects.select_related(
         "patient", "doctor", "branch", "cabinet", "service", "cancellation_reason"
     ).order_by("-start_at")
-    if request.user.is_doctor:
-        qs = qs.filter(doctor=request.user)
+    from .api_views import apply_appt_visibility
+    qs = apply_appt_visibility(qs, request.user, request.GET.get("doctor"))
     current_status = request.GET.get("status", "")
     if current_status:
         qs = qs.filter(status=current_status)

@@ -24,10 +24,10 @@ def treatments_report(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def doctors_report(request):
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
     month_start = date.today().replace(day=1)
-    doctors = User.objects.filter(role__name="doctor", is_active=True).annotate(
+    doctors = clinic_doctors(get_current_clinic()).annotate(
         treatments_count=Count("treatments", filter=Q(treatments__created_at__date__gte=month_start)),
         revenue=Sum("treatments__total_amount", filter=Q(treatments__created_at__date__gte=month_start)),
     ).values("id", "name", "treatments_count", "revenue")

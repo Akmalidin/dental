@@ -109,6 +109,10 @@ class User(AbstractUser):
         verbose_name="Доп. роли",
     )
     telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID")
+    can_view_all_appointments = models.BooleanField(
+        default=True, verbose_name="Видит записи всех врачей",
+        help_text="Если выключено — врач видит только свои записи",
+    )
     is_active = models.BooleanField(default=True)
 
     USERNAME_FIELD = "login"
@@ -151,6 +155,17 @@ class User(AbstractUser):
     @property
     def is_admin(self):
         return bool(self.all_role_names & {Role.ADMIN, Role.ADMIN_MAIN})
+
+
+def clinic_doctors(clinic=None):
+    """Врачи клиники — пользователи с ролью «доктор» (основной ИЛИ доп.), активные."""
+    from django.db.models import Q
+    qs = (User.objects.filter(is_active=True)
+          .filter(Q(role__name=Role.DOCTOR) | Q(roles__name=Role.DOCTOR))
+          .exclude(is_superuser=True).distinct())
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    return qs
 
 
 class UserActivity(models.Model):
