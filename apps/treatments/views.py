@@ -106,6 +106,8 @@ def treatment_create(request):
         treatment = form.save(commit=False)
         if not treatment.branch_id:
             treatment.branch = main_branch
+        if appt:
+            treatment.appointment = appt
         treatment.save()
         cures = formset.save(commit=False)
         for cure in cures:
@@ -118,9 +120,10 @@ def treatment_create(request):
         for cure in formset.deleted_objects:
             cure.delete()
         treatment.recalculate_total()
-        # запись, из которой начали приём → отметить «Завершён» (меняет цвет в календаре)
-        if appt and appt.status not in ("cancelled", "completed"):
-            appt.status = "completed"
+        # запись, из которой начали приём → «Принимается» (оранжевый в календаре).
+        # Завершает приём врач отдельной кнопкой «Завершить приём».
+        if appt and appt.status not in ("cancelled", "completed", "in_progress"):
+            appt.status = "in_progress"
             appt.save(update_fields=["status"])
         messages.success(request, _("Приём создан"))
         return redirect("treatment_detail", pk=treatment.pk)

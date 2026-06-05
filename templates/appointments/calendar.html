@@ -136,11 +136,38 @@
         <template x-if="av.treatment_id">
           <a :href="'/treatments/' + av.treatment_id + '/'" class="btn btn-soft btn-sm">Перейти к лечению</a>
         </template>
+        <template x-if="av.status==='in_progress'">
+          <button @click="openNextDlg(true)" class="btn btn-success btn-sm">✓ Завершить приём</button>
+        </template>
+        <template x-if="!av.cancelled && (av.status==='in_progress' || av.status==='completed')">
+          <button @click="openNextDlg(false)" class="btn btn-soft btn-sm">＋ Назначить след. приём</button>
+        </template>
         <a :href="'/appointments/' + av.id + '/edit/'" class="btn btn-ghost btn-sm">Изменить</a>
         <template x-if="av.patient_id">
           <a :href="'/patients/' + av.patient_id + '/'" class="btn btn-ghost btn-sm">Добавить платёж</a>
         </template>
         <button @click="showView=false" class="btn btn-ghost btn-sm ml-auto">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NEXT VISIT / FINISH DIALOG ───────────────────────────────────── -->
+  <div x-show="nextDlg.open" x-cloak class="modal-overlay" style="z-index:60" @click.self="nextDlg.open=false">
+    <div class="modal-box" style="max-width:420px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg" style="color:var(--text)" x-text="nextDlg.complete ? 'Завершить приём' : 'Назначить следующий приём'"></h2>
+        <button @click="nextDlg.open=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <p class="text-sm muted" x-show="nextDlg.complete">Укажите дату следующего приёма. Если оставить пустым — приём просто завершится, без новой записи.</p>
+        <div>
+          <label class="fld">Дата следующего приёма<span x-show="!nextDlg.complete"> *</span></label>
+          <input type="date" x-model="nextDlg.date">
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4" style="border-top:1px solid var(--border)">
+        <button @click="nextDlg.open=false" class="btn btn-ghost btn-sm">Отмена</button>
+        <button @click="submitNext()" class="btn btn-primary btn-sm" x-text="nextDlg.complete ? 'Завершить' : 'Назначить'"></button>
       </div>
     </div>
   </div>
@@ -214,6 +241,7 @@ function calendarPage() {
     bk: { patient:'', doctor:'{{ doctors.first.pk }}', service:'', date:'', dateLabel:'', timeFrom:'09:00', timeTo:'09:30', status:'scheduled', notes:'', fromSlot:false },
     patientTS: null, doctorTS: null, serviceTS: null,
     showView: false, av: {},
+    nextDlg: { open:false, complete:false, date:'' },
 
     init() {
       const el = document.getElementById('calendar');
@@ -296,6 +324,27 @@ function calendarPage() {
           method: 'POST', headers: { 'X-CSRFToken': getCsrf() }, body,
         });
         toast('Статус обновлён');
+        this.cal.refetchEvents();
+        this.openApptDetail(this.av.id);
+      } catch (e) { toast('Ошибка', 'error'); }
+    },
+
+    openNextDlg(complete) { this.nextDlg = { open:true, complete: complete, date:'' }; },
+    async submitNext() {
+      if (!this.nextDlg.complete && !this.nextDlg.date) { toast('Укажите дату', 'error'); return; }
+      const body = new URLSearchParams();
+      if (this.nextDlg.complete) body.set('complete','1');
+      if (this.nextDlg.date) body.set('next_date', this.nextDlg.date);
+      try {
+        const r = await fetch('/appointments/' + this.av.id + '/finish/', {
+          method: 'POST', headers: { 'X-CSRFToken': getCsrf() }, body,
+        });
+        const j = await r.json();
+        if (j.error) { toast(j.error, 'error'); return; }
+        const wasComplete = this.nextDlg.complete, madeNext = !!j.next_id;
+        this.nextDlg.open = false;
+        toast(wasComplete ? (madeNext ? 'Приём завершён, следующий назначен' : 'Приём завершён')
+                          : 'Следующий приём назначен');
         this.cal.refetchEvents();
         this.openApptDetail(this.av.id);
       } catch (e) { toast('Ошибка', 'error'); }

@@ -312,6 +312,50 @@ def appointment_status(request, pk):
 
 
 @login_required
+@require_POST
+def appointment_finish(request, pk):
+    """Завершить приём и/или назначить следующий.
+
+    - complete=1   → текущая запись становится «Завершён»
+    - next_date    → создать следующую запись (тот же пациент/врач/филиал, то же время дня)
+    Сценарии: «Завершить приём» шлёт complete=1 (+ дата опционально);
+    «Назначить след. приём» (уже завершённой) шлёт только next_date.
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone as _tz
+    from datetime import datetime
+    appt = get_object_or_404(Appointment, pk=pk)
+    do_complete = request.POST.get("complete") == "1"
+    next_date = (request.POST.get("next_date") or "").strip()
+
+    new_id = None
+    if next_date:
+        if not appt.patient_id:
+            return JsonResponse({"error": "У записи нет пациента"}, status=400)
+        try:
+            d = datetime.strptime(next_date, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Неверная дата"}, status=400)
+        dur = appt.end_at - appt.start_at
+        new_start = datetime.combine(d, _tz.localtime(appt.start_at).timetz())
+        nxt = Appointment.objects.create(
+            patient=appt.patient, doctor=appt.doctor, branch=appt.branch,
+            start_at=new_start, end_at=new_start + dur,
+            status=Appointment.STATUS_SCHEDULED,
+        )
+        new_id = nxt.pk
+
+    if do_complete and appt.status not in ("cancelled", "completed"):
+        appt.status = Appointment.STATUS_COMPLETED
+        appt.save(update_fields=["status"])
+
+    if request.POST.get("redirect"):
+        messages.success(request, _("Приём завершён") if do_complete else _("Следующий приём назначен"))
+        return redirect(request.META.get("HTTP_REFERER") or "appointment_list")
+    return JsonResponse({"ok": True, "next_id": new_id, "status": appt.status})
+
+
+@login_required
 def appointment_delete(request, pk):
     appt = get_object_or_404(Appointment, pk=pk)
     if request.method == "POST":

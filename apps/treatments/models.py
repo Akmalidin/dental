@@ -36,6 +36,10 @@ class Treatment(ClinicSoftDeleteModel):
         verbose_name="Врач",
     )
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="treatments", verbose_name="Филиал")
+    appointment = models.ForeignKey(
+        "appointments.Appointment", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="treatments", verbose_name="Запись",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PLANNED, verbose_name="Статус")
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Сумма (сом)")
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Скидка")

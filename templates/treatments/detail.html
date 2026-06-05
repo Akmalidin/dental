@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false, showPlan:false}">
+<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false, showPlan:false, showFinish:false}">
 
   <!-- Header card -->
   <div class="card card-pad">
@@ -27,6 +27,12 @@
         </div>
       </div>
       <div class="flex gap-2 flex-wrap">
+        {% if treatment.appointment and treatment.appointment.status != 'completed' and treatment.appointment.status != 'cancelled' %}
+        <button @click="showFinish=true" class="btn btn-success btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          Завершить приём
+        </button>
+        {% endif %}
         <button @click="showStatus=true" class="btn btn-ghost btn-sm">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           Статус
@@ -308,6 +314,26 @@
       </form>
     </div>
   </div>
+
+  {% if treatment.appointment %}
+  <!-- Finish appointment modal -->
+  <div x-show="showFinish" x-cloak class="modal-overlay" @click.self="showFinish=false">
+    <div class="modal-box" style="max-width:420px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)">Завершить приём</h2>
+        <button @click="showFinish=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" action="/appointments/{{ treatment.appointment.pk }}/finish/" class="p-6 space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="complete" value="1">
+        <input type="hidden" name="redirect" value="1">
+        <p class="text-sm muted">Укажите дату следующего приёма. Если оставить пустым — приём просто завершится, без новой записи.</p>
+        <div><label class="fld">Дата следующего приёма</label><input type="date" name="next_date"></div>
+        <div class="flex gap-3"><button type="submit" class="btn btn-success flex-1">Завершить</button><button type="button" @click="showFinish=false" class="btn btn-ghost">Отмена</button></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Payment modal -->
   <div x-show="showPay" x-cloak class="modal-overlay" @click.self="showPay=false">
