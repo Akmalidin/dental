@@ -95,12 +95,14 @@
         </div>
 
         <!-- Подтверждение визита -->
-        <div x-show="!av.cancelled && av.status!=='completed'" class="card card-pad flex items-center justify-between">
-          <span class="font-semibold" style="color:var(--text)">Подтверждение визита</span>
-          <div class="flex gap-2">
-            <button @click="setStatus('confirmed')" class="btn btn-sm" style="background:#DCFCE7;color:#16A34A">✓ Придёт</button>
-            <button @click="setStatus('no_show')" class="btn btn-sm" style="background:#FEE2E2;color:#DC2626">✕ Не придёт</button>
-          </div>
+        <div x-show="!av.cancelled && av.status!=='completed' && av.status!=='in_progress'" class="card card-pad flex items-center justify-between gap-3">
+          <span class="font-semibold" style="color:var(--text)">Статус визита</span>
+          <select class="no-tom" style="max-width:220px" @change="setStatus($event.target.value)">
+            <option value="scheduled" :selected="av.status==='scheduled'">Записан</option>
+            <option value="confirmed" :selected="av.status==='confirmed'">Подтверждён</option>
+            <option value="arrived" :selected="av.status==='arrived'">Пришёл</option>
+            <option value="no_show" :selected="av.status==='no_show'">Не пришёл</option>
+          </select>
         </div>
 
         <!-- Отмена -->
@@ -128,7 +130,7 @@
 
       <!-- Футер -->
       <div class="flex flex-wrap gap-2 px-6 py-4 shrink-0" style="border-top:1px solid var(--border)">
-        <template x-if="av.patient_id && !av.cancelled">
+        <template x-if="av.patient_id && !av.cancelled && av.status!=='completed' && !av.treatment_id">
           <a :href="'/treatments/create/?patient=' + av.patient_id + '&doctor=' + (av.doctor_id||'') + '&appointment=' + av.id" class="btn btn-success btn-sm">→ Начать приём</a>
         </template>
         <template x-if="av.treatment_id">
