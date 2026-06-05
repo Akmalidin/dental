@@ -1,8 +1,9 @@
 from django.db import models
 from django.conf import settings
+from apps.tenancy import ClinicScopedModel
 
 
-class Task(models.Model):
+class Task(ClinicScopedModel):
     PRIORITY_LOW = "low"
     PRIORITY_MEDIUM = "medium"
     PRIORITY_HIGH = "high"
