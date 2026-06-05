@@ -2,163 +2,192 @@
 {% block page_title %}Панель суперадмина{% endblock %}
 
 {% block content %}
-<div class="space-y-5 max-w-3xl">
+<style>
+  .sa-tab{padding:.6rem 1.1rem;font-size:.875rem;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;color:var(--text-soft);cursor:pointer;background:none;transition:.15s}
+  .sa-tab:hover{color:var(--text)}
+  .sa-tab.on{border-bottom-color:var(--primary);color:var(--primary)}
+  .switch{position:relative;display:inline-block;width:42px;height:24px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .sl{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:999px;transition:.2s}
+  .switch .sl:before{content:"";position:absolute;height:18px;width:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .switch input:checked + .sl{background:var(--primary)}
+  .switch input:checked + .sl:before{transform:translateX(18px)}
+</style>
 
-  <!-- Клиники -->
-  <div class="card overflow-hidden">
-    <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
-      <h3 class="font-bold text-lg" style="color:var(--text)">Клиники</h3>
-      <p class="muted text-sm mt-0.5">Каждая клиника — своя изолированная база (одна СУБД). Данные клиник не пересекаются.</p>
-    </div>
-    {% if clinics %}
-    <table class="tbl">
-      <thead><tr><th>Клиника</th><th>Создана</th><th class="text-right pr-5">Действия</th></tr></thead>
-      <tbody>
-        {% for c in clinics %}
-        <tr>
-          <td class="font-semibold">{{ c.name }} {% if active_clinic and active_clinic.pk == c.pk %}<span class="badge badge-blue ml-1">активна</span>{% endif %}</td>
-          <td class="muted text-xs">{{ c.created_at|date:"d.m.Y" }}</td>
-          <td class="text-right pr-3">
-            <div class="flex items-center justify-end gap-2">
-              <a href="/users/clinic/{{ c.pk }}/overview/" class="btn btn-sm btn-ghost">Обзор и доступы</a>
-              <form method="post" action="/users/set-clinic/"><input type="hidden" name="next" value="/users/superadmin/">{% csrf_token %}<input type="hidden" name="clinic" value="{{ c.pk }}"><button class="btn btn-sm">Войти →</button></form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-    <form method="post" class="p-4 grid grid-cols-2 gap-2" style="border-top:1px solid var(--border)">
-      {% csrf_token %}<input type="hidden" name="action" value="create_clinic">
-      <input type="text" name="clinic_name" placeholder="Название клиники *" required class="col-span-2">
-      <input type="text" name="clinic_admin_name" placeholder="Имя администратора">
-      <input type="text" name="clinic_admin_login" placeholder="Логин администратора *" required>
-      <input type="text" name="clinic_admin_password" placeholder="Пароль администратора *" required class="col-span-2">
-      <button class="btn btn-primary col-span-2">+ Создать клинику (с услугами, ЭМК, документами)</button>
-    </form>
+<div class="w-full" x-data="{tab:'clinics'}">
+
+  <!-- Вкладки -->
+  <div class="flex gap-1 mb-5 overflow-x-auto" style="border-bottom:1px solid var(--border)">
+    <button class="sa-tab" :class="tab==='clinics' && 'on'" @click="tab='clinics'">🏥 Клиники</button>
+    <button class="sa-tab" :class="tab==='tariff' && 'on'" @click="tab='tariff'">⚙️ Тариф и модули</button>
+    <button class="sa-tab" :class="tab==='data' && 'on'" @click="tab='data'">📦 Данные клиники</button>
+    <button class="sa-tab" :class="tab==='staff' && 'on'" @click="tab='staff'">👥 Сотрудники</button>
   </div>
 
-  <div class="grid grid-cols-3 gap-4">
-    <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><div><p class="stat-label">Услуг</p><p class="stat-value">{{ services_count }}</p></div></div>
-    <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/></svg></div><div><p class="stat-label">Категорий услуг</p><p class="stat-value">{{ service_cats_count }}</p></div></div>
-    <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg></div><div><p class="stat-label">Материалов</p><p class="stat-value">{{ materials_count }}</p></div></div>
-  </div>
-
-  <div class="card card-pad">
-    <div class="flex items-start gap-4">
-      <div class="w-12 h-12 rounded-2xl ic-purple flex items-center justify-center shrink-0">
-        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+  <!-- ═══════ TAB: КЛИНИКИ ═══════ -->
+  <div x-show="tab==='clinics'" class="space-y-5">
+    <div class="card overflow-hidden">
+      <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
+        <h3 class="font-bold text-lg" style="color:var(--text)">Клиники</h3>
+        <p class="muted text-sm mt-0.5">Каждая клиника изолирована логически (одна СУБД, фильтр по clinic). Данные клиник не пересекаются.</p>
       </div>
-      <div class="flex-1">
-        <h3 class="font-bold text-lg" style="color:var(--text)">Заполнить базу стоматологии</h3>
-        <p class="muted text-sm mt-1 mb-4">
-          Одним кликом создаёт полный набор стоматологических <strong>услуг</strong> (терапия, хирургия,
-          ортопедия, ортодонтия, имплантология, гигиена) и заполняет <strong>склад материалами</strong>
-          (анестезия, пломбы, эндодонтия, боры, расходники) с количеством 0.
-          Уже существующие позиции не дублируются.
-        </p>
-        <form method="post" action="/users/superadmin/seed-dental/" onsubmit="return confirm('Заполнить базу услугами и материалами?')">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Заполнить услуги и склад
-          </button>
-        </form>
-      </div>
+      {% if clinics %}
+      <table class="tbl w-full">
+        <thead><tr><th>Клиника</th><th>Создана</th><th class="text-right pr-5">Действия</th></tr></thead>
+        <tbody>
+          {% for c in clinics %}
+          <tr>
+            <td class="font-semibold">{{ c.name }} {% if active_clinic and active_clinic.pk == c.pk %}<span class="badge badge-blue ml-1">активна</span>{% endif %}</td>
+            <td class="muted text-xs">{{ c.created_at|date:"d.m.Y" }}</td>
+            <td class="text-right pr-3">
+              <div class="flex items-center justify-end gap-2">
+                <a href="/users/clinic/{{ c.pk }}/overview/" class="btn btn-sm btn-ghost">Обзор и доступы</a>
+                <form method="post" action="/users/set-clinic/"><input type="hidden" name="next" value="/users/superadmin/">{% csrf_token %}<input type="hidden" name="clinic" value="{{ c.pk }}"><button class="btn btn-sm">Войти →</button></form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="px-5 py-8 text-center muted text-sm">Пока нет клиник — создайте первую ниже.</p>
+      {% endif %}
+    </div>
+
+    <div class="card card-pad">
+      <h3 class="font-bold mb-3" style="color:var(--text)">+ Новая клиника</h3>
+      <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}<input type="hidden" name="action" value="create_clinic">
+        <input type="text" name="clinic_name" placeholder="Название клиники *" required class="md:col-span-2">
+        <input type="text" name="clinic_admin_name" placeholder="Имя директора">
+        <input type="text" name="clinic_admin_login" placeholder="Логин директора *" required>
+        <input type="text" name="clinic_admin_password" placeholder="Пароль директора *" required class="md:col-span-2">
+        <button class="btn btn-primary md:col-span-2">Создать клинику (с услугами, ЭМК, документами)</button>
+      </form>
     </div>
   </div>
 
-  <!-- Tariff / modules (per clinic) -->
-  <div class="card card-pad">
-    <h3 class="font-bold mb-1" style="color:var(--text)">Тариф и доступные модули
-      {% if target_clinic %}<span class="badge badge-blue ml-1">{{ target_clinic.name }}</span>{% endif %}
-    </h3>
-    {% if not target_clinic %}
-    <div class="badge-orange px-4 py-3 rounded-xl text-sm mt-2">
-      Тариф настраивается для конкретной клиники. Нажмите «Войти →» у нужной клиники выше, затем вернитесь сюда.
-    </div>
-    {% else %}
-    <p class="muted text-sm mb-4">Выберите тариф (модули проставятся автоматически) или отметьте вручную. Снятые — скрываются из меню у этой клиники.</p>
-    {{ tariff_presets_json|json_script:"tariff-presets" }}
-    <form method="post">
-      {% csrf_token %}<input type="hidden" name="action" value="save_modules">
-      <div class="mb-4 flex flex-wrap gap-4">
-        <div>
-          <label class="fld">Тарифный план</label>
-          <select name="tariff_plan" class="no-tom" onchange="applyTariff(this.value)">
-            {% for tk, tlabel in tariff_choices %}
-            <option value="{{ tk }}" {% if tariff_plan == tk %}selected{% endif %}>{{ tlabel }}</option>
-            {% endfor %}
-          </select>
+  <!-- ═══════ TAB: ТАРИФ И МОДУЛИ ═══════ -->
+  <div x-show="tab==='tariff'" x-cloak class="space-y-5">
+    <div class="card card-pad">
+      <h3 class="font-bold mb-1" style="color:var(--text)">Тариф и доступные модули
+        {% if target_clinic %}<span class="badge badge-blue ml-1">{{ target_clinic.name }}</span>{% endif %}
+      </h3>
+      {% if not target_clinic %}
+      <div class="badge-orange px-4 py-3 rounded-xl text-sm mt-2">
+        Тариф настраивается для конкретной клиники. На вкладке «Клиники» нажмите «Войти →» у нужной, затем вернитесь сюда.
+      </div>
+      {% else %}
+      <p class="muted text-sm mb-4">Выберите тариф (модули проставятся автоматически) или включите вручную. Выключенные — скрыты из меню у этой клиники.</p>
+      {{ tariff_presets_json|json_script:"tariff-presets" }}
+      <form method="post">
+        {% csrf_token %}<input type="hidden" name="action" value="save_modules">
+        <div class="mb-5 flex flex-wrap gap-4">
+          <div>
+            <label class="fld">Тарифный план</label>
+            <select name="tariff_plan" class="no-tom" onchange="applyTariff(this.value)">
+              {% for tk, tlabel in tariff_choices %}
+              <option value="{{ tk }}" {% if tariff_plan == tk %}selected{% endif %}>{{ tlabel }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="fld">Оплачен до {% if target_clinic.is_expired %}<span class="text-red-500">(истёк!)</span>{% endif %}</label>
+            <input type="date" name="tariff_until" value="{% if target_clinic.tariff_until %}{{ target_clinic.tariff_until|date:'Y-m-d' }}{% endif %}">
+            <p class="text-xs muted mt-0.5">Пусто = бессрочно</p>
+          </div>
         </div>
-        <div>
-          <label class="fld">Оплачен до {% if target_clinic.is_expired %}<span class="text-red-500">(истёк!)</span>{% endif %}</label>
-          <input type="date" name="tariff_until" value="{% if target_clinic.tariff_until %}{{ target_clinic.tariff_until|date:'Y-m-d' }}{% endif %}">
-          <p class="text-xs muted mt-0.5">Пусто = бессрочно</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-5" id="modules-grid">
+          {% for key, label in all_modules %}
+          <label class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
+            <span style="color:var(--text)">{{ label }}</span>
+            <span class="switch">
+              <input type="checkbox" name="modules" value="{{ key }}" {% if key in enabled_modules %}checked{% endif %}>
+              <span class="sl"></span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary">Сохранить тариф</button>
+      </form>
+      <script>
+        function applyTariff(plan) {
+          const presets = JSON.parse(document.getElementById('tariff-presets').textContent);
+          const allowed = presets[plan] || [];
+          document.querySelectorAll('#modules-grid input[name="modules"]').forEach(cb => { cb.checked = allowed.includes(cb.value); });
+        }
+      </script>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ═══════ TAB: ДАННЫЕ КЛИНИКИ ═══════ -->
+  <div x-show="tab==='data'" x-cloak class="space-y-5">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="stat"><div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><div><p class="stat-label">Услуг</p><p class="stat-value">{{ services_count }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/></svg></div><div><p class="stat-label">Категорий услуг</p><p class="stat-value">{{ service_cats_count }}</p></div></div>
+      <div class="stat"><div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg></div><div><p class="stat-label">Материалов</p><p class="stat-value">{{ materials_count }}</p></div></div>
+    </div>
+
+    <div class="card card-pad">
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-2xl ic-purple flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="font-bold text-lg" style="color:var(--text)">Заполнить базу стоматологии</h3>
+          <p class="muted text-sm mt-1 mb-4">Одним кликом создаёт полный набор стоматологических <strong>услуг</strong> и заполняет <strong>склад материалами</strong> (количество 0). Существующие позиции не дублируются.</p>
+          <form method="post" action="/users/superadmin/seed-dental/" onsubmit="return confirm('Заполнить базу услугами и материалами?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Заполнить услуги и склад</button>
+          </form>
         </div>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="modules-grid">
-        {% for key, label in all_modules %}
-        <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
-          <input type="checkbox" name="modules" value="{{ key }}" {% if key in enabled_modules %}checked{% endif %}> {{ label }}
-        </label>
-        {% endfor %}
+    </div>
+
+    <div>
+      <p class="fld mb-2">Быстрые ссылки</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <a href="/services/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Услуги</p><p class="text-xs muted">Прейскурант</p></a>
+        <a href="/warehouse/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Склад</p><p class="text-xs muted">Материалы</p></a>
+        <a href="/settings/documents/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Шаблоны</p><p class="text-xs muted">Документы</p></a>
+        <a href="/settings/references/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Справочники</p><p class="text-xs muted">Поставщики и др.</p></a>
       </div>
-      <button type="submit" class="btn btn-primary btn-sm">Сохранить тариф</button>
-    </form>
-    <script>
-      function applyTariff(plan) {
-        const presets = JSON.parse(document.getElementById('tariff-presets').textContent);
-        const allowed = presets[plan] || [];
-        document.querySelectorAll('#modules-grid input[name="modules"]').forEach(cb => {
-          cb.checked = allowed.includes(cb.value);
-        });
-      }
-    </script>
-    {% endif %}
+    </div>
   </div>
 
-  <!-- Manage data quick links -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <a href="/services/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Услуги</p><p class="text-xs muted">Прейскурант</p></a>
-    <a href="/warehouse/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Склад</p><p class="text-xs muted">Материалы</p></a>
-    <a href="/settings/documents/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Шаблоны</p><p class="text-xs muted">Документы</p></a>
-    <a href="/settings/references/" class="card card-pad text-center hover:border-indigo-400" style="text-decoration:none"><p class="font-bold" style="color:var(--text)">Справочники</p><p class="text-xs muted">Поставщики и др.</p></a>
-  </div>
-
-  <!-- Clinics (branches) + Users -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-    <!-- Clinics / branches -->
+  <!-- ═══════ TAB: СОТРУДНИКИ ═══════ -->
+  <div x-show="tab==='staff'" x-cloak class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <!-- Филиалы -->
     <div class="card overflow-hidden">
       <div class="px-5 py-3.5" style="border-bottom:1px solid var(--border)"><h3 class="font-bold" style="color:var(--text)">Клиники / филиалы</h3></div>
-      <div class="max-h-52 overflow-y-auto">
+      <div class="max-h-72 overflow-y-auto">
         {% for b in branches %}
         <div class="flex items-center justify-between px-5 py-2.5" style="border-bottom:1px solid var(--border-2)">
           <div><p class="text-sm font-semibold" style="color:var(--text)">{{ b.name }} {% if b.is_main %}<span class="badge badge-green">основной</span>{% endif %}</p><p class="text-xs muted">{{ b.address }} · {{ b.phone }}</p></div>
         </div>
-        {% empty %}<p class="px-5 py-6 text-center muted text-sm">Нет клиник</p>{% endfor %}
+        {% empty %}<p class="px-5 py-6 text-center muted text-sm">Нет филиалов</p>{% endfor %}
       </div>
       <form method="post" class="p-4 space-y-2" style="border-top:1px solid var(--border)">
         {% csrf_token %}<input type="hidden" name="action" value="create_branch">
-        <input type="text" name="name" placeholder="Название клиники/филиала *" required>
+        <input type="text" name="name" placeholder="Название филиала *" required>
         <div class="grid grid-cols-2 gap-2"><input type="text" name="address" placeholder="Адрес"><input type="text" name="phone" placeholder="Телефон"></div>
-        <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" name="is_main"> Основной филиал</label>
-        <button type="submit" class="btn btn-primary btn-sm w-full">+ Создать клинику</button>
+        <label class="flex items-center gap-2 text-sm muted cursor-pointer"><span class="switch"><input type="checkbox" name="is_main"><span class="sl"></span></span> Основной филиал</label>
+        <button type="submit" class="btn btn-primary btn-sm w-full">+ Создать филиал</button>
       </form>
     </div>
 
-    <!-- Users / access -->
+    <!-- Сотрудники -->
     <div class="card overflow-hidden">
-      <div class="px-5 py-3.5" style="border-bottom:1px solid var(--border)"><h3 class="font-bold" style="color:var(--text)">Сотрудники и доступы</h3></div>
-      <div class="max-h-52 overflow-y-auto">
+      <div class="px-5 py-3.5" style="border-bottom:1px solid var(--border)"><h3 class="font-bold" style="color:var(--text)">Сотрудники</h3></div>
+      <div class="max-h-72 overflow-y-auto">
         {% for s in staff %}
         <div class="flex items-center gap-3 px-5 py-2.5" style="border-bottom:1px solid var(--border-2)">
           <div class="avatar w-8 h-8 text-xs">{{ s.name|first|upper }}</div>
           <div class="flex-1"><p class="text-sm font-semibold" style="color:var(--text)">{{ s.name }}</p><p class="text-xs muted">{{ s.login }} · {{ s.role|default:"без роли" }}</p></div>
           <a href="/users/{{ s.pk }}/edit/" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/></svg></a>
         </div>
-        {% endfor %}
+        {% empty %}<p class="px-5 py-6 text-center muted text-sm">Нет сотрудников</p>{% endfor %}
       </div>
       <form method="post" class="p-4 space-y-2" style="border-top:1px solid var(--border)">
         {% csrf_token %}<input type="hidden" name="action" value="create_user">
@@ -172,5 +201,6 @@
       </form>
     </div>
   </div>
+
 </div>
 {% endblock %}

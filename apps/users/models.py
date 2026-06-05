@@ -57,7 +57,7 @@ class Role(models.Model):
 
     ROLE_CHOICES = [
         (SUPERADMIN, "Суперадмин AKM SOFT"),
-        (ADMIN_MAIN, "Главный администратор"),
+        (ADMIN_MAIN, "Директор"),
         (ADMIN, "Администратор"),
         (DOCTOR, "Доктор"),
         (NURSE, "Медсестра"),
