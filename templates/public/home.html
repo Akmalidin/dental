@@ -7,7 +7,7 @@
   <meta name="description" content="{{ site.seo_description|default:site.tagline }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@300;400;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root{
       --accent: {{ site.theme_color|default:"#2563EB" }};
@@ -20,7 +20,7 @@
     body{font-family:'Onest',sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased}
     a{color:inherit;text-decoration:none}
     .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-    h1,h2,h3{font-family:'Spectral',serif;font-weight:700;letter-spacing:-.01em;line-height:1.08}
+    h1,h2,h3{font-family:'Manrope',sans-serif;font-weight:700;letter-spacing:-.01em;line-height:1.08}
     .eyebrow{font-size:13px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
 
     /* Atmosphere */
@@ -42,7 +42,7 @@
     header{position:sticky;top:0;z-index:60;transition:.3s}
     .bar{display:flex;align-items:center;justify-content:space-between;height:74px;margin-top:14px;padding:0 22px;border-radius:20px;
         background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(16px);box-shadow:0 10px 30px -18px rgba(14,40,90,.4)}
-    .brand{display:flex;align-items:center;gap:13px;font-family:'Spectral';font-weight:800;font-size:21px}
+    .brand{display:flex;align-items:center;gap:13px;font-family:'Manrope';font-weight:800;font-size:21px}
     .brand img{height:40px;width:auto;border-radius:10px}
     .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%,transparent)}
     .navlinks{display:flex;gap:28px;font-size:15px;color:var(--ink-soft)}
@@ -56,7 +56,7 @@
     .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
     @media(max-width:920px){.hero-grid{grid-template-columns:1fr;text-align:center}}
     .hero h1{font-size:clamp(38px,6vw,72px);font-weight:800}
-    .hero h1 em{font-style:italic;font-weight:300;color:var(--accent)}
+    .hero h1 em{font-style:normal;font-weight:800;color:var(--accent)}
     .hero .lead{font-size:clamp(17px,2.1vw,21px);color:var(--ink-soft);max-width:520px;margin:22px 0 32px}
     @media(max-width:920px){.hero .lead{margin-left:auto;margin-right:auto}}
     .hero-cta{display:flex;gap:14px;flex-wrap:wrap}
@@ -66,7 +66,7 @@
     .stage{position:relative;height:440px;display:flex;align-items:center;justify-content:center}
     .orb{position:absolute;border-radius:50%;filter:blur(2px);opacity:.9}
     .glasscard{position:absolute;background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(14px);border-radius:20px;box-shadow:var(--shadow);padding:14px 18px;font-size:13px;animation:float 6s ease-in-out infinite}
-    .glasscard .k{font-family:'Spectral';font-weight:700;font-size:22px;color:var(--accent);line-height:1}
+    .glasscard .k{font-family:'Manrope';font-weight:700;font-size:22px;color:var(--accent);line-height:1}
     .glasscard .l{color:var(--ink-soft);font-size:12px;margin-top:3px}
     .tooth{width:240px;height:300px;filter:drop-shadow(0 30px 40px rgba(37,99,235,.28));animation:float 7s ease-in-out infinite}
     @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
@@ -86,19 +86,19 @@
     .doc{padding:26px;text-align:center;transition:transform .3s,box-shadow .3s;will-change:transform}
     .doc:hover{box-shadow:0 40px 80px -34px rgba(14,40,90,.5)}
     .doc .ava{width:96px;height:96px;border-radius:26px;margin:0 auto 16px;object-fit:cover;
-        background:linear-gradient(140deg,var(--accent),#38bdf8);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Spectral';font-size:34px;font-weight:700;
+        background:linear-gradient(140deg,var(--accent),#38bdf8);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Manrope';font-size:34px;font-weight:700;
         box-shadow:0 16px 30px -12px color-mix(in srgb,var(--accent) 60%,transparent)}
-    .doc .nm{font-family:'Spectral';font-weight:700;font-size:18px}
+    .doc .nm{font-family:'Manrope';font-weight:700;font-size:18px}
     .doc .rl{color:var(--ink-soft);font-size:13.5px;margin-top:3px}
 
     /* About */
     .about{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
     @media(max-width:860px){.about{grid-template-columns:1fr}}
     .about .panel{padding:38px;font-size:18px;color:var(--ink-soft)}
-    .about .big{font-family:'Spectral';font-weight:300;font-size:clamp(26px,3.4vw,40px);color:var(--ink);line-height:1.18}
+    .about .big{font-family:'Manrope';font-weight:300;font-size:clamp(26px,3.4vw,40px);color:var(--ink);line-height:1.18}
     .feat{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
     .feat .it{padding:18px 20px}
-    .feat .it .n{font-family:'Spectral';font-weight:800;font-size:30px;color:var(--accent)}
+    .feat .it .n{font-family:'Manrope';font-weight:800;font-size:30px;color:var(--accent)}
     .feat .it .t{font-size:13.5px;color:var(--ink-soft)}
 
     /* Services price */
@@ -106,14 +106,14 @@
     .cat{margin:24px 0 4px;font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
     .prow{display:flex;justify-content:space-between;gap:18px;align-items:baseline;padding:15px 6px;border-bottom:1px solid var(--line)}
     .prow .s{font-weight:500}
-    .prow .p{white-space:nowrap;font-family:'Spectral';font-weight:700;font-size:18px;color:var(--ink)}
+    .prow .p{white-space:nowrap;font-family:'Manrope';font-weight:700;font-size:18px;color:var(--ink)}
 
     /* Contacts */
     .contacts{background:linear-gradient(180deg,transparent, color-mix(in srgb,var(--accent) 6%,transparent))}
     .cc{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;margin-top:30px}
     .cc .card{padding:24px}
     .cc .card .t{font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
-    .cc .card .v{font-family:'Spectral';font-weight:700;font-size:19px}
+    .cc .card .v{font-family:'Manrope';font-weight:700;font-size:19px}
     .soc{display:flex;justify-content:center;gap:12px;margin-top:30px;flex-wrap:wrap}
     .soc a{padding:11px 22px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(10px);font-weight:600;font-size:14px;transition:.2s}
     .soc a:hover{color:var(--accent);transform:translateY(-2px)}
@@ -124,10 +124,47 @@
     /* Reveal */
     .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s cubic-bezier(.16,1,.3,1),transform .8s cubic-bezier(.16,1,.3,1)}
     .reveal.in{opacity:1;transform:none}
+
+    /* Floating tooth — путешествует от секции к секции */
+    #floatTooth{position:fixed;z-index:0;right:9%;top:18%;width:230px;pointer-events:none;opacity:.55;
+        transition:transform 1.1s cubic-bezier(.16,1,.3,1),opacity .6s;will-change:transform}
+    #floatTooth .tooth{width:230px;height:288px}
+    .hero,section,footer{position:relative;z-index:1}
+    @media(max-width:920px){#floatTooth{display:none}}
+
+    /* Соцсети */
+    .social{display:flex;justify-content:center;gap:16px;margin-top:34px;flex-wrap:wrap}
+    .social a{display:inline-flex;align-items:center;gap:10px;padding:13px 22px;border-radius:16px;font-weight:600;font-size:14.5px;
+        background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(10px);transition:.22s}
+    .social a:hover{transform:translateY(-3px);box-shadow:0 18px 34px -18px rgba(14,40,90,.5)}
+    .social a svg{width:22px;height:22px}
+    .social .wa:hover{color:#25D366} .social .ig:hover{color:#E1306C} .social .tg:hover{color:#229ED9}
+    /* Плавающая кнопка WhatsApp */
+    .wa-fab{position:fixed;right:24px;bottom:24px;z-index:80;width:60px;height:60px;border-radius:50%;
+        background:#25D366;display:flex;align-items:center;justify-content:center;color:#fff;
+        box-shadow:0 14px 30px -8px rgba(37,211,102,.6);transition:transform .2s}
+    .wa-fab:hover{transform:scale(1.08)}
+    .wa-fab::before{content:"";position:absolute;inset:0;border-radius:50%;background:#25D366;opacity:.5;animation:wapulse 2.2s ease-out infinite;z-index:-1}
+    @keyframes wapulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.9);opacity:0}}
+    .wa-fab svg{width:32px;height:32px}
   </style>
 </head>
 <body>
   <div class="aura"></div><div class="grain"></div>
+
+  <!-- Летящий 3D-зуб (fixed, перемещается по секциям) -->
+  <div id="floatTooth">
+    <svg class="tooth" viewBox="0 0 200 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eaf2ff"/><stop offset="1" stop-color="#c7dbff"/>
+        </linearGradient>
+      </defs>
+      <path d="M100 18c34 0 64 20 64 58 0 30-12 52-19 86-5 24-10 64-24 64-11 0-12-34-21-34s-10 34-21 34c-14 0-19-40-24-64C48 128 36 106 36 76 36 38 66 18 100 18Z" fill="url(#tg)" stroke="#dbe7ff" stroke-width="2"/>
+      <path d="M70 52c10-12 36-16 56-6" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".9"/>
+      <ellipse cx="128" cy="74" rx="9" ry="16" fill="#fff" opacity=".55"/>
+    </svg>
+  </div>
 
   <header>
     <div class="wrap">
@@ -148,7 +185,7 @@
   </header>
 
   <!-- HERO -->
-  <div class="hero">
+  <div class="hero" id="hero">
     <div class="wrap hero-grid">
       <div class="reveal in">
         <span class="eyebrow">Стоматология нового поколения</span>
@@ -165,20 +202,6 @@
         <div class="ring" style="width:280px;height:280px;animation-direction:reverse;animation-duration:34s"></div>
         <div class="orb" style="width:120px;height:120px;left:8%;top:12%;background:radial-gradient(circle at 30% 30%,#7dd3fc,#2563eb)"></div>
         <div class="orb" style="width:70px;height:70px;right:10%;bottom:18%;background:radial-gradient(circle at 30% 30%,#bfdbfe,#60a5fa)"></div>
-        <!-- SVG tooth -->
-        <svg class="tooth" viewBox="0 0 200 250" fill="none" xmlns="http://www.w3.org/2000/svg" data-par="0.06">
-          <defs>
-            <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eaf2ff"/><stop offset="1" stop-color="#c7dbff"/>
-            </linearGradient>
-            <linearGradient id="tg2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="color-mix(in srgb,var(--accent) 40%,#ffffff)"/><stop offset="1" stop-color="var(--accent)"/>
-            </linearGradient>
-          </defs>
-          <path d="M100 18c34 0 64 20 64 58 0 30-12 52-19 86-5 24-10 64-24 64-11 0-12-34-21-34s-10 34-21 34c-14 0-19-40-24-64C48 128 36 106 36 76 36 38 66 18 100 18Z" fill="url(#tg)" stroke="#dbe7ff" stroke-width="2"/>
-          <path d="M70 52c10-12 36-16 56-6" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".9"/>
-          <ellipse cx="128" cy="74" rx="9" ry="16" fill="#fff" opacity=".55"/>
-        </svg>
         <div class="glasscard" style="left:-2%;bottom:14%;animation-delay:.6s"><div class="k">15+</div><div class="l">лет практики</div></div>
         <div class="glasscard" style="right:-2%;top:16%;animation-delay:1.4s"><div class="k">★ 4.9</div><div class="l">оценка пациентов</div></div>
       </div>
@@ -255,10 +278,17 @@
       </div>
       {% if site.show_booking %}<div style="text-align:center;margin-top:38px"><a href="/book/" class="btn">Записаться на приём →</a></div>{% endif %}
       {% if site.instagram or site.whatsapp or site.telegram %}
-      <div class="soc">
-        {% if site.instagram %}<a href="{{ site.instagram }}" target="_blank">Instagram</a>{% endif %}
-        {% if site.whatsapp %}<a href="https://wa.me/{{ site.whatsapp }}" target="_blank">WhatsApp</a>{% endif %}
-        {% if site.telegram %}<a href="https://t.me/{{ site.telegram }}" target="_blank">Telegram</a>{% endif %}
+      <h3 style="text-align:center;margin-top:54px;font-size:24px">Мы в соцсетях</h3>
+      <div class="social">
+        {% if site.whatsapp %}<a class="wa" href="https://wa.me/{{ site.whatsapp }}" target="_blank">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-.607zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+          WhatsApp</a>{% endif %}
+        {% if site.instagram %}<a class="ig" href="{{ site.instagram }}" target="_blank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>
+          Instagram</a>{% endif %}
+        {% if site.telegram %}<a class="tg" href="https://t.me/{{ site.telegram }}" target="_blank">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.944 4.567l-3.32 15.654c-.25 1.105-.905 1.38-1.834.859l-5.066-3.733-2.444 2.35c-.27.271-.496.497-1.017.497l.364-5.155 9.385-8.48c.408-.364-.089-.566-.633-.202L5.213 13.42l-5-1.565c-1.087-.34-1.107-1.087.226-1.608L20.542 2.99c.905-.34 1.697.202 1.402 1.577z"/></svg>
+          Telegram</a>{% endif %}
       </div>
       {% endif %}
     </div>
@@ -269,10 +299,32 @@
     <span style="opacity:.7;font-size:12.5px">Работает на платформе AKM SOFT CLINIC</span></div>
   </footer>
 
+  {% if site.whatsapp %}
+  <a class="wa-fab" href="https://wa.me/{{ site.whatsapp }}" target="_blank" aria-label="Написать в WhatsApp">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-.607zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+  </a>
+  {% endif %}
+
   <script>
     // Scroll reveal
     const io = new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.14});
     document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+    // Летящий зуб: поза на каждую секцию
+    const tooth=document.getElementById('floatTooth');
+    const poses={
+      hero:'translate(0,0) rotate(0deg) scale(1)',
+      about:'translate(-74vw,16vh) rotate(-18deg) scale(.82)',
+      doctors:'translate(3vw,34vh) rotate(14deg) scale(.78)',
+      services:'translate(-74vw,20vh) rotate(-10deg) scale(.82)',
+      contacts:'translate(-40vw,6vh) rotate(8deg) scale(.7)'
+    };
+    if(tooth){
+      const io2=new IntersectionObserver((es)=>es.forEach(e=>{
+        if(e.isIntersecting && poses[e.target.id]) tooth.style.transform=poses[e.target.id];
+      }),{threshold:.45});
+      ['hero','about','doctors','services','contacts'].forEach(id=>{const el=document.getElementById(id);if(el)io2.observe(el);});
+    }
     // Header shadow on scroll
     addEventListener('scroll',()=>{document.querySelector('.bar').style.boxShadow = scrollY>10 ? '0 18px 40px -22px rgba(14,40,90,.55)' : '';},{passive:true});
     // Hero parallax
