@@ -93,6 +93,42 @@ class TariffGuardMiddleware:
         return self.get_response(request)
 
 
+class PublicSiteMiddleware:
+    """Поддомен клиники → публичный сайт.
+
+    <slug>.PUBLIC_BASE_DOMAIN (кроме APP_HOST) → ищем клинику по slug, если сайт включён,
+    переключаем urlconf на публичный и ставим текущую клинику. Иначе — 404.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings as dj
+        host = request.get_host().split(":")[0].lower()
+        app_host = (getattr(dj, "APP_HOST", "") or "").lower()
+        base = (getattr(dj, "PUBLIC_BASE_DOMAIN", "") or "").lower()
+        if base and host != app_host and host.endswith("." + base):
+            slug = host[: -(len(base) + 1)]
+            if slug and slug not in ("www", "app"):
+                from apps.users.models import Clinic, ClinicSite
+                clinic = Clinic.objects.filter(slug=slug).first()
+                site = ClinicSite.objects.filter(clinic=clinic).first() if clinic else None
+                if clinic and site and site.enabled and site.published:
+                    request.public_clinic = clinic
+                    request.public_site = site
+                    request.urlconf = "config.urls_site"
+                    set_current_clinic(clinic)
+                else:
+                    from django.http import HttpResponse
+                    return HttpResponse(
+                        "<!doctype html><meta charset=utf-8><title>Сайт недоступен</title>"
+                        "<div style='font-family:sans-serif;text-align:center;padding:80px'>"
+                        "<h1>Сайт недоступен</h1><p>Публичный сайт этой клиники не активирован.</p></div>",
+                        status=404, content_type="text/html; charset=utf-8",
+                    )
+        return self.get_response(request)
+
+
 class SectionAccessMiddleware:
     """Персональные доступы: блокирует заход в раздел, если он не разрешён пользователю.
 

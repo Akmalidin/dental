@@ -68,6 +68,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.tenancy.CurrentClinicMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
+    "apps.tenancy.PublicSiteMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "apps.tenancy.SectionAccessMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -188,6 +189,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 AXES_ENABLED = False
+
+# ─── Публичные сайты клиник (поддомены) ──────────────────────────────────────
+APP_HOST = "app.denta.tw1.ru"           # хост CRM-системы
+PUBLIC_BASE_DOMAIN = "denta.tw1.ru"     # <slug>.denta.tw1.ru → публичный сайт клиники
 
 SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""

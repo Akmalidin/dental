@@ -315,13 +315,37 @@ def clinic_overview(request, clinic_id):
         })
     stats["staff"] = len(staff)
 
+    from apps.users.models import ClinicSite
+    from django.conf import settings as dj_settings
+    site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
+    public_url = "https://{}.{}".format(clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+
     return render(request, "users/clinic_overview.html", {
         "clinic": clinic,
         "stats": stats,
         "staff": staff,
         "staff_data": staff_data,
         "sections": SECTIONS,
+        "site": site,
+        "public_url": public_url,
     })
+
+
+@login_required
+@require_POST
+def toggle_clinic_site(request, clinic_id):
+    """Включить/выключить публичный сайт клиники — только суперадмин."""
+    from apps.users.models import Clinic, ClinicSite
+    if not request.user.is_superadmin:
+        messages.error(request, _("Включать сайт может только суперадмин"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
+    site.enabled = not site.enabled
+    site.save(update_fields=["enabled"])
+    messages.success(request, _("Публичный сайт %(s)s") % {
+        "s": "включён" if site.enabled else "выключен"})
+    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
 
 @login_required

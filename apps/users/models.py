@@ -246,5 +246,45 @@ class UserActivity(models.Model):
         return f"{self.user} — {self.action} — {self.created_at:%d.%m.%Y %H:%M}"
 
 
+class ClinicSite(models.Model):
+    """Публичный сайт клиники (поддомен). Доступ включает суперадмин, правит суперадмин/Директор."""
+    clinic = models.OneToOneField(
+        "users.Clinic", on_delete=models.CASCADE, related_name="site", verbose_name="Клиника",
+    )
+    enabled = models.BooleanField(default=False, verbose_name="Публичный сайт включён",
+                                  help_text="Включает только суперадмин")
+    published = models.BooleanField(default=True, verbose_name="Опубликован")
+
+    headline = models.CharField(max_length=200, blank=True, verbose_name="Заголовок (hero)")
+    tagline = models.CharField(max_length=300, blank=True, verbose_name="Подзаголовок")
+    about = models.TextField(blank=True, verbose_name="О клинике")
+    phone = models.CharField(max_length=50, blank=True, verbose_name="Телефон")
+    address = models.CharField(max_length=300, blank=True, verbose_name="Адрес")
+    hours = models.CharField(max_length=200, blank=True, verbose_name="Часы работы")
+
+    logo = models.ImageField(upload_to="site/", null=True, blank=True, verbose_name="Логотип")
+    cover = models.ImageField(upload_to="site/", null=True, blank=True, verbose_name="Обложка (hero)")
+    theme_color = models.CharField(max_length=20, default="#4F46E5", verbose_name="Цвет темы")
+
+    instagram = models.CharField(max_length=200, blank=True)
+    whatsapp = models.CharField(max_length=50, blank=True)
+    telegram = models.CharField(max_length=100, blank=True)
+
+    show_doctors = models.BooleanField(default=True, verbose_name="Показывать врачей")
+    show_services = models.BooleanField(default=True, verbose_name="Показывать услуги")
+    show_booking = models.BooleanField(default=True, verbose_name="Онлайн-запись")
+
+    seo_title = models.CharField(max_length=200, blank=True)
+    seo_description = models.CharField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Сайт клиники"
+        verbose_name_plural = "Сайты клиник"
+
+    def __str__(self):
+        return f"Сайт {self.clinic.name}"
+
+
 # Re-export salary & schedule models (defined after User/Branch to avoid circular refs)
 from .models_salary import SalaryScheme, DoctorSchedule  # noqa: E402,F401

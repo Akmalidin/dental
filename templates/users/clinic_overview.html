@@ -24,6 +24,30 @@
     <div class="stat"><div><p class="stat-label">Выручка</p><p class="stat-value">{% if stats.revenue is not None %}{{ stats.revenue|floatformat:0 }}{% else %}—{% endif %}</p></div></div>
   </div>
 
+  <!-- Публичный сайт -->
+  <div class="card card-pad flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h3 class="font-bold" style="color:var(--text)">🌐 Публичный сайт клиники</h3>
+      <p class="muted text-sm mt-0.5">
+        {% if site.enabled %}Включён · <a href="{{ public_url }}" target="_blank" style="color:var(--primary)">{{ public_url }}</a>
+        {% else %}Выключен — клиника без публичной страницы{% endif %}
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      {% if site.enabled %}<a href="{{ public_url }}" target="_blank" class="btn btn-ghost btn-sm">Открыть сайт ↗</a>{% endif %}
+      {% if user.is_superadmin %}
+      <form method="post" action="/users/clinic/{{ clinic.pk }}/site-toggle/">
+        {% csrf_token %}
+        <button class="btn btn-sm {% if site.enabled %}btn-ghost{% else %}btn-primary{% endif %}">
+          {% if site.enabled %}Выключить сайт{% else %}Включить сайт{% endif %}
+        </button>
+      </form>
+      {% else %}
+      <span class="badge {% if site.enabled %}badge-green{% else %}badge-gray{% endif %}">{% if site.enabled %}активен{% else %}неактивен{% endif %}</span>
+      {% endif %}
+    </div>
+  </div>
+
   <!-- Персонал -->
   <div class="card overflow-hidden">
     <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
