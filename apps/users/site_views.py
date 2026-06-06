@@ -30,10 +30,32 @@ def public_home(request):
 
     from apps.users.models import Branch
     branches = list(Branch.objects.filter(is_active=True))
+    map_points = [
+        {"name": b.name, "address": b.address, "phone": b.phone,
+         "lat": b.latitude, "lng": b.longitude}
+        for b in branches if b.latitude is not None and b.longitude is not None
+    ]
 
     return render(request, "public/home.html", {
         "clinic": clinic, "site": site,
         "doctors": doctors, "services": services, "branches": branches,
+        "map_points": map_points,
+    })
+
+
+def public_service(request, pk):
+    """Полная страница об услуге/лечении."""
+    clinic, site = _ctx(request)
+    from apps.services.models import Service
+    service = Service.objects.filter(pk=pk, is_active=True).select_related("category").first()
+    if service is None:
+        raise Http404("Услуга не найдена")
+    related = list(
+        Service.objects.filter(is_active=True, category=service.category)
+        .exclude(pk=service.pk)[:6]
+    )
+    return render(request, "public/service.html", {
+        "clinic": clinic, "site": site, "service": service, "related": related,
     })
 
 

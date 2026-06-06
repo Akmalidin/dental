@@ -33,6 +33,8 @@ class Branch(ClinicScopedModel):
     name = models.CharField(max_length=200, verbose_name="Название")
     address = models.CharField(max_length=500, verbose_name="Адрес")
     phone = models.CharField(max_length=30, verbose_name="Телефон")
+    latitude = models.FloatField(null=True, blank=True, verbose_name="Широта (для карты)")
+    longitude = models.FloatField(null=True, blank=True, verbose_name="Долгота (для карты)")
     is_main = models.BooleanField(default=False, verbose_name="Главный филиал")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

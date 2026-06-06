@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  {% if map_points %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">{% endif %}
   <style>
     :root{
       --accent: {{ site.theme_color|default:"#2563EB" }};
@@ -68,7 +69,7 @@
     .glasscard{position:absolute;background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(14px);border-radius:20px;box-shadow:var(--shadow);padding:14px 18px;font-size:13px;animation:float 6s ease-in-out infinite}
     .glasscard .k{font-family:'Manrope';font-weight:700;font-size:22px;color:var(--accent);line-height:1}
     .glasscard .l{color:var(--ink-soft);font-size:12px;margin-top:3px}
-    .tooth{width:240px;height:300px;filter:drop-shadow(0 30px 40px rgba(37,99,235,.28));animation:float 7s ease-in-out infinite}
+    .tooth{width:240px;height:300px;filter:drop-shadow(0 24px 44px rgba(37,99,235,.55));animation:float 7s ease-in-out infinite}
     @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
     .ring{position:absolute;border:1.5px dashed color-mix(in srgb,var(--accent) 40%,transparent);border-radius:50%;animation:spin 26s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -102,11 +103,18 @@
     .feat .it .t{font-size:13.5px;color:var(--ink-soft)}
 
     /* Services price */
-    .price{max-width:840px;margin:0 auto;padding:14px 28px 28px}
-    .cat{margin:24px 0 4px;font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
-    .prow{display:flex;justify-content:space-between;gap:18px;align-items:baseline;padding:15px 6px;border-bottom:1px solid var(--line)}
-    .prow .s{font-weight:500}
-    .prow .p{white-space:nowrap;font-family:'Manrope';font-weight:700;font-size:18px;color:var(--ink)}
+    .price{max-width:880px;margin:0 auto;padding:10px 24px 24px}
+    .prow{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:16px 6px;border-bottom:1px solid var(--line)}
+    .prow.extra{display:none}
+    .price.expanded .prow.extra{display:flex}
+    .prow .s{display:flex;flex-direction:column;gap:3px}
+    .prow .snm{font-weight:600;font-size:16px}
+    .prow .stag{font-size:11.5px;color:var(--accent);font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+    .prow .pright{display:flex;align-items:center;gap:16px;white-space:nowrap}
+    .prow .p{font-family:'Manrope';font-weight:700;font-size:18px;color:var(--ink)}
+    .prow .more{font-size:13.5px;font-weight:600;color:var(--accent);padding:8px 15px;border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:11px;transition:.2s}
+    .prow .more:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+    @media(max-width:560px){.prow{flex-direction:column;align-items:flex-start;gap:9px}.prow .pright{width:100%;justify-content:space-between}}
 
     /* Contacts */
     .contacts{background:linear-gradient(180deg,transparent, color-mix(in srgb,var(--accent) 6%,transparent))}
@@ -126,9 +134,9 @@
     .reveal.in{opacity:1;transform:none}
 
     /* Floating tooth — путешествует от секции к секции */
-    #floatTooth{position:fixed;z-index:0;right:9%;top:18%;width:230px;pointer-events:none;opacity:.55;
+    #floatTooth{position:fixed;z-index:0;right:7%;top:16%;width:270px;pointer-events:none;opacity:.95;
         transition:transform 1.1s cubic-bezier(.16,1,.3,1),opacity .6s;will-change:transform}
-    #floatTooth .tooth{width:230px;height:288px}
+    #floatTooth .tooth{width:270px;height:338px}
     .hero,section,footer{position:relative;z-index:1}
     @media(max-width:920px){#floatTooth{display:none}}
 
@@ -157,10 +165,10 @@
     <svg class="tooth" viewBox="0 0 200 250" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="tg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eaf2ff"/><stop offset="1" stop-color="#c7dbff"/>
+          <stop offset="0" stop-color="#eaf3ff"/><stop offset=".5" stop-color="#9cc4ff"/><stop offset="1" stop-color="#3b82f6"/>
         </linearGradient>
       </defs>
-      <path d="M100 18c34 0 64 20 64 58 0 30-12 52-19 86-5 24-10 64-24 64-11 0-12-34-21-34s-10 34-21 34c-14 0-19-40-24-64C48 128 36 106 36 76 36 38 66 18 100 18Z" fill="url(#tg)" stroke="#dbe7ff" stroke-width="2"/>
+      <path d="M100 18c34 0 64 20 64 58 0 30-12 52-19 86-5 24-10 64-24 64-11 0-12-34-21-34s-10 34-21 34c-14 0-19-40-24-64C48 128 36 106 36 76 36 38 66 18 100 18Z" fill="url(#tg)" stroke="#bfdcff" stroke-width="2"/>
       <path d="M70 52c10-12 36-16 56-6" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".9"/>
       <ellipse cx="128" cy="74" rx="9" ry="16" fill="#fff" opacity=".55"/>
     </svg>
@@ -251,17 +259,40 @@
   <section id="services">
     <div class="wrap">
       <div class="shead reveal"><span class="eyebrow">Прайс-лист</span><h2>Услуги и цены</h2><p>Честные цены без скрытых платежей</p></div>
-      <div class="glass price reveal">
-        {% regroup services by category as cat_list %}
-        {% for cat in cat_list %}
-          <div class="cat">{{ cat.grouper|default:"Прочее" }}</div>
-          {% for s in cat.list %}
-          <div class="prow"><span class="s">{{ s.name }}</span><span class="p">{{ s.price|floatformat:0 }} сом</span></div>
-          {% endfor %}
+      <div class="glass price reveal" id="priceList">
+        {% for s in services %}
+        <div class="prow{% if forloop.counter > 6 %} extra{% endif %}">
+          <div class="s">
+            <span class="snm">{{ s.name }}</span>
+            {% if s.category %}<span class="stag">{{ s.category.name }}</span>{% endif %}
+          </div>
+          <div class="pright">
+            <span class="p">{{ s.price|floatformat:0 }} сом</span>
+            <a href="/service/{{ s.pk }}/" class="more">Подробнее →</a>
+          </div>
+        </div>
         {% endfor %}
+      </div>
+      {% if services|length > 6 %}
+      <div style="text-align:center;margin-top:24px">
+        <button class="btn btn-ghost" id="moreBtn" onclick="toggleServices()">Все услуги ({{ services|length }}) ↓</button>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- BRANCHES MAP -->
+  {% if map_points %}
+  <section id="branches">
+    <div class="wrap">
+      <div class="shead reveal"><span class="eyebrow">Наши филиалы</span><h2>Мы на карте</h2><p>Выберите ближайший к вам филиал</p></div>
+      <div class="glass reveal" style="padding:10px;overflow:hidden">
+        <div id="map" style="height:430px;width:100%;border-radius:18px;z-index:1"></div>
       </div>
     </div>
   </section>
+  {{ map_points|json_script:"map-points" }}
   {% endif %}
 
   <!-- CONTACTS -->
@@ -296,7 +327,8 @@
 
   <footer>
     <div class="wrap"><div class="sep"></div>© {{ clinic.name }} · Современная стоматология<br>
-    <span style="opacity:.7;font-size:12.5px">Работает на платформе AKM SOFT CLINIC</span></div>
+    <span style="opacity:.7;font-size:12.5px">Работает на платформе
+    <a href="https://wa.me/996553033399" target="_blank" style="color:var(--accent);font-weight:600">AKM SOFT CLINIC</a></span></div>
   </footer>
 
   {% if site.whatsapp %}
@@ -305,7 +337,29 @@
   </a>
   {% endif %}
 
+  {% if map_points %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endif %}
   <script>
+    // Услуги: показать все / свернуть
+    function toggleServices(){
+      const list=document.getElementById('priceList'), btn=document.getElementById('moreBtn');
+      const open=list.classList.toggle('expanded');
+      btn.innerHTML = open ? 'Свернуть ↑' : ('Все услуги ↓');
+    }
+
+    // Карта филиалов (Leaflet / OpenStreetMap)
+    (function(){
+      const el=document.getElementById('map'); if(!el||typeof L==='undefined') return;
+      let pts=[]; try{pts=JSON.parse(document.getElementById('map-points').textContent);}catch(e){}
+      if(!pts.length) return;
+      const map=L.map('map',{scrollWheelZoom:false}).setView([pts[0].lat,pts[0].lng],13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+      const group=[];
+      pts.forEach(p=>{const m=L.marker([p.lat,p.lng]).addTo(map);
+        m.bindPopup('<b>'+p.name+'</b><br>'+(p.address||'')+'<br>'+(p.phone||''));group.push([p.lat,p.lng]);});
+      if(group.length>1) map.fitBounds(group,{padding:[40,40]});
+      el.addEventListener('click',()=>map.scrollWheelZoom.enable());
+    })();
+
     // Scroll reveal
     const io = new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.14});
     document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
