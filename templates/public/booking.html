@@ -3,21 +3,165 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Запись — {{ clinic.name }}</title>
+  <title>Запись на приём — {{ clinic.name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <style>
-    :root{ --accent: {{ site.theme_color|default:"#4F46E5" }}; }
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1e293b;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px}
-    .box{max-width:440px}
-    h1{font-size:28px;margin-bottom:10px}
-    p{color:#64748b;margin-bottom:24px}
-    a{display:inline-block;background:var(--accent);color:#fff;padding:12px 26px;border-radius:999px;font-weight:600;text-decoration:none}
+    :root{ --accent: {{ site.theme_color|default:"#2563EB" }}; --ink:#0b1b33; --ink-soft:#46587a; --line:#e6ecf5; --bg:#f6f9ff;
+      --glass:rgba(255,255,255,.7); --glass-bd:rgba(255,255,255,.9); --shadow:0 30px 70px -30px rgba(14,40,90,.35);}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Onest',sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+    a{color:inherit;text-decoration:none}
+    h1,h2,h3{font-family:'Manrope',sans-serif;letter-spacing:-.01em}
+    .aura{position:fixed;inset:0;z-index:-1;background:
+        radial-gradient(60% 50% at 12% 6%, color-mix(in srgb,var(--accent) 14%,transparent), transparent 70%),
+        radial-gradient(55% 45% at 92% 4%, rgba(56,189,248,.16), transparent 70%),linear-gradient(180deg,#fff,var(--bg));}
+    .wrap{max-width:720px;margin:0 auto;padding:0 22px}
+    .top{display:flex;align-items:center;justify-content:space-between;padding:24px 0}
+    .brand{font-family:'Manrope';font-weight:800;font-size:20px}
+    .btn{display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:#fff;padding:14px 28px;border-radius:999px;font-weight:600;border:none;cursor:pointer;transition:.25s;font-size:15px}
+    .btn:hover{transform:translateY(-2px)} .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+    .btn-ghost{background:var(--glass);color:var(--ink);border:1px solid var(--glass-bd)}
+    .glass{background:var(--glass);border:1px solid var(--glass-bd);backdrop-filter:blur(14px);border-radius:24px;box-shadow:var(--shadow)}
+    .card{padding:30px;margin-bottom:20px}
+    .step{font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+    .docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+    .doc{padding:16px;border:1.5px solid var(--line);border-radius:16px;cursor:pointer;text-align:center;transition:.2s;background:#fff}
+    .doc:hover{border-color:var(--accent)}
+    .doc.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,#fff);box-shadow:0 10px 24px -14px color-mix(in srgb,var(--accent) 70%,transparent)}
+    .doc .ava{width:54px;height:54px;border-radius:16px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(140deg,var(--accent),#38bdf8);color:#fff;font-family:'Manrope';font-weight:700;font-size:20px}
+    .doc .nm{font-weight:600;font-size:14px} .doc .rl{font-size:12px;color:var(--ink-soft)}
+    label.fld{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:7px}
+    input,select{width:100%;padding:13px 15px;border:1.5px solid var(--line);border-radius:13px;font-family:inherit;font-size:15px;background:#fff;color:var(--ink)}
+    input:focus,select:focus{outline:none;border-color:var(--accent)}
+    .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;margin-top:6px}
+    .slot{padding:12px 0;text-align:center;border:1.5px solid var(--line);border-radius:12px;cursor:pointer;font-weight:600;transition:.15s;background:#fff}
+    .slot:hover{border-color:var(--accent)} .slot.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .muted{color:var(--ink-soft);font-size:14px}
+    .ok{text-align:center;padding:54px 30px}
+    .ok .ic{width:84px;height:84px;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;font-size:44px;margin:0 auto 18px}
+    .err{background:#fee2e2;color:#b91c1c;padding:12px 16px;border-radius:12px;font-size:14px;margin-top:14px}
   </style>
 </head>
-<body>
-  <div class="box">
-    <h1>Онлайн-запись скоро</h1>
-    <p>Запись на приём в клинику «{{ clinic.name }}» появится здесь в ближайшее время. Пока позвоните нам{% if site.phone %}: <strong>{{ site.phone }}</strong>{% endif %}.</p>
-    <a href="/">← На главную</a>
+<body x-data="booking()">
+  <div class="aura"></div>
+  <div class="wrap">
+    <div class="top">
+      <a href="/" class="brand">{{ clinic.name }}</a>
+      <a href="/" class="btn btn-ghost" style="padding:10px 20px">← На сайт</a>
+    </div>
+
+    {% csrf_token %}
+
+    <template x-if="!done">
+      <div>
+        <h1 style="font-size:30px;margin-bottom:6px">Запись на приём</h1>
+        <p class="muted" style="margin-bottom:24px">Выберите врача, дату и удобное время — мы перезвоним для подтверждения.</p>
+
+        <!-- Врач -->
+        <div class="glass card">
+          <div class="step">1 · Врач</div>
+          <div class="docs">
+            {% for d in doctors %}
+            <div class="doc" :class="doctor=={{ d.pk }} && 'sel'" @click="doctor={{ d.pk }};loadSlots()">
+              <div class="ava">{{ d.name|first|upper }}</div>
+              <div class="nm">{{ d.name }}</div>
+              <div class="rl">{{ d.role|default:"Врач" }}</div>
+            </div>
+            {% empty %}<p class="muted">Нет доступных врачей</p>{% endfor %}
+          </div>
+        </div>
+
+        <!-- Услуга + дата -->
+        <div class="glass card">
+          <div class="step">2 · Услуга и дата</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <label class="fld">Услуга (необязательно)</label>
+              <select x-model="service">
+                <option value="">— Выберите услугу —</option>
+                {% for s in services %}<option value="{{ s.pk }}">{{ s.name }} · {{ s.price|floatformat:0 }} сом</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="fld">Дата *</label>
+              <input type="date" x-model="date" :min="today" @change="loadSlots()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Слоты -->
+        <div class="glass card" x-show="doctor && date" x-cloak>
+          <div class="step">3 · Время</div>
+          <template x-if="loading"><p class="muted">Загрузка слотов…</p></template>
+          <template x-if="!loading && slots.length===0"><p class="muted">На эту дату нет свободного времени. Выберите другую дату.</p></template>
+          <div class="slots">
+            <template x-for="s in slots" :key="s">
+              <div class="slot" :class="slot===s && 'sel'" @click="slot=s" x-text="s"></div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Контакты -->
+        <div class="glass card" x-show="slot" x-cloak>
+          <div class="step">4 · Ваши данные</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div><label class="fld">Имя *</label><input type="text" x-model="name" placeholder="Ваше имя"></div>
+            <div><label class="fld">Телефон *</label><input type="tel" x-model="phone" placeholder="+996 ..."></div>
+          </div>
+          <div class="err" x-show="error" x-text="error" x-cloak></div>
+          <button class="btn" style="margin-top:20px;width:100%;justify-content:center" :disabled="!canSubmit||sending" @click="submit()">
+            <span x-text="sending ? 'Отправка…' : 'Записаться на приём'"></span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Успех -->
+    <template x-if="done">
+      <div class="glass ok" style="margin-top:30px">
+        <div class="ic">✓</div>
+        <h2 style="font-size:26px;margin-bottom:8px">Заявка отправлена!</h2>
+        <p class="muted" style="max-width:420px;margin:0 auto 24px">Мы записали вас и скоро перезвоним для подтверждения. Спасибо, что выбрали «{{ clinic.name }}».</p>
+        <a href="/" class="btn">На главную</a>
+      </div>
+    </template>
   </div>
+
+  <script>
+    function booking(){
+      return {
+        doctor:'', service:'', date:'', slot:'', name:'', phone:'',
+        slots:[], loading:false, sending:false, done:false, error:'',
+        today:new Date().toISOString().slice(0,10),
+        get canSubmit(){ return this.doctor&&this.date&&this.slot&&this.name.trim()&&this.phone.trim(); },
+        async loadSlots(){
+          this.slot=''; this.slots=[];
+          if(!this.doctor||!this.date) return;
+          this.loading=true;
+          try{
+            const r=await fetch('/book/slots/?doctor='+this.doctor+'&date='+this.date);
+            const j=await r.json(); this.slots=j.slots||[];
+          }catch(e){ this.slots=[]; }
+          this.loading=false;
+        },
+        async submit(){
+          if(!this.canSubmit) return;
+          this.sending=true; this.error='';
+          const token=document.querySelector('[name=csrfmiddlewaretoken]').value;
+          const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.phone});
+          try{
+            const r=await fetch('/book/submit/',{method:'POST',headers:{'X-CSRFToken':token},body});
+            const j=await r.json();
+            if(j.ok){ this.done=true; }
+            else{ this.error=j.error||'Ошибка'; if(r.status===409) this.loadSlots(); }
+          }catch(e){ this.error='Ошибка сети'; }
+          this.sending=false;
+        },
+      };
+    }
+  </script>
 </body>
 </html>

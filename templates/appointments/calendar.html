@@ -91,6 +91,7 @@
         </div>
         <div class="card card-pad"><p class="text-xs muted mb-0.5">Статус / комментарий</p>
           <span class="badge" :class="av.cancelled ? 'badge-red' : (av.status==='completed'?'badge-green':'badge-orange')" x-text="av.status_display"></span>
+          <template x-if="av.source==='online' && av.status==='scheduled'"><span class="badge ml-2" style="background:#9CA3AF;color:#fff">🌐 Заявка с сайта — подтвердите</span></template>
           <span class="text-sm muted ml-2" x-text="av.notes || 'Нет комментариев'"></span>
         </div>
 
@@ -309,7 +310,7 @@ function calendarPage() {
         this.av = {
           id: a.id, doctor_id: a.doctor_id, doctor: a.doctor,
           date: a.date, time: a.time, duration: a.duration,
-          status: a.status, status_display: a.status_display, notes: a.notes,
+          status: a.status, status_display: a.status_display, source: a.source, notes: a.notes,
           cancelled: a.cancelled, cancel_reason: a.cancel_reason, cancel_note: a.cancel_note,
           patient_id: p.id, patient_name: p.name, patient_age: p.age,
           phone: p.phone, debt: p.debt, first_visit: p.first_visit,

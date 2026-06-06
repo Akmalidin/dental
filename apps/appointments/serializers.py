@@ -54,9 +54,12 @@ class AppointmentCalendarSerializer(serializers.ModelSerializer):
         return f"{patient} — {obj.doctor.name}"
 
     def get_color(self, obj):
+        # Непотверждённая заявка с сайта — серая (до подтверждения администратором)
+        if obj.source == "online" and obj.status == "scheduled":
+            return "#9CA3AF"
         colors = {
             "scheduled": "#6366F1",   # новые — индиго
-            "confirmed": "#6366F1",
+            "confirmed": "#2563EB",   # подтверждён — синий
             "arrived": "#F59E0B",     # на приёме — оранжевый
             "in_progress": "#F59E0B",
             "completed": "#22C55E",   # завершён — зелёный

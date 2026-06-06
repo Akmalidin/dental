@@ -59,7 +59,120 @@ def public_service(request, pk):
     })
 
 
+WORK_START, WORK_END, SLOT_HOURS = 9, 18, 1  # рабочие часы и шаг слота
+
+
 def public_book(request):
-    """Онлайн-запись (Phase C). Пока — заглушка-страница."""
+    """Страница онлайн-записи."""
     clinic, site = _ctx(request)
-    return render(request, "public/booking.html", {"clinic": clinic, "site": site})
+    if not site.show_booking:
+        raise Http404("Запись недоступна")
+    from apps.users.models import clinic_doctors
+    from apps.services.models import Service
+    doctors = list(clinic_doctors(clinic))
+    services = list(Service.objects.filter(is_active=True).order_by("name"))
+    return render(request, "public/booking.html", {
+        "clinic": clinic, "site": site, "doctors": doctors, "services": services,
+    })
+
+
+def public_slots(request):
+    """Свободные часовые слоты врача на дату (JSON)."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from datetime import datetime
+    clinic, site = _ctx(request)
+    doctor_id = request.GET.get("doctor")
+    date_str = request.GET.get("date")
+    if not doctor_id or not date_str:
+        return JsonResponse({"slots": []})
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({"slots": []})
+    from apps.appointments.models import Appointment
+    taken = set()
+    for a in (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id, start_at__date=d)
+              .exclude(status="cancelled")):
+        taken.add(timezone.localtime(a.start_at).hour)
+    now = timezone.localtime()
+    slots = []
+    for h in range(WORK_START, WORK_END):
+        if h in taken:
+            continue
+        if d == now.date() and h <= now.hour:
+            continue
+        slots.append("%02d:00" % h)
+    return JsonResponse({"slots": slots})
+
+
+def public_book_submit(request):
+    """Создать заявку с сайта → серая запись в расписании + уведомление администраторам."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from django.db.models import Q
+    from datetime import datetime, timedelta, time as dtime
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "POST"}, status=405)
+    clinic, site = _ctx(request)
+    name = (request.POST.get("name") or "").strip()
+    phone = (request.POST.get("phone") or "").strip()
+    doctor_id = request.POST.get("doctor")
+    date_str = request.POST.get("date")
+    slot = request.POST.get("slot") or ""
+    service_id = request.POST.get("service") or None
+    if not (name and phone and doctor_id and date_str and slot):
+        return JsonResponse({"ok": False, "error": "Заполните все поля"}, status=400)
+
+    from apps.users.models import clinic_doctors, Branch, User, Role
+    from apps.appointments.models import Appointment
+    from apps.patients.models import Patient
+
+    if not clinic_doctors(clinic).filter(pk=doctor_id).exists():
+        return JsonResponse({"ok": False, "error": "Врач не найден"}, status=400)
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        hh = int(slot.split(":")[0])
+    except (ValueError, IndexError):
+        return JsonResponse({"ok": False, "error": "Неверная дата/время"}, status=400)
+
+    start = timezone.make_aware(datetime.combine(d, dtime(hour=hh)))
+    end = start + timedelta(hours=SLOT_HOURS)
+    clash = (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id,
+             start_at__lt=end, end_at__gt=start).exclude(status="cancelled").exists())
+    if clash:
+        return JsonResponse({"ok": False, "error": "Это время уже занято, выберите другое"}, status=409)
+
+    branch = Branch.objects.filter(is_main=True).first() or Branch.objects.first()
+    if branch is None:
+        return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
+
+    patient = Patient.all_objects.filter(clinic=clinic, phone=phone, is_deleted=False).first()
+    if patient is None:
+        parts = name.split(None, 1)
+        patient = Patient(first_name=parts[0], last_name=parts[1] if len(parts) > 1 else "",
+                          phone=phone, branch=branch)
+        patient.save()
+
+    appt = Appointment(patient=patient, doctor_id=doctor_id, branch=branch,
+                       start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED,
+                       source="online", notes="Заявка с сайта")
+    if service_id:
+        appt.service_id = service_id
+    appt.save()
+    if service_id:
+        appt.services.add(service_id)
+
+    try:
+        from apps.notifications.models import Notification
+        admins = (User.objects.filter(clinic=clinic, is_active=True)
+                  .filter(Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
+                          | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN])).distinct())
+        for u in admins:
+            Notification.send(u, "Новая заявка с сайта",
+                              "%s, %s — %s %s" % (name, phone, d.strftime("%d.%m.%Y"), slot),
+                              type="appointment", link="/calendar/")
+    except Exception:
+        pass
+
+    return JsonResponse({"ok": True})

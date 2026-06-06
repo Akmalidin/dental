@@ -414,6 +414,7 @@ def appointment_detail_json(request, pk):
             "doctor_id": appt.doctor_id,
             "status": appt.status,
             "status_display": appt.get_status_display(),
+            "source": appt.source,
             "notes": appt.notes or "",
             "cancelled": appt.status == "cancelled",
             "cancel_reason": appt.cancellation_reason.name if appt.cancellation_reason else "",
