@@ -74,4 +74,17 @@ class UserForm(forms.ModelForm):
 class BranchForm(forms.ModelForm):
     class Meta:
         model = Branch
-        fields = ["name", "address", "phone", "is_main", "is_active"]
+        fields = ["name", "address", "phone", "hours", "latitude", "longitude", "is_main", "is_active"]
+        widgets = {
+            "latitude": forms.NumberInput(attrs={"step": "any", "placeholder": "42.8746"}),
+            "longitude": forms.NumberInput(attrs={"step": "any", "placeholder": "74.5698"}),
+            "hours": forms.TextInput(attrs={"placeholder": "Пн–Сб: 09:00–18:00"}),
+        }
+
+
+class CabinetForm(forms.ModelForm):
+    class Meta:
+        from apps.appointments.models import Cabinet
+        model = Cabinet
+        fields = ["name", "color", "is_active"]
+        widgets = {"color": forms.TextInput(attrs={"type": "color"})}

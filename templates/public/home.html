@@ -304,7 +304,13 @@
         {% if site.address %}<div class="glass card"><div class="t">Адрес</div><div class="v">{{ site.address }}</div></div>{% endif %}
         {% if site.hours %}<div class="glass card"><div class="t">Часы работы</div><div class="v">{{ site.hours }}</div></div>{% endif %}
         {% for b in branches %}
-        <div class="glass card"><div class="t">{{ b.name }}</div><div class="v" style="font-size:16px">{{ b.address }}</div><div class="t" style="margin-top:8px;text-transform:none">{{ b.phone }}</div></div>
+        <div class="glass card">
+          <div class="t">{{ b.name }}{% if b.is_main %} · главный{% endif %}</div>
+          <div class="v" style="font-size:16px">{{ b.address }}</div>
+          {% if b.phone %}<div style="margin-top:8px"><a href="tel:{{ b.phone }}" style="color:var(--accent);font-weight:700">{{ b.phone }}</a></div>{% endif %}
+          {% if b.hours %}<div class="t" style="margin-top:8px;text-transform:none">🕒 {{ b.hours }}</div>{% endif %}
+          {% if b.latitude and b.longitude %}<a href="#branches" style="color:var(--accent);font-size:13px;font-weight:600;display:inline-block;margin-top:10px">На карте →</a>{% endif %}
+        </div>
         {% endfor %}
       </div>
       {% if site.show_booking %}<div style="text-align:center;margin-top:38px"><a href="/book/" class="btn">Записаться на приём →</a></div>{% endif %}

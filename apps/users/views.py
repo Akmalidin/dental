@@ -632,7 +632,40 @@ def branch_edit(request, pk):
         form.save()
         messages.success(request, _("Филиал обновлён"))
         return redirect("branch_list")
-    return render(request, "users/branch_form.html", {"form": form, "object": branch})
+    return render(request, "users/branch_form.html", {
+        "form": form, "object": branch,
+        "cabinets": branch.cabinets.all(),
+    })
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+@require_POST
+def cabinet_create(request, branch_pk):
+    """Добавить кабинет в филиал."""
+    from apps.appointments.models import Cabinet
+    branch = get_object_or_404(Branch, pk=branch_pk)
+    name = request.POST.get("name", "").strip()
+    if name:
+        Cabinet.objects.create(
+            branch=branch, name=name,
+            color=request.POST.get("color") or "#10B981",
+        )
+        messages.success(request, _("Кабинет «%(n)s» добавлен") % {"n": name})
+    return redirect("branch_edit", pk=branch_pk)
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+@require_POST
+def cabinet_delete(request, pk):
+    """Удалить кабинет."""
+    from apps.appointments.models import Cabinet
+    cab = get_object_or_404(Cabinet, pk=pk)
+    branch_pk = cab.branch_id
+    cab.delete()
+    messages.success(request, _("Кабинет удалён"))
+    return redirect("branch_edit", pk=branch_pk)
 
 
 # ─── Salary ──────────────────────────────────────────────────────────────────

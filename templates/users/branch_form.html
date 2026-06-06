@@ -1,25 +1,90 @@
 {% extends "base.html" %}
-{% block page_title %}{% if object %}Редактировать филиал{% else %}Новый филиал{% endif %}{% endblock %}
+{% block page_title %}{% if object %}Филиал — {{ object.name }}{% else %}Новый филиал{% endif %}{% endblock %}
 {% block content %}
-<div class="max-w-lg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<div class="max-w-3xl space-y-5">
+
+  <!-- Форма филиала -->
   <div class="card overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
-      <h2 class="font-bold text-white text-lg">{% if object %}{{ object.name }}{% else %}Новый филиал{% endif %}</h2>
+    <div class="px-6 py-4" style="border-bottom:1px solid var(--border)">
+      <h2 class="font-bold text-lg" style="color:var(--text)">{% if object %}Редактировать филиал{% else %}Новый филиал{% endif %}</h2>
+      <p class="muted text-sm mt-0.5">Эти данные показываются на публичном сайте клиники и в записях.</p>
     </div>
     <form method="post" class="p-6 space-y-4">
       {% csrf_token %}
-      {% for field in form %}
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{{ field.label }}</label>
-        {{ field }}
-        {% if field.errors %}<p class="text-red-500 text-xs mt-1">{{ field.errors|join:", " }}</p>{% endif %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="fld">Название *</label>{{ form.name }}{% if form.name.errors %}<p class="text-red-500 text-xs mt-1">{{ form.name.errors|join:", " }}</p>{% endif %}</div>
+        <div><label class="fld">Телефон</label>{{ form.phone }}</div>
+        <div class="md:col-span-2"><label class="fld">Адрес</label>{{ form.address }}</div>
+        <div class="md:col-span-2"><label class="fld">Часы работы</label>{{ form.hours }}</div>
       </div>
-      {% endfor %}
+
+      <!-- Карта -->
+      <div>
+        <label class="fld">Точка на карте <span class="muted" style="text-transform:none;font-weight:400">— кликните по карте или перетащите маркер</span></label>
+        <div id="bmap" style="height:320px;width:100%;border-radius:14px;border:1px solid var(--border);z-index:1"></div>
+        <div class="grid grid-cols-2 gap-3 mt-3">
+          <div><label class="fld">Широта</label>{{ form.latitude }}</div>
+          <div><label class="fld">Долгота</label>{{ form.longitude }}</div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-5 pt-1">
+        <label class="flex items-center gap-2 text-sm cursor-pointer" style="color:var(--text)">{{ form.is_main }} Главный филиал</label>
+        <label class="flex items-center gap-2 text-sm cursor-pointer" style="color:var(--text)">{{ form.is_active }} Активен</label>
+      </div>
+
       <div class="flex gap-3 pt-2">
-        <button type="submit" class="btn-primary">Сохранить</button>
-        <a href="/users/branches/" class="btn-ghost">Отмена</a>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/users/branches/" class="btn btn-ghost">Отмена</a>
       </div>
     </form>
   </div>
+
+  {% if object %}
+  <!-- Кабинеты -->
+  <div class="card overflow-hidden">
+    <div class="px-6 py-4" style="border-bottom:1px solid var(--border)">
+      <h3 class="font-bold text-lg" style="color:var(--text)">Кабинеты филиала</h3>
+      <p class="muted text-sm mt-0.5">Кабинеты (кресла) используются в расписании и записях.</p>
+    </div>
+    <div>
+      {% for c in cabinets %}
+      <div class="flex items-center gap-3 px-6 py-3" style="border-bottom:1px solid var(--border-2)">
+        <span style="width:16px;height:16px;border-radius:5px;background:{{ c.color }};display:inline-block"></span>
+        <span class="flex-1 text-sm font-semibold" style="color:var(--text)">{{ c.name }}{% if not c.is_active %} <span class="badge badge-gray">неактивен</span>{% endif %}</span>
+        <form method="post" action="/users/cabinets/{{ c.pk }}/delete/" onsubmit="return confirm('Удалить кабинет «{{ c.name|escapejs }}»?')">{% csrf_token %}<button class="btn btn-ghost btn-sm" style="color:#ef4444">Удалить</button></form>
+      </div>
+      {% empty %}
+      <p class="px-6 py-6 text-center muted text-sm">Кабинетов пока нет — добавьте первый ниже.</p>
+      {% endfor %}
+    </div>
+    <form method="post" action="/users/branches/{{ object.pk }}/cabinets/add/" class="p-4 flex flex-wrap items-end gap-3" style="border-top:1px solid var(--border)">
+      {% csrf_token %}
+      <div class="flex-1" style="min-width:200px"><label class="fld">Название кабинета *</label><input type="text" name="name" placeholder="Кабинет №1" required></div>
+      <div><label class="fld">Цвет</label><input type="color" name="color" value="#10B981" style="width:54px;height:42px;padding:2px"></div>
+      <button type="submit" class="btn btn-primary">+ Добавить кабинет</button>
+    </form>
+  </div>
+  {% endif %}
 </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  (function(){
+    const el=document.getElementById('bmap'); if(!el||typeof L==='undefined') return;
+    const latI=document.getElementById('id_latitude'), lngI=document.getElementById('id_longitude');
+    let lat=parseFloat(latI.value), lng=parseFloat(lngI.value);
+    const hasVal=!isNaN(lat)&&!isNaN(lng);
+    if(!hasVal){ lat=42.8746; lng=74.5698; }
+    const map=L.map('bmap').setView([lat,lng],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+    const marker=L.marker([lat,lng],{draggable:true}).addTo(map);
+    function set(ll){ latI.value=ll.lat.toFixed(6); lngI.value=ll.lng.toFixed(6); }
+    if(!hasVal) set(marker.getLatLng());
+    marker.on('dragend',()=>set(marker.getLatLng()));
+    map.on('click',e=>{ marker.setLatLng(e.latlng); set(e.latlng); });
+    setTimeout(()=>map.invalidateSize(),200);
+  })();
+</script>
 {% endblock %}
