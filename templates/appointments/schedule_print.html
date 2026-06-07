@@ -2,13 +2,13 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Расписание {{ day|date:"d.m.Y" }}</title>
+<title>Расписание {{ d_from|date:"d.m.Y" }}{% if multi %}–{{ d_to|date:"d.m.Y" }}{% endif %}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 22px; }
   h1 { font-size: 17px; text-align: center; margin: 0 0 2px; }
   .sub { text-align: center; color: #666; font-size: 12px; margin-bottom: 18px; }
-  .doc { margin-bottom: 22px; page-break-inside: avoid; }
-  .doc h2 { font-size: 14px; background: #2563EB; color: #fff; padding: 6px 10px; border-radius: 6px 6px 0 0; margin: 0; }
+  .day { margin-bottom: 20px; page-break-inside: avoid; }
+  .day h2 { font-size: 14px; background: #2563EB; color: #fff; padding: 6px 10px; border-radius: 6px 6px 0 0; margin: 0; text-transform: capitalize; }
   table { width: 100%; border-collapse: collapse; }
   th { background: #eef2ff; text-align: left; padding: 6px 8px; font-size: 11px; border-bottom: 1px solid #dbe2f5; }
   td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
@@ -22,33 +22,34 @@
 </head>
 <body onload="window.print()">
   <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}AKM SOFT — CLINIC{% endif %}</h1>
-  <div class="sub">Расписание на {{ day|date:"l, d E Y" }}{% if single and columns %} · врач {{ columns.0.doctor.name }}{% endif %}</div>
+  <div class="sub">Расписание {% if multi %}с {{ d_from|date:"d.m.Y" }} по {{ d_to|date:"d.m.Y" }}{% else %}на {{ d_from|date:"l, d E Y" }}{% endif %}{% if doctor_name %} · врач {{ doctor_name }}{% endif %}</div>
 
-  {% for col in columns %}
-  <div class="doc">
-    <h2>{{ col.doctor.name }}</h2>
+  {% for day in day_list %}
+  <div class="day">
+    <h2>{{ day.date|date:"l, d E Y" }}</h2>
     <table>
-      <thead><tr><th style="width:90px">Время</th><th>Пациент</th><th style="width:130px">Телефон</th><th>Услуга</th><th style="width:110px">Статус</th></tr></thead>
+      <thead><tr><th style="width:95px">Время</th><th>Врач</th><th>Пациент</th><th style="width:125px">Телефон</th><th>Услуга</th><th style="width:100px">Статус</th></tr></thead>
       <tbody>
-        {% for a in col.appts %}
+        {% for a in day.appts %}
         <tr>
           <td class="time">{{ a.start_at|time:"H:i" }}–{{ a.end_at|time:"H:i" }}</td>
+          <td>{{ a.doctor.name }}</td>
           <td>{{ a.patient.full_name|default:"—" }}</td>
           <td>{{ a.patient.phone|default:"—" }}</td>
           <td>{% for s in a.services.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ a.service.name|default:"—" }}{% endfor %}</td>
           <td>{{ a.get_status_display }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="empty">Нет записей</td></tr>
+        <tr><td colspan="6" class="empty">Нет записей</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% empty %}
-  <p class="empty">Нет врачей</p>
+  <p class="empty">Нет записей за выбранный период</p>
   {% endfor %}
 
-  <div class="footer">Распечатано из AKM SOFT CLINIC · {{ day|date:"d.m.Y" }}</div>
+  <div class="footer">Распечатано из AKM SOFT CLINIC</div>
   <div class="noprint"><button onclick="window.print()">🖨 Печать</button></div>
 </body>
 </html>

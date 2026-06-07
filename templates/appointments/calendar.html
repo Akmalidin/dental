@@ -56,7 +56,14 @@
         <option value="">Все врачи</option>
         {% for doc in doctors %}<option value="{{ doc.pk }}" {% if default_doctor and doc.pk == default_doctor %}selected{% endif %}>{{ doc.name }}</option>{% endfor %}
       </select>
-      <button class="btn btn-ghost btn-sm" @click="printSchedule()" title="Печать расписания на текущую дату">🖨 Печать</button>
+      <div class="relative" x-data="{po:false}" @click.outside="po=false">
+        <button class="btn btn-ghost btn-sm" @click="po=!po" title="Печать расписания">🖨 Печать ▾</button>
+        <div x-show="po" x-cloak class="dropdown right-0 top-full mt-1 w-44">
+          <button @click="printRange('day'); po=false">📄 День</button>
+          <button @click="printRange('week'); po=false">🗓 Неделя</button>
+          <button @click="printRange('month'); po=false">📅 Месяц</button>
+        </div>
+      </div>
       <button class="btn btn-primary btn-sm" @click="openBooking()">+ Новая запись</button>
     </div>
   </div>
@@ -339,12 +346,22 @@ function calendarPage() {
       } catch (e) { toast('Ошибка', 'error'); }
     },
 
-    printSchedule() {
-      const d = this.cal ? this.cal.getDate() : new Date();
-      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    printRange(kind) {
+      const base = this.cal ? this.cal.getDate() : new Date();
+      let from, to;
+      if (kind === 'day') { from = new Date(base); to = new Date(base); }
+      else if (kind === 'week') {
+        const d = new Date(base); const wd = (d.getDay() + 6) % 7; // Пн=0
+        from = new Date(d); from.setDate(d.getDate() - wd);
+        to = new Date(from); to.setDate(from.getDate() + 6);
+      } else { // month
+        from = new Date(base.getFullYear(), base.getMonth(), 1);
+        to = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+      }
+      const fmt = x => x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
       const df = document.getElementById('doctorFilter');
       const doc = (df && df.value) ? '&doctor=' + df.value : '';
-      window.open('/appointments/schedule/print/?date=' + ds + doc, '_blank');
+      window.open('/appointments/schedule/print/?from=' + fmt(from) + '&to=' + fmt(to) + doc, '_blank');
     },
     openNextDlg(complete) { this.nextDlg = { open:true, complete: complete, date:'' }; },
     async submitNext() {

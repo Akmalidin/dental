@@ -113,36 +113,58 @@ def appointment_day_grid(request):
 
 @login_required
 def schedule_print(request):
-    """Печать расписания на дату — все врачи или один (?doctor=id)."""
+    """Печать расписания на диапазон дат (день/неделя/месяц), опц. один врач (?doctor=id).
+    Параметры: from, to (YYYY-MM-DD) — диапазон; или date — один день."""
     from datetime import datetime, time, timedelta
+    from collections import OrderedDict
     from django.utils import timezone
-    qd = request.GET.get("date")
-    try:
-        day = datetime.strptime(qd, "%Y-%m-%d").date() if qd else timezone.localdate()
-    except ValueError:
-        day = timezone.localdate()
+
+    def parse(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            return None
+
+    today = timezone.localdate()
+    d_from = parse(request.GET.get("from")) or parse(request.GET.get("date")) or today
+    d_to = parse(request.GET.get("to")) or parse(request.GET.get("date")) or d_from
+    if d_to < d_from:
+        d_from, d_to = d_to, d_from
+    if (d_to - d_from).days > 62:
+        d_to = d_from + timedelta(days=62)
     doctor_id = request.GET.get("doctor")
-    from apps.users.models import clinic_doctors
-    from apps.tenancy import get_current_clinic
-    doctors = clinic_doctors(get_current_clinic())
+
+    start_dt = timezone.make_aware(datetime.combine(d_from, time(0, 0)))
+    end_dt = timezone.make_aware(datetime.combine(d_to, time(0, 0))) + timedelta(days=1)
+    qs = (Appointment.objects.filter(start_at__gte=start_dt, start_at__lt=end_dt)
+          .exclude(status="cancelled")
+          .select_related("patient", "doctor", "service").prefetch_related("services")
+          .order_by("start_at"))
     if doctor_id:
-        doctors = doctors.filter(pk=doctor_id)
-    doctors = list(doctors)
-    start_dt = timezone.make_aware(datetime.combine(day, time(0, 0)))
-    end_dt = start_dt + timedelta(days=1)
-    appts = (Appointment.objects.filter(start_at__gte=start_dt, start_at__lt=end_dt)
-             .exclude(status="cancelled")
-             .select_related("patient", "doctor", "service").prefetch_related("services")
-             .order_by("start_at"))
-    by_doctor = {d.pk: [] for d in doctors}
-    for a in appts:
-        if a.doctor_id in by_doctor:
-            by_doctor[a.doctor_id].append(a)
-    columns = [{"doctor": d, "appts": by_doctor.get(d.pk, [])} for d in doctors]
+        qs = qs.filter(doctor_id=doctor_id)
+
+    days = OrderedDict()
+    cur = d_from
+    while cur <= d_to:
+        days[cur] = []
+        cur += timedelta(days=1)
+    for a in qs:
+        ld = timezone.localtime(a.start_at).date()
+        if ld in days:
+            days[ld].append(a)
+
+    multi = d_from != d_to
+    day_list = [{"date": dt, "appts": ap} for dt, ap in days.items() if ap or not multi]
+
+    doctor_name = ""
+    if doctor_id:
+        from apps.users.models import User
+        u = User.objects.filter(pk=doctor_id).first()
+        doctor_name = u.name if u else ""
     from apps.settings_clinic.models import ClinicSettings
     return render(request, "appointments/schedule_print.html", {
-        "day": day, "columns": columns, "clinic_settings": ClinicSettings.get(),
-        "single": bool(doctor_id),
+        "day_list": day_list, "clinic_settings": ClinicSettings.get(),
+        "d_from": d_from, "d_to": d_to, "multi": multi, "doctor_name": doctor_name,
     })
 
 
