@@ -299,7 +299,7 @@ def treatment_create_quick(request):
 @require_POST
 def plan_create(request):
     """AJAX: create a treatment plan with items from patient detail."""
-    from .models_plan import TreatmentPlan, TreatmentPlanItem
+    from .models_plan import TreatmentPlan, TreatmentPlanItem, TreatmentPlanStage
     from apps.services.models import Service
     try:
         data = json.loads(request.body)
@@ -312,10 +312,14 @@ def plan_create(request):
             title=data.get("title") or "План лечения",
             status=TreatmentPlan.STATUS_DRAFT,
         )
-        for i, it in enumerate(data.get("items", [])):
+        items = data.get("items", [])
+        # услуги кладём в первый этап, чтобы они отображались в редакторе плана
+        stage = TreatmentPlanStage.objects.create(plan=plan, title="Этап 1", sort_order=0) if items else None
+        for i, it in enumerate(items):
             service = Service.objects.get(pk=it["service_id"])
             TreatmentPlanItem.objects.create(
                 plan=plan,
+                stage=stage,
                 service=service,
                 tooth_number=it.get("tooth", ""),
                 price=service.price,
@@ -362,12 +366,16 @@ def plan_item_toggle(request, pk):
 @login_required
 def plan_detail(request, pk):
     """Full treatment-plan editor page with stages."""
-    from .models_plan import TreatmentPlan
-    plan = get_object_or_404(
-        TreatmentPlan.objects.select_related("patient", "doctor").prefetch_related(
-            "stages__items__service", "stages__items__doctor"
-        ), pk=pk,
-    )
+    from .models_plan import TreatmentPlan, TreatmentPlanStage
+    plan = get_object_or_404(TreatmentPlan.objects.select_related("patient", "doctor"), pk=pk)
+    # самоисцеление: услуги без этапа (старые планы) — привязать к этапу
+    orphans = plan.items.filter(stage__isnull=True)
+    if orphans.exists():
+        n = plan.stages.count()
+        stage = TreatmentPlanStage.objects.create(plan=plan, title=f"Этап {n+1}", sort_order=n)
+        orphans.update(stage=stage)
+    plan = (TreatmentPlan.objects.select_related("patient", "doctor")
+            .prefetch_related("stages__items__service", "stages__items__doctor").get(pk=pk))
     from apps.services.models import Service
     services = list(Service.objects.filter(is_active=True).select_related("category")
                     .order_by("category__sort_order", "name")

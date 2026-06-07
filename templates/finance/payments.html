@@ -9,7 +9,7 @@
 
   <div class="card overflow-hidden">
     <table class="data-table">
-      <thead><tr><th>Пациент</th><th>Сумма</th><th>Метод</th><th>Тип</th><th>Принял</th><th>Дата</th></tr></thead>
+      <thead><tr><th>Пациент</th><th>Сумма</th><th>Метод</th><th>Тип</th><th>Принял</th><th>Дата</th><th class="text-right pr-5">Чек</th></tr></thead>
       <tbody>
         {% for p in payments %}
         <tr>
@@ -21,9 +21,15 @@
           <td><span class="badge {% if p.type == 'income' %}badge-green{% else %}badge-red{% endif %}">{{ p.get_type_display }}</span></td>
           <td class="text-slate-600 text-sm">{{ p.received_by.name }}</td>
           <td class="text-slate-400 text-xs">{{ p.created_at|date:"d.m.Y H:i" }}</td>
+          <td class="text-right pr-3">
+            <a href="/finance/payments/{{ p.pk }}/receipt/" target="_blank" class="btn btn-ghost btn-sm" title="Печать чека">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Печать
+            </a>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center py-12 text-slate-400">Нет платежей</td></tr>
+        <tr><td colspan="7" class="text-center py-12 text-slate-400">Нет платежей</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -47,7 +47,13 @@ class AppointmentCalendarSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "start", "end", "color", "className", "extendedProps"]
 
     def get_className(self, obj):
-        return "appt-cancelled" if obj.status == "cancelled" else ""
+        if obj.status == "cancelled":
+            return "appt-cancelled"
+        # прошедшая запись без отметки исхода → требует внимания
+        from django.utils import timezone
+        if obj.status in ("scheduled", "confirmed") and obj.end_at and obj.end_at < timezone.now():
+            return "appt-stale"
+        return ""
 
     def get_title(self, obj):
         patient = obj.patient.full_name if obj.patient else "Без пациента"

@@ -17,6 +17,14 @@
   /* cancelled appointments: dimmed + strikethrough, full opacity on hover */
   .fc-event.appt-cancelled { opacity: .38; background: #EF4444 !important; text-decoration: line-through; }
   .fc-event.appt-cancelled:hover { opacity: 1; }
+  /* past unhandled appointments: amber striped + warning */
+  .fc-event.appt-stale { background-color: #F59E0B !important;
+    background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.12) 0 7px, transparent 7px 14px) !important;
+    box-shadow: inset 0 0 0 2px #B45309; }
+  .fc-event.appt-stale .fc-event-title::before { content: "⚠ "; }
+  /* hover highlight on any event */
+  .fc-event { transition: box-shadow .12s, transform .12s; }
+  .fc-event:hover { box-shadow: 0 0 0 2px #F97316, 0 8px 18px -8px rgba(249,115,22,.6) !important; transform: translateY(-1px); z-index: 5; }
   /* clickable slots: pointer cursor + hover highlight */
   .fc .fc-timegrid-slot-lane, .fc .fc-daygrid-day-frame, .fc .fc-timegrid-col { cursor: pointer; transition: background .12s; }
   .fc .fc-timegrid-slot-lane:hover, .fc .fc-daygrid-day-frame:hover { background: var(--primary-light) !important; }
@@ -48,6 +56,7 @@
         <option value="">Все врачи</option>
         {% for doc in doctors %}<option value="{{ doc.pk }}" {% if default_doctor and doc.pk == default_doctor %}selected{% endif %}>{{ doc.name }}</option>{% endfor %}
       </select>
+      <button class="btn btn-ghost btn-sm" @click="printSchedule()" title="Печать расписания на текущую дату">🖨 Печать</button>
       <button class="btn btn-primary btn-sm" @click="openBooking()">+ Новая запись</button>
     </div>
   </div>
@@ -330,6 +339,13 @@ function calendarPage() {
       } catch (e) { toast('Ошибка', 'error'); }
     },
 
+    printSchedule() {
+      const d = this.cal ? this.cal.getDate() : new Date();
+      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      const df = document.getElementById('doctorFilter');
+      const doc = (df && df.value) ? '&doctor=' + df.value : '';
+      window.open('/appointments/schedule/print/?date=' + ds + doc, '_blank');
+    },
     openNextDlg(complete) { this.nextDlg = { open:true, complete: complete, date:'' }; },
     async submitNext() {
       if (!this.nextDlg.complete && !this.nextDlg.date) { toast('Укажите дату', 'error'); return; }

@@ -41,6 +41,17 @@ def payment_list(request):
 
 
 @login_required
+def payment_receipt(request, pk):
+    """Печатный чек платежа."""
+    payment = get_object_or_404(
+        Payment.objects.select_related("patient", "received_by", "treatment", "branch"), pk=pk)
+    from apps.settings_clinic.models import ClinicSettings
+    return render(request, "finance/payment_receipt.html", {
+        "payment": payment, "clinic_settings": ClinicSettings.get(),
+    })
+
+
+@login_required
 def payment_create(request):
     patient_id = request.POST.get("patient") or request.GET.get("patient")
     treatment_id = request.POST.get("treatment") or request.GET.get("treatment")

@@ -18,7 +18,8 @@
       <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#F59E0B"></span>Приём</span>
       <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#22C55E"></span>Завершён</span>
       <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#EF4444"></span>Отменён</span>
-      <a href="/calendar/" class="btn btn-ghost btn-sm ml-2">📅 Календарь</a>
+      <a href="/appointments/schedule/print/?date={{ day|date:'Y-m-d' }}" target="_blank" class="btn btn-ghost btn-sm ml-2" title="Печать расписания всех врачей">🖨 Печать всех</a>
+      <a href="/calendar/" class="btn btn-ghost btn-sm">📅 Календарь</a>
     </div>
   </div>
 
@@ -41,7 +42,8 @@
         <!-- header -->
         <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2)">
           <span class="avatar w-6 h-6 text-[10px]">{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
-          <span class="text-sm font-semibold truncate" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
+          <span class="text-sm font-semibold truncate flex-1" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
+          {% if col.doctor %}<a href="/appointments/schedule/print/?date={{ day|date:'Y-m-d' }}&doctor={{ col.doctor.pk }}" target="_blank" title="Печать расписания врача" style="color:var(--text-faint);text-decoration:none" onclick="event.stopPropagation()">🖨</a>{% endif %}
         </div>
         <!-- column body -->
         <div style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border-2) 59px,var(--border-2) 60px)"

@@ -112,6 +112,41 @@ def appointment_day_grid(request):
 
 
 @login_required
+def schedule_print(request):
+    """Печать расписания на дату — все врачи или один (?doctor=id)."""
+    from datetime import datetime, time, timedelta
+    from django.utils import timezone
+    qd = request.GET.get("date")
+    try:
+        day = datetime.strptime(qd, "%Y-%m-%d").date() if qd else timezone.localdate()
+    except ValueError:
+        day = timezone.localdate()
+    doctor_id = request.GET.get("doctor")
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    doctors = clinic_doctors(get_current_clinic())
+    if doctor_id:
+        doctors = doctors.filter(pk=doctor_id)
+    doctors = list(doctors)
+    start_dt = timezone.make_aware(datetime.combine(day, time(0, 0)))
+    end_dt = start_dt + timedelta(days=1)
+    appts = (Appointment.objects.filter(start_at__gte=start_dt, start_at__lt=end_dt)
+             .exclude(status="cancelled")
+             .select_related("patient", "doctor", "service").prefetch_related("services")
+             .order_by("start_at"))
+    by_doctor = {d.pk: [] for d in doctors}
+    for a in appts:
+        if a.doctor_id in by_doctor:
+            by_doctor[a.doctor_id].append(a)
+    columns = [{"doctor": d, "appts": by_doctor.get(d.pk, [])} for d in doctors]
+    from apps.settings_clinic.models import ClinicSettings
+    return render(request, "appointments/schedule_print.html", {
+        "day": day, "columns": columns, "clinic_settings": ClinicSettings.get(),
+        "single": bool(doctor_id),
+    })
+
+
+@login_required
 @require_POST
 def appointment_create_quick(request):
     """AJAX: create appointment from calendar modal."""
@@ -195,12 +230,23 @@ def appointment_list(request):
             | Q(service__name__icontains=q)
         )
     form = AppointmentForm(initial={"doctor": request.user if request.user.is_doctor else None})
+
+    # Прошедшие записи без отметки исхода — «требуют внимания»
+    from django.utils import timezone
+    stale = (Appointment.objects.select_related("patient", "doctor")
+             .filter(status__in=["scheduled", "confirmed"], end_at__lt=timezone.now())
+             .order_by("start_at"))
+    stale = apply_appt_visibility(stale, request.user, None)
+    stale_count = stale.count()
+
     return render(request, "appointments/list.html", {
         "appointments": qs,
         "current_status": current_status,
         "q": q,
         "form": form,
         "cancel_reasons": CancellationReason.objects.filter(is_active=True),
+        "stale_appointments": stale[:100],
+        "stale_count": stale_count,
     })
 
 

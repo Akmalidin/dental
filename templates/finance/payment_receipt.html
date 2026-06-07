@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Чек платежа #{{ payment.pk }}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #222; margin: 0; padding: 24px; }
+  .wrap { max-width: 360px; margin: 0 auto; }
+  .clinic { text-align: center; margin-bottom: 14px; }
+  .clinic h1 { font-size: 18px; margin: 0 0 4px; }
+  .clinic p { margin: 0; font-size: 11px; color: #666; }
+  hr { border: none; border-top: 1px dashed #bbb; margin: 14px 0; }
+  .row { display: flex; justify-content: space-between; padding: 5px 0; }
+  .row .k { color: #666; }
+  .row .v { font-weight: 600; text-align: right; }
+  .amount { text-align: center; margin: 16px 0; }
+  .amount .n { font-size: 30px; font-weight: 800; color: #16a34a; }
+  .amount .n.refund { color: #dc2626; }
+  .amount .l { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .08em; }
+  .footer { margin-top: 22px; text-align: center; font-size: 10px; color: #999; }
+  @media print { .noprint { display: none; } }
+  .noprint { text-align:center; margin-top:18px; }
+  .noprint button { padding:9px 22px; border:none; border-radius:8px; background:#2563EB; color:#fff; font-size:13px; cursor:pointer; }
+</style>
+</head>
+<body onload="window.print()">
+<div class="wrap">
+  <div class="clinic">
+    <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}AKM SOFT — CLINIC{% endif %}</h1>
+    {% if clinic_settings %}<p>{{ clinic_settings.address }}{% if clinic_settings.phone %} · {{ clinic_settings.phone }}{% endif %}</p>{% endif %}
+  </div>
+
+  <hr>
+  <p style="text-align:center;font-weight:700;margin:0">Чек платежа №{{ payment.pk }}</p>
+
+  <div class="amount">
+    <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} сом</div>
+    <div class="l">{{ payment.get_type_display }}</div>
+  </div>
+
+  <hr>
+  <div class="row"><span class="k">Пациент</span><span class="v">{{ payment.patient.full_name }}</span></div>
+  <div class="row"><span class="k">Метод оплаты</span><span class="v">{{ payment.get_method_display }}</span></div>
+  {% if payment.treatment %}<div class="row"><span class="k">Приём</span><span class="v">#{{ payment.treatment.pk }}</span></div>{% endif %}
+  <div class="row"><span class="k">Филиал</span><span class="v">{{ payment.branch.name }}</span></div>
+  <div class="row"><span class="k">Принял</span><span class="v">{{ payment.received_by.name }}</span></div>
+  <div class="row"><span class="k">Дата</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>
+  <hr>
+
+  <div class="footer">Спасибо! Сохраните чек для контроля оплаты.</div>
+
+  <div class="noprint"><button onclick="window.print()">🖨 Печать</button></div>
+</div>
+</body>
+</html>

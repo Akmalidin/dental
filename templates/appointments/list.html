@@ -25,6 +25,30 @@
   </div>
 
 
+  {% if stale_count %}
+  <div class="card" style="border:1px solid #FCD34D;background:#FFFBEB;overflow:hidden">
+    <div class="px-5 py-3 flex items-center gap-2" style="border-bottom:1px solid #FDE68A">
+      <span class="text-xl">⚠</span>
+      <p class="font-bold" style="color:#92400E">Требуют внимания — прошедшие записи без отметки ({{ stale_count }})</p>
+    </div>
+    <div style="max-height:340px;overflow-y:auto">
+      {% for a in stale_appointments %}
+      <div class="flex items-center gap-3 px-5 py-2.5 flex-wrap" style="border-bottom:1px solid #FDE68A">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold" style="color:var(--text)">{{ a.patient.full_name|default:"Без пациента" }} <span class="muted font-normal">· {{ a.doctor.name }}</span></p>
+          <p class="text-xs muted">{{ a.start_at|date:"d.m.Y H:i" }} · {{ a.get_status_display }}</p>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <form method="post" action="/appointments/{{ a.pk }}/status/">{% csrf_token %}<input type="hidden" name="status" value="arrived"><button class="btn btn-sm" style="background:#DCFCE7;color:#16A34A">Пришёл</button></form>
+          <form method="post" action="/appointments/{{ a.pk }}/status/">{% csrf_token %}<input type="hidden" name="status" value="completed"><button class="btn btn-sm" style="background:#DBEAFE;color:#2563EB">Завершить</button></form>
+          <form method="post" action="/appointments/{{ a.pk }}/status/">{% csrf_token %}<input type="hidden" name="status" value="no_show"><button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626">Не пришёл</button></form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <div class="flex items-center justify-between flex-wrap gap-3">
     <div class="pill-tabs">
       <a href="?status=" class="pill-tab {% if not current_status %}active{% endif %}">Все</a>

@@ -2,9 +2,13 @@
 {% block page_title %}Сотрудники{% endblock %}
 {% block content %}
 <div class="space-y-4" x-data="{showCreate:false}">
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between flex-wrap gap-2">
     <h2 class="text-slate-700 text-sm">Персонал клиники</h2>
-    <button @click="showCreate=true" class="btn-primary">+ Добавить сотрудника</button>
+    <div class="flex items-center gap-2">
+      <a href="/users/salary/" class="btn btn-ghost btn-sm">💰 Зарплаты и схемы</a>
+      <a href="/users/schedule/" class="btn btn-ghost btn-sm">🗓 Графики</a>
+      <button @click="showCreate=true" class="btn-primary">+ Добавить сотрудника</button>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

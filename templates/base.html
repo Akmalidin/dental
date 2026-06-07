@@ -251,13 +251,17 @@
       <!-- Lang (флаги, дропдаун) -->
       <div class="relative" x-data="{lopen:false}">
         <button @click="lopen=!lopen" class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold" style="border:1px solid var(--border);color:var(--text)">
-          <span class="text-base leading-none">{% if LANGUAGE_CODE == 'ky' %}🇰🇬{% else %}🇷🇺{% endif %}</span>
+          {% if LANGUAGE_CODE == 'ky' %}
+          <svg width="20" height="14" viewBox="0 0 20 14" style="border-radius:2px;display:block"><rect width="20" height="14" fill="#E8112D"/><circle cx="10" cy="7" r="3.4" fill="#FFEF00"/></svg>
+          {% else %}
+          <svg width="20" height="14" viewBox="0 0 3 2" style="border-radius:2px;display:block"><rect width="3" height="2" fill="#fff"/><rect y=".667" width="3" height="1.333" fill="#0039A6"/><rect y="1.333" width="3" height=".667" fill="#D52B1E"/></svg>
+          {% endif %}
           <span class="hidden sm:inline">{% if LANGUAGE_CODE == 'ky' %}KY{% else %}RU{% endif %}</span>
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div x-show="lopen" x-cloak @click.outside="lopen=false" class="dropdown right-0 top-full mt-1 w-40">
-          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ru"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left {% if LANGUAGE_CODE == 'ru' %}text-indigo-600 font-bold{% endif %}">🇷🇺 Русский</button></form>
-          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ky"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left {% if LANGUAGE_CODE == 'ky' %}text-indigo-600 font-bold{% endif %}">🇰🇬 Кыргызча</button></form>
+          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ru"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left flex items-center gap-2 {% if LANGUAGE_CODE == 'ru' %}text-indigo-600 font-bold{% endif %}"><svg width="20" height="14" viewBox="0 0 3 2" style="border-radius:2px"><rect width="3" height="2" fill="#fff"/><rect y=".667" width="3" height="1.333" fill="#0039A6"/><rect y="1.333" width="3" height=".667" fill="#D52B1E"/></svg> Русский</button></form>
+          <form method="post" action="/i18n/setlang/">{% csrf_token %}<input type="hidden" name="language" value="ky"><input type="hidden" name="next" value="{{ request.path }}"><button class="w-full text-left flex items-center gap-2 {% if LANGUAGE_CODE == 'ky' %}text-indigo-600 font-bold{% endif %}"><svg width="20" height="14" viewBox="0 0 20 14" style="border-radius:2px"><rect width="20" height="14" fill="#E8112D"/><circle cx="10" cy="7" r="3.4" fill="#FFEF00"/></svg> Кыргызча</button></form>
         </div>
       </div>
 
