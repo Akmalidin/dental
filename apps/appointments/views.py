@@ -86,7 +86,7 @@ def appointment_day_grid(request):
         height = min(dur, total_min - start_min) * PX_PER_MIN
         services = ", ".join(s.name for s in a.services.all()) or (a.service.name if a.service else "—")
         block = {
-            "id": a.pk, "top": round(top, 1), "height": round(max(height, 18), 1),
+            "id": a.pk, "top": int(round(top)), "height": int(round(max(height, 18))),
             "color": STATUS_COLORS.get(a.status, "#6366F1"),
             "cancelled": a.status == "cancelled",
             "time": f"{local_start:%H:%M}–{local_end:%H:%M}",
@@ -99,15 +99,20 @@ def appointment_day_grid(request):
     if unassigned:
         columns.append({"doctor": None, "blocks": unassigned})
 
+    # позиция для авто-скролла: к первой записи дня (или 9:00)
+    all_tops = [b["top"] for col in columns for b in col["blocks"]]
+    scroll_to = max(0, (min(all_tops) - 30)) if all_tops else (9 - DAY_START) * 60
+
     return render(request, "appointments/day_grid.html", {
         "day": day,
         "prev_day": (day - timedelta(days=1)).isoformat(),
         "next_day": (day + timedelta(days=1)).isoformat(),
         "today": timezone.localdate().isoformat(),
-        "hours": [{"h": h, "top": (h - DAY_START) * 60 * PX_PER_MIN} for h in hours],
-        "grid_height": total_min * PX_PER_MIN,
+        "hours": [{"h": h, "top": int((h - DAY_START) * 60 * PX_PER_MIN)} for h in hours],
+        "grid_height": int(total_min * PX_PER_MIN),
         "columns": columns,
         "day_start": DAY_START,
+        "scroll_to": int(scroll_to),
     })
 
 

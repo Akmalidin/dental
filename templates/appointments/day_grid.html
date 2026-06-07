@@ -24,14 +24,14 @@
   </div>
 
   <!-- Grid -->
-  <div class="card" style="overflow:auto">
+  <div class="card" id="dgScroll" style="overflow:auto;max-height:72vh">
     <div style="display:flex;min-width:max-content">
       <!-- time axis -->
       <div style="width:56px;flex-shrink:0;position:relative;border-right:1px solid var(--border)">
-        <div style="height:42px;border-bottom:1px solid var(--border)"></div>
+        <div style="height:42px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:3;background:var(--surface)"></div>
         <div style="position:relative;height:{{ grid_height }}px">
           {% for hr in hours %}
-          <div style="position:absolute;top:{{ hr.top }}px;right:6px;font-size:11px;color:var(--text-faint);transform:translateY(-50%)">{{ hr.h }}:00</div>
+          <div style="position:absolute;top:{{ hr.top }}px;right:6px;font-size:11px;font-weight:600;color:var(--text-soft);transform:translateY(-50%)">{{ hr.h }}:00</div>
           {% endfor %}
         </div>
       </div>
@@ -40,13 +40,13 @@
       {% for col in columns %}
       <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border)">
         <!-- header -->
-        <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2)">
+        <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2);position:sticky;top:0;z-index:2">
           <span class="avatar w-6 h-6 text-[10px]">{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
           <span class="text-sm font-semibold truncate flex-1" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
           {% if col.doctor %}<a href="/appointments/schedule/print/?date={{ day|date:'Y-m-d' }}&doctor={{ col.doctor.pk }}" target="_blank" title="Печать расписания врача" style="color:var(--text-faint);text-decoration:none" onclick="event.stopPropagation()">🖨</a>{% endif %}
         </div>
         <!-- column body -->
-        <div style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border-2) 59px,var(--border-2) 60px)"
+        <div style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border) 59px,var(--border) 60px)"
              {% if col.doctor %}onclick="bookAt(event, {{ col.doctor.pk }})"{% endif %} title="Клик — записать">
           {% for b in col.blocks %}
           <div onclick="event.stopPropagation(); location.href='/appointments/?focus={{ b.id }}'"
@@ -68,6 +68,8 @@
 </div>
 
 <script>
+// авто-скролл к первой записи дня
+(function(){ const el = document.getElementById('dgScroll'); if (el) el.scrollTop = {{ scroll_to }}; })();
 const DAY_START = {{ day_start }};
 const DAY = '{{ day|date:"Y-m-d" }}';
 function bookAt(e, doctorId) {
