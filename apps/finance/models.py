@@ -73,14 +73,8 @@ class Payment(ClinicScopedModel):
             self._update_treatment_paid()
 
     def _update_patient_balance(self):
-        from django.db.models import Sum
-        from decimal import Decimal
-        income = self.patient.payments.filter(type=self.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-        refund = self.patient.payments.filter(type=self.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-        treatments_total = self.patient.treatments.aggregate(s=Sum("total_amount"))["s"] or Decimal(0)
-        discount_total = self.patient.treatments.aggregate(s=Sum("discount"))["s"] or Decimal(0)
-        balance = income - refund - (treatments_total - discount_total)
-        Patient.objects.filter(pk=self.patient_id).update(balance=balance)
+        if self.patient_id:
+            self.patient.recalc_balance()
 
     def _update_treatment_paid(self):
         from django.db.models import Sum

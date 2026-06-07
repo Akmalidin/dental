@@ -84,6 +84,9 @@ class Treatment(ClinicSoftDeleteModel):
         total = sum(cure.price * cure.quantity for cure in self.cures.all())
         self.total_amount = total
         self.save(update_fields=["total_amount", "updated_at"])
+        # сумма приёма изменилась → пересчитать баланс пациента
+        if self.patient_id:
+            self.patient.recalc_balance()
 
 
 class TreatmentCure(models.Model):

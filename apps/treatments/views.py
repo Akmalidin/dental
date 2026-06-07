@@ -603,6 +603,9 @@ def treatment_status(request, pk):
     if new_status in valid:
         treatment.status = new_status
         treatment.save(update_fields=["status", "updated_at"])
+        # отмена/восстановление приёма меняет баланс пациента
+        if treatment.patient_id:
+            treatment.patient.recalc_balance()
         messages.success(request, _("Статус изменён: %(s)s") % {"s": valid[new_status]})
     return redirect("treatment_detail", pk=pk)
 

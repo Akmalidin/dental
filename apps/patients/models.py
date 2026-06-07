@@ -127,3 +127,24 @@ class Patient(ClinicSoftDeleteModel):
         disc = qs.aggregate(disc=Sum("discount"))["disc"] or Decimal(0)
         paid = qs.aggregate(paid=Sum("paid_amount"))["paid"] or Decimal(0)
         return max(Decimal(0), total - disc - paid)
+
+    def recalc_balance(self):
+        """Пересчитать баланс пациента: платежи − возвраты − (сумма приёмов − скидки).
+        Считается по всем клиникам (минуя фильтр текущей клиники), отменённые приёмы не в счёт.
+        """
+        from django.db.models import Sum
+        from decimal import Decimal
+        from apps.finance.models import Payment
+        from apps.treatments.models import Treatment
+        income = (Payment.all_clinics.filter(patient_id=self.pk, type=Payment.TYPE_INCOME)
+                  .aggregate(s=Sum("amount"))["s"] or Decimal(0))
+        refund = (Payment.all_clinics.filter(patient_id=self.pk, type=Payment.TYPE_REFUND)
+                  .aggregate(s=Sum("amount"))["s"] or Decimal(0))
+        agg = (Treatment.all_objects.filter(patient_id=self.pk, is_deleted=False)
+               .exclude(status="cancelled").aggregate(tot=Sum("total_amount"), disc=Sum("discount")))
+        treatments_total = agg["tot"] or Decimal(0)
+        discount_total = agg["disc"] or Decimal(0)
+        balance = income - refund - (treatments_total - discount_total)
+        Patient.all_objects.filter(pk=self.pk).update(balance=balance)
+        self.balance = balance
+        return balance
