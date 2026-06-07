@@ -375,11 +375,14 @@ def plan_detail(request, pk):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
     doctors = clinic_doctors(get_current_clinic())
+    patient_treatments = (plan.patient.treatments.exclude(status="cancelled")
+                          .order_by("-created_at")[:50])
     return render(request, "treatments/plan_detail.html", {
         "plan": plan,
         "services_json": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),
                            "cat": s["category__name"] or ""} for s in services],
         "doctors": doctors,
+        "patient_treatments": patient_treatments,
     })
 
 
@@ -391,6 +394,24 @@ def plan_stage_add(request, pk):
     n = plan.stages.count()
     TreatmentPlanStage.objects.create(plan=plan, title=f"Этап {n+1}", sort_order=n)
     return redirect("plan_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def plan_stage_edit(request, pk):
+    """Изменить этап плана: название, продолжительность, привязанный визит (приём)."""
+    from .models_plan import TreatmentPlanStage
+    stage = get_object_or_404(TreatmentPlanStage, pk=pk)
+    title = (request.POST.get("title") or "").strip()
+    if title:
+        stage.title = title
+    dur = (request.POST.get("duration_min") or "").strip()
+    stage.duration_min = int(dur) if dur.isdigit() and int(dur) > 0 else None
+    visit_id = (request.POST.get("visit") or "").strip()
+    stage.visit_id = int(visit_id) if visit_id.isdigit() else None
+    stage.save(update_fields=["title", "duration_min", "visit"])
+    messages.success(request, _("Этап обновлён"))
+    return redirect("plan_detail", pk=stage.plan_id)
 
 
 @login_required
