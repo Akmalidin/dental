@@ -24,6 +24,7 @@ urlpatterns = [
     path("set-clinic/", views.set_active_clinic, name="set_active_clinic"),
     path("clinic/<int:clinic_id>/overview/", views.clinic_overview, name="clinic_overview"),
     path("clinic/<int:clinic_id>/site-toggle/", views.toggle_clinic_site, name="toggle_clinic_site"),
+    path("clinic/<int:clinic_id>/site/", views.clinic_site_edit, name="clinic_site_edit"),
     path("<int:pk>/access/", views.save_user_access, name="save_user_access"),
     path("recycle-bin/", views.recycle_bin, name="recycle_bin"),
     path("recycle-bin/<str:kind>/<int:pk>/restore/", views.recycle_restore, name="recycle_restore"),

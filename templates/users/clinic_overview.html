@@ -35,6 +35,7 @@
     </div>
     <div class="flex items-center gap-3">
       {% if site.enabled %}<a href="{{ public_url }}" target="_blank" class="btn btn-ghost btn-sm">Открыть сайт ↗</a>{% endif %}
+      {% if user.is_superadmin or user.is_admin_main %}<a href="/users/clinic/{{ clinic.pk }}/site/" class="btn btn-soft btn-sm">✎ Редактировать сайт</a>{% endif %}
       {% if user.is_superadmin %}
       <form method="post" action="/users/clinic/{{ clinic.pk }}/site-toggle/">
         {% csrf_token %}

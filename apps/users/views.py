@@ -348,6 +348,54 @@ def toggle_clinic_site(request, clinic_id):
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
 
+def _can_edit_site(user, clinic):
+    """Редактировать сайт: суперадмин (любую) или Директор своей клиники."""
+    return user.is_superadmin or (user.is_admin_main and user.clinic_id == clinic.pk)
+
+
+@login_required
+def clinic_site_edit(request, clinic_id):
+    """Конструктор публичного сайта клиники (суперадмин/Директор)."""
+    from apps.users.models import Clinic, ClinicSite
+    from django.conf import settings as dj_settings
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    if not _can_edit_site(request.user, clinic):
+        messages.error(request, _("Нет доступа к редактированию сайта"))
+        return redirect("/")
+    site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
+
+    if request.method == "POST":
+        text_fields = ["headline", "tagline", "about", "phone", "address", "hours",
+                       "theme_color", "whatsapp", "instagram", "telegram",
+                       "seo_title", "seo_description"]
+        for f in text_fields:
+            setattr(site, f, (request.POST.get(f) or "").strip())
+        if not site.theme_color:
+            site.theme_color = "#2563EB"
+        # тумблеры (чекбокс присутствует = True)
+        site.show_doctors = bool(request.POST.get("show_doctors"))
+        site.show_services = bool(request.POST.get("show_services"))
+        site.show_booking = bool(request.POST.get("show_booking"))
+        site.published = bool(request.POST.get("published"))
+        # изображения
+        if request.FILES.get("logo"):
+            site.logo = request.FILES["logo"]
+        if request.FILES.get("cover"):
+            site.cover = request.FILES["cover"]
+        if request.POST.get("remove_logo"):
+            site.logo = None
+        if request.POST.get("remove_cover"):
+            site.cover = None
+        site.save()
+        messages.success(request, _("Сайт сохранён"))
+        return redirect(f"/users/clinic/{clinic_id}/site/")
+
+    public_url = "https://{}.{}".format(clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+    return render(request, "users/site_edit.html", {
+        "clinic": clinic, "site": site, "public_url": public_url,
+    })
+
+
 @login_required
 @require_POST
 def save_user_access(request, pk):
