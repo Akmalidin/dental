@@ -64,3 +64,57 @@ def wa_send_text(phone, text):
 # Совместимость с возможными вызовами шаблонов — у Green-API шаблоны не нужны
 def wa_notify(phone, text, template_setting=None, params=None):
     return wa_send_text(phone, text)
+
+
+def seed_default_templates():
+    """Создать набор дефолтных шаблонов для текущей клиники (если их нет)."""
+    from apps.notifications.models import MessageTemplate
+    defaults = [
+        ("Подтверждение записи", "confirm",
+         "Здравствуйте, {имя}! Ваш приём в клинике «{клиника}» {дата} в {время} подтверждён. Ждём вас!"),
+        ("Напоминание о приёме", "reminder",
+         "Здравствуйте, {имя}! Напоминаем: завтра {дата} в {время} у вас приём в клинике «{клиника}». До встречи!"),
+        ("О задолженности", "debt",
+         "Здравствуйте, {имя}! У вас задолженность {долг} сом в клинике «{клиника}». Просьба погасить при визите. Спасибо!"),
+        ("Благодарность за визит", "manual",
+         "Здравствуйте, {имя}! Спасибо, что выбрали клинику «{клиника}». Будем рады видеть вас снова. Здоровья и красивой улыбки!"),
+        ("Поздравление с днём рождения", "birthday",
+         "Уважаемый(ая) {фио}! Клиника «{клиника}» поздравляет вас с днём рождения! 🎉 Желаем здоровья и яркой улыбки."),
+    ]
+    for name, kind, body in defaults:
+        MessageTemplate.objects.create(name=name, kind=kind, body=body)
+
+
+def render_message(body, patient=None, appt=None, amount=None):
+    """Подстановка плейсхолдеров шаблона данными пациента/записи."""
+    from django.utils import timezone
+    repl = {}
+    try:
+        from apps.settings_clinic.models import ClinicSettings
+        repl["{клиника}"] = ClinicSettings.get().name
+    except Exception:
+        repl["{клиника}"] = ""
+    if patient is not None:
+        repl["{имя}"] = patient.first_name or ""
+        repl["{фамилия}"] = patient.last_name or ""
+        repl["{фио}"] = patient.full_name
+        repl["{телефон}"] = patient.phone or ""
+        try:
+            repl["{долг}"] = str(int(patient.debt))
+        except Exception:
+            repl["{долг}"] = "0"
+        try:
+            repl["{баланс}"] = str(int(patient.balance))
+        except Exception:
+            repl["{баланс}"] = "0"
+    if appt is not None:
+        st = timezone.localtime(appt.start_at)
+        repl["{дата}"] = st.strftime("%d.%m.%Y")
+        repl["{время}"] = st.strftime("%H:%M")
+        repl["{врач}"] = appt.doctor.name if appt.doctor else ""
+    if amount is not None:
+        repl["{сумма}"] = str(int(amount))
+    out = body or ""
+    for k, v in repl.items():
+        out = out.replace(k, str(v))
+    return out

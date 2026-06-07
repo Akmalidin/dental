@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block page_title %}Шаблоны сообщений{% endblock %}
+{% block content %}
+<div class="w-full max-w-3xl space-y-5" x-data="tplPage()">
+
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h2 class="text-xl font-bold" style="color:var(--text)">Шаблоны WhatsApp-сообщений</h2>
+      <p class="muted text-sm">Используются в карточке пациента («Уведомить») и в авто-уведомлениях.</p>
+    </div>
+    <button @click="openNew()" class="btn btn-primary btn-sm">+ Новый шаблон</button>
+  </div>
+
+  <div class="card card-pad">
+    <p class="fld mb-2">Плейсхолдеры (подставятся данными пациента/записи):</p>
+    <div class="flex flex-wrap gap-2 text-xs">
+      <span class="badge badge-gray">{имя}</span><span class="badge badge-gray">{фамилия}</span>
+      <span class="badge badge-gray">{фио}</span><span class="badge badge-gray">{телефон}</span>
+      <span class="badge badge-gray">{клиника}</span><span class="badge badge-gray">{долг}</span>
+      <span class="badge badge-gray">{баланс}</span><span class="badge badge-gray">{дата}</span>
+      <span class="badge badge-gray">{время}</span><span class="badge badge-gray">{врач}</span>
+      <span class="badge badge-gray">{сумма}</span>
+    </div>
+  </div>
+
+  {{ templates_json|json_script:"tpl-data" }}
+  <div class="card overflow-hidden">
+    {% for t in templates %}
+    <div class="flex items-start gap-3 px-5 py-3" style="border-bottom:1px solid var(--border-2)">
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold" style="color:var(--text)">{{ t.name }}
+          <span class="badge badge-blue ml-1">{{ t.get_kind_display }}</span>
+          {% if not t.is_active %}<span class="badge badge-gray ml-1">выкл</span>{% endif %}</p>
+        <p class="text-sm muted mt-0.5 whitespace-pre-line">{{ t.body }}</p>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button @click="openEdit({{ t.pk }})" class="btn btn-ghost btn-sm">✎</button>
+        <form method="post" action="/notifications/templates/{{ t.pk }}/delete/" onsubmit="return confirm('Удалить шаблон?')">{% csrf_token %}<button class="btn btn-ghost btn-sm" style="color:var(--red)">🗑</button></form>
+      </div>
+    </div>
+    {% empty %}
+    <p class="px-5 py-8 text-center muted text-sm">Нет шаблонов — создайте первый.</p>
+    {% endfor %}
+  </div>
+
+  <div x-show="open" x-cloak class="modal-overlay" @click.self="open=false">
+    <div class="modal-box" style="max-width:520px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold" style="color:var(--text)" x-text="form.id ? 'Изменить шаблон' : 'Новый шаблон'"></h2>
+        <button @click="open=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" class="p-6 space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="id" :value="form.id">
+        <div><label class="fld">Название</label><input type="text" name="name" x-model="form.name" required></div>
+        <div><label class="fld">Тип</label>
+          <select name="kind" x-model="form.kind" class="no-tom">
+            {% for k, label in kinds %}<option value="{{ k }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><label class="fld">Текст сообщения</label><textarea name="body" x-model="form.body" rows="5" required></textarea></div>
+        <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" name="is_active" x-model="form.is_active"> Активен</label>
+        <div class="flex justify-end gap-3 pt-1">
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+          <button type="button" @click="open=false" class="btn btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function tplPage() {
+  return {
+    open: false, data: [],
+    form: { id:'', name:'', kind:'manual', body:'', is_active:true },
+    init() { try { this.data = JSON.parse(document.getElementById('tpl-data').textContent); } catch(e){ this.data = []; } },
+    openNew() { this.form = { id:'', name:'', kind:'manual', body:'', is_active:true }; this.open = true; },
+    openEdit(id) {
+      const t = this.data.find(x => x.id === id);
+      if (t) this.form = { id: t.id, name: t.name, kind: t.kind, body: t.body, is_active: t.is_active };
+      this.open = true;
+    },
+  };
+}
+</script>
+{% endblock %}

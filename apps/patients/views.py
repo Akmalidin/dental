@@ -121,6 +121,20 @@ def patient_detail(request, pk):
     from apps.users.models import Branch
     all_branches = Branch.objects.filter(is_active=True)
     main_branch = all_branches.filter(is_main=True).first() or all_branches.first()
+
+    # WhatsApp: шаблоны (с подстановкой данных пациента) + статус интеграции
+    from apps.notifications.models import MessageTemplate
+    from apps.notifications.whatsapp import render_message, wa_enabled, seed_default_templates
+    if not MessageTemplate.objects.exists():
+        try:
+            seed_default_templates()
+        except Exception:
+            pass
+    wa_templates = [
+        {"id": t.pk, "name": t.name, "kind": t.get_kind_display(),
+         "body": render_message(t.body, patient=patient)}
+        for t in MessageTemplate.objects.filter(is_active=True)
+    ]
     return render(request, "patients/detail.html", {
         "doc_templates": doc_templates,
         "patient": patient,
@@ -133,7 +147,30 @@ def patient_detail(request, pk):
         "doctors": doctors,
         "all_branches": all_branches,
         "main_branch": main_branch,
+        "wa_templates": wa_templates,
+        "wa_enabled": wa_enabled(),
     })
+
+
+@login_required
+@require_POST
+def patient_notify(request, pk):
+    """Отправить пациенту WhatsApp-сообщение (из меню «Уведомить»)."""
+    from django.http import JsonResponse
+    patient = get_object_or_404(Patient, pk=pk)
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"ok": False, "error": "Пустое сообщение"}, status=400)
+    if not patient.phone:
+        return JsonResponse({"ok": False, "error": "У пациента нет телефона"}, status=400)
+    from apps.notifications.whatsapp import wa_send_text, wa_enabled
+    from apps.notifications.models import WaMessage
+    if not wa_enabled():
+        return JsonResponse({"ok": False, "error": "WhatsApp не настроен"}, status=400)
+    ok = wa_send_text(patient.phone, text)
+    WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
+                             body=text, sent_by=request.user, ok=ok)
+    return JsonResponse({"ok": ok, "error": "" if ok else "Не удалось отправить (проверьте номер/инстанс)"})
 
 
 @login_required

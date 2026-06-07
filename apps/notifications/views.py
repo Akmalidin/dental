@@ -138,3 +138,49 @@ def mark_all_read(request):
     if _is_ajax(request):
         return JsonResponse({"ok": True})
     return redirect("notification_list")
+
+
+@login_required
+def message_templates(request):
+    """Управление редактируемыми шаблонами WhatsApp-сообщений."""
+    from django.contrib import messages
+    from .models import MessageTemplate
+    from .whatsapp import seed_default_templates
+    if request.method == "POST":
+        pk = request.POST.get("id")
+        name = (request.POST.get("name") or "").strip()
+        kind = request.POST.get("kind") or "manual"
+        body = (request.POST.get("body") or "").strip()
+        if name and body:
+            if pk:
+                t = MessageTemplate.objects.filter(pk=pk).first()
+                if t:
+                    t.name, t.kind, t.body = name, kind, body
+                    t.is_active = bool(request.POST.get("is_active"))
+                    t.save()
+            else:
+                MessageTemplate.objects.create(name=name, kind=kind, body=body)
+            messages.success(request, "Шаблон сохранён")
+        return redirect("message_templates")
+    if not MessageTemplate.objects.exists():
+        try:
+            seed_default_templates()
+        except Exception:
+            pass
+    tpls = list(MessageTemplate.objects.all())
+    return render(request, "notifications/templates.html", {
+        "templates": tpls,
+        "templates_json": [{"id": t.pk, "name": t.name, "kind": t.kind,
+                            "body": t.body, "is_active": t.is_active} for t in tpls],
+        "kinds": MessageTemplate.KIND_CHOICES,
+    })
+
+
+@login_required
+def message_template_delete(request, pk):
+    from django.contrib import messages
+    from .models import MessageTemplate
+    if request.method == "POST":
+        MessageTemplate.objects.filter(pk=pk).delete()
+        messages.success(request, "Шаблон удалён")
+    return redirect("message_templates")
