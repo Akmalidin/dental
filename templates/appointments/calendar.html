@@ -81,7 +81,7 @@
         <div class="card card-pad flex items-start gap-3" style="background:var(--surface-2)">
           <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-black shrink-0" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)" x-text="(av.patient_name||'?').charAt(0)"></div>
           <div class="flex-1 min-w-0">
-            <p class="font-bold" style="color:var(--text)"><span x-text="av.patient_name"></span> <span class="muted font-normal" x-show="av.patient_age" x-text="'('+av.patient_age+' лет)'"></span></p>
+            <p class="font-bold" style="color:var(--text)"><a :href="av.patient_id ? '/patients/'+av.patient_id+'/' : '#'" style="color:var(--primary)" class="hover:underline" x-text="av.patient_name"></a> <span class="muted font-normal" x-show="av.patient_age" x-text="'('+av.patient_age+' лет)'"></span></p>
             <p class="text-xs muted">ID пациента: #<span x-text="av.patient_id"></span></p>
             <div x-show="av.first_visit" class="mt-1"><span class="badge badge-green">★ Первый визит</span></div>
           </div>

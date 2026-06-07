@@ -35,7 +35,7 @@
       {% for a in stale_appointments %}
       <div class="flex items-center gap-3 px-5 py-2.5 flex-wrap" style="border-bottom:1px solid #FDE68A">
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold" style="color:var(--text)">{{ a.patient.full_name|default:"Без пациента" }} <span class="muted font-normal">· {{ a.doctor.name }}</span></p>
+          <p class="text-sm font-semibold">{% if a.patient_id %}<a href="/patients/{{ a.patient.pk }}/" style="color:var(--primary)" class="hover:underline">{{ a.patient.full_name }}</a>{% else %}<span style="color:var(--text)">Без пациента</span>{% endif %} <span class="muted font-normal">· {{ a.doctor.name }}</span></p>
           <p class="text-xs muted">{{ a.start_at|date:"d.m.Y H:i" }} · {{ a.get_status_display }}</p>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
