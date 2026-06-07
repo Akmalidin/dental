@@ -825,21 +825,22 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
   </div>
 
   <!-- Notify (WhatsApp) modal -->
-  {{ wa_templates|json_script:"wa-templates" }}
   <div x-show="notifyOpen" x-cloak class="modal-overlay" @click.self="notifyOpen=false" style="z-index:80">
     <div class="modal-box" style="max-width:480px">
       <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
         <h2 class="font-bold" style="color:var(--text)">Уведомить в WhatsApp</h2>
-        <button @click="notifyOpen=false" class="text-2xl muted">&times;</button>
+        <button type="button" @click="notifyOpen=false" class="text-2xl muted">&times;</button>
       </div>
       <div class="p-6 space-y-3">
         {% if not wa_enabled %}<div class="badge-orange px-3 py-2 rounded-xl text-sm">WhatsApp ещё не настроен — обратитесь к администратору.</div>{% endif %}
         <div>
           <label class="fld">Шаблон</label>
           <div class="flex flex-wrap gap-2">
-            <template x-for="t in waTemplates" :key="t.id">
-              <button type="button" @click="notifyText=t.body" class="btn btn-soft btn-sm" x-text="t.name"></button>
-            </template>
+            {% for t in wa_templates %}
+            <button type="button" @click="notifyText = '{{ t.body|escapejs }}'" class="btn btn-soft btn-sm">{{ t.name }}</button>
+            {% empty %}
+            <span class="text-xs muted">Нет шаблонов</span>
+            {% endfor %}
           </div>
           <a href="/notifications/templates/" class="text-xs" style="color:var(--primary)">⚙ Управление шаблонами</a>
         </div>
@@ -870,11 +871,6 @@ function patientDetail() {
     showPayment: false,
     showCashier: false,
     notifyOpen: false, notifyText: '', notifySending: false, notifyErr: '',
-    waTemplates: [],
-    init() {
-      try { this.waTemplates = JSON.parse(document.getElementById('wa-templates').textContent); }
-      catch(e) { this.waTemplates = []; }
-    },
     async sendNotify() {
       const text = this.notifyText.trim();
       if (!text) return;
