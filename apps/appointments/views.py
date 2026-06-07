@@ -354,6 +354,20 @@ def appointment_status(request, pk):
         else:
             appt.save(update_fields=["status"])
         messages.success(request, _("Статус записи изменён"))
+        # WhatsApp пациенту при подтверждении приёма (Green-API; если включено в env)
+        if (new_status == Appointment.STATUS_CONFIRMED
+                and appt.patient_id and appt.patient.phone):
+            try:
+                from apps.notifications.whatsapp import wa_send_text
+                from apps.settings_clinic.models import ClinicSettings
+                from django.utils import timezone as _tz
+                st = _tz.localtime(appt.start_at)
+                wa_send_text(appt.patient.phone,
+                             "Здравствуйте, %s! Ваш приём в клинике «%s» подтверждён на %s в %s. Ждём вас!"
+                             % (appt.patient.first_name or appt.patient.full_name,
+                                ClinicSettings.get().name, st.strftime("%d.%m.%Y"), st.strftime("%H:%M")))
+            except Exception:
+                pass
     return redirect("appointment_list")
 
 

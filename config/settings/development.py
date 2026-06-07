@@ -190,6 +190,12 @@ X_FRAME_OPTIONS = "SAMEORIGIN"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 AXES_ENABLED = False
 
+# ─── WhatsApp (Green-API) — ключи только из env, не в репозиторий ─────────────
+GREENAPI_ENABLED = os.environ.get("GREENAPI_ENABLED", "") == "1"
+GREENAPI_ID_INSTANCE = os.environ.get("GREENAPI_ID_INSTANCE", "")
+GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
+GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
+
 # ─── Публичные сайты клиник (поддомены) ──────────────────────────────────────
 APP_HOST = "app.denta.tw1.ru"           # хост CRM-системы
 PUBLIC_BASE_DOMAIN = "denta.tw1.ru"     # <slug>.denta.tw1.ru → публичный сайт клиники

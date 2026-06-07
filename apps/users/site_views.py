@@ -175,4 +175,16 @@ def public_book_submit(request):
     except Exception:
         pass
 
+    # WhatsApp (Green-API) — пациенту и врачу. Работает только если включено в env.
+    try:
+        from apps.notifications.whatsapp import wa_send_text
+        dt = "%s %s" % (d.strftime("%d.%m.%Y"), slot)
+        wa_send_text(phone, "Здравствуйте, %s! Ваша заявка в клинику «%s» на %s принята. "
+                            "Мы свяжемся с вами для подтверждения." % (name, clinic.name, dt))
+        doc = User.objects.filter(pk=doctor_id).first()
+        if doc and doc.phone:
+            wa_send_text(doc.phone, "Новая заявка с сайта: %s, %s — %s." % (name, phone, dt))
+    except Exception:
+        pass
+
     return JsonResponse({"ok": True})
