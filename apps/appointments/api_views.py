@@ -89,7 +89,7 @@ def available_slots(request):
     existing = Appointment.objects.filter(
         doctor_id=doctor_id,
         start_at__date=date,
-    ).exclude(status="cancelled").values_list("start_at", "end_at")
+    ).exclude(status__in=["cancelled", "no_show"]).values_list("start_at", "end_at")
 
     start_hour, end_hour = 9, 18
     slot_minutes = 30

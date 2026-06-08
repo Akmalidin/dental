@@ -38,7 +38,7 @@ class AppointmentForm(forms.ModelForm):
                 raise forms.ValidationError("Время окончания должно быть позже начала")
             qs = Appointment.objects.filter(
                 doctor=doctor, start_at__lt=end, end_at__gt=start,
-            ).exclude(status=Appointment.STATUS_CANCELLED)
+            ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW])
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             clash = qs.first()

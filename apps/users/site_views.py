@@ -93,7 +93,7 @@ def public_slots(request):
     from apps.appointments.models import Appointment
     taken = set()
     for a in (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id, start_at__date=d)
-              .exclude(status="cancelled")):
+              .exclude(status__in=["cancelled", "no_show"])):
         taken.add(timezone.localtime(a.start_at).hour)
     now = timezone.localtime()
     slots = []
@@ -139,7 +139,7 @@ def public_book_submit(request):
     start = timezone.make_aware(datetime.combine(d, dtime(hour=hh)))
     end = start + timedelta(hours=SLOT_HOURS)
     clash = (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id,
-             start_at__lt=end, end_at__gt=start).exclude(status="cancelled").exists())
+             start_at__lt=end, end_at__gt=start).exclude(status__in=["cancelled", "no_show"]).exists())
     if clash:
         return JsonResponse({"ok": False, "error": "Это время уже занято, выберите другое"}, status=409)
 
@@ -154,9 +154,12 @@ def public_book_submit(request):
                           phone=phone, branch=branch)
         patient.save()
 
+    note = "Заявка с сайта"
+    if name and patient.full_name.strip().lower() != name.strip().lower():
+        note += " (на сайте указано имя: %s)" % name
     appt = Appointment(patient=patient, doctor_id=doctor_id, branch=branch,
                        start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED,
-                       source="online", notes="Заявка с сайта")
+                       source="online", notes=note)
     if service_id:
         appt.service_id = service_id
     appt.save()
@@ -170,20 +173,20 @@ def public_book_submit(request):
                           | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN])).distinct())
         for u in admins:
             Notification.send(u, "Новая заявка с сайта",
-                              "%s, %s — %s %s" % (name, phone, d.strftime("%d.%m.%Y"), slot),
+                              "%s, %s — %s %s" % (patient.full_name, phone, d.strftime("%d.%m.%Y"), slot),
                               type="appointment", link="/calendar/")
     except Exception:
         pass
 
-    # WhatsApp (Green-API) — пациенту и врачу. Работает только если включено в env.
+    # WhatsApp (Green-API) — пациенту и врачу. Имя берём из карточки пациента (как в расписании).
     try:
         from apps.notifications.whatsapp import wa_send_text
         dt = "%s %s" % (d.strftime("%d.%m.%Y"), slot)
         wa_send_text(phone, "Здравствуйте, %s! Ваша заявка в клинику «%s» на %s принята. "
-                            "Мы свяжемся с вами для подтверждения." % (name, clinic.name, dt))
+                            "Мы свяжемся с вами для подтверждения." % (patient.first_name or patient.full_name, clinic.name, dt))
         doc = User.objects.filter(pk=doctor_id).first()
         if doc and doc.phone:
-            wa_send_text(doc.phone, "Новая заявка с сайта: %s, %s — %s." % (name, phone, dt))
+            wa_send_text(doc.phone, "Новая заявка с сайта: %s, %s — %s." % (patient.full_name, phone, dt))
     except Exception:
         pass
 

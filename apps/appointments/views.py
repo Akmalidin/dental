@@ -203,7 +203,7 @@ def appointment_create_quick(request):
         # Prevent double-booking: doctor can't have overlapping appointments
         overlap = Appointment.objects.filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
-        ).exclude(status=Appointment.STATUS_CANCELLED).first()
+        ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
             return JsonResponse({
                 "error": "У врача уже есть запись на это время (%s–%s). Выберите другое время." % (
@@ -354,7 +354,7 @@ def appointment_move(request, pk):
             end = _tz.make_aware(end)
         overlap = Appointment.objects.filter(
             doctor=appt.doctor, start_at__lt=end, end_at__gt=start,
-        ).exclude(pk=pk).exclude(status=Appointment.STATUS_CANCELLED).exists()
+        ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).exists()
         if overlap:
             return JsonResponse({"error": "Пересечение с другой записью этого врача"}, status=400)
         appt.start_at = start
