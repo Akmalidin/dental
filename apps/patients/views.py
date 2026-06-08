@@ -153,24 +153,40 @@ def patient_detail(request, pk):
 
 
 @login_required
-@require_POST
 def patient_notify(request, pk):
-    """Отправить пациенту WhatsApp-сообщение (из меню «Уведомить»)."""
-    from django.http import JsonResponse
+    """Отдельная страница: отправить пациенту WhatsApp-сообщение."""
     patient = get_object_or_404(Patient, pk=pk)
-    text = (request.POST.get("text") or "").strip()
-    if not text:
-        return JsonResponse({"ok": False, "error": "Пустое сообщение"}, status=400)
-    if not patient.phone:
-        return JsonResponse({"ok": False, "error": "У пациента нет телефона"}, status=400)
-    from apps.notifications.whatsapp import wa_send_text, wa_enabled
-    from apps.notifications.models import WaMessage
-    if not wa_enabled():
-        return JsonResponse({"ok": False, "error": "WhatsApp не настроен"}, status=400)
-    ok = wa_send_text(patient.phone, text)
-    WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
-                             body=text, sent_by=request.user, ok=ok)
-    return JsonResponse({"ok": ok, "error": "" if ok else "Не удалось отправить (проверьте номер/инстанс)"})
+    from apps.notifications.whatsapp import wa_send_text, wa_enabled, render_message
+    from apps.notifications.models import MessageTemplate, WaMessage
+
+    if request.method == "POST":
+        text = (request.POST.get("text") or "").strip()
+        if not text:
+            messages.error(request, _("Введите текст сообщения"))
+        elif not patient.phone:
+            messages.error(request, _("У пациента нет телефона"))
+        elif not wa_enabled():
+            messages.error(request, _("WhatsApp не настроен"))
+        else:
+            ok = wa_send_text(patient.phone, text)
+            WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
+                                     body=text, sent_by=request.user, ok=ok)
+            if ok:
+                messages.success(request, _("Сообщение отправлено в WhatsApp"))
+                return redirect("patient_detail", pk=pk)
+            messages.error(request, _("Не удалось отправить (проверьте номер/инстанс)"))
+
+    if not MessageTemplate.objects.exists():
+        from apps.notifications.whatsapp import seed_default_templates
+        try:
+            seed_default_templates()
+        except Exception:
+            pass
+    tpls = [{"name": t.name, "body": render_message(t.body, patient=patient)}
+            for t in MessageTemplate.objects.filter(is_active=True)]
+    return render(request, "patients/notify.html", {
+        "patient": patient, "wa_templates": tpls, "wa_enabled": wa_enabled(),
+    })
 
 
 @login_required

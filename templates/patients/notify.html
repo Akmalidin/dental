@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block page_title %}Уведомить — {{ patient.full_name }}{% endblock %}
+{% block content %}
+<div class="w-full max-w-xl space-y-4">
+
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h2 class="text-xl font-bold" style="color:var(--text)">Уведомить в WhatsApp</h2>
+      <p class="muted text-sm">{{ patient.full_name }} · {{ patient.phone|default:"нет телефона" }}</p>
+    </div>
+    <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost btn-sm">← Назад</a>
+  </div>
+
+  {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
+  {% if not patient.phone %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">У пациента не указан телефон.</div>{% endif %}
+
+  <form method="post" class="card card-pad space-y-3">
+    {% csrf_token %}
+    <div>
+      <label class="fld">Шаблон (нажмите, чтобы вставить)</label>
+      <div class="flex flex-wrap gap-2">
+        {% for t in wa_templates %}
+        <button type="button" data-body="{{ t.body }}"
+                onclick="document.getElementById('notifyText').value = this.dataset.body"
+                class="btn btn-soft btn-sm">{{ t.name }}</button>
+        {% empty %}
+        <span class="muted text-sm">Нет шаблонов</span>
+        {% endfor %}
+      </div>
+      <a href="/notifications/templates/" class="text-xs" style="color:var(--primary)">⚙ Управление шаблонами</a>
+    </div>
+
+    <div>
+      <label class="fld">Текст сообщения</label>
+      <textarea id="notifyText" name="text" rows="7" placeholder="Выберите шаблон выше или напишите текст..."></textarea>
+      <p class="text-xs muted mt-1">Форматирование WhatsApp: *жирный*, _курсив_, ~зачёркнутый~.</p>
+    </div>
+
+    <div class="flex justify-end gap-2">
+      <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost">Отмена</a>
+      <button type="submit" class="btn text-white" style="background:#25D366"
+              {% if not patient.phone or not wa_enabled %}disabled{% endif %}>✓ Отправить в WhatsApp</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
