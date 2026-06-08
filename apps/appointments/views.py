@@ -390,9 +390,17 @@ def appointment_status(request, pk):
                 from django.utils import timezone as _tz
                 st = _tz.localtime(appt.start_at)
                 wa_send_text(appt.patient.phone,
-                             "Здравствуйте, %s! Ваш приём в клинике «%s» подтверждён на %s в %s. Ждём вас!"
-                             % (appt.patient.first_name or appt.patient.full_name,
-                                ClinicSettings.get().name, st.strftime("%d.%m.%Y"), st.strftime("%H:%M")))
+                             "✅ *%s*\n\n"
+                             "Здравствуйте, *%s*!\n"
+                             "Ваш приём *подтверждён* 🎉\n\n"
+                             "📅 Дата: *%s*\n"
+                             "🕐 Время: *%s*\n"
+                             "👨‍⚕️ Врач: _%s_\n\n"
+                             "Ждём вас! 💙 Если планы изменятся — позвоните нам."
+                             % (ClinicSettings.get().name,
+                                appt.patient.first_name or appt.patient.full_name,
+                                st.strftime("%d.%m.%Y"), st.strftime("%H:%M"),
+                                appt.doctor.name if appt.doctor else "—"))
             except Exception:
                 pass
     return redirect("appointment_list")

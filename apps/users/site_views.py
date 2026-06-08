@@ -181,12 +181,28 @@ def public_book_submit(request):
     # WhatsApp (Green-API) — пациенту и врачу. Имя берём из карточки пациента (как в расписании).
     try:
         from apps.notifications.whatsapp import wa_send_text
-        dt = "%s %s" % (d.strftime("%d.%m.%Y"), slot)
-        wa_send_text(phone, "Здравствуйте, %s! Ваша заявка в клинику «%s» на %s принята. "
-                            "Мы свяжемся с вами для подтверждения." % (patient.first_name or patient.full_name, clinic.name, dt))
-        doc = User.objects.filter(pk=doctor_id).first()
+        from django.conf import settings as dj_settings
+        d_str, doc = d.strftime("%d.%m.%Y"), User.objects.filter(pk=doctor_id).first()
+        doc_name = doc.name if doc else "—"
+        wa_send_text(phone,
+            "🦷 *%s*\n\n"
+            "Здравствуйте, *%s*! 👋\n"
+            "Ваша заявка на приём принята ✅\n\n"
+            "📅 Дата: *%s*\n"
+            "🕐 Время: *%s*\n"
+            "👨‍⚕️ Врач: _%s_\n\n"
+            "Мы свяжемся с вами для подтверждения. Спасибо, что выбрали нас! 💙"
+            % (clinic.name, patient.first_name or patient.full_name, d_str, slot, doc_name))
         if doc and doc.phone:
-            wa_send_text(doc.phone, "Новая заявка с сайта: %s, %s — %s." % (patient.full_name, phone, dt))
+            link = "https://%s/appointments/?focus=%s" % (
+                getattr(dj_settings, "APP_HOST", "app.denta.tw1.ru"), appt.pk)
+            wa_send_text(doc.phone,
+                "🔔 *Новая заявка с сайта*\n\n"
+                "👤 Пациент: *%s*\n"
+                "📞 Телефон: %s\n"
+                "📅 *%s*  🕐 *%s*\n\n"
+                "🔗 Открыть запись:\n%s"
+                % (patient.full_name, phone, d_str, slot, link))
     except Exception:
         pass
 
