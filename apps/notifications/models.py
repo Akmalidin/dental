@@ -9,7 +9,8 @@ class MessageTemplate(ClinicScopedModel):
     KIND_CHOICES = [
         ("manual", "Произвольное"),
         ("appointment", "О записи"),
-        ("reminder", "Напоминание о приёме"),
+        ("reminder", "Напоминание о приёме (за день)"),
+        ("reminder_hour", "Напоминание (за час)"),
         ("confirm", "Подтверждение записи"),
         ("debt", "О задолженности"),
         ("birthday", "Поздравление"),

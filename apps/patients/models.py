@@ -80,6 +80,7 @@ class Patient(ClinicSoftDeleteModel):
     )
 
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Баланс (сом)")
+    last_debt_reminder = models.DateTimeField(null=True, blank=True, verbose_name="Последнее напоминание о долге")
     notes = models.TextField(blank=True, verbose_name="Заметки")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

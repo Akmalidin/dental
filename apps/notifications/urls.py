@@ -13,4 +13,5 @@ urlpatterns = [
     path("wa-webhook/", views.wa_webhook, name="wa_webhook"),
     path("wa-inbox/", views.wa_inbox, name="wa_inbox"),
     path("wa-broadcast/", views.wa_broadcast, name="wa_broadcast"),
+    path("wa-settings/", views.wa_settings, name="wa_settings"),
 ]

@@ -38,5 +38,27 @@
   </form>
 
   <p class="text-xs muted">⚠️ Рассылка уходит сразу всем выбранным (до 500 за раз). Соблюдайте лимиты WhatsApp и не злоупотребляйте рассылками — иначе номер могут заблокировать.</p>
+
+  <!-- Авто-напоминания -->
+  <div class="card card-pad space-y-3">
+    <h3 class="font-bold" style="color:var(--text)">🔔 Авто-напоминания</h3>
+    <p class="text-xs muted">Отправляются автоматически по расписанию. Тексты — в «⚙ Шаблоны» (типы «за день», «за час», «о задолженности»).</p>
+    <form method="post" action="/notifications/wa-settings/" class="space-y-3">
+      {% csrf_token %}
+      <label class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl" style="border:1px solid var(--border)">
+        <span style="color:var(--text)">Напоминать <b>за день</b> до приёма</span>
+        <input type="checkbox" name="wa_remind_day" {% if cs.wa_remind_day %}checked{% endif %}>
+      </label>
+      <label class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl" style="border:1px solid var(--border)">
+        <span style="color:var(--text)">Напоминать <b>за час</b> до приёма</span>
+        <input type="checkbox" name="wa_remind_hour" {% if cs.wa_remind_hour %}checked{% endif %}>
+      </label>
+      <div>
+        <label class="fld">Напоминать должникам каждые (дней), 0 — выключить</label>
+        <input type="number" name="wa_remind_debt_days" min="0" value="{{ cs.wa_remind_debt_days }}" style="max-width:140px">
+      </div>
+      <div class="flex justify-end"><button type="submit" class="btn btn-primary btn-sm">Сохранить настройки</button></div>
+    </form>
+  </div>
 </div>
 {% endblock %}

@@ -23,6 +23,10 @@ class ClinicSettings(models.Model):
     language = models.CharField(max_length=5, default="ru", verbose_name="Язык")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
+    # WhatsApp авто-напоминания
+    wa_remind_day = models.BooleanField(default=True, verbose_name="Напоминать за день до приёма")
+    wa_remind_hour = models.BooleanField(default=True, verbose_name="Напоминать за час до приёма")
+    wa_remind_debt_days = models.PositiveIntegerField(default=7, verbose_name="Напоминать должникам каждые N дней (0 — выкл)")
     # Tariff / feature flags: list of enabled module keys. Empty = all enabled.
     enabled_modules = models.JSONField(default=list, blank=True, verbose_name="Доступные модули (тариф)")
     tariff_plan = models.CharField(max_length=50, default="full", blank=True, verbose_name="Тарифный план")

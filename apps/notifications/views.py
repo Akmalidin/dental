@@ -327,10 +327,31 @@ def wa_broadcast(request):
         messages.success(request, "Рассылка завершена. Отправлено: %s, ошибок: %s" % (sent, failed))
         return redirect("wa_broadcast")
 
+    from apps.settings_clinic.models import ClinicSettings
     return render(request, "notifications/wa_broadcast.html", {
         "templates": MessageTemplate.objects.filter(is_active=True),
         "wa_enabled": wa_enabled(),
         "count_all": _broadcast_patients("all").count(),
         "count_debtors": _broadcast_patients("debtors").count(),
         "count_upcoming": _broadcast_patients("upcoming").count(),
+        "cs": ClinicSettings.get(),
     })
+
+
+@login_required
+def wa_settings(request):
+    """Сохранить настройки авто-напоминаний текущей клиники."""
+    from django.contrib import messages
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    cs.wa_remind_day = bool(request.POST.get("wa_remind_day"))
+    cs.wa_remind_hour = bool(request.POST.get("wa_remind_hour"))
+    try:
+        cs.wa_remind_debt_days = max(0, int(request.POST.get("wa_remind_debt_days") or 0))
+    except (TypeError, ValueError):
+        cs.wa_remind_debt_days = 0
+    cs.save(update_fields=["wa_remind_day", "wa_remind_hour", "wa_remind_debt_days"])
+    messages.success(request, "Настройки напоминаний сохранены")
+    return redirect("wa_broadcast")
