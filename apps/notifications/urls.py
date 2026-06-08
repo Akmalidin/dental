@@ -10,4 +10,5 @@ urlpatterns = [
     path("read-all/", views.mark_all_read, name="notification_mark_all_read"),
     path("templates/", views.message_templates, name="message_templates"),
     path("templates/<int:pk>/delete/", views.message_template_delete, name="message_template_delete"),
+    path("wa-webhook/", views.wa_webhook, name="wa_webhook"),
 ]

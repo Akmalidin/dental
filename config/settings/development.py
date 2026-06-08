@@ -195,6 +195,7 @@ GREENAPI_ENABLED = os.environ.get("GREENAPI_ENABLED", "") == "1"
 GREENAPI_ID_INSTANCE = os.environ.get("GREENAPI_ID_INSTANCE", "")
 GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
 GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
+GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
 
 # ─── Публичные сайты клиник (поддомены) ──────────────────────────────────────
 APP_HOST = "app.denta.tw1.ru"           # хост CRM-системы

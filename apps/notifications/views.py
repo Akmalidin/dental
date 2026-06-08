@@ -184,3 +184,43 @@ def message_template_delete(request, pk):
         MessageTemplate.objects.filter(pk=pk).delete()
         messages.success(request, "Шаблон удалён")
     return redirect("message_templates")
+
+
+@csrf_exempt
+def wa_webhook(request):
+    """Webhook Green-API: входящие WhatsApp-сообщения → WaMessage(direction=in)."""
+    from django.conf import settings as dj
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    key = getattr(dj, "GREENAPI_WEBHOOK_KEY", "")
+    if key and request.GET.get("key") != key:
+        return HttpResponse("forbidden", status=403)
+    try:
+        data = json.loads(request.body or b"{}")
+    except Exception:
+        return HttpResponse("bad", status=400)
+    if data.get("typeWebhook") == "incomingMessageReceived":
+        md = data.get("messageData", {}) or {}
+        tm = md.get("typeMessage")
+        text = ""
+        if tm == "textMessage":
+            text = (md.get("textMessageData") or {}).get("textMessage", "")
+        elif tm in ("extendedTextMessage", "quotedMessage"):
+            text = (md.get("extendedTextMessageData") or {}).get("text", "")
+        chat_id = (data.get("senderData") or {}).get("chatId", "") or ""
+        phone = chat_id.split("@")[0]
+        if text and phone:
+            import re
+            from apps.patients.models import Patient
+            from apps.notifications.models import WaMessage
+            from apps.tenancy import unscoped
+            digits = re.sub(r"\D", "", phone)
+            tail = digits[-9:] if len(digits) >= 9 else digits
+            with unscoped():
+                patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
+                           .order_by("-id").first() if tail else None)
+                m = WaMessage(patient=patient, direction="in", phone=phone, body=text)
+                if patient is not None:
+                    m.clinic = patient.clinic
+                m.save()
+    return JsonResponse({"ok": True})

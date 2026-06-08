@@ -1,46 +1,58 @@
 {% extends "base.html" %}
-{% block page_title %}Уведомить — {{ patient.full_name }}{% endblock %}
+{% block page_title %}Чат — {{ patient.full_name }}{% endblock %}
 {% block content %}
-<div class="w-full max-w-xl space-y-4">
+<div class="w-full max-w-2xl space-y-4">
 
   <div class="flex items-center justify-between flex-wrap gap-2">
     <div>
-      <h2 class="text-xl font-bold" style="color:var(--text)">Уведомить в WhatsApp</h2>
+      <h2 class="text-xl font-bold" style="color:var(--text)">💬 WhatsApp-чат</h2>
       <p class="muted text-sm">{{ patient.full_name }} · {{ patient.phone|default:"нет телефона" }}</p>
     </div>
-    <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost btn-sm">← Назад</a>
+    <div class="flex gap-2">
+      <a href="/patients/{{ patient.pk }}/notify/" class="btn btn-ghost btn-sm">🔄 Обновить</a>
+      <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost btn-sm">← Назад</a>
+    </div>
   </div>
 
   {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
   {% if not patient.phone %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">У пациента не указан телефон.</div>{% endif %}
 
+  <!-- Лента переписки -->
+  <div class="card" style="padding:16px">
+    <div id="waThread" style="max-height:48vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+      {% for m in wa_history %}
+      <div style="align-self:{% if m.direction == 'out' %}flex-end{% else %}flex-start{% endif %};max-width:78%">
+        <div style="padding:8px 12px;border-radius:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;
+                    {% if m.direction == 'out' %}background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px{% else %}background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px{% endif %}">{{ m.body }}</div>
+        <div class="text-xs muted" style="text-align:{% if m.direction == 'out' %}right{% else %}left{% endif %};margin-top:2px">
+          {% if m.direction == 'out' %}{% if m.ok %}✓{% else %}✕{% endif %} {% if m.sent_by %}{{ m.sent_by.name }} · {% endif %}{% endif %}{{ m.created_at|date:"d.m H:i" }}
+        </div>
+      </div>
+      {% empty %}
+      <p class="muted text-sm text-center py-6">Сообщений пока нет. Напишите первым ниже.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Отправка -->
   <form method="post" class="card card-pad space-y-3">
     {% csrf_token %}
     <div>
-      <label class="fld">Шаблон (нажмите, чтобы вставить)</label>
       <div class="flex flex-wrap gap-2">
         {% for t in wa_templates %}
         <button type="button" data-body="{{ t.body }}"
                 onclick="document.getElementById('notifyText').value = this.dataset.body"
                 class="btn btn-soft btn-sm">{{ t.name }}</button>
-        {% empty %}
-        <span class="muted text-sm">Нет шаблонов</span>
         {% endfor %}
+        <a href="/notifications/templates/" class="btn btn-ghost btn-sm">⚙ Шаблоны</a>
       </div>
-      <a href="/notifications/templates/" class="text-xs" style="color:var(--primary)">⚙ Управление шаблонами</a>
     </div>
-
-    <div>
-      <label class="fld">Текст сообщения</label>
-      <textarea id="notifyText" name="text" rows="7" placeholder="Выберите шаблон выше или напишите текст..."></textarea>
-      <p class="text-xs muted mt-1">Форматирование WhatsApp: *жирный*, _курсив_, ~зачёркнутый~.</p>
-    </div>
-
-    <div class="flex justify-end gap-2">
-      <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost">Отмена</a>
+    <textarea id="notifyText" name="text" rows="3" placeholder="Сообщение... (*жирный*, _курсив_)"></textarea>
+    <div class="flex justify-end">
       <button type="submit" class="btn text-white" style="background:#25D366"
-              {% if not patient.phone or not wa_enabled %}disabled{% endif %}>✓ Отправить в WhatsApp</button>
+              {% if not patient.phone or not wa_enabled %}disabled{% endif %}>✓ Отправить</button>
     </div>
   </form>
 </div>
+<script>(function(){var t=document.getElementById('waThread'); if(t) t.scrollTop=t.scrollHeight;})();</script>
 {% endblock %}
