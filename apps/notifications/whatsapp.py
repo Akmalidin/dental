@@ -144,6 +144,4 @@ def render_message(body, patient=None, appt=None, amount=None):
     out = re.sub(r"\{[А-Яа-яёЁ]+\}", "", out)
     out = re.sub(r"\*\s*\*", "", out)   # пустой *жирный*
     out = re.sub(r"_\s*_", "", out)     # пустой _курсив_
-    # убрать строки, где осталась только подпись без значения (напр. "Дата: ")
-    out = re.sub(r"(?m)^.*:\s*$\n?", "", out)
     return out
