@@ -139,7 +139,11 @@ def render_message(body, patient=None, appt=None, amount=None):
     out = body or ""
     for k, v in repl.items():
         out = out.replace(k, str(v))
-    # убрать незаполненные плейсхолдеры (например {врач} при ручной отправке без записи)
+    # убрать незаполненные плейсхолдеры и пустые маркеры форматирования
     import re
     out = re.sub(r"\{[А-Яа-яёЁ]+\}", "", out)
+    out = re.sub(r"\*\s*\*", "", out)   # пустой *жирный*
+    out = re.sub(r"_\s*_", "", out)     # пустой _курсив_
+    # убрать строки, где осталась только подпись без значения (напр. "Дата: ")
+    out = re.sub(r"(?m)^.*:\s*$\n?", "", out)
     return out

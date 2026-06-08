@@ -54,5 +54,36 @@
     </div>
   </form>
 </div>
-<script>(function(){var t=document.getElementById('waThread'); if(t) t.scrollTop=t.scrollHeight;})();</script>
+<script>
+(function(){
+  var thread = document.getElementById('waThread');
+  if(!thread) return;
+  thread.scrollTop = thread.scrollHeight;
+  var lastId = {{ last_id }}, pid = {{ patient.pk }};
+  function bubble(m){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'align-self:'+(m.dir==='out'?'flex-end':'flex-start')+';max-width:78%';
+    var b = document.createElement('div');
+    b.style.cssText = 'padding:8px 12px;border-radius:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;'+(m.dir==='out'?'background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px':'background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px');
+    b.textContent = m.body;
+    var meta = document.createElement('div');
+    meta.className = 'text-xs muted';
+    meta.style.cssText = 'text-align:'+(m.dir==='out'?'right':'left')+';margin-top:2px';
+    meta.textContent = (m.dir==='out'?(m.ok?'✓ ':'✕ ')+(m.by?m.by+' · ':''):'')+m.time;
+    wrap.appendChild(b); wrap.appendChild(meta); thread.appendChild(wrap);
+  }
+  async function poll(){
+    try{
+      var r = await fetch('/patients/'+pid+'/wa-messages/?after='+lastId);
+      var j = await r.json();
+      if(j.messages && j.messages.length){
+        var atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
+        j.messages.forEach(function(m){ bubble(m); lastId = m.id; });
+        if(atBottom) thread.scrollTop = thread.scrollHeight;
+      }
+    }catch(e){}
+  }
+  setInterval(poll, 8000);
+})();
+</script>
 {% endblock %}

@@ -182,13 +182,37 @@ def patient_notify(request, pk):
             seed_default_templates()
         except Exception:
             pass
-    tpls = [{"name": t.name, "body": render_message(t.body, patient=patient)}
+    # ближайший будущий приём пациента — для подстановки {дата}/{время}/{врач} в шаблоны
+    from apps.appointments.models import Appointment
+    from django.utils import timezone
+    next_appt = (Appointment.objects.filter(patient=patient, start_at__gte=timezone.now())
+                 .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
+    tpls = [{"name": t.name, "body": render_message(t.body, patient=patient, appt=next_appt)}
             for t in MessageTemplate.objects.filter(is_active=True)]
     history = list(WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300])
     return render(request, "patients/notify.html", {
         "patient": patient, "wa_templates": tpls, "wa_enabled": wa_enabled(),
-        "wa_history": history,
+        "wa_history": history, "last_id": history[-1].id if history else 0,
     })
+
+
+@login_required
+def patient_wa_messages(request, pk):
+    """JSON новых сообщений чата для авто-обновления."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    patient = get_object_or_404(Patient, pk=pk)
+    from apps.notifications.models import WaMessage
+    after = request.GET.get("after") or 0
+    try:
+        after = int(after)
+    except (TypeError, ValueError):
+        after = 0
+    qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
+    msgs = [{"id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok,
+             "by": m.sent_by.name if m.sent_by else "",
+             "time": timezone.localtime(m.created_at).strftime("%d.%m %H:%M")} for m in qs]
+    return JsonResponse({"messages": msgs})
 
 
 @login_required
