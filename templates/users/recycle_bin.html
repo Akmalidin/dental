@@ -7,6 +7,12 @@
     <h3 class="font-bold">Корзина</h3>
     <p class="muted text-sm mt-0.5">Удалённые записи можно восстановить или удалить безвозвратно.</p>
   </div>
+  <div class="px-5 py-3 flex flex-wrap gap-2" style="border-bottom:1px solid var(--border)">
+    <a href="/users/recycle-bin/" class="pill-tab {% if not current_kind %}active{% endif %}">Все ({{ total }})</a>
+    {% for c in cats %}
+    <a href="?kind={{ c.kind }}" class="pill-tab {% if current_kind == c.kind %}active{% endif %}">{{ c.label }} ({{ c.count }})</a>
+    {% endfor %}
+  </div>
   <table class="tbl">
     <thead><tr><th>Тип</th><th>Запись</th><th>Удалено</th><th>Кем</th><th class="text-right pr-5">Действия</th></tr></thead>
     <tbody>

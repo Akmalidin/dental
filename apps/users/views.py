@@ -211,16 +211,26 @@ def _recycle_qs(Model):
 @login_required
 @role_required("superadmin", "admin_main", "admin")
 def recycle_bin(request):
-    items = []
-    for kind, (Model, label) in _recycle_models().items():
-        for obj in _recycle_qs(Model).order_by("-deleted_at")[:200]:
+    models = _recycle_models()
+    current = request.GET.get("kind", "")
+    items, counts = [], {}
+    for kind, (Model, label) in models.items():
+        qs = _recycle_qs(Model)
+        counts[kind] = qs.count()
+        if current and current != kind:
+            continue
+        for obj in qs.order_by("-deleted_at")[:300]:
             items.append({
                 "kind": kind, "label": label, "pk": obj.pk,
                 "title": str(obj), "deleted_at": obj.deleted_at,
                 "deleted_by": obj.deleted_by,
             })
     items.sort(key=lambda x: x["deleted_at"] or 0, reverse=True)
-    return render(request, "users/recycle_bin.html", {"items": items})
+    cats = [{"kind": k, "label": models[k][1], "count": counts.get(k, 0)} for k in models]
+    return render(request, "users/recycle_bin.html", {
+        "items": items, "cats": cats, "current_kind": current,
+        "total": sum(counts.values()),
+    })
 
 
 @login_required
