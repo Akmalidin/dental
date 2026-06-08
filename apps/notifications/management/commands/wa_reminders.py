@@ -12,7 +12,11 @@ from django.db.models import Q
 class Command(BaseCommand):
     help = "WhatsApp авто-напоминания: за день, за час, должникам"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--dry", action="store_true", help="не отправлять, только показать")
+
     def handle(self, *args, **opts):
+        dry = opts.get("dry")
         from apps.notifications.whatsapp import wa_enabled, wa_send_text, render_message
         from apps.notifications.models import MessageTemplate, WaMessage
         from apps.appointments.models import Appointment
@@ -42,6 +46,9 @@ class Command(BaseCommand):
             def send(patient, appt, body):
                 if not (patient and patient.phone and body):
                     return False
+                if dry:
+                    self.stdout.write("  [DRY] -> %s (%s)" % (patient.full_name, patient.phone))
+                    return True
                 msg = render_message(body, patient=patient, appt=appt)
                 ok = wa_send_text(patient.phone, msg)
                 WaMessage.objects.create(patient=patient, direction="out",
@@ -59,7 +66,8 @@ class Command(BaseCommand):
                           .select_related("patient", "doctor"))
                     for a in qs:
                         send(a.patient, a, body)
-                        Appointment.objects.filter(pk=a.pk).update(reminded_hour=True)
+                        if not dry:
+                            Appointment.objects.filter(pk=a.pk).update(reminded_hour=True)
                         stat["hour"] += 1
 
             # — за день —
@@ -74,7 +82,8 @@ class Command(BaseCommand):
                           .select_related("patient", "doctor"))
                     for a in qs:
                         send(a.patient, a, body)
-                        Appointment.objects.filter(pk=a.pk).update(reminded_day=True)
+                        if not dry:
+                            Appointment.objects.filter(pk=a.pk).update(reminded_day=True)
                         stat["day"] += 1
 
             # — должникам (раз в N дней, около 10:00 локального времени) —
@@ -87,7 +96,8 @@ class Command(BaseCommand):
                                        | Q(last_debt_reminder__lte=cutoff)))
                     for p in debtors[:300]:
                         send(p, None, body)
-                        Patient.all_objects.filter(pk=p.pk).update(last_debt_reminder=now)
+                        if not dry:
+                            Patient.all_objects.filter(pk=p.pk).update(last_debt_reminder=now)
                         stat["debt"] += 1
 
         self.stdout.write(self.style.SUCCESS(
