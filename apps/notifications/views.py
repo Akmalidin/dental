@@ -219,8 +219,118 @@ def wa_webhook(request):
             with unscoped():
                 patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
                            .order_by("-id").first() if tail else None)
-                m = WaMessage(patient=patient, direction="in", phone=phone, body=text)
+                m = WaMessage(patient=patient, direction="in", phone=phone, body=text, read=False)
                 if patient is not None:
                     m.clinic = patient.clinic
                 m.save()
+            # уведомление персоналу клиники о входящем сообщении
+            if patient is not None:
+                try:
+                    from apps.tenancy import set_current_clinic
+                    from apps.users.models import User as U, Role
+                    from django.db.models import Q
+                    set_current_clinic(patient.clinic)
+                    recipients = U.objects.filter(clinic=patient.clinic, is_active=True).filter(
+                        Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
+                        | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
+                    if patient.primary_doctor_id:
+                        recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
+                    snippet = (text[:80] + "…") if len(text) > 80 else text
+                    for u in recipients.distinct():
+                        Notification.send(u, "💬 Сообщение в WhatsApp",
+                                          "%s: %s" % (patient.full_name, snippet),
+                                          type="system", link="/patients/%s/notify/" % patient.pk)
+                except Exception:
+                    pass
     return JsonResponse({"ok": True})
+
+
+def _wa_staff_ok(user):
+    return user.is_superadmin or user.is_admin
+
+
+@login_required
+def wa_inbox(request):
+    """Инбокс WhatsApp-чатов: последние переписки с пациентами."""
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from .models import WaMessage
+    from apps.tenancy import get_current_clinic
+    base = WaMessage.all_clinics.exclude(patient__isnull=True)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        base = base.filter(clinic=clinic)
+    convos = {}
+    for m in base.select_related("patient").order_by("-id")[:2000]:
+        c = convos.get(m.patient_id)
+        if c is None:
+            c = convos[m.patient_id] = {"patient": m.patient, "last": m, "unread": 0}
+        if m.direction == "in" and not m.read:
+            c["unread"] += 1
+    rows = sorted(convos.values(), key=lambda c: c["last"].created_at, reverse=True)
+    return render(request, "notifications/wa_inbox.html", {
+        "rows": rows, "total_unread": sum(c["unread"] for c in rows),
+    })
+
+
+def _broadcast_patients(audience):
+    from apps.patients.models import Patient
+    from apps.appointments.models import Appointment
+    from django.utils import timezone
+    qs = Patient.objects.exclude(phone="")
+    if audience == "debtors":
+        return qs.filter(balance__lt=0)
+    if audience == "upcoming":
+        pids = (Appointment.objects.filter(start_at__gte=timezone.now())
+                .exclude(status__in=["cancelled", "no_show"])
+                .values_list("patient_id", flat=True).distinct())
+        return qs.filter(pk__in=pids)
+    return qs
+
+
+@login_required
+def wa_broadcast(request):
+    """Массовая WhatsApp-рассылка по аудитории (все / должники / с приёмами)."""
+    from django.contrib import messages
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from .models import MessageTemplate, WaMessage
+    from .whatsapp import wa_send_text, wa_enabled, render_message
+    from apps.appointments.models import Appointment
+    from django.utils import timezone
+
+    if request.method == "POST":
+        audience = request.POST.get("audience", "all")
+        tpl_id = request.POST.get("template")
+        text = (request.POST.get("text") or "").strip()
+        if tpl_id and not text:
+            t = MessageTemplate.objects.filter(pk=tpl_id).first()
+            text = t.body if t else ""
+        if not text:
+            messages.error(request, "Выберите шаблон или введите текст")
+            return redirect("wa_broadcast")
+        if not wa_enabled():
+            messages.error(request, "WhatsApp не настроен")
+            return redirect("wa_broadcast")
+        sent = failed = 0
+        for p in list(_broadcast_patients(audience).select_related()[:500]):
+            if not p.phone:
+                continue
+            appt = (Appointment.objects.filter(patient=p, start_at__gte=timezone.now())
+                    .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
+            msg = render_message(text, patient=p, appt=appt)
+            ok = wa_send_text(p.phone, msg)
+            WaMessage.objects.create(patient=p, direction="out", phone=p.phone,
+                                     body=msg, sent_by=request.user, ok=ok)
+            sent += 1 if ok else 0
+            failed += 0 if ok else 1
+        messages.success(request, "Рассылка завершена. Отправлено: %s, ошибок: %s" % (sent, failed))
+        return redirect("wa_broadcast")
+
+    return render(request, "notifications/wa_broadcast.html", {
+        "templates": MessageTemplate.objects.filter(is_active=True),
+        "wa_enabled": wa_enabled(),
+        "count_all": _broadcast_patients("all").count(),
+        "count_debtors": _broadcast_patients("debtors").count(),
+        "count_upcoming": _broadcast_patients("upcoming").count(),
+    })

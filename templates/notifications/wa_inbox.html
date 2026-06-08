@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}WhatsApp — чаты{% endblock %}
+{% block content %}
+<div class="w-full max-w-2xl space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <h2 class="text-xl font-bold" style="color:var(--text)">💬 WhatsApp-чаты
+      {% if total_unread %}<span class="badge badge-green ml-1">{{ total_unread }} новых</span>{% endif %}</h2>
+    <a href="/notifications/wa-broadcast/" class="btn btn-primary btn-sm">📣 Массовая рассылка</a>
+  </div>
+
+  <div class="card overflow-hidden">
+    {% for r in rows %}
+    <a href="/patients/{{ r.patient.pk }}/notify/" class="flex items-center gap-3 px-5 py-3 transition"
+       style="border-bottom:1px solid var(--border-2);text-decoration:none">
+      <div class="avatar w-10 h-10">{{ r.patient.first_name|first|upper }}</div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold" style="color:var(--text)">{{ r.patient.full_name }}
+          {% if r.unread %}<span class="badge badge-green ml-1">{{ r.unread }}</span>{% endif %}</p>
+        <p class="text-sm muted truncate">{% if r.last.direction == 'out' %}Вы: {% endif %}{{ r.last.body }}</p>
+      </div>
+      <div class="text-xs muted shrink-0">{{ r.last.created_at|date:"d.m H:i" }}</div>
+    </a>
+    {% empty %}
+    <p class="px-5 py-12 text-center muted">Пока нет переписок. Они появятся, когда пациент напишет или вы отправите сообщение.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

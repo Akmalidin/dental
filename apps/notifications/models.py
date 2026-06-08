@@ -43,6 +43,7 @@ class WaMessage(ClinicScopedModel):
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="+")
     ok = models.BooleanField(default=True)
+    read = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -38,6 +38,17 @@ def clinic_settings(request):
         except Exception:
             pass
 
+        # Непрочитанные WhatsApp-входящие (для бейджа в сайдбаре, только админам)
+        try:
+            if getattr(request.user, "is_admin", False) or getattr(request.user, "is_superadmin", False):
+                from apps.notifications.models import WaMessage
+                wq = WaMessage.all_clinics.filter(direction="in", read=False)
+                if cur is not None:
+                    wq = wq.filter(clinic=cur)
+                ctx["wa_unread"] = wq.count()
+        except Exception:
+            pass
+
         # Филиалы для переключателя в navbar
         try:
             from apps.users.models import Branch

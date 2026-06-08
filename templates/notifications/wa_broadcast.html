@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block page_title %}Массовая рассылка WhatsApp{% endblock %}
+{% block content %}
+<div class="w-full max-w-xl space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <h2 class="text-xl font-bold" style="color:var(--text)">📣 Массовая рассылка WhatsApp</h2>
+    <a href="/notifications/wa-inbox/" class="btn btn-ghost btn-sm">← Чаты</a>
+  </div>
+
+  {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
+
+  <form method="post" class="card card-pad space-y-3" onsubmit="return confirm('Отправить рассылку выбранной аудитории? Это действие необратимо.')">
+    {% csrf_token %}
+    <div>
+      <label class="fld">Кому отправляем</label>
+      <select name="audience" class="no-tom">
+        <option value="all">Все пациенты с телефоном ({{ count_all }})</option>
+        <option value="debtors">Должники ({{ count_debtors }})</option>
+        <option value="upcoming">С будущими приёмами ({{ count_upcoming }})</option>
+      </select>
+    </div>
+    <div>
+      <label class="fld">Шаблон (подставится в текст)</label>
+      <select name="template" class="no-tom"
+              onchange="if(this.value){document.getElementById('bcText').value=this.options[this.selectedIndex].dataset.body||''}">
+        <option value="">— выбрать шаблон —</option>
+        {% for t in templates %}<option value="{{ t.pk }}" data-body="{{ t.body }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="fld">Текст сообщения</label>
+      <textarea id="bcText" name="text" rows="6" placeholder="Текст рассылки..."></textarea>
+      <p class="text-xs muted mt-1">Плейсхолдеры подставятся для каждого пациента: <b>{имя} {фамилия} {долг} {дата} {время} {врач} {клиника}</b>. Форматирование: *жирный*, _курсив_.</p>
+    </div>
+    <div class="flex justify-end">
+      <button type="submit" class="btn text-white" style="background:#25D366" {% if not wa_enabled %}disabled{% endif %}>📣 Отправить рассылку</button>
+    </div>
+  </form>
+
+  <p class="text-xs muted">⚠️ Рассылка уходит сразу всем выбранным (до 500 за раз). Соблюдайте лимиты WhatsApp и не злоупотребляйте рассылками — иначе номер могут заблокировать.</p>
+</div>
+{% endblock %}

@@ -11,4 +11,6 @@ urlpatterns = [
     path("templates/", views.message_templates, name="message_templates"),
     path("templates/<int:pk>/delete/", views.message_template_delete, name="message_template_delete"),
     path("wa-webhook/", views.wa_webhook, name="wa_webhook"),
+    path("wa-inbox/", views.wa_inbox, name="wa_inbox"),
+    path("wa-broadcast/", views.wa_broadcast, name="wa_broadcast"),
 ]

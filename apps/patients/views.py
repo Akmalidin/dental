@@ -189,6 +189,7 @@ def patient_notify(request, pk):
                  .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
     tpls = [{"name": t.name, "body": render_message(t.body, patient=patient, appt=next_appt)}
             for t in MessageTemplate.objects.filter(is_active=True)]
+    WaMessage.all_clinics.filter(patient=patient, direction="in", read=False).update(read=True)
     history = list(WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300])
     return render(request, "patients/notify.html", {
         "patient": patient, "wa_templates": tpls, "wa_enabled": wa_enabled(),
