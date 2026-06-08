@@ -172,8 +172,8 @@ def patient_notify(request, pk):
             WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
                                      body=text, sent_by=request.user, ok=ok)
             if ok:
-                messages.success(request, _("Сообщение отправлено в WhatsApp"))
-                return redirect("patient_detail", pk=pk)
+                messages.success(request, _("Сообщение отправлено"))
+                return redirect("patient_notify", pk=pk)
             messages.error(request, _("Не удалось отправить (проверьте номер/инстанс)"))
 
     if not MessageTemplate.objects.exists():
