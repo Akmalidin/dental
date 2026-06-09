@@ -72,6 +72,19 @@
     <div id="calendar"></div>
   </div>
 
+  <!-- Контекстное меню события (правый клик) -->
+  <div x-show="ctx.open" x-cloak @click.outside="ctx.open=false"
+       class="dropdown" :style="`position:fixed;z-index:95;min-width:210px;left:${ctx.x}px;top:${ctx.y}px`">
+    <button @click="ctxStatus('confirmed')">✅ Подтверждён</button>
+    <button @click="ctxStatus('arrived')">🟠 Пришёл</button>
+    <button @click="ctxStatus('no_show')">🔴 Не пришёл</button>
+    <button @click="ctxStatus('completed')">🟢 Завершён</button>
+    <button @click="ctxStatus('scheduled')">↩ Записан</button>
+    <div class="divider my-1"></div>
+    <button @click="ctxNotify()">💬 Уведомить в WhatsApp</button>
+    <button @click="ctxDelete()" style="color:var(--red)">🗑 Удалить (в корзину)</button>
+  </div>
+
   <!-- ── APPOINTMENT VIEW MODAL (rich) ───────────────────────────────── -->
   <div x-show="showView" x-cloak class="modal-overlay" @click.self="showView=false">
     <div class="modal-box flex flex-col" style="max-width:680px;max-height:90vh">
@@ -160,6 +173,9 @@
           <button @click="openNextDlg(false)" class="btn btn-soft btn-sm">＋ Назначить след. приём</button>
         </template>
         <a :href="'/appointments/' + av.id + '/edit/'" class="btn btn-ghost btn-sm">Изменить</a>
+        <template x-if="av.patient_id">
+          <a :href="'/patients/' + av.patient_id + '/notify/'" target="_blank" class="btn btn-sm text-white" style="background:#25D366">💬 Уведомить</a>
+        </template>
         <template x-if="av.patient_id">
           <a :href="'/patients/' + av.patient_id + '/'" class="btn btn-ghost btn-sm">Добавить платёж</a>
         </template>
@@ -259,6 +275,7 @@ function calendarPage() {
     patientTS: null, doctorTS: null, serviceTS: null,
     showView: false, av: {},
     nextDlg: { open:false, complete:false, date:'' },
+    ctx: { open:false, x:0, y:0, id:null, pid:null, status:'' },
 
     init() {
       const el = document.getElementById('calendar');
@@ -279,6 +296,9 @@ function calendarPage() {
         }],
         datesSet: (info) => { this.title = info.view.title; },
         eventClick: (info) => { this.openApptDetail(info.event.id); },
+        eventDidMount: (info) => {
+          info.el.addEventListener('contextmenu', (e) => this.openCtx(e, info.event));
+        },
         dateClick: (info) => { this.openBooking(info.dateStr); },
       });
       this.cal.render();
@@ -362,6 +382,36 @@ function calendarPage() {
       const df = document.getElementById('doctorFilter');
       const doc = (df && df.value) ? '&doctor=' + df.value : '';
       window.open('/appointments/schedule/print/?from=' + fmt(from) + '&to=' + fmt(to) + doc, '_blank');
+    },
+    openCtx(e, ev) {
+      e.preventDefault();
+      this.ctx = { open:true, x:e.clientX, y:e.clientY, id:ev.id,
+        pid: ev.extendedProps ? ev.extendedProps.patient_id : null,
+        status: ev.extendedProps ? ev.extendedProps.status : '' };
+    },
+    async ctxStatus(status) {
+      this.ctx.open = false;
+      try {
+        await fetch('/appointments/' + this.ctx.id + '/status/', {
+          method:'POST', headers:{'X-CSRFToken':getCsrf()}, body:new URLSearchParams({status}) });
+        toast('Статус обновлён');
+        this.cal.refetchEvents();
+      } catch(e) { toast('Ошибка', 'error'); }
+    },
+    ctxNotify() {
+      const pid = this.ctx.pid; this.ctx.open = false;
+      if (pid) window.open('/patients/' + pid + '/notify/', '_blank');
+      else toast('У записи нет пациента', 'error');
+    },
+    async ctxDelete() {
+      this.ctx.open = false;
+      if (!confirm('Удалить запись в корзину?')) return;
+      try {
+        await fetch('/appointments/' + this.ctx.id + '/trash/', {
+          method:'POST', headers:{'X-CSRFToken':getCsrf()}, body:new URLSearchParams({}) });
+        toast('Запись перемещена в корзину');
+        this.cal.refetchEvents();
+      } catch(e) { toast('Ошибка', 'error'); }
     },
     openNextDlg(complete) { this.nextDlg = { open:true, complete: complete, date:'' }; },
     async submitNext() {
