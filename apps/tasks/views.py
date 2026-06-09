@@ -101,6 +101,6 @@ def task_delete(request, pk):
     if not (request.user.is_superadmin or request.user.is_admin or task.created_by_id == request.user.pk):
         messages.error(request, _("Нет прав удалять эту задачу"))
         return redirect("task_list")
-    task.delete()
-    messages.success(request, _("Задача удалена"))
+    task.soft_delete(request.user)
+    messages.success(request, _("Задача удалена (в корзине)"))
     return redirect("task_list")

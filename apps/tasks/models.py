@@ -1,9 +1,9 @@
 from django.db import models
 from django.conf import settings
-from apps.tenancy import ClinicScopedModel
+from apps.tenancy import ClinicSoftDeleteModel
 
 
-class Task(ClinicScopedModel):
+class Task(ClinicSoftDeleteModel):
     PRIORITY_LOW = "low"
     PRIORITY_MEDIUM = "medium"
     PRIORITY_HIGH = "high"

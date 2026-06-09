@@ -191,10 +191,14 @@ def _recycle_models():
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
     from apps.appointments.models import Appointment
+    from apps.services.models import Service
+    from apps.tasks.models import Task
     return {
-        "patient": (Patient, "Пациент"),
-        "treatment": (Treatment, "Приём"),
-        "appointment": (Appointment, "Запись"),
+        "patient": (Patient, "Пациенты"),
+        "treatment": (Treatment, "Приёмы"),
+        "appointment": (Appointment, "Записи"),
+        "service": (Service, "Услуги"),
+        "task": (Task, "Задачи"),
     }
 
 

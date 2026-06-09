@@ -1,5 +1,5 @@
 from django.db import models
-from apps.tenancy import ClinicScopedModel
+from apps.tenancy import ClinicScopedModel, ClinicSoftDeleteModel
 
 
 class ServiceCategory(ClinicScopedModel):
@@ -16,7 +16,7 @@ class ServiceCategory(ClinicScopedModel):
         return self.name
 
 
-class Service(ClinicScopedModel):
+class Service(ClinicSoftDeleteModel):
     name = models.CharField(max_length=200, verbose_name="Услуга")
     code = models.CharField(max_length=50, blank=True, verbose_name="Код услуги")
     category = models.ForeignKey(

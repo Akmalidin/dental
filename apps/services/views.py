@@ -96,8 +96,7 @@ def service_edit(request, pk):
 def service_delete(request, pk):
     service = get_object_or_404(Service, pk=pk)
     if request.method == "POST":
-        service.is_active = False
-        service.save()
-        messages.success(request, _("Услуга деактивирована"))
+        service.soft_delete(request.user)
+        messages.success(request, _("Услуга удалена (в корзине)"))
         return redirect("service_list")
     return render(request, "services/confirm_delete.html", {"object": service})
