@@ -14,4 +14,6 @@ urlpatterns = [
     path("wa-inbox/", views.wa_inbox, name="wa_inbox"),
     path("wa-broadcast/", views.wa_broadcast, name="wa_broadcast"),
     path("wa-settings/", views.wa_settings, name="wa_settings"),
+    path("wa-groups/", views.wa_groups, name="wa_groups"),
+    path("wa-connect/", views.wa_connect, name="wa_connect"),
 ]

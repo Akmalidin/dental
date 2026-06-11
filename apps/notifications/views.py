@@ -207,7 +207,38 @@ def wa_webhook(request):
             text = (md.get("textMessageData") or {}).get("textMessage", "")
         elif tm in ("extendedTextMessage", "quotedMessage"):
             text = (md.get("extendedTextMessageData") or {}).get("text", "")
-        chat_id = (data.get("senderData") or {}).get("chatId", "") or ""
+        sender = data.get("senderData") or {}
+        chat_id = sender.get("chatId", "") or ""
+        # Группа: автоматически регистрируем (для выбора Директором), уведомления по умолчанию выкл.
+        if chat_id.endswith("@g.us"):
+            try:
+                from apps.notifications.models import WaGroup
+                from apps.patients.models import Patient
+                from apps.tenancy import unscoped
+                import re as _re
+                gname = sender.get("chatName") or ""
+                # клиника группы: по номеру отправителя, иначе единственная клиника
+                cl = None
+                sp = (sender.get("sender") or "").split("@")[0]
+                tail = _re.sub(r"\D", "", sp)[-9:]
+                with unscoped():
+                    if tail:
+                        p = Patient.all_objects.filter(phone__icontains=tail).order_by("-id").first()
+                        cl = p.clinic if p else None
+                    if cl is None:
+                        from apps.users.models import Clinic
+                        cs = list(Clinic.objects.all()[:2])
+                        cl = cs[0] if len(cs) == 1 else None
+                    if cl is not None:
+                        g, created = WaGroup.all_clinics.get_or_create(
+                            clinic=cl, chat_id=chat_id,
+                            defaults={"name": gname, "notify": False})
+                        if not created and gname and g.name != gname:
+                            g.name = gname
+                            g.save(update_fields=["name"])
+            except Exception:
+                pass
+            return JsonResponse({"ok": True})
         phone = chat_id.split("@")[0]
         if text and phone:
             import re
@@ -355,3 +386,61 @@ def wa_settings(request):
     cs.save(update_fields=["wa_remind_day", "wa_remind_hour", "wa_remind_debt_days"])
     messages.success(request, "Настройки напоминаний сохранены")
     return redirect("wa_broadcast")
+
+
+@login_required
+def wa_groups(request):
+    """Управление WhatsApp-группами клиники (Директор/Администратор):
+    в какие группы слать уведомления о записях/отменах."""
+    from django.contrib import messages
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from .models import WaGroup
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "add":
+            chat_id = (request.POST.get("chat_id") or "").strip()
+            name = (request.POST.get("name") or "").strip()
+            # допускаем ввод только цифр id — дополним до @g.us
+            if chat_id and "@" not in chat_id:
+                digits = "".join(ch for ch in chat_id if ch.isdigit())
+                if digits:
+                    chat_id = digits + "@g.us"
+            if not chat_id.endswith("@g.us"):
+                messages.error(request, "Укажите корректный ID группы (…@g.us)")
+            else:
+                WaGroup.objects.get_or_create(chat_id=chat_id, defaults={"name": name, "notify": True})
+                messages.success(request, "Группа добавлена")
+        elif action == "toggle":
+            g = WaGroup.objects.filter(pk=request.POST.get("id")).first()
+            if g:
+                g.notify = not g.notify
+                g.save(update_fields=["notify"])
+        elif action == "delete":
+            WaGroup.objects.filter(pk=request.POST.get("id")).delete()
+            messages.success(request, "Группа удалена")
+        return redirect("wa_groups")
+
+    from .whatsapp import wa_enabled
+    groups = list(WaGroup.objects.all())
+    return render(request, "notifications/wa_groups.html", {
+        "groups": groups, "wa_enabled": wa_enabled(),
+    })
+
+
+@login_required
+def wa_connect(request):
+    """Подключение WhatsApp (привязка устройства по QR) — только Директор/Администратор."""
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from .whatsapp import wa_state, wa_qr
+    state = wa_state()
+    qr_type, qr_msg = ("", "")
+    if state and state != "authorized":
+        qr_type, qr_msg = wa_qr()
+    return render(request, "notifications/wa_connect.html", {
+        "state": state,
+        "qr_type": qr_type,
+        "qr_b64": qr_msg if qr_type == "qrCode" else "",
+    })

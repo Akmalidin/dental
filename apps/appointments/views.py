@@ -41,6 +41,46 @@ def schedule_violation(doctor, start, end):
     return None
 
 
+def notify_appointment_cancelled(appt):
+    """Уведомить об отмене записи: пациента, врача и WhatsApp-группы клиники.
+    Безопасно: при выключенном WhatsApp/ошибках ничего не падает."""
+    try:
+        from apps.notifications.whatsapp import wa_send_text, notify_groups, wa_enabled
+        from apps.settings_clinic.models import ClinicSettings
+        from django.utils import timezone as _tz
+        if not wa_enabled():
+            return
+        st = _tz.localtime(appt.start_at)
+        clinic_name = ClinicSettings.get().name
+        doctor_name = appt.doctor.name if appt.doctor else "—"
+        pname = (appt.patient.first_name or appt.patient.full_name) if appt.patient_id else ""
+        date_s, time_s = st.strftime("%d.%m.%Y"), st.strftime("%H:%M")
+        # пациенту
+        if appt.patient_id and appt.patient.phone:
+            wa_send_text(appt.patient.phone,
+                         "❌ *%s*\n\nЗдравствуйте, *%s*!\n"
+                         "Ваша запись *отменена*.\n\n"
+                         "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
+                         "Чтобы записаться повторно — позвоните нам или оставьте заявку на сайте."
+                         % (clinic_name, pname, date_s, time_s, doctor_name))
+        # врачу
+        if appt.doctor_id and getattr(appt.doctor, "phone", ""):
+            wa_send_text(appt.doctor.phone,
+                         "❌ *Отмена записи*\n\n"
+                         "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+                         % (appt.patient.full_name if appt.patient_id else "—",
+                            date_s, time_s, doctor_name))
+        # группы клиники
+        notify_groups(
+            "❌ *Отмена записи* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+            % (clinic_name, appt.patient.full_name if appt.patient_id else "—",
+               date_s, time_s, doctor_name),
+            clinic=appt.clinic,
+        )
+    except Exception:
+        pass
+
+
 def doctor_schedules_map(doctors):
     """{doctor_id: {day_of_week: [HH:MM, HH:MM] | null}} — для подсказок в календаре."""
     from apps.users.models_salary import DoctorSchedule
@@ -428,6 +468,7 @@ def appointment_status(request, pk):
             appt.cancellation_reason = CancellationReason.objects.filter(pk=reason_id).first() if reason_id else None
             appt.cancel_note = request.POST.get("cancel_note", "")[:300]
             appt.save(update_fields=["status", "cancellation_reason", "cancel_note"])
+            notify_appointment_cancelled(appt)
         else:
             appt.save(update_fields=["status"])
         messages.success(request, _("Статус записи изменён"))
@@ -506,6 +547,7 @@ def appointment_delete(request, pk):
     if request.method == "POST":
         appt.status = Appointment.STATUS_CANCELLED
         appt.save()
+        notify_appointment_cancelled(appt)
         messages.success(request, _("Запись отменена"))
         return redirect("appointment_list")
     return render(request, "appointments/confirm_delete.html", {"object": appt})
@@ -584,5 +626,6 @@ def appointment_trash(request, pk):
     """Мягкое удаление записи (в корзину)."""
     appt = get_object_or_404(Appointment, pk=pk)
     appt.soft_delete(request.user)
+    notify_appointment_cancelled(appt)
     messages.success(request, _("Запись перемещена в корзину"))
     return redirect("appointment_list")

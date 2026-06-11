@@ -33,6 +33,26 @@
             {{ form.is_active }} <span>Активен</span>
           </label>
         </div>
+
+        {% if can_manage_access %}
+        <div class="col-span-2 pt-2" x-data="{full: {% if form.full_access.value %}true{% else %}false{% endif %}}">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Доступ к страницам</label>
+          <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer mb-2">
+            <input type="checkbox" name="full_access" x-model="full" {% if form.full_access.value %}checked{% endif %}>
+            <span>Полный доступ ко всем разделам</span>
+          </label>
+          <div x-show="!full" x-cloak class="grid grid-cols-2 gap-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            {% for value, label in form.sections.field.choices %}
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" name="sections" value="{{ value }}"
+                     {% if value in form.sections.value %}checked{% endif %}>
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Снятый раздел скрывается из меню и блокируется при открытии напрямую.</p>
+        </div>
+        {% endif %}
       </div>
       <div class="flex gap-3 pt-2">
         <button type="submit" class="btn-primary">Сохранить</button>

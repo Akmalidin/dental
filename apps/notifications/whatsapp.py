@@ -31,22 +31,26 @@ def _chat_id(phone):
     return d + "@c.us"
 
 
-def wa_send_text(phone, text):
-    """Отправить текст в WhatsApp. Возвращает True/False."""
+def _api_base():
+    base = getattr(settings, "GREENAPI_API_URL", "").rstrip("/")
+    return base or "https://api.greenapi.com"
+
+
+def _api_url(method):
+    return "%s/waInstance%s/%s/%s" % (
+        _api_base(), settings.GREENAPI_ID_INSTANCE, method, settings.GREENAPI_TOKEN)
+
+
+def wa_send_chat(chat, text):
+    """Отправить текст в произвольный чат Green-API (chatId уже готов: @c.us или @g.us)."""
     if not wa_enabled():
-        log.info("WhatsApp(Green-API) выключен — пропуск отправки на %s", phone)
+        log.info("WhatsApp(Green-API) выключен — пропуск отправки в %s", chat)
         return False
-    chat = _chat_id(phone)
     if not chat:
         return False
-    base = getattr(settings, "GREENAPI_API_URL", "").rstrip("/")
-    if not base:
-        base = "https://api.greenapi.com"
-    url = "%s/waInstance%s/sendMessage/%s" % (
-        base, settings.GREENAPI_ID_INSTANCE, settings.GREENAPI_TOKEN)
     payload = {"chatId": chat, "message": text}
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode("utf-8"), method="POST",
+        _api_url("sendMessage"), data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json"},
     )
     try:
@@ -59,6 +63,58 @@ def wa_send_text(phone, text):
     except Exception as e:  # noqa: BLE001
         log.warning("WhatsApp(Green-API) ошибка: %s", e)
         return False
+
+
+def wa_send_text(phone, text):
+    """Отправить текст на номер телефона (преобразуется в chatId @c.us). True/False."""
+    chat = _chat_id(phone)
+    if not chat:
+        return False
+    return wa_send_chat(chat, text)
+
+
+def notify_groups(text, clinic=None):
+    """Разослать текст во все включённые WhatsApp-группы клиники. Возвращает кол-во отправленных."""
+    if not wa_enabled():
+        return 0
+    from apps.notifications.models import WaGroup
+    from apps.tenancy import get_current_clinic
+    qs = WaGroup.all_clinics.filter(notify=True)
+    cl = clinic or get_current_clinic()
+    if cl is not None:
+        qs = qs.filter(clinic=cl)
+    sent = 0
+    for g in qs:
+        if g.chat_id and wa_send_chat(g.chat_id, text):
+            sent += 1
+    return sent
+
+
+def wa_state():
+    """Состояние инстанса Green-API: 'authorized' | 'notAuthorized' | 'starting' | '' (ошибка/выкл)."""
+    if not (getattr(settings, "GREENAPI_ID_INSTANCE", "") and getattr(settings, "GREENAPI_TOKEN", "")):
+        return ""
+    try:
+        with urllib.request.urlopen(_api_url("getStateInstance"), timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        return data.get("stateInstance", "")
+    except Exception as e:  # noqa: BLE001
+        log.warning("WhatsApp(Green-API) getStateInstance ошибка: %s", e)
+        return ""
+
+
+def wa_qr():
+    """QR-код для привязки устройства. Возвращает (type, message):
+    type='qrCode' → message = base64 PNG; type='alreadyLogged' → уже подключено; '' → ошибка."""
+    if not (getattr(settings, "GREENAPI_ID_INSTANCE", "") and getattr(settings, "GREENAPI_TOKEN", "")):
+        return ("", "")
+    try:
+        with urllib.request.urlopen(_api_url("qr"), timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        return (data.get("type", ""), data.get("message", ""))
+    except Exception as e:  # noqa: BLE001
+        log.warning("WhatsApp(Green-API) qr ошибка: %s", e)
+        return ("", "")
 
 
 # Совместимость с возможными вызовами шаблонов — у Green-API шаблоны не нужны

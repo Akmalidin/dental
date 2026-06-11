@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Подключение WhatsApp{% endblock %}
+{% block content %}
+<div class="w-full max-w-lg space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <h2 class="text-xl font-bold" style="color:var(--text)">🔗 Подключение WhatsApp</h2>
+    <div class="flex gap-2">
+      <a href="/notifications/wa-groups/" class="btn btn-ghost btn-sm">Группы</a>
+      <a href="/notifications/wa-connect/" class="btn btn-ghost btn-sm">↻ Обновить</a>
+    </div>
+  </div>
+
+  {% if not state %}
+  <div class="badge-orange px-4 py-3 rounded-xl text-sm">
+    WhatsApp (Green-API) не настроен или недоступен. Проверьте ключи на сервере (GREENAPI_ID_INSTANCE / GREENAPI_TOKEN).
+  </div>
+  {% elif state == "authorized" %}
+  <div class="card card-pad text-center">
+    <div class="text-5xl mb-2">✅</div>
+    <p class="font-bold text-lg" style="color:var(--text)">WhatsApp подключён</p>
+    <p class="muted text-sm mt-1">Номер клиники привязан и готов отправлять/принимать сообщения.</p>
+  </div>
+  {% else %}
+  <div class="card card-pad text-center">
+    <p class="font-semibold mb-1" style="color:var(--text)">Сканируйте QR-код, чтобы подключить WhatsApp</p>
+    <p class="muted text-sm mb-4">На телефоне: WhatsApp → <b>Связанные устройства</b> → <b>Привязка устройства</b> → отсканируйте код ниже. Статус: <b>{{ state }}</b></p>
+    {% if qr_b64 %}
+    <img src="data:image/png;base64,{{ qr_b64 }}" alt="WhatsApp QR" class="mx-auto rounded-xl border" style="width:264px;height:264px">
+    <p class="muted text-xs mt-3">QR обновляется каждые ~20 секунд. Если не сканируется — нажмите «↻ Обновить».</p>
+    {% else %}
+    <div class="badge-orange px-4 py-3 rounded-xl text-sm">Не удалось получить QR-код. Нажмите «↻ Обновить» через несколько секунд.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <p class="text-xs muted">Подключать устройство может только администратор/директор клиники.</p>
+</div>
+{% endblock %}

@@ -53,6 +53,26 @@ class WaMessage(ClinicScopedModel):
         ordering = ["created_at"]
 
 
+class WaGroup(ClinicScopedModel):
+    """WhatsApp-группа клиники, в которую можно слать уведомления (записи/отмены).
+
+    chat_id — идентификатор группы Green-API вида '120363XXXXXXXXX@g.us'.
+    notify — слать ли уведомления в эту группу (управляет Директор)."""
+    chat_id = models.CharField(max_length=64, verbose_name="ID группы (@g.us)")
+    name = models.CharField(max_length=200, blank=True, verbose_name="Название группы")
+    notify = models.BooleanField(default=True, verbose_name="Слать уведомления")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "WhatsApp-группа"
+        verbose_name_plural = "WhatsApp-группы"
+        ordering = ["name", "chat_id"]
+        unique_together = [["clinic", "chat_id"]]
+
+    def __str__(self):
+        return self.name or self.chat_id
+
+
 class Notification(models.Model):
     TYPE_CHOICES = [
         ("appointment", "Запись"),

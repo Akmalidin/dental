@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
-from .models import User, Role, Branch
+from .models import User, Role, Branch, SECTIONS
 
 
 class LoginForm(forms.Form):
@@ -41,6 +41,15 @@ class UserForm(forms.ModelForm):
         required=False,
         help_text=_("Оставьте пустым, чтобы не менять пароль"),
     )
+    # Персональные доступы к разделам. full_access=True → allowed_sections=None (все разделы).
+    full_access = forms.BooleanField(
+        label=_("Полный доступ ко всем разделам"), required=False, initial=True,
+    )
+    sections = forms.MultipleChoiceField(
+        label=_("Доступные разделы"), required=False,
+        choices=[(k, lbl) for k, lbl, _url in SECTIONS if k != "dashboard"],
+        widget=forms.CheckboxSelectMultiple(),
+    )
 
     class Meta:
         model = User
@@ -59,6 +68,18 @@ class UserForm(forms.ModelForm):
         self.fields["roles"].required = False
         self.fields["can_view_all_appointments"].label = "Видит записи всех врачей"
         self.fields["can_view_all_appointments"].required = False
+        # Филиалы — только текущей клиники (queryset вычисляется в запросе, а не на импорте,
+        # иначе ModelForm захватывает несфильтрованный список всех клиник).
+        self.fields["branches"].queryset = Branch.objects.all()
+        # Предзаполнить доступы из allowed_sections редактируемого пользователя.
+        inst = self.instance if self.instance and self.instance.pk else None
+        if inst is not None and not self.is_bound:
+            if inst.allowed_sections is None:
+                self.fields["full_access"].initial = True
+                self.fields["sections"].initial = [k for k, _l, _u in SECTIONS if k != "dashboard"]
+            else:
+                self.fields["full_access"].initial = False
+                self.fields["sections"].initial = list(inst.allowed_sections)
 
     def save(self, commit=True):
         user = super().save(commit=False)

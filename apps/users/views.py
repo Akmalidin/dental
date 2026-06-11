@@ -277,6 +277,20 @@ def _can_manage_access(actor, target):
     return False
 
 
+def _apply_access_from_form(actor, target, form):
+    """Сохранить персональные доступы из формы сотрудника (full_access + sections).
+    Применяется только если actor имеет право менять доступы target."""
+    from apps.users.models import SECTION_KEYS
+    if not _can_manage_access(actor, target):
+        return
+    if form.cleaned_data.get("full_access"):
+        target.allowed_sections = None
+    else:
+        target.allowed_sections = [s for s in (form.cleaned_data.get("sections") or [])
+                                   if s in SECTION_KEYS]
+    target.save(update_fields=["allowed_sections"])
+
+
 @login_required
 def clinic_overview(request, clinic_id):
     """Сводка по клинике + управление доступами сотрудников.
@@ -685,9 +699,13 @@ def staff_create(request):
         new_user.clinic = get_current_clinic() or getattr(request.user, "clinic", None)
         new_user.save()
         form.save_m2m()
+        _apply_access_from_form(request.user, new_user, form)
         messages.success(request, _("Сотрудник добавлен"))
         return redirect("staff_list")
-    return render(request, "users/form.html", {"form": form, "title": _("Добавить сотрудника")})
+    return render(request, "users/form.html", {
+        "form": form, "title": _("Добавить сотрудника"),
+        "can_manage_access": request.user.is_superadmin or request.user.is_admin_main,
+    })
 
 
 @login_required
@@ -706,9 +724,13 @@ def staff_edit(request, pk):
             messages.error(request, _("Доступ запрещён: нельзя назначить роль суперадмина"))
             return redirect("staff_list")
         form.save()
+        _apply_access_from_form(request.user, user, form)
         messages.success(request, _("Данные обновлены"))
         return redirect("staff_list")
-    return render(request, "users/form.html", {"form": form, "title": _("Редактировать сотрудника"), "object": user})
+    return render(request, "users/form.html", {
+        "form": form, "title": _("Редактировать сотрудника"), "object": user,
+        "can_manage_access": _can_manage_access(request.user, user),
+    })
 
 
 @login_required

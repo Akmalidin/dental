@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block page_title %}WhatsApp-группы{% endblock %}
+{% block content %}
+<div class="w-full max-w-2xl space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <h2 class="text-xl font-bold" style="color:var(--text)">👥 WhatsApp-группы</h2>
+    <div class="flex gap-2">
+      <a href="/notifications/wa-inbox/" class="btn btn-ghost btn-sm">← Чаты</a>
+      <a href="/notifications/wa-connect/" class="btn btn-ghost btn-sm">Подключение</a>
+    </div>
+  </div>
+
+  {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
+
+  <p class="text-sm muted">Выберите, в какие группы слать уведомления о новых записях и отменах. Группы появляются здесь автоматически, когда номер клиники добавлен в группу и туда приходит сообщение. Также можно добавить группу вручную по ID.</p>
+
+  <!-- Добавить вручную -->
+  <form method="post" class="card card-pad flex flex-wrap items-end gap-3">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <div class="flex-1 min-w-40">
+      <label class="fld">Название</label>
+      <input type="text" name="name" placeholder="Например: Ресепшн SADAF">
+    </div>
+    <div class="flex-1 min-w-48">
+      <label class="fld">ID группы (…@g.us)</label>
+      <input type="text" name="chat_id" placeholder="120363XXXXXXXXX@g.us" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Добавить</button>
+  </form>
+
+  <!-- Список групп -->
+  <div class="card overflow-hidden">
+    <table class="data-table">
+      <thead>
+        <tr><th>Группа</th><th>ID</th><th class="text-center">Уведомления</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for g in groups %}
+        <tr>
+          <td class="font-semibold" style="color:var(--text)">{{ g.name|default:"—" }}</td>
+          <td class="text-xs muted">{{ g.chat_id }}</td>
+          <td class="text-center">
+            <form method="post" class="inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="id" value="{{ g.pk }}">
+              <button type="submit" class="badge {% if g.notify %}badge-green{% else %}badge-gray{% endif %} cursor-pointer">
+                {% if g.notify %}✓ Включены{% else %}Выключены{% endif %}
+              </button>
+            </form>
+          </td>
+          <td class="text-right pr-4">
+            <form method="post" class="inline" onsubmit="return confirm('Удалить группу из списка?')">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="{{ g.pk }}">
+              <button type="submit" class="btn-ghost text-xs py-1" style="color:var(--red)">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center py-10 muted">Групп пока нет. Добавьте номер клиники в группу WhatsApp или введите ID вручную.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

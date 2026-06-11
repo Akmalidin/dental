@@ -203,6 +203,13 @@ def public_book_submit(request):
                 "📅 *%s*  🕐 *%s*\n\n"
                 "🔗 Открыть запись:\n%s"
                 % (patient.full_name, phone, d_str, slot, link))
+        # WhatsApp-группы клиники
+        from apps.notifications.whatsapp import notify_groups
+        notify_groups(
+            "🔔 *Новая заявка с сайта* — %s\n\n"
+            "👤 Пациент: *%s*\n📞 %s\n📅 *%s*  🕐 *%s*\n👨‍⚕️ Врач: _%s_"
+            % (clinic.name, patient.full_name, phone, d_str, slot, doc_name),
+            clinic=clinic)
     except Exception:
         pass
 
