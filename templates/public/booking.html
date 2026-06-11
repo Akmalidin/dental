@@ -109,7 +109,18 @@
           <div class="step">4 · Ваши данные</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div><label class="fld">Имя *</label><input type="text" x-model="name" placeholder="Ваше имя"></div>
-            <div><label class="fld">Телефон *</label><input type="tel" x-model="phone" placeholder="+996 ..."></div>
+            <div>
+              <label class="fld">Телефон *</label>
+              <div style="display:flex;gap:8px">
+                <select x-model="country" @change="phone=''" style="max-width:130px">
+                  <option value="kg">🇰🇬 +996</option>
+                  <option value="ru">🇷🇺 +7</option>
+                </select>
+                <input type="tel" inputmode="numeric" x-model="phone" style="flex:1"
+                       @input="phone=phone.replace(/\D/g,'').slice(0,maxLen)"
+                       :placeholder="country==='ru' ? '900 000 00 00' : '700 000 000'">
+              </div>
+            </div>
           </div>
           <div class="err" x-show="error" x-text="error" x-cloak></div>
           <button class="btn" style="margin-top:20px;width:100%;justify-content:center" :disabled="!canSubmit||sending" @click="submit()">
@@ -133,10 +144,12 @@
   <script>
     function booking(){
       return {
-        doctor:'', service:'', date:'', slot:'', name:'', phone:'',
+        doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'kg',
         slots:[], loading:false, sending:false, done:false, error:'',
         today:new Date().toISOString().slice(0,10),
-        get canSubmit(){ return this.doctor&&this.date&&this.slot&&this.name.trim()&&this.phone.trim(); },
+        get maxLen(){ return this.country==='ru' ? 10 : 9; },
+        get fullPhone(){ return (this.country==='ru' ? '+7' : '+996') + this.phone; },
+        get canSubmit(){ return this.doctor&&this.date&&this.slot&&this.name.trim()&&this.phone.length===this.maxLen; },
         async loadSlots(){
           this.slot=''; this.slots=[];
           if(!this.doctor||!this.date) return;
@@ -151,7 +164,7 @@
           if(!this.canSubmit) return;
           this.sending=true; this.error='';
           const token=document.querySelector('[name=csrfmiddlewaretoken]').value;
-          const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.phone});
+          const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.fullPhone});
           try{
             const r=await fetch('/book/submit/',{method:'POST',headers:{'X-CSRFToken':token},body});
             const j=await r.json();

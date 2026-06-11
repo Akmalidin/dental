@@ -5,6 +5,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 {{ patients_json|json_script:"cal-patients" }}
 {{ services_json|json_script:"cal-services" }}
+{{ schedules_json|json_script:"cal-schedules" }}
 <style>
   #calendar { min-height: 600px; }
   .fc { --fc-border-color: var(--border); --fc-page-bg-color: var(--surface); --fc-today-bg-color: var(--primary-light); }
@@ -240,9 +241,11 @@
         </div>
         <div x-show="bk.fromSlot" class="text-sm muted">Дата: <strong style="color:var(--text)" x-text="bk.dateLabel"></strong></div>
         <div class="grid grid-cols-2 gap-4">
-          <div><label class="fld">Время с *</label><input type="time" x-model="bk.timeFrom" step="300"></div>
-          <div><label class="fld">Время до *</label><input type="time" x-model="bk.timeTo" step="300"></div>
+          <div><label class="fld">Время с *</label><input type="time" x-model="bk.timeFrom" step="300" :min="docHours()?docHours().start:null" :max="docHours()?docHours().end:null"></div>
+          <div><label class="fld">Время до *</label><input type="time" x-model="bk.timeTo" step="300" :min="docHours()?docHours().start:null" :max="docHours()?docHours().end:null"></div>
         </div>
+        <p class="text-xs muted -mt-2" x-show="docHours()" x-cloak>График работы врача: <strong style="color:var(--text)" x-text="docHours() ? docHours().start+'–'+docHours().end : ''"></strong></p>
+        <p class="text-xs -mt-2" style="color:var(--red)" x-show="docHours()===false" x-cloak>Врач не работает в выбранный день.</p>
         <div>
           <label class="fld">Статус</label>
           <select x-model="bk.status" class="no-tom">
@@ -271,6 +274,7 @@ function calendarPage() {
     showBooking: false, bkSaving: false, bookError: '',
     patients: JSON.parse(document.getElementById('cal-patients').textContent),
     services: JSON.parse(document.getElementById('cal-services').textContent),
+    schedules: JSON.parse(document.getElementById('cal-schedules').textContent),
     bk: { patient:'', doctor:'{{ doctors.first.pk }}', service:'', date:'', dateLabel:'', timeFrom:'09:00', timeTo:'09:30', status:'scheduled', notes:'', fromSlot:false },
     patientTS: null, doctorTS: null, serviceTS: null,
     showView: false, av: {},
@@ -434,6 +438,19 @@ function calendarPage() {
       } catch (e) { toast('Ошибка', 'error'); }
     },
 
+    // Рабочие часы выбранного врача на выбранную дату.
+    //  {start,end} — работает; false — не работает в этот день; null — график не ведётся.
+    docHours() {
+      const did = this.bk.doctor;
+      if (!did || !this.bk.date) return null;
+      const docSched = this.schedules[String(did)];
+      if (!docSched) return null;                 // у врача нет графика — без ограничений
+      const dow = (new Date(this.bk.date + 'T00:00:00').getDay() + 6) % 7;  // Пн=0
+      const entry = docSched[String(dow)];
+      if (entry === undefined || entry === null) return false;  // выходной
+      return { start: entry[0], end: entry[1] };
+    },
+
     openBooking(dateStr) {
       this.bookError = '';
       const fmt = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
@@ -486,6 +503,15 @@ function calendarPage() {
       const [h2,m2] = this.bk.timeTo.split(':').map(Number);
       let dur = (h2*60+m2) - (h1*60+m1);
       if (dur <= 0) { this.bookError = 'Время «до» должно быть позже «с»'; return; }
+      // Проверка графика работы врача
+      const hrs = this.docHours();
+      if (hrs === false) { this.bookError = 'Врач не работает в выбранный день.'; return; }
+      if (hrs) {
+        if (this.bk.timeFrom < hrs.start || this.bk.timeTo > hrs.end) {
+          this.bookError = 'Время вне графика работы врача (' + hrs.start + '–' + hrs.end + ').';
+          return;
+        }
+      }
       // selected services (multiple)
       const serviceIds = this.serviceTS ? this.serviceTS.getValue() : [];
       this.bkSaving = true; this.bookError = '';

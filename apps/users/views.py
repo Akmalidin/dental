@@ -442,6 +442,12 @@ def profile_view(request):
         password2 = request.POST.get("password2", "").strip()
         avatar = request.FILES.get("avatar")
         errors = []
+        # Сохранение номера WhatsApp (отдельная мини-форма карточки)
+        if "_whatsapp_only" in request.POST:
+            user.phone = request.POST.get("phone", "").strip()
+            user.save(update_fields=["phone"])
+            messages.success(request, _("Номер WhatsApp сохранён"))
+            return redirect("profile")
         if name:
             user.name = name
         if login_val and login_val != user.login:
@@ -466,6 +472,61 @@ def profile_view(request):
         for e in errors:
             messages.error(request, e)
     return render(request, "users/profile.html", {"profile_user": user})
+
+
+@require_POST
+@login_required
+def profile_send_daily_report(request):
+    """Сформировать краткий отчёт за сегодня и отправить в WhatsApp текущему пользователю."""
+    from datetime import date
+    from django.db.models import Sum, Count
+    from decimal import Decimal
+    from apps.notifications.whatsapp import wa_send_text, wa_enabled
+    from apps.appointments.models import Appointment
+    from apps.finance.models import Payment
+    from apps.patients.models import Patient
+
+    user = request.user
+    if not (user.phone or "").strip():
+        messages.error(request, _("Укажите номер WhatsApp в профиле, чтобы получать отчёт"))
+        return redirect("profile")
+    if not wa_enabled():
+        messages.error(request, _("WhatsApp не настроен (Green-API). Обратитесь к администратору."))
+        return redirect("profile")
+
+    today = date.today()
+    appts = Appointment.objects.filter(start_at__date=today).exclude(
+        status__in=[Appointment.STATUS_CANCELLED])
+    appts_total = appts.count()
+    completed = appts.filter(status=Appointment.STATUS_COMPLETED).count()
+    payments_today = Payment.objects.filter(
+        created_at__date=today, type=Payment.TYPE_INCOME).aggregate(
+        s=Sum("amount"))["s"] or Decimal(0)
+    new_patients = Patient.objects.filter(created_at__date=today).count()
+
+    try:
+        from apps.settings_clinic.models import ClinicSettings
+        clinic_name = ClinicSettings.get().name
+    except Exception:
+        clinic_name = ""
+
+    text = (
+        "📊 *Ежедневный отчёт*\n"
+        "%s\n"
+        "📅 %s\n\n"
+        "🗓 Записей сегодня: *%d*\n"
+        "✅ Завершено приёмов: *%d*\n"
+        "👤 Новых пациентов: *%d*\n"
+        "💰 Поступления: *%s сом*"
+    ) % (clinic_name, today.strftime("%d.%m.%Y"), appts_total, completed,
+         new_patients, "{:,.0f}".format(payments_today).replace(",", " "))
+
+    ok = wa_send_text(user.phone, text)
+    if ok:
+        messages.success(request, _("Отчёт отправлен в WhatsApp"))
+    else:
+        messages.error(request, _("Не удалось отправить отчёт. Проверьте настройки WhatsApp."))
+    return redirect("profile")
 
 
 def login_view(request):

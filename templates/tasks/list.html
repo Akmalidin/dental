@@ -79,9 +79,14 @@
         {% csrf_token %}
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Заголовок *</label><input type="text" name="title" required placeholder="Что нужно сделать?"></div>
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Описание</label><textarea name="description" rows="2" placeholder="Подробнее..."></textarea></div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Исполнители <span class="text-slate-400 normal-case font-normal">(получат уведомление)</span></label>
-          <div class="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-1">
+        <div x-data="{all:false}">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-semibold text-slate-600 uppercase">Исполнители <span class="text-slate-400 normal-case font-normal">(получат уведомление)</span></label>
+            <button type="button" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                    @click="all=!all; $refs.assignees.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=all)"
+                    x-text="all ? 'Снять все' : 'Все'"></button>
+          </div>
+          <div x-ref="assignees" class="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-1">
             {% for u in staff %}
             <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" name="assigned_to" value="{{ u.pk }}"> {{ u.name }}</label>
             {% endfor %}

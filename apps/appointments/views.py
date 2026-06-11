@@ -11,6 +11,48 @@ from .models import Appointment, Cabinet
 from .forms import AppointmentForm
 
 
+def schedule_violation(doctor, start, end):
+    """Проверка, что приём укладывается в график работы врача.
+
+    Возвращает строку-ошибку, либо None, если всё в порядке.
+    Если у врача вообще нет настроенного графика — не ограничиваем (None),
+    чтобы не блокировать клиники, которые график не ведут.
+    """
+    from django.utils import timezone as _tz
+    from apps.users.models_salary import DoctorSchedule
+
+    if not doctor:
+        return None
+    # Если у врача нет ни одной записи в графике — ограничения не применяем.
+    if not DoctorSchedule.objects.filter(doctor=doctor).exists():
+        return None
+
+    local_start = _tz.localtime(start)
+    local_end = _tz.localtime(end)
+    dow = local_start.weekday()  # 0=Пн … 6=Вс — совпадает с DoctorSchedule.day_of_week
+
+    sched = DoctorSchedule.objects.filter(doctor=doctor, day_of_week=dow).first()
+    if not sched or not sched.is_working:
+        return "Врач не работает в этот день. Запись возможна только в рабочие дни по графику."
+
+    if local_start.time() < sched.start_time or local_end.time() > sched.end_time:
+        return "Время вне графика работы врача (%s–%s). Выберите время в рабочих часах." % (
+            sched.start_time.strftime("%H:%M"), sched.end_time.strftime("%H:%M"))
+    return None
+
+
+def doctor_schedules_map(doctors):
+    """{doctor_id: {day_of_week: [HH:MM, HH:MM] | null}} — для подсказок в календаре."""
+    from apps.users.models_salary import DoctorSchedule
+    out = {}
+    doctor_ids = [d.pk for d in doctors]
+    for s in DoctorSchedule.objects.filter(doctor_id__in=doctor_ids):
+        day = out.setdefault(s.doctor_id, {})
+        day[s.day_of_week] = ([s.start_time.strftime("%H:%M"), s.end_time.strftime("%H:%M")]
+                              if s.is_working else None)
+    return out
+
+
 @login_required
 def calendar_view(request):
     """Calendar page with booking modal."""
@@ -38,6 +80,7 @@ def calendar_view(request):
             {"id": s["id"], "name": s["name"], "price": float(s["price"]), "duration": s["duration"]}
             for s in services
         ],
+        "schedules_json": doctor_schedules_map(doctors),
     })
 
 
@@ -210,6 +253,10 @@ def appointment_create_quick(request):
                     overlap.start_at.strftime("%H:%M"), overlap.end_at.strftime("%H:%M"))
             }, status=400)
 
+        sched_err = schedule_violation(doctor, start, end)
+        if sched_err:
+            return JsonResponse({"error": sched_err}, status=400)
+
         branch = doctor.branches.first() or Branch.objects.first()
         appt = Appointment.objects.create(
             patient=Patient.objects.filter(pk=data.get("patient_id")).first(),
@@ -357,6 +404,9 @@ def appointment_move(request, pk):
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).exists()
         if overlap:
             return JsonResponse({"error": "Пересечение с другой записью этого врача"}, status=400)
+        sched_err = schedule_violation(appt.doctor, start, end)
+        if sched_err:
+            return JsonResponse({"error": sched_err}, status=400)
         appt.start_at = start
         appt.end_at = end
         appt.save(update_fields=["start_at", "end_at"])
