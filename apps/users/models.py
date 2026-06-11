@@ -296,6 +296,25 @@ class ClinicSite(models.Model):
         return f"Сайт {self.clinic.name}"
 
 
+class GoogleCalendarAccount(models.Model):
+    """Подключённый Google-аккаунт врача для синхронизации записей с Google Calendar."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="gcal_account", verbose_name="Пользователь")
+    email = models.CharField(max_length=200, blank=True, verbose_name="Google email")
+    refresh_token = models.TextField(verbose_name="Refresh token")
+    access_token = models.TextField(blank=True, verbose_name="Access token")
+    token_expiry = models.DateTimeField(null=True, blank=True, verbose_name="Срок access token")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Google Calendar аккаунт"
+        verbose_name_plural = "Google Calendar аккаунты"
+
+    def __str__(self):
+        return f"{self.user.name} → {self.email or 'Google'}"
+
+
 class DoctorReview(ClinicScopedModel):
     """Отзыв о враче для публичного сайта (управляется в настройках сайта)."""
     doctor = models.ForeignKey(

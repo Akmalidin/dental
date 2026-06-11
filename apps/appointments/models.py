@@ -110,6 +110,7 @@ class Appointment(ClinicSoftDeleteModel):
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="manual", verbose_name="Источник")
     reminded_day = models.BooleanField(default=False)   # отправлено напоминание за день
     reminded_hour = models.BooleanField(default=False)  # отправлено напоминание за час
+    gcal_event_id = models.CharField(max_length=200, blank=True, verbose_name="ID события Google Calendar")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Обновлён")
     created_by = models.ForeignKey(

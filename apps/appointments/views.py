@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 
 from .models import Appointment, Cabinet
 from .forms import AppointmentForm
+from .gcal import push_event as gcal_push, delete_event as gcal_delete
 
 
 def schedule_violation(doctor, start, end):
@@ -353,6 +354,7 @@ def appointment_create_quick(request):
         if services:
             appt.services.set(services)
         notify_appointment_created(appt, created_by=request.user)
+        gcal_push(appt)
         return JsonResponse({"ok": True, "id": appt.pk})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -452,6 +454,7 @@ def appointment_create(request):
         except Exception:
             pass
         notify_appointment_created(appt, created_by=request.user)
+        gcal_push(appt)
         messages.success(request, _("Запись добавлена"))
         return redirect("appointment_list")
     return render(request, "appointments/form.html", {"form": form})
@@ -462,7 +465,11 @@ def appointment_edit(request, pk):
     appt = get_object_or_404(Appointment, pk=pk)
     form = AppointmentForm(request.POST or None, instance=appt)
     if form.is_valid():
-        form.save()
+        appt = form.save()
+        if appt.status == Appointment.STATUS_CANCELLED:
+            gcal_delete(appt)
+        else:
+            gcal_push(appt)
         messages.success(request, _("Запись обновлена"))
         return redirect("appointment_list")
     return render(request, "appointments/form.html", {"form": form, "object": appt})
@@ -493,6 +500,7 @@ def appointment_move(request, pk):
         appt.start_at = start
         appt.end_at = end
         appt.save(update_fields=["start_at", "end_at"])
+        gcal_push(appt)
         return JsonResponse({"ok": True})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -512,8 +520,10 @@ def appointment_status(request, pk):
             appt.cancel_note = request.POST.get("cancel_note", "")[:300]
             appt.save(update_fields=["status", "cancellation_reason", "cancel_note"])
             notify_appointment_cancelled(appt)
+            gcal_delete(appt)
         else:
             appt.save(update_fields=["status"])
+            gcal_push(appt)
         messages.success(request, _("Статус записи изменён"))
         # WhatsApp пациенту при подтверждении приёма (Green-API; если включено в env)
         if (new_status == Appointment.STATUS_CONFIRMED
@@ -573,10 +583,13 @@ def appointment_finish(request, pk):
             status=Appointment.STATUS_SCHEDULED,
         )
         new_id = nxt.pk
+        notify_appointment_created(nxt, created_by=request.user)
+        gcal_push(nxt)
 
     if do_complete and appt.status not in ("cancelled", "completed"):
         appt.status = Appointment.STATUS_COMPLETED
         appt.save(update_fields=["status"])
+        gcal_push(appt)
 
     if request.POST.get("redirect"):
         messages.success(request, _("Приём завершён") if do_complete else _("Следующий приём назначен"))
@@ -591,6 +604,7 @@ def appointment_delete(request, pk):
         appt.status = Appointment.STATUS_CANCELLED
         appt.save()
         notify_appointment_cancelled(appt)
+        gcal_delete(appt)
         messages.success(request, _("Запись отменена"))
         return redirect("appointment_list")
     return render(request, "appointments/confirm_delete.html", {"object": appt})
@@ -670,5 +684,6 @@ def appointment_trash(request, pk):
     appt = get_object_or_404(Appointment, pk=pk)
     appt.soft_delete(request.user)
     notify_appointment_cancelled(appt)
+    gcal_delete(appt)
     messages.success(request, _("Запись перемещена в корзину"))
     return redirect("appointment_list")

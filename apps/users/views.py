@@ -547,7 +547,12 @@ def profile_view(request):
             return redirect("profile")
         for e in errors:
             messages.error(request, e)
-    return render(request, "users/profile.html", {"profile_user": user})
+    from apps.appointments.gcal import gcal_enabled
+    return render(request, "users/profile.html", {
+        "profile_user": user,
+        "gcal_enabled": gcal_enabled(),
+        "gcal_account": getattr(user, "gcal_account", None),
+    })
 
 
 @require_POST
@@ -602,6 +607,76 @@ def profile_send_daily_report(request):
         messages.success(request, _("Отчёт отправлен в WhatsApp"))
     else:
         messages.error(request, _("Не удалось отправить отчёт. Проверьте настройки WhatsApp."))
+    return redirect("profile")
+
+
+# ─── Google Calendar OAuth ───────────────────────────────────────────────────
+@login_required
+def google_calendar_connect(request):
+    """Старт OAuth: редирект на согласие Google."""
+    from django.core import signing
+    from apps.appointments.gcal import gcal_enabled, auth_url
+    if not gcal_enabled():
+        messages.error(request, _("Google Calendar не настроен. Обратитесь к администратору."))
+        return redirect("profile")
+    state = signing.dumps({"uid": request.user.pk}, salt="gcal-oauth")
+    return redirect(auth_url(state))
+
+
+@login_required
+def google_calendar_callback(request):
+    """Возврат от Google: обмен кода на токены, сохранение аккаунта."""
+    from django.core import signing
+    from apps.appointments.gcal import gcal_enabled, exchange_code, userinfo_email
+    from apps.users.models import GoogleCalendarAccount
+    from datetime import timedelta
+    from django.utils import timezone
+
+    if not gcal_enabled():
+        return redirect("profile")
+    err = request.GET.get("error")
+    if err:
+        messages.error(request, _("Подключение Google отменено: %(e)s") % {"e": err})
+        return redirect("profile")
+    code = request.GET.get("code")
+    state = request.GET.get("state")
+    try:
+        data = signing.loads(state, salt="gcal-oauth", max_age=600)
+        if data.get("uid") != request.user.pk:
+            raise ValueError("uid mismatch")
+    except Exception:
+        messages.error(request, _("Не удалось подтвердить запрос. Попробуйте ещё раз."))
+        return redirect("profile")
+    try:
+        tok = exchange_code(code)
+    except Exception:
+        messages.error(request, _("Google вернул ошибку при подключении. Попробуйте ещё раз."))
+        return redirect("profile")
+    refresh = tok.get("refresh_token")
+    access = tok.get("access_token")
+    if not access:
+        messages.error(request, _("Google не выдал токен. Попробуйте ещё раз."))
+        return redirect("profile")
+    email = userinfo_email(access)
+    acc, _created = GoogleCalendarAccount.objects.get_or_create(user=request.user)
+    if refresh:
+        acc.refresh_token = refresh
+    acc.access_token = access
+    acc.token_expiry = timezone.now() + timedelta(seconds=int(tok.get("expires_in", 3600)))
+    if email:
+        acc.email = email
+    acc.save()
+    messages.success(request, _("Google Календарь подключён%(e)s") % {
+        "e": (": " + email) if email else ""})
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def google_calendar_disconnect(request):
+    from apps.users.models import GoogleCalendarAccount
+    GoogleCalendarAccount.objects.filter(user=request.user).delete()
+    messages.success(request, _("Google Календарь отключён"))
     return redirect("profile")
 
 

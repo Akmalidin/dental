@@ -197,6 +197,12 @@ GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
 GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
 GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
 
+# ─── Google Calendar (OAuth2) — ключи только из env ──────────────────────────
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
+    "GOOGLE_OAUTH_REDIRECT_URI", "https://app.denta.tw1.ru/google/calendar/callback/")
+
 # ─── Публичные сайты клиник (поддомены) ──────────────────────────────────────
 APP_HOST = "app.denta.tw1.ru"           # хост CRM-системы
 PUBLIC_BASE_DOMAIN = "denta.tw1.ru"     # <slug>.denta.tw1.ru → публичный сайт клиники

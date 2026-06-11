@@ -192,6 +192,12 @@ def public_book_submit(request):
         appt.services.add(service_id)
 
     try:
+        from apps.appointments.gcal import push_event
+        push_event(appt)
+    except Exception:
+        pass
+
+    try:
         from apps.notifications.models import Notification
         admins = (User.objects.filter(clinic=clinic, is_active=True)
                   .filter(Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])

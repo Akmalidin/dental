@@ -54,6 +54,39 @@
       </form>
     </div>
 
+    <!-- Google Calendar -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-slate-200">
+            <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 00-2 2v13a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm0 15H5V9h14v10z"/><path fill="#34A853" d="M7 11h5v5H7z"/></svg>
+          </div>
+          <span class="font-semibold text-slate-800 text-sm">Google Календарь</span>
+        </div>
+        {% if gcal_account %}
+        <form method="post" action="/google/calendar/disconnect/" onsubmit="return confirm('Отключить Google Календарь?')">
+          {% csrf_token %}
+          <button type="submit" class="text-xs font-semibold text-red-600 px-3 py-1 rounded-lg border border-red-200">Отключить</button>
+        </form>
+        {% else %}
+        <a href="/google/calendar/connect/" class="text-xs font-semibold text-white px-3 py-1 rounded-lg" style="background:#4285F4">Подключить</a>
+        {% endif %}
+      </div>
+      {% if gcal_account %}
+      <div class="bg-green-50 border border-green-100 rounded-xl p-3 text-xs text-green-700">
+        ✅ Подключён{% if gcal_account.email %}: <b>{{ gcal_account.email }}</b>{% endif %}. Ваши записи автоматически появляются в Google Календаре.
+      </div>
+      {% elif gcal_enabled %}
+      <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-600">
+        Подключите Google-аккаунт — записи из расписания будут автоматически добавляться в ваш Google Календарь.
+      </div>
+      {% else %}
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500">
+        Интеграция с Google Календарём не настроена. Обратитесь к администратору.
+      </div>
+      {% endif %}
+    </div>
+
     <!-- Theme -->
     <div class="card p-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
