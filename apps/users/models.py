@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, Permission
 from django.db import models
 from apps.tenancy import ClinicScopedModel
@@ -143,6 +144,12 @@ class User(AbstractUser):
         null=True, blank=True, default=None, verbose_name="Разрешённые разделы",
         help_text="Пусто (null) = все разделы по роли. Список ключей = только эти разделы.",
     )
+    # ── Публичный профиль врача (для сайта клиники) ──
+    specialty = models.CharField(max_length=150, blank=True, verbose_name="Специализация")
+    bio = models.TextField(blank=True, verbose_name="Биография")
+    experience_years = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name="Стаж (лет)")
+    show_on_site = models.BooleanField(default=True, verbose_name="Показывать на сайте")
     is_active = models.BooleanField(default=True)
 
     USERNAME_FIELD = "login"
@@ -287,6 +294,26 @@ class ClinicSite(models.Model):
 
     def __str__(self):
         return f"Сайт {self.clinic.name}"
+
+
+class DoctorReview(ClinicScopedModel):
+    """Отзыв о враче для публичного сайта (управляется в настройках сайта)."""
+    doctor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="reviews", verbose_name="Врач")
+    author = models.CharField(max_length=150, verbose_name="Автор")
+    rating = models.PositiveSmallIntegerField(default=5, verbose_name="Оценка (1–5)")
+    text = models.TextField(verbose_name="Отзыв")
+    is_published = models.BooleanField(default=True, verbose_name="Опубликован")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Отзыв о враче"
+        verbose_name_plural = "Отзывы о врачах"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.author} → {self.doctor.name} ({self.rating}★)"
 
 
 # Re-export salary & schedule models (defined after User/Branch to avoid circular refs)

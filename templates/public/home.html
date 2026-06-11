@@ -243,11 +243,12 @@
       <div class="shead reveal"><span class="eyebrow">Команда</span><h2>Наши врачи</h2><p>Специалисты, которым доверяют вашу улыбку</p></div>
       <div class="cards doctors">
         {% for d in doctors %}
-        <div class="glass doc reveal" data-tilt style="transition-delay:{{ forloop.counter0|add:forloop.counter0 }}0ms">
+        <a class="glass doc reveal" href="/doctor/{{ d.pk }}/" data-tilt style="transition-delay:{{ forloop.counter0|add:forloop.counter0 }}0ms;text-decoration:none;color:inherit;display:block">
           {% if d.avatar %}<img class="ava" src="{{ d.avatar.url }}" alt="{{ d.name }}">{% else %}<div class="ava">{{ d.name|first|upper }}</div>{% endif %}
           <div class="nm">{{ d.name }}</div>
-          <div class="rl">{{ d.role|default:"Врач-стоматолог" }}</div>
-        </div>
+          <div class="rl">{{ d.specialty|default:d.role|default:"Врач-стоматолог" }}</div>
+          {% if d.experience_years %}<div class="rl" style="opacity:.8">Стаж: {{ d.experience_years }} лет</div>{% endif %}
+        </a>
         {% endfor %}
       </div>
     </div>

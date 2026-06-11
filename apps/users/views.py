@@ -425,6 +425,62 @@ def clinic_site_edit(request, clinic_id):
 
 
 @login_required
+def clinic_site_doctors(request, clinic_id):
+    """Вкладка «Врачи и отзывы» конструктора сайта: профиль врача (специализация,
+    стаж, телефон, биография, показ на сайте) + отзывы. Суперадмин / Директор."""
+    from apps.users.models import Clinic, DoctorReview, clinic_doctors
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    if not _can_edit_site(request.user, clinic):
+        messages.error(request, _("Нет доступа к редактированию сайта"))
+        return redirect("/")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        doctor = clinic_doctors(clinic).filter(pk=request.POST.get("doctor_id")).first()
+        if doctor is None:
+            messages.error(request, _("Врач не найден"))
+            return redirect(f"/users/clinic/{clinic_id}/site/doctors/")
+        if action == "save_profile":
+            doctor.specialty = (request.POST.get("specialty") or "").strip()[:150]
+            doctor.bio = (request.POST.get("bio") or "").strip()
+            doctor.phone = (request.POST.get("phone") or "").strip()[:30]
+            try:
+                exp = request.POST.get("experience_years")
+                doctor.experience_years = int(exp) if exp not in (None, "") else None
+            except (TypeError, ValueError):
+                doctor.experience_years = None
+            doctor.show_on_site = bool(request.POST.get("show_on_site"))
+            doctor.save(update_fields=["specialty", "bio", "phone",
+                                       "experience_years", "show_on_site"])
+            messages.success(request, _("Профиль врача обновлён"))
+        elif action == "add_review":
+            text = (request.POST.get("text") or "").strip()
+            author = (request.POST.get("author") or "").strip()[:150]
+            if text and author:
+                try:
+                    rating = max(1, min(5, int(request.POST.get("rating") or 5)))
+                except (TypeError, ValueError):
+                    rating = 5
+                DoctorReview.objects.create(doctor=doctor, author=author,
+                                            rating=rating, text=text)
+                messages.success(request, _("Отзыв добавлен"))
+            else:
+                messages.error(request, _("Укажите автора и текст отзыва"))
+        elif action == "del_review":
+            DoctorReview.objects.filter(pk=request.POST.get("review_id"), doctor=doctor).delete()
+            messages.success(request, _("Отзыв удалён"))
+        return redirect(f"/users/clinic/{clinic_id}/site/doctors/")
+
+    from django.conf import settings as dj_settings
+    doctors = list(clinic_doctors(clinic).prefetch_related("reviews"))
+    public_url = "https://{}.{}".format(
+        clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+    return render(request, "users/site_doctors.html", {
+        "clinic": clinic, "doctors": doctors, "public_url": public_url,
+    })
+
+
+@login_required
 @require_POST
 def save_user_access(request, pk):
     """Сохранить персональные доступы сотрудника (из модала обзора клиники)."""

@@ -18,7 +18,7 @@ def public_home(request):
     doctors = []
     if site.show_doctors:
         from apps.users.models import clinic_doctors
-        doctors = list(clinic_doctors(clinic)[:24])
+        doctors = list(clinic_doctors(clinic).filter(show_on_site=True)[:24])
 
     services = []
     if site.show_services:
@@ -40,6 +40,31 @@ def public_home(request):
         "clinic": clinic, "site": site,
         "doctors": doctors, "services": services, "branches": branches,
         "map_points": map_points,
+    })
+
+
+def public_doctor(request, pk):
+    """Публичная страница врача: фото, специализация, стаж, биография, пациенты, отзывы."""
+    clinic, site = _ctx(request)
+    if not site.show_doctors:
+        raise Http404("Страница недоступна")
+    from apps.users.models import clinic_doctors
+    doctor = clinic_doctors(clinic).filter(pk=pk, show_on_site=True).first()
+    if doctor is None:
+        raise Http404("Врач не найден")
+    reviews = list(doctor.reviews.filter(is_published=True).order_by("-created_at"))
+    # кол-во пациентов врача (по лечениям)
+    patients_count = 0
+    try:
+        from apps.treatments.models import Treatment
+        patients_count = (Treatment.objects.filter(doctor=doctor)
+                          .values("patient").distinct().count())
+    except Exception:
+        pass
+    avg_rating = round(sum(r.rating for r in reviews) / len(reviews), 1) if reviews else None
+    return render(request, "public/doctor.html", {
+        "clinic": clinic, "site": site, "doctor": doctor, "reviews": reviews,
+        "patients_count": patients_count, "avg_rating": avg_rating,
     })
 
 

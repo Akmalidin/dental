@@ -4,6 +4,7 @@ from apps.users import site_views
 
 urlpatterns = [
     path("", site_views.public_home, name="public_home"),
+    path("doctor/<int:pk>/", site_views.public_doctor, name="public_doctor"),
     path("service/<int:pk>/", site_views.public_service, name="public_service"),
     path("book/", site_views.public_book, name="public_book"),
     path("book/slots/", site_views.public_slots, name="public_slots"),

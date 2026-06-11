@@ -30,6 +30,7 @@
     </div>
     <div class="flex items-center gap-2">
       {% if site.enabled %}<a href="{{ public_url }}" target="_blank" class="btn btn-ghost btn-sm">Открыть сайт ↗</a>{% endif %}
+      <a href="/users/clinic/{{ clinic.pk }}/site/doctors/" class="btn btn-ghost btn-sm">👨‍⚕️ Врачи и отзывы</a>
       <a href="/users/clinic/{{ clinic.pk }}/overview/" class="btn btn-ghost btn-sm">← Обзор</a>
       <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
     </div>

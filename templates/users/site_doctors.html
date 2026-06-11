@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block page_title %}Врачи и отзывы — {{ clinic.name }}{% endblock %}
+{% block content %}
+<div class="w-full max-w-3xl space-y-4" x-data="{open:null}">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h2 class="text-xl font-bold" style="color:var(--text)">👨‍⚕️ Врачи и отзывы</h2>
+      <p class="muted text-sm">Профили врачей для публичного сайта: специализация, стаж, биография, отзывы.</p>
+    </div>
+    <a href="/users/clinic/{{ clinic.pk }}/site/" class="btn btn-ghost btn-sm">← Конструктор сайта</a>
+  </div>
+
+  {% for d in doctors %}
+  <div class="card overflow-hidden">
+    <div class="flex items-center gap-3 px-5 py-3 cursor-pointer" @click="open === {{ d.pk }} ? open=null : open={{ d.pk }}"
+         style="border-bottom:1px solid var(--border-2)">
+      <div class="avatar w-9 h-9 text-sm">{{ d.name|first|upper }}</div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-semibold" style="color:var(--text)">{{ d.name }}
+          {% if not d.show_on_site %}<span class="badge badge-gray ml-1">скрыт на сайте</span>{% endif %}
+        </p>
+        <p class="text-xs muted">{{ d.specialty|default:"специализация не указана" }}{% if d.experience_years %} · стаж {{ d.experience_years }} лет{% endif %} · отзывов: {{ d.reviews.count }}</p>
+      </div>
+      <span class="badge badge-blue text-xs">Редактировать ▾</span>
+    </div>
+
+    <div x-show="open === {{ d.pk }}" x-cloak class="p-5 space-y-5">
+      <!-- Профиль -->
+      <form method="post" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_profile">
+        <input type="hidden" name="doctor_id" value="{{ d.pk }}">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Специализация</label><input type="text" name="specialty" value="{{ d.specialty }}" placeholder="Стоматолог-терапевт"></div>
+          <div><label class="fld">Стаж (лет)</label><input type="number" name="experience_years" min="0" max="70" value="{{ d.experience_years|default_if_none:'' }}"></div>
+          <div><label class="fld">Телефон</label><input type="text" name="phone" value="{{ d.phone }}" placeholder="+996 ..."></div>
+          <div class="flex items-end">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" name="show_on_site" {% if d.show_on_site %}checked{% endif %}>
+              <span>Показывать на сайте</span>
+            </label>
+          </div>
+        </div>
+        <div><label class="fld">Биография</label><textarea name="bio" rows="4" placeholder="Опыт, образование, подход к лечению...">{{ d.bio }}</textarea></div>
+        <div class="flex justify-end"><button type="submit" class="btn btn-primary btn-sm">Сохранить профиль</button></div>
+      </form>
+
+      <!-- Отзывы -->
+      <div>
+        <p class="text-xs font-bold uppercase muted mb-2">Отзывы</p>
+        <div class="space-y-2 mb-3">
+          {% for r in d.reviews.all %}
+          <div class="flex items-start gap-2 p-3 rounded-xl" style="background:var(--surface-2)">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold" style="color:var(--text)">{{ r.author }} <span style="color:#f59e0b">{% for _ in "12345"|make_list %}{% if forloop.counter <= r.rating %}★{% else %}☆{% endif %}{% endfor %}</span></p>
+              <p class="text-sm muted">{{ r.text }}</p>
+            </div>
+            <form method="post" onsubmit="return confirm('Удалить отзыв?')">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="del_review">
+              <input type="hidden" name="doctor_id" value="{{ d.pk }}">
+              <input type="hidden" name="review_id" value="{{ r.pk }}">
+              <button type="submit" class="btn-ghost text-xs py-1" style="color:var(--red)">Удалить</button>
+            </form>
+          </div>
+          {% empty %}
+          <p class="text-xs muted">Отзывов пока нет.</p>
+          {% endfor %}
+        </div>
+        <form method="post" class="flex flex-wrap items-end gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_review">
+          <input type="hidden" name="doctor_id" value="{{ d.pk }}">
+          <div style="width:160px"><label class="fld">Автор</label><input type="text" name="author" placeholder="Имя пациента" required></div>
+          <div style="width:90px"><label class="fld">Оценка</label>
+            <select name="rating"><option value="5">5 ★</option><option value="4">4 ★</option><option value="3">3 ★</option><option value="2">2 ★</option><option value="1">1 ★</option></select>
+          </div>
+          <div class="flex-1 min-w-48"><label class="fld">Отзыв</label><input type="text" name="text" placeholder="Текст отзыва" required></div>
+          <button type="submit" class="btn btn-primary btn-sm">Добавить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="card card-pad text-center muted">В клинике нет врачей. Добавьте сотрудника с ролью «Доктор».</div>
+  {% endfor %}
+</div>
+{% endblock %}

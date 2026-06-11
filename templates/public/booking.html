@@ -45,7 +45,7 @@
     .err{background:#fee2e2;color:#b91c1c;padding:12px 16px;border-radius:12px;font-size:14px;margin-top:14px}
   </style>
 </head>
-<body x-data="booking()">
+<body x-data="booking()" x-init="init()">
   <div class="aura"></div>
   <div class="wrap">
     <div class="top">
@@ -147,6 +147,10 @@
         doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'kg',
         slots:[], loading:false, sending:false, done:false, error:'',
         today:new Date().toISOString().slice(0,10),
+        init(){
+          const p = new URLSearchParams(location.search).get('doctor');
+          if(p) this.doctor = parseInt(p, 10) || '';
+        },
         get maxLen(){ return this.country==='ru' ? 10 : 9; },
         get fullPhone(){ return (this.country==='ru' ? '+7' : '+996') + this.phone; },
         get canSubmit(){ return this.doctor&&this.date&&this.slot&&this.name.trim()&&this.phone.length===this.maxLen; },
