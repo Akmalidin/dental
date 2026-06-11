@@ -17,3 +17,7 @@ class TaskForm(forms.ModelForm):
         self.fields["due_date"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["status"].required = False      # по умолчанию «Ожидает»
         self.fields["assigned_to"].required = False
+        # Создателя (себя) не показываем в списке исполнителей
+        if user is not None and getattr(user, "pk", None):
+            self.fields["assigned_to"].queryset = (
+                self.fields["assigned_to"].queryset.exclude(pk=user.pk))

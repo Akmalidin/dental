@@ -26,7 +26,7 @@ def task_list(request):
     qs = qs.order_by(F("due_date").asc(nulls_last=True), "-created_at")
     from apps.users.models import User
     from apps.tenancy import get_current_clinic
-    staff = User.objects.filter(is_active=True)
+    staff = User.objects.filter(is_active=True).exclude(pk=request.user.pk)
     _clinic = get_current_clinic()
     if _clinic is not None:
         staff = staff.filter(clinic=_clinic)

@@ -40,12 +40,23 @@
           <td>
             <div class="flex items-center gap-3">
               <div class="avatar w-9 h-9 text-xs">{{ appt.patient.first_name|first|upper|default:"?" }}</div>
-              <span class="font-semibold">{{ appt.patient.full_name|default:"Без пациента" }}</span>
+              {% if appt.patient_id %}
+              <a href="/patients/{{ appt.patient_id }}/" class="font-semibold" style="color:var(--primary)">{{ appt.patient.full_name }}</a>
+              {% else %}
+              <span class="font-semibold">Без пациента</span>
+              {% endif %}
             </div>
           </td>
           <td class="muted">{{ appt.service.name|default:"—" }}</td>
           <td class="muted">{{ appt.start_at|date:"d.m.Y H:i" }}</td>
-          <td><a href="/appointments/{{ appt.pk }}/edit/" class="btn btn-ghost btn-sm">Изменить</a></td>
+          <td>
+            <div class="flex items-center gap-2 justify-end">
+              {% if appt.patient_id and appt.status != "completed" and appt.status != "cancelled" %}
+              <a href="/treatments/create/?patient={{ appt.patient_id }}&doctor={{ appt.doctor_id }}&appointment={{ appt.pk }}" class="btn btn-success btn-sm">→ Начать приём</a>
+              {% endif %}
+              <a href="/appointments/{{ appt.pk }}/edit/" class="btn btn-ghost btn-sm">Изменить</a>
+            </div>
+          </td>
         </tr>
         {% empty %}
         <tr><td colspan="4" class="text-center py-10 muted">Нет ближайших записей</td></tr>

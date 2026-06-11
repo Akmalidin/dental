@@ -735,6 +735,31 @@ def staff_edit(request, pk):
 
 @login_required
 @role_required("superadmin", "admin_main")
+@require_POST
+def staff_purge(request, pk):
+    """Удалить сотрудника навсегда. Если у него есть приёмы/записи (PROTECT) —
+    удалить нельзя, оставляем деактивированным и сообщаем об этом."""
+    from django.db.models import ProtectedError
+    user = get_object_or_404(User, pk=pk)
+    if not _can_manage_access(request.user, user):
+        messages.error(request, _("Нет прав удалять этого сотрудника"))
+        return redirect(request.META.get("HTTP_REFERER") or "staff_list")
+    name = user.name
+    try:
+        user.delete()
+        messages.success(request, _("Сотрудник «%(n)s» удалён") % {"n": name})
+    except ProtectedError:
+        if user.is_active:
+            user.is_active = False
+            user.save(update_fields=["is_active"])
+        messages.error(request, _("У сотрудника «%(n)s» есть приёмы/записи — удалить нельзя. "
+                                  "Он деактивирован (вход заблокирован).") % {"n": name})
+    return redirect(request.META.get("HTTP_REFERER")
+                    or (f"/users/clinic/{user.clinic_id}/overview/" if user.clinic_id else "/users/"))
+
+
+@login_required
+@role_required("superadmin", "admin_main")
 def staff_delete(request, pk):
     user = get_object_or_404(User, pk=pk)
     if _is_protected_target(user, request.user):

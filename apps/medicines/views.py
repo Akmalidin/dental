@@ -11,9 +11,10 @@ def medicine_list(request):
     medicines = Medicine.objects.filter(is_active=True)
     prescriptions = PatientMedicine.objects.select_related(
         "patient", "medicine", "doctor"
-    ).order_by("-date")[:50]
+    ).order_by("-date")
     if request.user.is_doctor:
         prescriptions = prescriptions.filter(doctor=request.user)
+    prescriptions = prescriptions[:50]
     return render(request, "medicines/list.html", {
         "medicines": medicines,
         "prescriptions": prescriptions,

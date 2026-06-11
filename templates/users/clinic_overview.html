@@ -72,6 +72,13 @@
         </div>
         {% if s.manageable %}
         <span class="badge badge-blue shrink-0 text-xs">Настроить →</span>
+        {% if not s.is_active %}
+        <form method="post" action="/users/{{ s.pk }}/purge/" class="shrink-0" @click.stop
+              onsubmit="return confirm('Удалить сотрудника «{{ s.name|escapejs }}» навсегда? Действие необратимо.')">
+          {% csrf_token %}
+          <button type="submit" class="badge badge-red text-xs cursor-pointer" title="Удалить навсегда">🗑 Удалить</button>
+        </form>
+        {% endif %}
         {% else %}
         <span class="badge badge-gray shrink-0 text-xs">только просмотр</span>
         {% endif %}
