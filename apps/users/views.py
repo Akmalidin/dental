@@ -450,8 +450,14 @@ def clinic_site_doctors(request, clinic_id):
             except (TypeError, ValueError):
                 doctor.experience_years = None
             doctor.show_on_site = bool(request.POST.get("show_on_site"))
-            doctor.save(update_fields=["specialty", "bio", "phone",
-                                       "experience_years", "show_on_site"])
+            update_fields = ["specialty", "bio", "phone", "experience_years", "show_on_site"]
+            if request.FILES.get("avatar"):
+                doctor.avatar = request.FILES["avatar"]
+                update_fields.append("avatar")
+            elif request.POST.get("remove_avatar"):
+                doctor.avatar = None
+                update_fields.append("avatar")
+            doctor.save(update_fields=update_fields)
             messages.success(request, _("Профиль врача обновлён"))
         elif action == "add_review":
             text = (request.POST.get("text") or "").strip()

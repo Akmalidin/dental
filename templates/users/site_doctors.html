@@ -26,10 +26,22 @@
 
     <div x-show="open === {{ d.pk }}" x-cloak class="p-5 space-y-5">
       <!-- Профиль -->
-      <form method="post" class="space-y-3">
+      <form method="post" enctype="multipart/form-data" class="space-y-3">
         {% csrf_token %}
         <input type="hidden" name="action" value="save_profile">
         <input type="hidden" name="doctor_id" value="{{ d.pk }}">
+        <div class="flex items-center gap-4">
+          {% if d.avatar %}
+          <img src="{{ d.avatar.url }}" class="w-16 h-16 rounded-2xl object-cover border" style="border-color:var(--border)">
+          {% else %}
+          <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black text-white" style="background:linear-gradient(135deg,var(--primary),#8B5CF6)">{{ d.name|first|upper }}</div>
+          {% endif %}
+          <div class="flex-1">
+            <label class="fld">Фото врача</label>
+            <input type="file" name="avatar" accept="image/*">
+            {% if d.avatar %}<label class="flex items-center gap-2 text-xs muted mt-1 cursor-pointer"><input type="checkbox" name="remove_avatar"> Удалить фото</label>{% endif %}
+          </div>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="fld">Специализация</label><input type="text" name="specialty" value="{{ d.specialty }}" placeholder="Стоматолог-терапевт"></div>
           <div><label class="fld">Стаж (лет)</label><input type="number" name="experience_years" min="0" max="70" value="{{ d.experience_years|default_if_none:'' }}"></div>

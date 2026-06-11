@@ -41,6 +41,47 @@ def schedule_violation(doctor, start, end):
     return None
 
 
+def notify_appointment_created(appt, created_by=None):
+    """Уведомить о новой записи (создана в календаре/CRM): пациента, врача и группы.
+    Безопасно: при выключенном WhatsApp/ошибках ничего не падает."""
+    try:
+        from apps.notifications.whatsapp import wa_send_text, notify_groups, wa_enabled
+        from apps.settings_clinic.models import ClinicSettings
+        from django.utils import timezone as _tz
+        if not wa_enabled():
+            return
+        st = _tz.localtime(appt.start_at)
+        clinic_name = ClinicSettings.get().name
+        doctor_name = appt.doctor.name if appt.doctor else "—"
+        date_s, time_s = st.strftime("%d.%m.%Y"), st.strftime("%H:%M")
+        # пациенту
+        if appt.patient_id and appt.patient.phone:
+            pname = appt.patient.first_name or appt.patient.full_name
+            wa_send_text(appt.patient.phone,
+                         "✅ *%s*\n\nЗдравствуйте, *%s*!\n"
+                         "Вы записаны на приём.\n\n"
+                         "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
+                         "Ждём вас! Если планы изменятся — пожалуйста, сообщите нам."
+                         % (clinic_name, pname, date_s, time_s, doctor_name))
+        # врачу (если запись создал не сам врач)
+        if (appt.doctor_id and getattr(appt.doctor, "phone", "")
+                and getattr(created_by, "pk", None) != appt.doctor_id):
+            wa_send_text(appt.doctor.phone,
+                         "🆕 *Новая запись*\n\n"
+                         "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+                         % (appt.patient.full_name if appt.patient_id else "—",
+                            date_s, time_s, doctor_name))
+        # группы клиники
+        notify_groups(
+            "🆕 *Новая запись* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+            % (clinic_name, appt.patient.full_name if appt.patient_id else "—",
+               date_s, time_s, doctor_name),
+            clinic=appt.clinic,
+        )
+    except Exception:
+        pass
+
+
 def notify_appointment_cancelled(appt):
     """Уведомить об отмене записи: пациента, врача и WhatsApp-группы клиники.
     Безопасно: при выключенном WhatsApp/ошибках ничего не падает."""
@@ -311,6 +352,7 @@ def appointment_create_quick(request):
         )
         if services:
             appt.services.set(services)
+        notify_appointment_created(appt, created_by=request.user)
         return JsonResponse({"ok": True, "id": appt.pk})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -409,6 +451,7 @@ def appointment_create(request):
                               type="appointment", link="/appointments/", actor=request.user)
         except Exception:
             pass
+        notify_appointment_created(appt, created_by=request.user)
         messages.success(request, _("Запись добавлена"))
         return redirect("appointment_list")
     return render(request, "appointments/form.html", {"form": form})
