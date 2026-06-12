@@ -40,15 +40,15 @@ class TreatmentPlan(models.Model):
 
     @property
     def total_price(self):
-        from django.db.models import Sum
+        # Считаем через subtotal (цена × кол-во − скидка), чтобы итог совпадал
+        # со строками и суммами этапов. Sum("price") давал заниженную цифру.
         from decimal import Decimal
-        return self.items.aggregate(s=Sum("price"))["s"] or Decimal(0)
+        return sum((it.subtotal for it in self.items.all()), Decimal(0))
 
     @property
     def done_price(self):
-        from django.db.models import Sum
         from decimal import Decimal
-        return self.items.filter(status="done").aggregate(s=Sum("price"))["s"] or Decimal(0)
+        return sum((it.subtotal for it in self.items.filter(status="done")), Decimal(0))
 
     @property
     def completion_pct(self):

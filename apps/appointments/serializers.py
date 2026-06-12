@@ -36,11 +36,26 @@ class AppointmentCalendarSerializer(serializers.ModelSerializer):
     """Compact serializer for FullCalendar events."""
 
     title = serializers.SerializerMethodField()
-    start = serializers.DateTimeField(source="start_at")
-    end = serializers.DateTimeField(source="end_at")
+    start = serializers.SerializerMethodField()
+    end = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
     className = serializers.SerializerMethodField()
     extendedProps = serializers.SerializerMethodField()
+
+    def _local_naive(self, dt):
+        """Время в часовом поясе клиники, БЕЗ смещения (наивная ISO-строка).
+        FullCalendar показывает её как есть — одинаково на любом устройстве,
+        независимо от часового пояса браузера."""
+        if not dt:
+            return None
+        from django.utils import timezone
+        return timezone.localtime(dt).strftime("%Y-%m-%dT%H:%M:%S")
+
+    def get_start(self, obj):
+        return self._local_naive(obj.start_at)
+
+    def get_end(self, obj):
+        return self._local_naive(obj.end_at)
 
     class Meta:
         model = Appointment

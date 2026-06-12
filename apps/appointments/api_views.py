@@ -99,9 +99,14 @@ def available_slots(request):
 
     while current < end_time:
         slot_end = current + timedelta(minutes=slot_minutes)
+        # Приводим занятые интервалы к местному (клиники) времени, затем сравниваем
+        # с наивными местными слотами — иначе сравнение шло бы против UTC и смещалось.
         is_busy = any(
             not (slot_end <= s or current >= e)
-            for s, e in ((s.replace(tzinfo=None), e.replace(tzinfo=None)) for s, e in existing)
+            for s, e in (
+                (timezone.localtime(s).replace(tzinfo=None), timezone.localtime(e).replace(tzinfo=None))
+                for s, e in existing
+            )
         )
         if not is_busy:
             slots.append({

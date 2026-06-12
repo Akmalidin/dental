@@ -36,6 +36,12 @@ class Tag(models.Model):
 class Patient(ClinicSoftDeleteModel):
     GENDER_CHOICES = [("male", "Мужской"), ("female", "Женский")]
 
+    # Порядковый номер пациента ВНУТРИ клиники (у каждой клиники нумерация с 1).
+    # Не путать с глобальным pk (id в БД).
+    number = models.PositiveIntegerField(
+        null=True, blank=True, db_index=True, verbose_name="№ пациента",
+    )
+
     first_name = models.CharField(max_length=100, verbose_name="Имя")
     last_name = models.CharField(max_length=100, verbose_name="Фамилия")
     middle_name = models.CharField(max_length=100, blank=True, verbose_name="Отчество")
@@ -102,6 +108,28 @@ class Patient(ClinicSoftDeleteModel):
 
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
+
+    def save(self, *args, **kwargs):
+        # Назначаем порядковый номер в пределах клиники при первом сохранении.
+        # _ClinicSaveMixin.save (через super) проставит clinic; нам он нужен заранее,
+        # поэтому повторяем его логику здесь для расчёта номера.
+        if self.number is None:
+            from apps.tenancy import get_current_clinic
+            from django.db.models import Max
+            if self.clinic_id is None:
+                cur = get_current_clinic()
+                if cur is not None:
+                    self.clinic = cur
+            if self.clinic_id is not None:
+                last = (Patient.all_objects.filter(clinic_id=self.clinic_id)
+                        .aggregate(m=Max("number"))["m"] or 0)
+                self.number = last + 1
+        super().save(*args, **kwargs)
+
+    @property
+    def display_number(self):
+        """Номер для показа: порядковый в клинике, иначе глобальный id."""
+        return self.number or self.pk
 
     @property
     def full_name(self):

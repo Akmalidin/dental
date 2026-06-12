@@ -260,12 +260,18 @@ def treatment_create_quick(request):
         cures_data = data.get("cures", [])
 
         patient = Patient.objects.get(pk=patient_id)
-        User = request.user.__class__
-        doctor = User.objects.get(pk=doctor_id) if doctor_id else request.user
+        # Изоляция клиник: врач — только из текущей клиники, иначе текущий пользователь.
+        from apps.users.models import clinic_doctors
+        from apps.tenancy import get_current_clinic
+        clinic = get_current_clinic()
+        doctor = None
+        if doctor_id:
+            doctor = clinic_doctors(clinic).filter(pk=doctor_id).first()
+        doctor = doctor or request.user
 
         branch = None
         if branch_id:
-            branch = Branch.objects.filter(pk=branch_id).first()
+            branch = Branch.objects.filter(pk=branch_id, clinic=clinic).first() if clinic else Branch.objects.filter(pk=branch_id).first()
         if not branch:
             branch = request.user.branches.first() or Branch.objects.first()
         if not branch:
@@ -304,8 +310,14 @@ def plan_create(request):
     try:
         data = json.loads(request.body)
         patient = Patient.objects.get(pk=data["patient_id"])
-        User = request.user.__class__
-        doctor = User.objects.get(pk=data["doctor_id"]) if data.get("doctor_id") else request.user
+        # Изоляция клиник: врач — только из текущей клиники.
+        from apps.users.models import clinic_doctors
+        from apps.tenancy import get_current_clinic
+        clinic = get_current_clinic()
+        doctor = None
+        if data.get("doctor_id"):
+            doctor = clinic_doctors(clinic).filter(pk=data["doctor_id"]).first()
+        doctor = doctor or request.user
         plan = TreatmentPlan.objects.create(
             patient=patient,
             doctor=doctor,
@@ -498,12 +510,13 @@ def plan_print(request, pk):
         TreatmentPlan.objects.select_related("patient", "doctor").prefetch_related("stages__items__service"),
         pk=pk,
     )
+    from django.utils.html import escape
     clinic = ClinicSettings.get()
     rows = ""
     for si, stage in enumerate(plan.stages.all(), 1):
-        rows += f'<tr style="background:#f3f3f3"><td colspan="6"><b>Этап {si}: {stage.title}</b></td></tr>'
+        rows += f'<tr style="background:#f3f3f3"><td colspan="6"><b>Этап {si}: {escape(stage.title)}</b></td></tr>'
         for it in stage.items.all():
-            rows += (f"<tr><td>{it.service.name}</td><td>{it.tooth_number or '—'}</td>"
+            rows += (f"<tr><td>{escape(it.service.name)}</td><td>{escape(it.tooth_number) or '—'}</td>"
                      f"<td>{it.quantity}</td><td>{it.price:.0f}</td><td>{it.discount:.0f}%</td>"
                      f"<td>{it.subtotal:.0f} сом</td></tr>")
     html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>План лечения</title>
@@ -512,9 +525,9 @@ def plan_print(request, pk):
     table{{width:100%;border-collapse:collapse;margin-top:10px}} th,td{{border:1px solid #ccc;padding:7px;text-align:left;font-size:14px}}
     th{{background:#f0f0f0}} .total{{text-align:right;font-weight:bold;font-size:16px;margin-top:14px}}
     @media print{{.no-print{{display:none}}}}</style></head><body>
-    <div class="hdr"><h1>{clinic.name}</h1><p>{clinic.address} · {clinic.phone}</p></div>
-    <h2>План лечения: {plan.title}</h2>
-    <p>Пациент: <b>{plan.patient.full_name}</b> · Врач: {plan.doctor.name} · Дата: {plan.created_at:%d.%m.%Y}</p>
+    <div class="hdr"><h1>{escape(clinic.name)}</h1><p>{escape(clinic.address)} · {escape(clinic.phone)}</p></div>
+    <h2>План лечения: {escape(plan.title)}</h2>
+    <p>Пациент: <b>{escape(plan.patient.full_name)}</b> · Врач: {escape(plan.doctor.name)} · Дата: {plan.created_at:%d.%m.%Y}</p>
     <table><thead><tr><th>Услуга</th><th>Зуб</th><th>Кол-во</th><th>Цена</th><th>Скидка</th><th>Итого</th></tr></thead>
     <tbody>{rows}</tbody></table>
     <p class="total">Итого по плану: {plan.total_price:.0f} сом</p>
@@ -597,6 +610,7 @@ def treatment_emr_print(request, pk):
     from .models_emr import MedicalRecord, EMR_SECTIONS
     from apps.settings_clinic.models import ClinicSettings
     treatment = get_object_or_404(Treatment.objects.select_related("patient", "doctor"), pk=pk)
+    from django.utils.html import escape
     emr = getattr(treatment, "emr", None)
     clinic = ClinicSettings.get()
     fields = {"complaints": "complaints", "anamnesis": "anamnesis", "external_exam": "external_exam",
@@ -606,16 +620,16 @@ def treatment_emr_print(request, pk):
     for key, label in EMR_SECTIONS:
         val = getattr(emr, fields[key], "") if emr else ""
         if val:
-            body += f"<p><b>{label}:</b> {val}</p>"
+            body += f"<p><b>{escape(label)}:</b> {escape(val)}</p>"
     if not body:
         body = "<p>Медкарта не заполнена.</p>"
     html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>ЭМК</title>
     <style>body{{font-family:'Times New Roman',serif;max-width:800px;margin:30px auto;padding:0 30px;line-height:1.6}}
     .hdr{{text-align:center;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:20px}}
     @media print{{.no-print{{display:none}}}}</style></head><body>
-    <div class="hdr"><h2>{clinic.name}</h2><p>{clinic.address} · {clinic.phone}</p></div>
+    <div class="hdr"><h2>{escape(clinic.name)}</h2><p>{escape(clinic.address)} · {escape(clinic.phone)}</p></div>
     <h3>Медицинская карта</h3>
-    <p>Пациент: <b>{treatment.patient.full_name}</b> · Врач: {treatment.doctor.name} · {treatment.created_at:%d.%m.%Y}</p>
+    <p>Пациент: <b>{escape(treatment.patient.full_name)}</b> · Врач: {escape(treatment.doctor.name)} · {treatment.created_at:%d.%m.%Y}</p>
     <hr>{body}
     <div class="no-print" style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:10px 28px;background:#6366F1;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨 Печать</button></div>
     </body></html>"""

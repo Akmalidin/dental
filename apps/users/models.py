@@ -4,6 +4,29 @@ from django.db import models
 from apps.tenancy import ClinicScopedModel
 
 
+# Часовые пояса для выбора в настройках клиники (по городу/стране).
+# value = IANA-зона, label — город/страна для понятного выбора.
+TIMEZONE_CHOICES = [
+    ("Asia/Bishkek", "Бишкек (Кыргызстан, UTC+6)"),
+    ("Asia/Almaty", "Алматы / Астана (Казахстан, UTC+5)"),
+    ("Asia/Tashkent", "Ташкент (Узбекистан, UTC+5)"),
+    ("Asia/Dushanbe", "Душанбе (Таджикистан, UTC+5)"),
+    ("Asia/Ashgabat", "Ашхабад (Туркменистан, UTC+5)"),
+    ("Asia/Yekaterinburg", "Екатеринбург (Россия, UTC+5)"),
+    ("Asia/Omsk", "Омск (Россия, UTC+6)"),
+    ("Asia/Novosibirsk", "Новосибирск (Россия, UTC+7)"),
+    ("Europe/Moscow", "Москва (Россия, UTC+3)"),
+    ("Europe/Kyiv", "Киев (Украина, UTC+2)"),
+    ("Europe/Minsk", "Минск (Беларусь, UTC+3)"),
+    ("Asia/Baku", "Баку (Азербайджан, UTC+4)"),
+    ("Asia/Yerevan", "Ереван (Армения, UTC+4)"),
+    ("Asia/Tbilisi", "Тбилиси (Грузия, UTC+4)"),
+    ("Asia/Dubai", "Дубай (ОАЭ, UTC+4)"),
+    ("Asia/Istanbul", "Стамбул (Турция, UTC+3)"),
+    ("UTC", "UTC (всемирное время)"),
+]
+
+
 class Clinic(models.Model):
     """Клиника (арендатор). Изоляция данных по полю clinic в одной БД."""
     name = models.CharField(max_length=200, verbose_name="Название клиники")
@@ -12,6 +35,11 @@ class Clinic(models.Model):
     tariff_plan = models.CharField(max_length=20, default="standard", verbose_name="Тариф")
     enabled_modules = models.JSONField(default=list, blank=True, verbose_name="Включённые модули")
     tariff_until = models.DateField(null=True, blank=True, verbose_name="Тариф оплачен до")
+    timezone = models.CharField(
+        max_length=64, default="Asia/Bishkek", choices=TIMEZONE_CHOICES,
+        verbose_name="Часовой пояс (город/страна)",
+        help_text="Время записей и расписания показывается в этом поясе на всех устройствах.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property

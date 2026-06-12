@@ -38,6 +38,15 @@
           {% if field.errors %}<p class="text-red-500 text-xs mt-1">{{ field.errors|join:", " }}</p>{% endif %}
         </div>
         {% endfor %}
+        <div class="md:col-span-2">
+          <label class="fld">Часовой пояс (город / страна)</label>
+          <select name="timezone" class="searchable">
+            {% for tz_value, tz_label in timezone_choices %}
+            <option value="{{ tz_value }}" {% if tz_value == current_timezone %}selected{% endif %}>{{ tz_label }}</option>
+            {% endfor %}
+          </select>
+          <p class="text-xs muted mt-1">Время записей и расписания показывается в этом поясе одинаково на всех устройствах.</p>
+        </div>
       </div>
       <div class="pt-2"><button type="submit" class="btn btn-primary px-8">Сохранить настройки</button></div>
     </form>

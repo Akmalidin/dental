@@ -72,6 +72,23 @@ class Payment(ClinicScopedModel):
         if self.treatment:
             self._update_treatment_paid()
 
+    def delete(self, *args, **kwargs):
+        # Запоминаем связанные объекты до удаления, затем пересчитываем баланс/оплату.
+        patient = self.patient
+        treatment_id = self.treatment_id
+        super().delete(*args, **kwargs)
+        if patient is not None:
+            patient.recalc_balance()
+        if treatment_id:
+            from django.db.models import Sum
+            from decimal import Decimal
+            from apps.treatments.models import Treatment
+            t = Treatment.all_objects.filter(pk=treatment_id).first()
+            if t is not None:
+                paid = t.payments.filter(type=self.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+                refund = t.payments.filter(type=self.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+                Treatment.objects.filter(pk=treatment_id).update(paid_amount=paid - refund)
+
     def _update_patient_balance(self):
         if self.patient_id:
             self.patient.recalc_balance()

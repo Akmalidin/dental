@@ -17,6 +17,24 @@ class TreatmentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # branch проставляется во view (основной филиал), поэтому не обязателен в форме
         self.fields["branch"].required = False
+        # Изоляция клиник: врач и филиал — только текущей клиники.
+        from apps.tenancy import get_current_clinic
+        from apps.users.models import clinic_doctors, Branch
+        clinic = get_current_clinic()
+        if clinic is not None:
+            from apps.users.models import User as _U
+            doctor_ids = set(clinic_doctors(clinic).values_list("pk", flat=True))
+            branches = Branch.objects.filter(clinic=clinic, is_active=True)
+            # Не ломаем редактирование уже существующего приёма: текущий врач/филиал
+            # остаётся в списке, даже если он вне фильтра.
+            inst = self.instance
+            if inst and inst.pk:
+                if inst.doctor_id:
+                    doctor_ids.add(inst.doctor_id)
+                if inst.branch_id:
+                    branches = (branches | Branch.objects.filter(pk=inst.branch_id)).distinct()
+            self.fields["doctor"].queryset = _U.objects.filter(pk__in=doctor_ids)
+            self.fields["branch"].queryset = branches
 
 
 class TreatmentCureForm(forms.ModelForm):

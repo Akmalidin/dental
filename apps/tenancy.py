@@ -68,9 +68,22 @@ class CurrentClinicMiddleware:
                     set_current_clinic(getattr(user, "clinic", None))
         except Exception:
             set_current_clinic(None)
+        # Часовой пояс клиники: время записей/расписания одинаково на всех устройствах.
+        activated_tz = False
+        clinic = get_current_clinic()
+        tzname = getattr(clinic, "timezone", None) if clinic is not None else None
+        if tzname:
+            try:
+                from zoneinfo import ZoneInfo
+                timezone.activate(ZoneInfo(tzname))
+                activated_tz = True
+            except Exception:
+                pass
         try:
             return self.get_response(request)
         finally:
+            if activated_tz:
+                timezone.deactivate()
             clear_current_clinic()
 
 

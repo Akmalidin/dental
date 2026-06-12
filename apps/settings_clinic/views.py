@@ -15,16 +15,26 @@ from apps.users.decorators import role_required
 @role_required("superadmin", "admin_main")
 def settings_view(request):
     instance = ClinicSettings.get()
+    # Часовой пояс хранится на самой клинике (арендаторе), не в ClinicSettings.
+    from apps.users.models import Branch, Clinic, TIMEZONE_CHOICES
+    from apps.tenancy import get_current_clinic
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    if request.method == "POST" and clinic is not None:
+        tzname = (request.POST.get("timezone") or "").strip()
+        valid_tz = {v for v, _label in TIMEZONE_CHOICES}
+        if tzname in valid_tz and tzname != clinic.timezone:
+            Clinic.objects.filter(pk=clinic.pk).update(timezone=tzname)
     form = ClinicSettingsForm(request.POST or None, request.FILES or None, instance=instance)
     if form.is_valid():
         form.save()
         messages.success(request, _("Настройки сохранены"))
         return redirect("clinic_settings")
-    from apps.users.models import Branch
     return render(request, "settings/settings.html", {
         "form": form,
         "branches": Branch.objects.all(),
         "module_choices": ClinicSettings.ALL_MODULES,
+        "timezone_choices": TIMEZONE_CHOICES,
+        "current_timezone": getattr(clinic, "timezone", "Asia/Bishkek"),
     })
 
 

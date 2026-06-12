@@ -58,7 +58,7 @@
       <tbody>
         {% for patient in patients %}
         <tr class="cursor-pointer" onclick="window.location='/patients/{{ patient.pk }}/'">
-          <td class="font-semibold" style="color:var(--primary)">{{ patient.pk }}</td>
+          <td class="font-semibold" style="color:var(--primary)">{{ patient.display_number }}</td>
           <td>
             <div class="flex items-center gap-3">
               <div class="avatar w-9 h-9 text-xs">{{ patient.first_name|first|upper }}</div>
