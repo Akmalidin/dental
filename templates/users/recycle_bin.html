@@ -27,9 +27,7 @@
             <form method="post" action="/users/recycle-bin/{{ it.kind }}/{{ it.pk }}/restore/">{% csrf_token %}
               <button class="btn btn-sm" title="Восстановить">↩ Восстановить</button>
             </form>
-            <form method="post" action="/users/recycle-bin/{{ it.kind }}/{{ it.pk }}/purge/" onsubmit="return confirm('Удалить безвозвратно? Это действие необратимо.')">{% csrf_token %}
-              <button class="row-act ra-del" title="Удалить навсегда"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
-            </form>
+            <a href="/users/recycle-bin/{{ it.kind }}/{{ it.pk }}/purge/confirm/" class="row-act ra-del" title="Удалить навсегда"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></a>
           </div>
         </td>
       </tr>

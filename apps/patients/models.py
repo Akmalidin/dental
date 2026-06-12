@@ -131,6 +131,50 @@ class Patient(ClinicSoftDeleteModel):
         """Номер для показа: порядковый в клинике, иначе глобальный id."""
         return self.number or self.pk
 
+    def related_summary(self):
+        """Счётчики связанных данных — для предупреждения перед безвозвратным удалением."""
+        from apps.treatments.models import Treatment
+        from apps.treatments.models_plan import TreatmentPlan
+        from apps.finance.models import Payment, PatientAdvance
+        from apps.medicines.models import PatientMedicine
+        from apps.appointments.models import Appointment
+        pid = self.pk
+        return {
+            "treatments": Treatment._base_manager.filter(patient_id=pid).count(),
+            "plans": TreatmentPlan._base_manager.filter(patient_id=pid).count(),
+            "payments": Payment._base_manager.filter(patient_id=pid).count(),
+            "advances": PatientAdvance._base_manager.filter(patient_id=pid).count(),
+            "medicines": PatientMedicine._base_manager.filter(patient_id=pid).count(),
+            "appointments": Appointment._base_manager.filter(patient_id=pid).count(),
+            "debt": self.debt,
+        }
+
+    def has_related_data(self):
+        s = self.related_summary()
+        return any(s[k] for k in ("treatments", "plans", "payments", "advances", "medicines", "appointments"))
+
+    def purge_with_related(self):
+        """Безвозвратно удалить пациента и ВСЕ связанные данные (в одной транзакции).
+        Порядок важен: сначала записи с on_delete=PROTECT (платежи, приёмы, планы),
+        иначе БД не даст удалить пациента."""
+        from django.db import transaction
+        from apps.treatments.models import Treatment
+        from apps.treatments.models_plan import TreatmentPlan
+        from apps.finance.models import Payment, PatientAdvance
+        from apps.medicines.models import PatientMedicine
+        from apps.appointments.models import Appointment
+        pid = self.pk
+        with transaction.atomic():
+            # платежи раньше приёмов: Payment.treatment = PROTECT
+            Payment._base_manager.filter(patient_id=pid).delete()
+            PatientAdvance._base_manager.filter(patient_id=pid).delete()
+            PatientMedicine._base_manager.filter(patient_id=pid).delete()
+            TreatmentPlan._base_manager.filter(patient_id=pid).delete()   # каскадом — этапы/пункты
+            Treatment._base_manager.filter(patient_id=pid).delete()       # каскадом — процедуры/файлы
+            Appointment._base_manager.filter(patient_id=pid).delete()
+            # tooth_conditions / medical_records / wa_messages удалятся каскадом (CASCADE)
+            Patient._base_manager.filter(pk=pid).delete()
+
     @property
     def full_name(self):
         parts = [self.last_name, self.first_name, self.middle_name]

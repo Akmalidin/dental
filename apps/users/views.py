@@ -250,17 +250,56 @@ def recycle_restore(request, kind, pk):
     return redirect("recycle_bin")
 
 
+def _purge_summary(kind, obj):
+    """Сводка связанных данных, которые будут удалены вместе с объектом."""
+    if kind == "patient" and hasattr(obj, "related_summary"):
+        s = obj.related_summary()
+        rows = [
+            ("Приёмы (лечения)", s["treatments"]),
+            ("Планы лечения", s["plans"]),
+            ("Платежи", s["payments"]),
+            ("Авансы", s["advances"]),
+            ("Назначения лекарств", s["medicines"]),
+            ("Записи в календаре", s["appointments"]),
+        ]
+        return [(label, n) for label, n in rows if n], s.get("debt")
+    return [], None
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+def recycle_purge_confirm(request, kind, pk):
+    """Страница-предупреждение перед безвозвратным удалением: что именно удалится."""
+    models = _recycle_models()
+    if kind not in models:
+        return redirect("recycle_bin")
+    Model = models[kind][0]
+    obj = get_object_or_404(_recycle_qs(Model), pk=pk)
+    related, debt = _purge_summary(kind, obj)
+    return render(request, "users/recycle_purge_confirm.html", {
+        "kind": kind, "obj": obj, "title": str(obj),
+        "related": related, "debt": debt, "label": models[kind][1],
+    })
+
+
 @login_required
 @role_required("superadmin", "admin_main")
 @require_POST
 def recycle_purge(request, kind, pk):
+    from django.db.models import ProtectedError
     models = _recycle_models()
     if kind in models:
         Model = models[kind][0]
         obj = get_object_or_404(_recycle_qs(Model), pk=pk)
         title = str(obj)
-        obj.delete()   # безвозвратно
-        messages.success(request, _("Удалено безвозвратно: %(t)s") % {"t": title})
+        try:
+            if kind == "patient" and hasattr(obj, "purge_with_related"):
+                obj.purge_with_related()   # каскадно: приёмы, платежи, планы и т.д.
+            else:
+                obj.delete()   # безвозвратно
+            messages.success(request, _("Удалено безвозвратно: %(t)s") % {"t": title})
+        except ProtectedError:
+            messages.error(request, _("Нельзя удалить «%(t)s»: есть связанные записи.") % {"t": title})
     return redirect("recycle_bin")
 
 
@@ -895,19 +934,92 @@ def staff_purge(request, pk):
                     or (f"/users/clinic/{user.clinic_id}/overview/" if user.clinic_id else "/users/"))
 
 
+def _doctor_related_summary(user):
+    """Связанные данные врача — для решения о переводе при удалении."""
+    from apps.treatments.models import Treatment
+    from apps.treatments.models_plan import TreatmentPlan
+    from apps.appointments.models import Appointment
+    from apps.patients.models import Patient
+    uid = user.pk
+    return {
+        "patients": Patient._base_manager.filter(primary_doctor_id=uid).count(),
+        "treatments": Treatment._base_manager.filter(doctor_id=uid).count(),
+        "appointments": Appointment._base_manager.filter(doctor_id=uid).count(),
+        "plans": TreatmentPlan._base_manager.filter(doctor_id=uid).count(),
+    }
+
+
+def _reassign_doctor(old_user, new_user):
+    """Перевести все данные врача old_user на new_user (приёмы, записи, пациентов и т.д.)."""
+    from django.db import transaction
+    from apps.treatments.models import Treatment, TreatmentCure
+    from apps.treatments.models_plan import TreatmentPlan, TreatmentPlanItem
+    from apps.appointments.models import Appointment
+    from apps.patients.models import Patient
+    from apps.finance.models import Payment
+    o, n = old_user.pk, new_user.pk
+    with transaction.atomic():
+        Treatment._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        TreatmentCure._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        Appointment._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        TreatmentPlan._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        TreatmentPlanItem._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        Patient._base_manager.filter(primary_doctor_id=o).update(primary_doctor_id=n)
+        Payment._base_manager.filter(received_by_id=o).update(received_by_id=n)
+        # медкарты/назначения — мягко, если поля есть
+        try:
+            from apps.treatments.models_emr import MedicalRecord
+            MedicalRecord._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        except Exception:
+            pass
+        try:
+            from apps.medicines.models import PatientMedicine
+            PatientMedicine._base_manager.filter(doctor_id=o).update(doctor_id=n)
+        except Exception:
+            pass
+
+
 @login_required
 @role_required("superadmin", "admin_main")
 def staff_delete(request, pk):
+    from django.db.models import ProtectedError
+    from .models import clinic_doctors
     user = get_object_or_404(User, pk=pk)
     if _is_protected_target(user, request.user):
         messages.error(request, _("Доступ запрещён: нельзя удалить суперпользователя"))
         return redirect("staff_list")
+    summary = _doctor_related_summary(user)
+    has_data = any(summary.values())
+    # кандидаты для перевода — активные врачи той же клиники, кроме удаляемого
+    candidates = (clinic_doctors(user.clinic).exclude(pk=user.pk)
+                  if user.clinic_id else clinic_doctors().exclude(pk=user.pk))
+
     if request.method == "POST":
-        user.is_active = False
-        user.save()
-        messages.success(request, _("Сотрудник деактивирован"))
+        if has_data:
+            target_id = request.POST.get("reassign_to")
+            target = candidates.filter(pk=target_id).first() if target_id else None
+            if target is None:
+                messages.error(request, _("Выберите врача, на которого перевести пациентов и приёмы"))
+                return redirect("staff_delete", pk=pk)
+            _reassign_doctor(user, target)
+            moved = f" Данные переведены на «{target.name}»."
+        else:
+            moved = ""
+        # после перевода связей пытаемся удалить совсем, иначе деактивируем
+        name = user.name
+        try:
+            user.delete()
+            messages.success(request, _("Сотрудник «%(n)s» удалён.%(m)s") % {"n": name, "m": moved})
+        except ProtectedError:
+            user.is_active = False
+            user.save(update_fields=["is_active"])
+            messages.success(request, _("Сотрудник «%(n)s» деактивирован.%(m)s") % {"n": name, "m": moved})
         return redirect("staff_list")
-    return render(request, "users/confirm_delete.html", {"object": user})
+
+    return render(request, "users/confirm_delete.html", {
+        "object": user, "summary": summary, "has_data": has_data,
+        "candidates": candidates,
+    })
 
 
 # ─── Branch management ───────────────────────────────────────────────────────

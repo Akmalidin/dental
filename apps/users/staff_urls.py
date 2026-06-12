@@ -30,5 +30,6 @@ urlpatterns = [
     path("<int:pk>/access/", views.save_user_access, name="save_user_access"),
     path("recycle-bin/", views.recycle_bin, name="recycle_bin"),
     path("recycle-bin/<str:kind>/<int:pk>/restore/", views.recycle_restore, name="recycle_restore"),
+    path("recycle-bin/<str:kind>/<int:pk>/purge/confirm/", views.recycle_purge_confirm, name="recycle_purge_confirm"),
     path("recycle-bin/<str:kind>/<int:pk>/purge/", views.recycle_purge, name="recycle_purge"),
 ]
