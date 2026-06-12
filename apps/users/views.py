@@ -949,8 +949,30 @@ def _doctor_related_summary(user):
     }
 
 
+def _appt_time_conflicts(old_id, new_id):
+    """Записи переводимого врача, которые пересекаются по времени с уже
+    существующими записями принимающего врача (отменённые/неявки не считаем).
+    Возвращает список приёмов old-врача, попавших в наложение."""
+    from apps.appointments.models import Appointment
+    skip = ["cancelled", "no_show"]
+    old_appts = list(Appointment._base_manager.filter(doctor_id=old_id)
+                     .exclude(status__in=skip).exclude(start_at__isnull=True))
+    new_slots = list(Appointment._base_manager.filter(doctor_id=new_id)
+                     .exclude(status__in=skip).exclude(start_at__isnull=True)
+                     .values_list("start_at", "end_at"))
+    conflicts = []
+    for a in old_appts:
+        for s, e in new_slots:
+            if a.start_at and a.end_at and a.start_at < e and a.end_at > s:
+                conflicts.append(a)
+                break
+    return conflicts
+
+
 def _reassign_doctor(old_user, new_user):
-    """Перевести все данные врача old_user на new_user (приёмы, записи, пациентов и т.д.)."""
+    """Перевести все данные врача old_user на new_user (приёмы, записи, пациентов и т.д.).
+    Возвращает список приёмов, которые после перевода пересекаются по времени с
+    записями принимающего врача — чтобы предупредить администратора."""
     from django.db import transaction
     from apps.treatments.models import Treatment, TreatmentCure
     from apps.treatments.models_plan import TreatmentPlan, TreatmentPlanItem
@@ -958,6 +980,8 @@ def _reassign_doctor(old_user, new_user):
     from apps.patients.models import Patient
     from apps.finance.models import Payment
     o, n = old_user.pk, new_user.pk
+    # Конфликты считаем ДО переноса (сравниваем записи старого и нового врача).
+    conflicts = _appt_time_conflicts(o, n)
     with transaction.atomic():
         Treatment._base_manager.filter(doctor_id=o).update(doctor_id=n)
         TreatmentCure._base_manager.filter(doctor_id=o).update(doctor_id=n)
@@ -977,6 +1001,7 @@ def _reassign_doctor(old_user, new_user):
             PatientMedicine._base_manager.filter(doctor_id=o).update(doctor_id=n)
         except Exception:
             pass
+    return conflicts
 
 
 @login_required
@@ -1001,8 +1026,20 @@ def staff_delete(request, pk):
             if target is None:
                 messages.error(request, _("Выберите врача, на которого перевести пациентов и приёмы"))
                 return redirect("staff_delete", pk=pk)
-            _reassign_doctor(user, target)
+            conflicts = _reassign_doctor(user, target)
             moved = f" Данные переведены на «{target.name}»."
+            if conflicts:
+                # Пересечения по времени — не блокируем перевод, но явно предупреждаем,
+                # чтобы администратор перенёс конфликтующие записи в календаре.
+                from django.utils import timezone as _tz
+                examples = "; ".join(
+                    f"{_tz.localtime(c.start_at):%d.%m %H:%M}" for c in conflicts[:5]
+                )
+                messages.warning(request, _(
+                    "Внимание: %(c)d записей пересекаются по времени с расписанием врача "
+                    "«%(d)s» (%(ex)s%(more)s). Откройте Расписание и перенесите их."
+                ) % {"c": len(conflicts), "d": target.name, "ex": examples,
+                     "more": "…" if len(conflicts) > 5 else ""})
         else:
             moved = ""
         # после перевода связей пытаемся удалить совсем, иначе деактивируем
