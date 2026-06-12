@@ -15,10 +15,38 @@ from django.conf import settings
 log = logging.getLogger("apps")
 
 
+def _wa_config():
+    """(enabled, id_instance, token, api_url) для ТЕКУЩЕЙ клиники.
+
+    Приоритет — настройки клиники (ClinicSettings: свой инстанс/токен/номер).
+    Если клиника свои ключи не задала — глобальные из .env (для совместимости),
+    но переключатель клиники (wa_enabled) всё равно учитывается.
+    """
+    g_id = getattr(settings, "GREENAPI_ID_INSTANCE", "") or ""
+    g_token = getattr(settings, "GREENAPI_TOKEN", "") or ""
+    g_url = getattr(settings, "GREENAPI_API_URL", "") or ""
+    g_enabled = bool(getattr(settings, "GREENAPI_ENABLED", False))
+    cs = None
+    try:
+        from apps.settings_clinic.models import ClinicSettings
+        cs = ClinicSettings.get()
+    except Exception:
+        cs = None
+    if cs is not None:
+        c_enabled = bool(getattr(cs, "wa_enabled", True))
+        cid = (getattr(cs, "wa_id_instance", "") or "").strip()
+        ctok = (getattr(cs, "wa_token", "") or "").strip()
+        curl = (getattr(cs, "wa_api_url", "") or "").strip()
+        if cid and ctok:
+            return (c_enabled, cid, ctok, curl or g_url)
+        # своих ключей нет → глобальные, но уважаем выключатель клиники
+        return (c_enabled and g_enabled, g_id, g_token, g_url)
+    return (g_enabled, g_id, g_token, g_url)
+
+
 def wa_enabled():
-    return bool(getattr(settings, "GREENAPI_ENABLED", False)
-                and getattr(settings, "GREENAPI_ID_INSTANCE", "")
-                and getattr(settings, "GREENAPI_TOKEN", ""))
+    enabled, idi, token, _url = _wa_config()
+    return bool(enabled and idi and token)
 
 
 def _chat_id(phone):
@@ -31,14 +59,10 @@ def _chat_id(phone):
     return d + "@c.us"
 
 
-def _api_base():
-    base = getattr(settings, "GREENAPI_API_URL", "").rstrip("/")
-    return base or "https://api.greenapi.com"
-
-
 def _api_url(method):
-    return "%s/waInstance%s/%s/%s" % (
-        _api_base(), settings.GREENAPI_ID_INSTANCE, method, settings.GREENAPI_TOKEN)
+    _enabled, idi, token, url = _wa_config()
+    base = (url or "https://api.greenapi.com").rstrip("/")
+    return "%s/waInstance%s/%s/%s" % (base, idi, method, token)
 
 
 def wa_send_chat(chat, text):
@@ -92,7 +116,8 @@ def notify_groups(text, clinic=None):
 
 def wa_state():
     """Состояние инстанса Green-API: 'authorized' | 'notAuthorized' | 'starting' | '' (ошибка/выкл)."""
-    if not (getattr(settings, "GREENAPI_ID_INSTANCE", "") and getattr(settings, "GREENAPI_TOKEN", "")):
+    _enabled, idi, token, _url = _wa_config()
+    if not (idi and token):
         return ""
     try:
         with urllib.request.urlopen(_api_url("getStateInstance"), timeout=15) as r:
@@ -106,7 +131,8 @@ def wa_state():
 def wa_qr():
     """QR-код для привязки устройства. Возвращает (type, message):
     type='qrCode' → message = base64 PNG; type='alreadyLogged' → уже подключено; '' → ошибка."""
-    if not (getattr(settings, "GREENAPI_ID_INSTANCE", "") and getattr(settings, "GREENAPI_TOKEN", "")):
+    _enabled, idi, token, _url = _wa_config()
+    if not (idi and token):
         return ("", "")
     try:
         with urllib.request.urlopen(_api_url("qr"), timeout=20) as r:

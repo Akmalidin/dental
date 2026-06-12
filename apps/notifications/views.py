@@ -431,15 +431,33 @@ def wa_groups(request):
 
 @login_required
 def wa_connect(request):
-    """Подключение WhatsApp (привязка устройства по QR) — только Директор/Администратор."""
+    """Подключение WhatsApp клиники: свой инстанс/токен/номер + переключатель + QR.
+    Только Директор/Администратор."""
+    from django.contrib import messages
     if not _wa_staff_ok(request.user):
         return redirect("/")
-    from .whatsapp import wa_state, wa_qr
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+
+    if request.method == "POST":
+        cs.wa_enabled = bool(request.POST.get("wa_enabled"))
+        cs.wa_id_instance = (request.POST.get("wa_id_instance") or "").strip()
+        cs.wa_token = (request.POST.get("wa_token") or "").strip()
+        cs.wa_api_url = (request.POST.get("wa_api_url") or "").strip()
+        cs.wa_phone = (request.POST.get("wa_phone") or "").strip()
+        cs.save(update_fields=["wa_enabled", "wa_id_instance", "wa_token", "wa_api_url", "wa_phone"])
+        messages.success(request, "Настройки WhatsApp сохранены")
+        return redirect("wa_connect")
+
+    from .whatsapp import wa_state, wa_qr, wa_enabled
     state = wa_state()
     qr_type, qr_msg = ("", "")
     if state and state != "authorized":
         qr_type, qr_msg = wa_qr()
     return render(request, "notifications/wa_connect.html", {
+        "cs": cs,
+        "wa_enabled": wa_enabled(),
+        "has_keys": bool((cs.wa_id_instance or "").strip() and (cs.wa_token or "").strip()),
         "state": state,
         "qr_type": qr_type,
         "qr_b64": qr_msg if qr_type == "qrCode" else "",

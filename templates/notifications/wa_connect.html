@@ -10,9 +10,54 @@
     </div>
   </div>
 
-  {% if not state %}
+  <!-- Per-clinic WhatsApp configuration -->
+  <form method="post" class="card card-pad space-y-4">
+    {% csrf_token %}
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-bold" style="color:var(--text)">WhatsApp для этой клиники</p>
+        <p class="text-xs muted">Свой инстанс Green-API и номер — у каждой клиники отдельно.</p>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="wa_enabled" {% if cs.wa_enabled %}checked{% endif %}>
+        <span class="text-sm font-semibold" style="color:var(--text)">Включён</span>
+      </label>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="fld">Green-API ID инстанса</label>
+        <input type="text" name="wa_id_instance" value="{{ cs.wa_id_instance }}" placeholder="напр. 1101000001">
+      </div>
+      <div>
+        <label class="fld">Green-API токен</label>
+        <input type="text" name="wa_token" value="{{ cs.wa_token }}" placeholder="токен инстанса">
+      </div>
+      <div>
+        <label class="fld">Номер WhatsApp клиники</label>
+        <input type="text" name="wa_phone" value="{{ cs.wa_phone }}" placeholder="напр. +996 700 123456">
+      </div>
+      <div>
+        <label class="fld">API URL (необязательно)</label>
+        <input type="text" name="wa_api_url" value="{{ cs.wa_api_url }}" placeholder="https://api.greenapi.com">
+      </div>
+    </div>
+    <div class="flex items-center justify-between">
+      <p class="text-xs muted">Оставьте ключи пустыми — будет использоваться общий номер сервера (если настроен).</p>
+      <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
+    </div>
+  </form>
+
+  {% if not cs.wa_enabled %}
+  <div class="badge-gray px-4 py-3 rounded-xl text-sm">
+    WhatsApp выключен для этой клиники. Включите переключатель выше, чтобы отправлять уведомления.
+  </div>
+  {% elif not has_keys and not state %}
   <div class="badge-orange px-4 py-3 rounded-xl text-sm">
-    WhatsApp (Green-API) не настроен или недоступен. Проверьте ключи на сервере (GREENAPI_ID_INSTANCE / GREENAPI_TOKEN).
+    Ключи Green-API для клиники не заданы. Укажите ID инстанса и токен выше, либо настройте общий номер на сервере.
+  </div>
+  {% elif not state %}
+  <div class="badge-orange px-4 py-3 rounded-xl text-sm">
+    WhatsApp (Green-API) недоступен. Проверьте правильность ID инстанса и токена.
   </div>
   {% elif state == "authorized" %}
   <div class="card card-pad text-center">

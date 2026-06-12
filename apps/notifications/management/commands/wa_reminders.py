@@ -25,10 +25,6 @@ class Command(BaseCommand):
         from apps.users.models import Clinic
         from apps.tenancy import set_current_clinic
 
-        if not wa_enabled():
-            self.stdout.write("WhatsApp выключен — пропуск")
-            return
-
         now = timezone.now()
         local_hour = timezone.localtime(now).hour
         stat = {"hour": 0, "day": 0, "debt": 0}
@@ -37,6 +33,9 @@ class Command(BaseCommand):
             set_current_clinic(clinic)
             cs = ClinicSettings.objects.filter(clinic=clinic).first()
             if cs is None:
+                continue
+            # WhatsApp проверяем для КАЖДОЙ клиники отдельно (свой инстанс/выключатель)
+            if not wa_enabled():
                 continue
 
             def tpl(kind):

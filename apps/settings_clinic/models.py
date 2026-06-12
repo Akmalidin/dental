@@ -23,6 +23,12 @@ class ClinicSettings(models.Model):
     language = models.CharField(max_length=5, default="ru", verbose_name="Язык")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
+    # WhatsApp подключение (своё на каждую клинику, Green-API)
+    wa_enabled = models.BooleanField(default=True, verbose_name="WhatsApp включён для клиники")
+    wa_id_instance = models.CharField(max_length=50, blank=True, verbose_name="Green-API ID инстанса")
+    wa_token = models.CharField(max_length=120, blank=True, verbose_name="Green-API токен")
+    wa_api_url = models.CharField(max_length=200, blank=True, verbose_name="Green-API URL (необязательно)")
+    wa_phone = models.CharField(max_length=30, blank=True, verbose_name="Номер WhatsApp клиники")
     # WhatsApp авто-напоминания
     wa_remind_day = models.BooleanField(default=True, verbose_name="Напоминать за день до приёма")
     wa_remind_hour = models.BooleanField(default=True, verbose_name="Напоминать за час до приёма")
