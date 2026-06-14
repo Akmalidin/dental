@@ -137,6 +137,7 @@ class TreatmentFile(models.Model):
 
     treatment = models.ForeignKey(Treatment, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="treatments/%Y/%m/")
+    tooth_number = models.IntegerField(null=True, blank=True, verbose_name="Зуб (FDI)")
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="xray", verbose_name="Тип")
     name = models.CharField(max_length=200, verbose_name="Название")
     uploaded_by = models.ForeignKey(

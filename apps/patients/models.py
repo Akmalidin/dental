@@ -85,6 +85,8 @@ class Patient(ClinicSoftDeleteModel):
         verbose_name="Лечащий врач",
     )
 
+    allergy = models.TextField(blank=True, null=True, verbose_name="Аллергии")
+    blood_group = models.CharField(max_length=10, blank=True, verbose_name="Группа крови")
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Баланс (сом)")
     last_debt_reminder = models.DateTimeField(null=True, blank=True, verbose_name="Последнее напоминание о долге")
     notes = models.TextField(blank=True, verbose_name="Заметки")

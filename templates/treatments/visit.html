@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block page_title %}Приём №{{ treatment.pk }}{% endblock %}
+
+{% block extra_head %}
+{{ services_json|json_script:"v-services" }}
+{{ tooth_statuses_json|json_script:"v-statuses" }}
+{{ tooth_conditions_json|json_script:"v-conditions" }}
+{{ cures_json|json_script:"v-cures" }}
+{{ files_json|json_script:"v-files" }}
+{{ icd_list_json|json_script:"v-icd" }}
+{{ emr_json|json_script:"v-emr" }}
+<script>
+  const VISIT = {
+    pk: {{ treatment.pk }},
+    saveUrl: "/treatments/visit/{{ treatment.pk }}/save/",
+    commitUrl: "/treatments/visit/{{ treatment.pk }}/commit/",
+    uploadUrl: "/treatments/visit/{{ treatment.pk }}/upload/",
+  };
+</script>
+<style>
+  .patient-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:14px}
+  .patient-bar .pb-name{font-weight:800;color:var(--text)}
+  .patient-bar .pb-sep{color:var(--border)}
+  .allergy-badge{background:#dc3545;color:#fff;padding:4px 10px;border-radius:20px;font-size:13px;font-weight:600;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .qtpl{padding:4px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;font-weight:600;color:#6c63ff;background:#6c63ff10}
+  .qtpl:hover{background:#6c63ff22}
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="visitWizard()" x-init="init()" class="space-y-4">
+
+  <!-- Header: persistent patient bar + stepper -->
+  <div class="card card-pad">
+    <div class="flex items-start justify-between flex-wrap gap-2 mb-3">
+      <div class="patient-bar">
+        <span class="pb-name">{{ patient.full_name }}</span>
+        <span class="pb-sep">|</span>
+        <span>{{ patient.phone|default:"—" }}</span>
+        <span class="pb-sep">|</span>
+        <span>{% if patient.age %}{{ patient.age }} л{% else %}—{% endif %}</span>
+        {% if patient.debt > 0 %}
+        <span class="pb-sep">|</span>
+        <span class="font-bold text-red-600">Долг: {{ patient.debt|floatformat:0 }} сом</span>
+        {% endif %}
+        {% if patient.allergy %}
+        <span class="allergy-badge">⚠️ Аллергия: {{ patient.allergy }}</span>
+        {% endif %}
+      </div>
+      <a href="/treatments/{{ treatment.pk }}/" class="btn btn-ghost btn-sm">Открыть карточку приёма →</a>
+    </div>
+    <p class="text-xs muted mb-3">Приём №{{ treatment.pk }} · Врач: {{ treatment.doctor.name }} · {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
+    <div class="flex items-center gap-1 overflow-x-auto">
+      <template x-for="(s,i) in steps" :key="i">
+        <div class="flex items-center shrink-0">
+          <button @click="go(i+1)" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-semibold transition"
+                  :class="step===i+1 ? 'text-white' : (step>i+1 ? 'text-emerald-600' : 'muted')"
+                  :style="step===i+1 ? 'background:linear-gradient(135deg,#6366F1,#8B5CF6)' : ''">
+            <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs"
+                  :class="step>i+1 ? 'bg-emerald-100 text-emerald-600' : (step===i+1?'bg-white/25':'bg-slate-100')"
+                  x-text="step>i+1 ? '✓' : (i+1)"></span>
+            <span x-text="s"></span>
+          </button>
+          <div x-show="i < steps.length-1" class="w-5 h-px bg-slate-200 mx-0.5"></div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- STEP 1 — Жалобы -->
+  <div x-show="step===1" class="card card-pad space-y-3">
+    <h3 class="font-bold" style="color:var(--text)">1. Жалобы</h3>
+    <div class="complaint-templates flex flex-wrap items-center gap-2">
+      <span class="text-xs muted">Быстрые шаблоны:</span>
+      <button type="button" class="qtpl" @click="applyTemplate(['Боль','Реакция на холодное'])">Острая боль</button>
+      <button type="button" class="qtpl" @click="applyTemplate(['Профосмотр'])">Профосмотр</button>
+      <button type="button" class="qtpl" @click="applyTemplate(['Кровоточит десна','Отёк'])">Кровоточивость</button>
+      <button type="button" class="qtpl" @click="applyTemplate(['Эстетика','Скол'])">Эстетика</button>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+      <template x-for="t in complaintChoices" :key="t">
+        <button @click="toggleComplaint(t)" :data-tag="t" class="px-3 py-1 rounded-full text-sm border transition"
+                :class="complaintTags.includes(t) ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 text-slate-600 hover:border-indigo-300'"
+                x-text="t"></button>
+      </template>
+    </div>
+    <div>
+      <label class="fld">Подробнее (свободный текст)</label>
+      <textarea x-model="complaintsText" rows="3" placeholder="Например: боль при накусывании, зуб 36, 2 дня…"></textarea>
+    </div>
+    <div>
+      <label class="fld">Анамнез заболевания</label>
+      <textarea x-model="anamnesis" rows="2"></textarea>
+    </div>
+    <div class="flex justify-end"><button @click="go(2)" class="btn btn-primary">Далее →</button></div>
+  </div>
+
+  <!-- STEP 2 — Осмотр -->
+  <div x-show="step===2" class="card card-pad space-y-4">
+    <h3 class="font-bold" style="color:var(--text)">2. Осмотр</h3>
+    <div class="flex items-center gap-2 text-xs muted">
+      <button @click="adult=true" :class="adult?'tab-btn active':'tab-btn'">Взрослые</button>
+      <button @click="adult=false" :class="!adult?'tab-btn active':'tab-btn'">Дети</button>
+    </div>
+    <div class="space-y-1">
+      <div class="flex justify-center gap-0.5 flex-wrap">
+        <template x-for="n in upperTeeth()" :key="n">
+          <button @click="selectTooth(n)" class="w-9 h-9 rounded-lg border text-xs font-bold"
+                  :style="toothStyle(n)" :class="selectedTooth===n?'ring-2 ring-indigo-500':''" x-text="n"></button>
+        </template>
+      </div>
+      <div class="border-t border-dashed border-slate-200 my-1"></div>
+      <div class="flex justify-center gap-0.5 flex-wrap">
+        <template x-for="n in lowerTeeth()" :key="n">
+          <button @click="selectTooth(n)" class="w-9 h-9 rounded-lg border text-xs font-bold"
+                  :style="toothStyle(n)" :class="selectedTooth===n?'ring-2 ring-indigo-500':''" x-text="n"></button>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="selectedTooth" class="rounded-xl p-3" style="background:var(--surface-2)">
+      <p class="text-sm font-semibold mb-2" style="color:var(--text)">Зуб <span x-text="selectedTooth"></span></p>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        <template x-for="st in STATUSES" :key="st.code">
+          <button @click="setToothStatus(st.code)"
+                  :data-status="st.code" :data-diagnosis="dxFor(st.code).dx" :data-mkb="dxFor(st.code).mkb"
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold border"
+                  :style="teeth[selectedTooth]===st.code ? ('background:'+st.color+';border-color:'+st.color+';color:#fff') : ('border-color:'+st.color+';color:'+st.color)"
+                  x-text="st.name"></button>
+        </template>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+        <div><label class="fld">Перкуссия</label>
+          <select class="no-tom" :value="toothParam('percussion')" @change="setParam('percussion',$event.target.value)">
+            <option value="">—</option><option>безболезн.</option><option>+</option><option>++</option><option>+++</option></select></div>
+        <div><label class="fld">Зондирование</label>
+          <select class="no-tom" :value="toothParam('probing')" @change="setParam('probing',$event.target.value)">
+            <option value="">—</option><option>безболезн.</option><option>болезн.</option><option>по эмали</option><option>по дентину</option></select></div>
+        <div><label class="fld">Подвижность</label>
+          <select class="no-tom" :value="toothParam('mobility')" @change="setParam('mobility',$event.target.value)">
+            <option value="">—</option><option>0</option><option>I</option><option>II</option><option>III</option></select></div>
+      </div>
+      <!-- Доп. поля (ЭОД) скрыты по умолчанию -->
+      <div class="mt-2">
+        <a href="#" @click.prevent="toggleExtra()" class="text-xs font-semibold" style="color:#6c63ff">
+          <span x-text="showExtra ? '− Скрыть доп. поля' : '+ Дополнительные поля'"></span>
+        </a>
+        <div x-show="showExtra" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm mt-2">
+          <div><label class="fld">ЭОД, мкА</label>
+            <input type="number" :value="toothParam('eod')" @input="setParam('eod',$event.target.value)" placeholder="напр. 100"></div>
+        </div>
+      </div>
+    </div>
+
+    <div><label class="fld">Внешний осмотр / объективно</label><textarea x-model="objective" rows="2"></textarea></div>
+
+    <!-- Снимки и фото -->
+    <div class="files-block">
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="font-semibold text-sm" style="color:var(--text)">Снимки и фото
+          <span class="muted font-normal" x-show="selectedTooth">· зуб <span x-text="selectedTooth"></span></span></h4>
+        <label class="btn btn-ghost btn-sm cursor-pointer">
+          + Добавить снимок
+          <input type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.pdf" @change="uploadFiles($event.target.files); $event.target.value=''">
+        </label>
+      </div>
+      <p x-show="uploading" class="text-xs muted">Загрузка…</p>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="f in files" :key="f.id">
+          <a :href="f.url" target="_blank" class="block relative">
+            <template x-if="f.is_image">
+              <img :src="f.url" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+            </template>
+            <template x-if="!f.is_image">
+              <span class="flex items-center justify-center text-xs font-bold" style="width:80px;height:80px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2)">PDF</span>
+            </template>
+            <span x-show="f.tooth" class="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full" x-text="f.tooth"></span>
+          </a>
+        </template>
+        <span x-show="files.length===0" class="text-xs muted py-6">Снимков пока нет</span>
+      </div>
+    </div>
+
+    <div class="flex justify-between"><button @click="go(1)" class="btn btn-ghost">← Назад</button><button @click="go(3)" class="btn btn-primary">Далее →</button></div>
+  </div>
+
+  <!-- STEP 3 — Диагноз -->
+  <div x-show="step===3" class="card card-pad space-y-3">
+    <h3 class="font-bold" style="color:var(--text)">3. Диагноз</h3>
+    <div>
+      <label class="fld">Диагноз</label>
+      <input type="text" x-model="diagnosis" @input="autoIcd()" placeholder="напр. Хронический апикальный периодонтит">
+      <p class="text-xs muted mt-1" x-show="dxAutofilled">Подставлено по статусу зуба — можно изменить.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="fld">МКБ-10</label>
+        <select class="no-tom" x-model="icd">
+          <option value="">— выберите код —</option>
+          <template x-for="d in ICD" :key="d.code"><option :value="d.code" x-text="d.code + ' — ' + d.name"></option></template>
+        </select>
+      </div>
+      <div><label class="fld">Рекомендации</label><textarea x-model="recommendations" rows="2"></textarea></div>
+    </div>
+    <div class="flex justify-between"><button @click="go(2)" class="btn btn-ghost">← Назад</button><button @click="go(4)" class="btn btn-primary">Далее →</button></div>
+  </div>
+
+  <!-- STEP 4 — План лечения -->
+  <div x-show="step===4" class="card card-pad space-y-3">
+    <div class="flex items-center justify-between">
+      <h3 class="font-bold" style="color:var(--text)">4. План лечения</h3>
+      <div class="flex items-center gap-2">
+        <select x-ref="svcSel" class="no-tom" style="min-width:220px"></select>
+        <button @click="addPlanItem()" class="btn btn-primary btn-sm">+ Добавить</button>
+      </div>
+    </div>
+    <table class="tbl">
+      <thead><tr><th class="text-center">Сегодня</th><th>Услуга</th><th>Зуб</th><th class="text-center">Кол.</th><th>Цена</th><th>Итого</th><th></th></tr></thead>
+      <tbody>
+        <template x-for="(it,idx) in plan" :key="idx">
+          <tr>
+            <td class="text-center"><input type="checkbox" x-model="it.done" title="Выполнено сегодня"></td>
+            <td class="font-semibold" x-text="it.name"></td>
+            <td><input type="text" x-model="it.tooth" class="text-center" style="width:64px" placeholder="зуб"></td>
+            <td class="text-center"><input type="number" x-model.number="it.qty" min="1" class="text-center" style="width:60px"></td>
+            <td><input type="number" x-model.number="it.price" class="text-center" style="width:100px"></td>
+            <td class="font-bold" x-text="fmt((it.price||0)*(it.qty||1))"></td>
+            <td><button @click="plan.splice(idx,1)" class="text-red-400 hover:text-red-600">✕</button></td>
+          </tr>
+        </template>
+        <tr x-show="plan.length===0"><td colspan="7" class="text-center muted py-4">Добавьте услуги в план</td></tr>
+      </tbody>
+    </table>
+    <div class="flex items-center justify-end gap-6 text-sm">
+      <span class="muted">Весь план: <b style="color:var(--text)" x-text="fmt(planTotal())"></b> сом</span>
+      <span>Сегодня (✓): <b class="text-emerald-600" x-text="fmt(doneTotal())"></b> сом</span>
+    </div>
+    <div class="flex justify-between"><button @click="go(3)" class="btn btn-ghost">← Назад</button><button @click="go(5)" class="btn btn-primary">Далее →</button></div>
+  </div>
+
+  <!-- STEP 5 — Итог -->
+  <div x-show="step===5" class="card card-pad space-y-4">
+    <h3 class="font-bold" style="color:var(--text)">5. Итог</h3>
+    <div class="rounded-xl p-4 text-sm space-y-1" style="background:var(--surface-2)">
+      <p><b>Жалобы:</b> <span x-text="complaintsSummary() || '—'"></span></p>
+      <p><b>Диагноз:</b> <span x-text="(diagnosis||'—') + (icd ? ' ('+icd+')' : '')"></span></p>
+      <p><b>Выполнено сегодня:</b> <span class="text-emerald-600 font-bold" x-text="fmt(doneTotal())+' сом'"></span></p>
+      <p x-show="planTotal()>doneTotal()"><b>В план (на будущее):</b> <span x-text="fmt(planTotal()-doneTotal())+' сом'"></span></p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+      <div><label class="fld">Следующий визит — дата</label><input type="date" x-model="next.date"></div>
+      <div><label class="fld">Время</label><input type="time" x-model="next.time"></div>
+      <div><label class="fld">Заметка к визиту</label><input type="text" x-model="next.note" placeholder="напр. коронка"></div>
+    </div>
+    <div class="flex flex-wrap gap-2 pt-2">
+      <button @click="go(4)" class="btn btn-ghost">← Назад</button>
+      <a :href="'/treatments/{{ treatment.pk }}/emr/print/'" target="_blank" class="btn btn-ghost">🖨 Протокол</a>
+      <button @click="finish()" :disabled="saving" class="btn btn-primary ml-auto">✓ Завершить приём</button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function visitWizard(){
+  return {
+    steps: ['Жалобы','Осмотр','Диагноз','План','Итог'],
+    step: 1, saving:false, uploading:false, adult:true, selectedTooth:null,
+    showExtra:false, dxAutofilled:false, pendingDx:null,
+    SERVICES: JSON.parse(document.getElementById('v-services').textContent),
+    STATUSES: JSON.parse(document.getElementById('v-statuses').textContent),
+    ICD: JSON.parse(document.getElementById('v-icd').textContent),
+    // статус зуба → диагноз + МКБ-10 (офлайн)
+    STATUS_DX:{
+      caries:{dx:'Кариес дентина',mkb:'K02.1'},
+      filling:{dx:'Вторичный кариес',mkb:'K02.1'},
+      root_canal:{dx:'Хронический апикальный периодонтит',mkb:'K04.5'},
+      to_remove:{dx:'Хронический периодонтит',mkb:'K04.5'},
+      missing:{dx:'',mkb:''},
+    },
+    complaintChoices:['Боль','Реакция на холодное','Реакция на горячее','Кровоточит десна','Отёк','Скол','Подвижность','Запах','Эстетика','Профосмотр'],
+    complaintTags:[], complaintsText:'', anamnesis:'', objective:'',
+    diagnosis:'', icd:'', recommendations:'',
+    teeth:{}, examTeeth:{}, plan:[], files:[], next:{date:'',time:'',note:''}, svcTS:null,
+
+    init(){
+      this.teeth = JSON.parse(document.getElementById('v-conditions').textContent) || {};
+      const cures = JSON.parse(document.getElementById('v-cures').textContent) || [];
+      this.plan = cures.map(c=>({service_id:c.service_id,name:c.name,tooth:c.tooth||'',qty:c.qty||1,price:c.price||0,done:true}));
+      this.files = JSON.parse(document.getElementById('v-files').textContent) || [];
+      const e = JSON.parse(document.getElementById('v-emr').textContent) || {};
+      this.anamnesis=e.anamnesis||''; this.objective=e.objective||'';
+      this.diagnosis=e.diagnosis||''; this.icd=e.icd_code||''; this.recommendations=e.recommendations||'';
+      const ed=e.exam_data||{};
+      this.complaintTags=Array.isArray(ed.complaint_tags)?ed.complaint_tags:[];
+      this.examTeeth=(ed.teeth&&typeof ed.teeth==='object')?ed.teeth:{};
+      this.complaintsText = e.complaints||'';
+      this.showExtra = localStorage.getItem('visitExtraOpen')==='true';
+      this.$nextTick(()=>this.initSvcSelect());
+    },
+    go(n){
+      this.save();
+      // авто-подстановка диагноза по статусу зуба при входе на шаг Диагноз
+      if(n===3 && !this.diagnosis && this.pendingDx && this.pendingDx.dx){
+        this.diagnosis=this.pendingDx.dx; this.icd=this.pendingDx.mkb||''; this.dxAutofilled=true;
+      }
+      this.step=n;
+    },
+
+    // ── Жалобы ──
+    toggleComplaint(t){ const i=this.complaintTags.indexOf(t); i>=0?this.complaintTags.splice(i,1):this.complaintTags.push(t); },
+    applyTemplate(tags){ tags.forEach(t=>{ if(!this.complaintTags.includes(t)) this.complaintTags.push(t); }); },
+    complaintsSummary(){ return [this.complaintTags.join(', '), this.complaintsText].filter(Boolean).join('. '); },
+
+    // ── Зубы ──
+    upperTeeth(){ return this.adult?[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28]:[55,54,53,52,51,61,62,63,64,65]; },
+    lowerTeeth(){ return this.adult?[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]:[85,84,83,82,81,71,72,73,74,75]; },
+    selectTooth(n){ this.selectedTooth=n; },
+    statusColor(code){ const s=this.STATUSES.find(x=>x.code===code); return s?s.color:''; },
+    toothStyle(n){ const c=this.statusColor(this.teeth[n]); return c?('background:'+c+'22;border-color:'+c+';color:'+c):'border-color:#e2e8f0;color:#64748b'; },
+    dxFor(code){ return this.STATUS_DX[code] || {dx:'',mkb:''}; },
+    setToothStatus(code){
+      if(!this.selectedTooth)return;
+      const cleared = this.teeth[this.selectedTooth]===code;
+      this.teeth[this.selectedTooth]= cleared?'':code;
+      // запоминаем диагноз по статусу (для авто-подстановки на шаге Диагноз)
+      if(!cleared){ const m=this.dxFor(code); if(m.dx){ this.pendingDx={dx:m.dx,mkb:m.mkb}; } }
+    },
+    toothParam(k){ const t=this.examTeeth[this.selectedTooth]; return t?(t[k]||''):''; },
+    setParam(k,v){ if(!this.selectedTooth)return; if(!this.examTeeth[this.selectedTooth])this.examTeeth[this.selectedTooth]={}; this.examTeeth[this.selectedTooth][k]=v; },
+    toggleExtra(){ this.showExtra=!this.showExtra; localStorage.setItem('visitExtraOpen', this.showExtra); },
+
+    // ── Диагноз: авто-МКБ по ключевым словам ──
+    autoIcd(){
+      this.dxAutofilled=false;
+      const t=this.diagnosis.toLowerCase();
+      const map=[['эмал','K02.0'],['дентин','K02.1'],['кариес','K02.1'],['некроз пульп','K04.1'],['пульпит','K04.0'],['острый периодонт','K04.4'],['периодонтит','K04.5'],['абсцесс','K04.7'],['гингивит','K05.1'],['пародонтит','K05.3'],['рецесс','K06.0'],['удал','K08.1']];
+      for(const [kw,code] of map){ if(t.includes(kw)){ this.icd=code; return; } }
+    },
+
+    // ── Файлы ──
+    uploadFiles(fileList){
+      if(!fileList||!fileList.length)return;
+      const form=new FormData();
+      Array.from(fileList).forEach(f=>form.append('files',f));
+      if(this.selectedTooth) form.append('tooth_number', this.selectedTooth);
+      this.uploading=true;
+      fetch(VISIT.uploadUrl,{method:'POST',headers:{'X-CSRFToken':getCsrf()},body:form})
+        .then(r=>r.json())
+        .then(d=>{ this.uploading=false; if(d.files){ d.files.forEach(f=>this.files.unshift(f)); toast('Загружено: '+d.files.length); } else toast(d.error||'Ошибка','error'); })
+        .catch(()=>{ this.uploading=false; toast('Ошибка сети','error'); });
+    },
+
+    // ── План ──
+    initSvcSelect(){
+      if(!window.TomSelect||!this.$refs.svcSel)return;
+      this.svcTS=new TomSelect(this.$refs.svcSel,{
+        options:this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'})),
+        placeholder:'Выберите услугу…',
+      });
+    },
+    addPlanItem(){
+      const v=this.svcTS?this.svcTS.getValue():''; if(!v){toast('Выберите услугу','error');return;}
+      const s=this.SERVICES.find(x=>String(x.id)===String(v)); if(!s)return;
+      this.plan.push({service_id:s.id,name:s.name,tooth:(this.selectedTooth||''),qty:1,price:Math.round(s.price),done:true});
+      this.svcTS.clear();
+    },
+    planTotal(){ return this.plan.reduce((a,it)=>a+(it.price||0)*(it.qty||1),0); },
+    doneTotal(){ return this.plan.filter(it=>it.done).reduce((a,it)=>a+(it.price||0)*(it.qty||1),0); },
+    fmt(n){ return Math.round(n).toLocaleString('ru-RU'); },
+
+    // ── Сохранение ──
+    payload(){
+      return {
+        complaints:this.complaintsSummary(), anamnesis:this.anamnesis, objective:this.objective,
+        diagnosis:this.diagnosis, icd_code:this.icd, recommendations:this.recommendations,
+        teeth:this.teeth,
+        exam_data:{complaint_tags:this.complaintTags, teeth:this.examTeeth},
+      };
+    },
+    async save(){
+      try{ await fetch(VISIT.saveUrl,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},body:JSON.stringify(this.payload())}); }
+      catch(e){}
+    },
+    async finish(){
+      this.saving=true;
+      await this.save();
+      try{
+        const r=await fetch(VISIT.commitUrl,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body:JSON.stringify({plan:this.plan, next_visit:this.next})});
+        const d=await r.json();
+        if(d.ok){ toast('Приём завершён'); setTimeout(()=>location.href=d.redirect,500); }
+        else { toast(d.error||'Ошибка','error'); this.saving=false; }
+      }catch(e){ toast('Ошибка сети','error'); this.saving=false; }
+    },
+  };
+}
+</script>
+{% endblock %}

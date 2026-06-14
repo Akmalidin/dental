@@ -1,9 +1,16 @@
 from django.urls import path
 from . import views
+from . import views_visit
 
 urlpatterns = [
     path("", views.treatment_list, name="treatment_list"),
     path("create/", views.treatment_create, name="treatment_create"),
+    # Мастер приёма (6 шагов): Пациент → Жалобы → Осмотр → Диагноз → План → Итог
+    path("visit/start/", views_visit.visit_start, name="visit_start"),
+    path("visit/<int:pk>/", views_visit.visit_wizard, name="visit_wizard"),
+    path("visit/<int:pk>/save/", views_visit.visit_save, name="visit_save"),
+    path("visit/<int:pk>/upload/", views_visit.visit_file_upload, name="visit_file_upload"),
+    path("visit/<int:pk>/commit/", views_visit.visit_commit, name="visit_commit"),
     path("create-quick/", views.treatment_create_quick, name="treatment_create_quick"),
     path("plans/create/", views.plan_create, name="plan_create"),
     path("plans/items/<int:pk>/toggle/", views.plan_item_toggle, name="plan_item_toggle"),

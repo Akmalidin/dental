@@ -59,7 +59,7 @@
           <p class="text-xs muted">{{ object.patient.phone }}</p>
         </div>
       </div>
-      <a href="/treatments/create/?patient={{ object.patient.pk }}" class="btn btn-success btn-sm w-full">→ Начать приём</a>
+      <a href="/treatments/visit/start/?patient={{ object.patient.pk }}&appointment={{ object.pk }}" class="btn btn-success btn-sm w-full">→ Начать приём</a>
     </div>
     {% endif %}
 

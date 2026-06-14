@@ -59,8 +59,14 @@ class MedicalRecord(models.Model):
     external_exam = models.TextField(blank=True, verbose_name="Внешний осмотр")
     objective = models.TextField(blank=True, verbose_name="Объективно")
     diagnosis = models.TextField(blank=True, verbose_name="Диагноз")
+    icd_code = models.CharField(max_length=20, blank=True, verbose_name="Код МКБ-10")
     treatment_text = models.TextField(blank=True, verbose_name="Лечение")
     recommendations = models.TextField(blank=True, verbose_name="Рекомендации")
+    # Структурированные данные осмотра по шагам мастера приёма:
+    # {"complaint_tags": [...],
+    #  "teeth": {"36": {"percussion":"++","probing":"","eod":"100","mobility":"I"}},
+    #  "diagnoses": [{"tooth":"36","dx":"...","icd":"K04.5"}]}
+    exam_data = models.JSONField(default=dict, blank=True, verbose_name="Данные осмотра")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

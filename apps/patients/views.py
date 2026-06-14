@@ -116,6 +116,19 @@ def patient_detail(request, pk):
     treatment_plans = patient.treatment_plans.select_related("doctor").prefetch_related(
         "items__service", "items__doctor"
     ).order_by("-created_at")
+    # Зубная карта: справочник статусов + сохранённые состояния зубов пациента
+    from apps.treatments.models_teeth import ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES
+    if not ToothStatus.objects.exists():
+        for i, (code, name, color) in enumerate(DEFAULT_TOOTH_STATUSES):
+            ToothStatus.objects.create(code=code, name=name, color=color, sort_order=i)
+    tooth_statuses_json = [{"id": s.id, "code": s.code, "name": s.name, "color": s.color}
+                           for s in ToothStatus.objects.all()]
+    tooth_conditions_json = {
+        str(tc.tooth_number): {"status_id": tc.status_id,
+                               "color": tc.status.color if tc.status else "",
+                               "name": tc.status.name if tc.status else ""}
+        for tc in ToothCondition.objects.filter(patient=patient).select_related("status")
+    }
     from apps.settings_clinic.models_documents import DocumentTemplate
     doc_templates = DocumentTemplate.objects.filter(is_active=True)
     from apps.users.models import Branch
@@ -142,6 +155,8 @@ def patient_detail(request, pk):
         "payments": payments,
         "treatment_plans": treatment_plans,
         "all_services_json": all_services_json,
+        "tooth_statuses_json": tooth_statuses_json,
+        "tooth_conditions_json": tooth_conditions_json,
         "service_categories_json": service_categories_json,
         "service_categories": ServiceCategory.objects.order_by("name"),
         "doctors": doctors,

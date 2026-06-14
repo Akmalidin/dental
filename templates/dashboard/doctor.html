@@ -52,7 +52,7 @@
           <td>
             <div class="flex items-center gap-2 justify-end">
               {% if appt.patient_id and appt.status != "completed" and appt.status != "cancelled" %}
-              <a href="/treatments/create/?patient={{ appt.patient_id }}&doctor={{ appt.doctor_id }}&appointment={{ appt.pk }}" class="btn btn-success btn-sm">→ Начать приём</a>
+              <a href="/treatments/visit/start/?patient={{ appt.patient_id }}&doctor={{ appt.doctor_id }}&appointment={{ appt.pk }}" class="btn btn-success btn-sm">→ Начать приём</a>
               {% endif %}
               <a href="/appointments/{{ appt.pk }}/edit/" class="btn btn-ghost btn-sm">Изменить</a>
             </div>

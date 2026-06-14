@@ -162,7 +162,7 @@
       <!-- Футер -->
       <div class="flex flex-wrap gap-2 px-6 py-4 shrink-0" style="border-top:1px solid var(--border)">
         <template x-if="av.patient_id && !av.cancelled && av.status!=='completed' && !av.treatment_id">
-          <a :href="'/treatments/create/?patient=' + av.patient_id + '&doctor=' + (av.doctor_id||'') + '&appointment=' + av.id" class="btn btn-success btn-sm">→ Начать приём</a>
+          <a :href="'/treatments/visit/start/?patient=' + av.patient_id + '&doctor=' + (av.doctor_id||'') + '&appointment=' + av.id" class="btn btn-success btn-sm">→ Начать приём</a>
         </template>
         <template x-if="av.treatment_id">
           <a :href="'/treatments/' + av.treatment_id + '/'" class="btn btn-soft btn-sm">Перейти к лечению</a>
