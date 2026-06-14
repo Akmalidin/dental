@@ -51,20 +51,36 @@
       <a href="/treatments/{{ treatment.pk }}/" class="btn btn-ghost btn-sm">Открыть карточку приёма →</a>
     </div>
     <p class="text-xs muted mb-3">Приём №{{ treatment.pk }} · Врач: {{ treatment.doctor.name }} · {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
-    <div class="flex items-center gap-1 overflow-x-auto">
-      <template x-for="(s,i) in steps" :key="i">
+    <div class="flex items-center gap-1 overflow-x-auto pb-1 flex-wrap">
+      <template x-for="(s, i) in steps" :key="i">
         <div class="flex items-center shrink-0">
-          <button @click="go(i+1)" class="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-semibold transition"
-                  :class="step===i+1 ? 'text-white' : (step>i+1 ? 'text-emerald-600' : 'muted')"
-                  :style="step===i+1 ? 'background:linear-gradient(135deg,#6366F1,#8B5CF6)' : ''">
-            <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs"
-                  :class="step>i+1 ? 'bg-emerald-100 text-emerald-600' : (step===i+1?'bg-white/25':'bg-slate-100')"
-                  x-text="step>i+1 ? '✓' : (i+1)"></span>
-            <span x-text="s"></span>
+          <button @click="go(i+1)"
+                  class="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all"
+                  :class="{
+                    'text-white shadow-lg': step === i+1,
+                    'text-emerald-600 hover:bg-emerald-50': step > i+1,
+                    'text-slate-400 hover:text-slate-600 hover:bg-slate-50': step < i+1
+                  }"
+                  :style="step === i+1 ? 'background:linear-gradient(135deg,#6366F1,#8B5CF6)' : ''">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0"
+                  :class="{
+                    'bg-white/30 text-white': step === i+1,
+                    'bg-emerald-100 text-emerald-600': step > i+1,
+                    'bg-slate-100 text-slate-400': step < i+1
+                  }">
+              <template x-if="step > i+1">✓</template>
+              <template x-if="step <= i+1"><span x-text="i+1"></span></template>
+            </span>
+            <span x-text="s" class="hidden sm:inline"></span>
           </button>
-          <div x-show="i < steps.length-1" class="w-5 h-px bg-slate-200 mx-0.5"></div>
+          <div x-show="i < steps.length - 1"
+               class="w-6 h-0.5 mx-0.5 rounded-full transition-colors"
+               :class="step > i+1 ? 'bg-emerald-300' : 'bg-slate-200'"></div>
         </div>
       </template>
+      <span x-show="lastSaved" x-transition class="ml-auto text-xs text-emerald-500 shrink-0 font-medium">
+        ✓ сохр. <span x-text="lastSaved"></span>
+      </span>
     </div>
   </div>
 
@@ -269,7 +285,7 @@ function visitWizard(){
   return {
     steps: ['Жалобы','Осмотр','Диагноз','План','Итог'],
     step: 1, saving:false, uploading:false, adult:true, selectedTooth:null,
-    showExtra:false, dxAutofilled:false, pendingDx:null,
+    showExtra:false, dxAutofilled:false, pendingDx:null, lastSaved:null,
     SERVICES: JSON.parse(document.getElementById('v-services').textContent),
     STATUSES: JSON.parse(document.getElementById('v-statuses').textContent),
     ICD: JSON.parse(document.getElementById('v-icd').textContent),
@@ -382,7 +398,10 @@ function visitWizard(){
       };
     },
     async save(){
-      try{ await fetch(VISIT.saveUrl,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},body:JSON.stringify(this.payload())}); }
+      try{
+        await fetch(VISIT.saveUrl,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},body:JSON.stringify(this.payload())});
+        this.lastSaved = new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      }
       catch(e){}
     },
     async finish(){

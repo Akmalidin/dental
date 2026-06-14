@@ -107,7 +107,7 @@
         <tr>
           <td>
             {% if a.patient %}
-            <div class="flex items-center gap-3"><div class="avatar w-9 h-9 text-xs">{{ a.patient.first_name|first|upper }}</div><a href="/patients/{{ a.patient.pk }}/" class="font-semibold" style="color:var(--text)">{{ a.patient.full_name }}</a></div>
+            <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black text-white shrink-0" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ a.patient.first_name|first|upper }}</div><div><a href="/patients/{{ a.patient.pk }}/" class="font-semibold hover:underline" style="color:var(--text)">{{ a.patient.full_name }}</a><p class="text-xs muted">{{ a.patient.phone }}</p></div></div>
             {% else %}<span class="muted">Без пациента</span>{% endif %}
           </td>
           <td class="muted">{{ a.doctor.name }}</td>
@@ -119,7 +119,7 @@
           </td>
           <td>
             <div class="flex items-center justify-end gap-1.5" x-data="{open:false}">
-              {% if a.patient %}<a href="/treatments/visit/start/?patient={{ a.patient.pk }}&doctor={{ a.doctor.pk }}&appointment={{ a.pk }}" class="btn btn-soft btn-sm" title="Начать приём">→ Приём</a>{% endif %}
+              {% if a.patient %}<a href="/treatments/visit/start/?patient={{ a.patient.pk }}&doctor={{ a.doctor.pk }}&appointment={{ a.pk }}" class="btn btn-primary btn-sm whitespace-nowrap" title="Начать приём">→ Приём</a>{% endif %}
               <div class="relative" @click.outside="open=false">
                 <button @click="open=!open" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
                 <div x-show="open" x-cloak class="dropdown right-0 top-full mt-1 w-48">

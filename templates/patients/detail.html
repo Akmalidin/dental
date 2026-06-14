@@ -330,7 +330,7 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
         <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100">
           <div class="flex">
             <button @click="toothView='chart'" :class="toothView==='chart'?'tab-btn active':'tab-btn'">Зубы</button>
-            <button @click="toothView='buttons'" :class="toothView==='buttons'?'tab-btn active':'tab-btn'">Кнопка</button>
+            <button @click="toothView='buttons'" :class="toothView==='buttons'?'tab-btn active':'tab-btn'">Список зубов</button>
           </div>
           <div class="flex items-center gap-2 text-sm text-slate-600">
             <span class="text-xs font-medium">Взрослые</span>

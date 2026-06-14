@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block page_title %}Дашборд{% endblock %}
 {% block content %}
+<div class="mb-6">
+  <h2 class="text-2xl font-black" style="color:var(--text)">
+    Здравствуйте, {{ request.user.name|default:request.user.login }}! 👋
+  </h2>
+  <p class="muted text-sm mt-1">{% now "l, d E Y г." %}</p>
+</div>
 <div class="card card-pad text-center py-16">
-  <p class="muted">Добро пожаловать в систему</p>
+  <p class="muted">Добро пожаловать в систему SADAF</p>
 </div>
 {% endblock %}

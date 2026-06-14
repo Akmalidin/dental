@@ -68,6 +68,18 @@ def _services_json():
 
 @login_required
 def treatment_create(request):
+    # Единый путь приёма — через мастер. Если указан пациент/запись, редиректим туда.
+    appt_id = request.GET.get("appointment")
+    _patient_id = request.GET.get("patient")
+    if appt_id or _patient_id:
+        params = []
+        if appt_id:
+            params.append("appointment=%s" % appt_id)
+        if _patient_id:
+            params.append("patient=%s" % _patient_id)
+        if request.GET.get("doctor"):
+            params.append("doctor=%s" % request.GET.get("doctor"))
+        return redirect("/treatments/visit/start/?" + "&".join(params))
     from apps.users.models import Branch
     patient_id = request.GET.get("patient")
     patient = get_object_or_404(Patient, pk=patient_id) if patient_id else None
