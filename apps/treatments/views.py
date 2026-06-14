@@ -182,8 +182,11 @@ def treatment_detail(request, pk):
                      for s in Service.objects.filter(is_active=True).order_by("name")]
     medicines_json = [{"id": m.pk, "name": m.name, "unit": m.unit}
                       for m in Medicine.objects.filter(is_active=True).order_by("name")]
+    from apps.users.models import Branch
+    branches = Branch.objects.filter(is_active=True)
     return render(request, "treatments/detail.html", {
         "treatment": treatment,
+        "branches": branches,
         "treated_teeth": sorted(treated_teeth),
         "treated_teeth_json": sorted(treated_teeth),
         "plans": plans,

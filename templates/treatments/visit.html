@@ -224,13 +224,12 @@
 
   <!-- STEP 4 — План лечения -->
   <div x-show="step===4" class="card card-pad space-y-3">
-    <div class="flex items-center justify-between">
-      <h3 class="font-bold" style="color:var(--text)">4. План лечения</h3>
-      <div class="flex items-center gap-2">
-        <select x-ref="svcSel" class="no-tom" style="min-width:220px"></select>
-        <button @click="addPlanItem()" class="btn btn-primary btn-sm">+ Добавить</button>
-      </div>
+    <h3 class="font-bold" style="color:var(--text)">4. План лечения</h3>
+    <div class="flex items-center gap-2">
+      <select x-ref="svcSel" class="no-tom flex-1" style="min-width:0;width:100%"></select>
+      <button @click="addPlanItem()" class="btn btn-primary btn-sm shrink-0">+ Добавить</button>
     </div>
+    <p class="text-xs muted -mt-1">Выберите услугу — она добавится автоматически.</p>
     <table class="tbl">
       <thead><tr><th class="text-center">Сегодня</th><th>Услуга</th><th>Зуб</th><th class="text-center">Кол.</th><th>Цена</th><th>Итого</th><th></th></tr></thead>
       <tbody>
@@ -373,16 +372,21 @@ function visitWizard(){
     // ── План ──
     initSvcSelect(){
       if(!window.TomSelect||!this.$refs.svcSel)return;
+      const self=this;
       this.svcTS=new TomSelect(this.$refs.svcSel,{
         options:this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'})),
         placeholder:'Выберите услугу…',
+        onChange(v){ if(v){ self.addPlanItem(String(v)); } },
       });
     },
-    addPlanItem(){
-      const v=this.svcTS?this.svcTS.getValue():''; if(!v){toast('Выберите услугу','error');return;}
+    addPlanItem(val){
+      // val передаётся из onChange; иначе берём текущее значение селекта
+      const v = val || (this.svcTS?this.svcTS.getValue():''); if(!v) return;
       const s=this.SERVICES.find(x=>String(x.id)===String(v)); if(!s)return;
       this.plan.push({service_id:s.id,name:s.name,tooth:(this.selectedTooth||''),qty:1,price:Math.round(s.price),done:true});
-      this.svcTS.clear();
+      // сбрасываем выбор (без повторного onChange-добавления)
+      this.svcTS.clear(true);
+      this.svcTS.blur();
     },
     planTotal(){ return this.plan.reduce((a,it)=>a+(it.price||0)*(it.qty||1),0); },
     doneTotal(){ return this.plan.filter(it=>it.done).reduce((a,it)=>a+(it.price||0)*(it.qty||1),0); },

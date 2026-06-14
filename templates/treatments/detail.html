@@ -350,7 +350,7 @@
           <div><label class="fld">Метод</label><select name="method" class="no-tom"><option value="cash">Наличные</option><option value="card">Карта</option><option value="transfer">Перевод</option></select></div>
           <div><label class="fld">Тип</label><select name="type" class="no-tom"><option value="income">Оплата</option><option value="refund">Возврат</option></select></div>
         </div>
-        <div><label class="fld">Филиал</label><select name="branch" class="no-tom" required>{% for b in request.user.branches.all %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select></div>
+        <div><label class="fld">Филиал</label><select name="branch" class="no-tom" required>{% for b in branches %}<option value="{{ b.pk }}"{% if b.is_main %} selected{% endif %}>{{ b.name }}</option>{% empty %}{% for b in request.user.branches.all %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}{% endfor %}</select></div>
         <div class="flex gap-3"><button type="submit" class="btn btn-success flex-1">Принять</button><button type="button" @click="showPay=false" class="btn btn-ghost">Отмена</button></div>
       </form>
     </div>
