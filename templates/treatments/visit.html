@@ -309,7 +309,8 @@
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
       <div><label class="fld">Следующий визит — дата</label><input type="date" x-model="next.date"></div>
-      <div><label class="fld">Время</label><input type="time" x-model="next.time"></div>
+      <div><label class="fld">Время</label><input type="time" x-model="next.time" min="{{ work_start }}" max="{{ work_end }}" step="300">
+        <p class="text-[11px] muted mt-1">Рабочее время: {{ work_start }}–{{ work_end }}</p></div>
       <div><label class="fld">Заметка к визиту</label><input type="text" x-model="next.note" placeholder="напр. коронка"></div>
     </div>
     <div class="flex flex-wrap gap-2 pt-2">

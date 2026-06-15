@@ -6,6 +6,7 @@
 {{ patients_json|json_script:"cal-patients" }}
 {{ services_json|json_script:"cal-services" }}
 {{ schedules_json|json_script:"cal-schedules" }}
+<script>const WORK_START="{{ work_start }}", WORK_END="{{ work_end }}";</script>
 <style>
   #calendar { min-height: 600px; }
   .fc { --fc-border-color: var(--border); --fc-page-bg-color: var(--surface); --fc-today-bg-color: var(--primary-light); }
@@ -241,8 +242,8 @@
         </div>
         <div x-show="bk.fromSlot" class="text-sm muted">Дата: <strong style="color:var(--text)" x-text="bk.dateLabel"></strong></div>
         <div class="grid grid-cols-2 gap-4">
-          <div><label class="fld">Время с *</label><input type="time" x-model="bk.timeFrom" step="300" :min="docHours()?docHours().start:null" :max="docHours()?docHours().end:null"></div>
-          <div><label class="fld">Время до *</label><input type="time" x-model="bk.timeTo" step="300" :min="docHours()?docHours().start:null" :max="docHours()?docHours().end:null"></div>
+          <div><label class="fld">Время с *</label><input type="time" x-model="bk.timeFrom" step="300" :min="docHours()?docHours().start:WORK_START" :max="docHours()?docHours().end:WORK_END"></div>
+          <div><label class="fld">Время до *</label><input type="time" x-model="bk.timeTo" step="300" :min="docHours()?docHours().start:WORK_START" :max="docHours()?docHours().end:WORK_END"></div>
         </div>
         <p class="text-xs muted -mt-2" x-show="docHours()" x-cloak>График работы врача: <strong style="color:var(--text)" x-text="docHours() ? docHours().start+'–'+docHours().end : ''"></strong></p>
         <p class="text-xs -mt-2" style="color:var(--red)" x-show="docHours()===false" x-cloak>Врач не работает в выбранный день.</p>
@@ -289,7 +290,7 @@ function calendarPage() {
         initialView: window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek',
         locale: 'ru', firstDay: 1, height: 'auto',
         headerToolbar: false,
-        slotMinTime: '08:00:00', slotMaxTime: '20:00:00',
+        slotMinTime: WORK_START + ':00', slotMaxTime: WORK_END + ':00',
         allDaySlot: false, nowIndicator: true,
         editable: allowDrag, eventStartEditable: allowDrag, eventDurationEditable: allowDrag,
         eventDrop: (info) => this.moveEvent(info),

@@ -12,6 +12,34 @@ from .forms import AppointmentForm
 from .gcal import push_event as gcal_push, delete_event as gcal_delete
 
 
+def _clinic_work_window():
+    """(start_time, end_time) рабочего окна клиники из ClinicSettings.working_hours.
+    Берём самое раннее открытие и позднее закрытие по дням. По умолчанию 09:00–21:00."""
+    from datetime import time as _time
+    ws, we = "09:00", "21:00"
+    try:
+        from apps.settings_clinic.models import ClinicSettings
+        wh = ClinicSettings.get().working_hours
+        if isinstance(wh, dict):
+            starts = [str(v[0]) for v in wh.values() if isinstance(v, (list, tuple)) and len(v) == 2 and v[0] and v[1]]
+            ends = [str(v[1]) for v in wh.values() if isinstance(v, (list, tuple)) and len(v) == 2 and v[0] and v[1]]
+            if starts and ends:
+                ws, we = min(starts), max(ends)
+    except Exception:
+        pass
+    def _t(s):
+        h, m = (s.split(":") + ["0"])[:2]
+        return _time(int(h), int(m))
+    return _t(ws), _t(we), ws, we
+
+
+def _clinic_hours_violation(local_start, local_end):
+    ws_t, we_t, ws, we = _clinic_work_window()
+    if local_start.time() < ws_t or local_end.time() > we_t:
+        return "Время вне рабочих часов клиники (%s–%s)." % (ws, we)
+    return None
+
+
 def schedule_violation(doctor, start, end):
     """Проверка, что приём укладывается в график работы врача.
 
@@ -24,13 +52,15 @@ def schedule_violation(doctor, start, end):
 
     if not doctor:
         return None
-    # Если у врача нет ни одной записи в графике — ограничения не применяем.
-    if not DoctorSchedule.objects.filter(doctor=doctor).exists():
-        return None
 
     local_start = _tz.localtime(start)
     local_end = _tz.localtime(end)
     dow = local_start.weekday()  # 0=Пн … 6=Вс — совпадает с DoctorSchedule.day_of_week
+
+    # Если у врача нет графика — ограничиваем рабочим окном клиники (чтобы нельзя
+    # было записать на нерабочее время, напр. 05:37).
+    if not DoctorSchedule.objects.filter(doctor=doctor).exists():
+        return _clinic_hours_violation(local_start, local_end)
 
     sched = DoctorSchedule.objects.filter(doctor=doctor, day_of_week=dow).first()
     if not sched or not sched.is_working:

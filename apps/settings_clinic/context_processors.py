@@ -4,7 +4,9 @@ def clinic_settings(request):
     ctx = {"clinic_settings": None, "unread_notifications_count": 0, "enabled_modules": [],
            "offline_mode": getattr(dj_settings, "OFFLINE_MODE", False),
            "vapid_public_key": getattr(dj_settings, "VAPID_PUBLIC_KEY", ""),
-           "asset_v": getattr(dj_settings, "ASSET_VERSION", "1")}
+           "asset_v": getattr(dj_settings, "ASSET_VERSION", "1"),
+           # Рабочее окно клиники (для ограничения выбора времени везде)
+           "work_start": "09:00", "work_end": "21:00"}
 
     from apps.tenancy import get_current_clinic
     cur = get_current_clinic()
@@ -12,6 +14,15 @@ def clinic_settings(request):
         from .models import ClinicSettings
         cs = ClinicSettings.get()
         ctx["clinic_settings"] = cs
+        # Рабочее окно: самое раннее открытие и самое позднее закрытие по дням недели
+        wh = cs.working_hours if isinstance(cs.working_hours, dict) else {}
+        starts, ends = [], []
+        for v in wh.values():
+            if isinstance(v, (list, tuple)) and len(v) == 2 and v[0] and v[1]:
+                starts.append(str(v[0])); ends.append(str(v[1]))
+        if starts and ends:
+            ctx["work_start"] = min(starts)
+            ctx["work_end"] = max(ends)
         # Доступные модули — из ТЕКУЩЕЙ клиники (per-clinic тариф). Пусто = все.
         all_keys = [m[0] for m in ClinicSettings.ALL_MODULES]
         if cur is not None:
