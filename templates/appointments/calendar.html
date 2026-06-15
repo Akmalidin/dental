@@ -165,7 +165,7 @@
           <a :href="'/treatments/visit/start/?patient=' + av.patient_id + '&doctor=' + (av.doctor_id||'') + '&appointment=' + av.id" class="btn btn-success btn-sm">→ Начать приём</a>
         </template>
         <template x-if="av.treatment_id">
-          <a :href="'/treatments/' + av.treatment_id + '/'" class="btn btn-soft btn-sm">Перейти к лечению</a>
+          <a :href="'/treatments/visit/' + av.treatment_id + '/'" class="btn btn-soft btn-sm">Перейти к лечению</a>
         </template>
         <template x-if="av.status==='in_progress'">
           <button @click="openNextDlg(true)" class="btn btn-success btn-sm">✓ Завершить приём</button>

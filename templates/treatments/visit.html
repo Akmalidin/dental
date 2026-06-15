@@ -69,8 +69,8 @@
                     'bg-emerald-100 text-emerald-600': step > i+1,
                     'bg-slate-100 text-slate-400': step < i+1
                   }">
-              <template x-if="step > i+1">✓</template>
-              <template x-if="step <= i+1"><span x-text="i+1"></span></template>
+              <span x-show="step > i+1">✓</span>
+              <span x-show="step <= i+1" x-text="i+1"></span>
             </span>
             <span x-text="s" class="hidden sm:inline"></span>
           </button>
@@ -427,7 +427,9 @@ function visitWizard(){
 
     // ── План ──
     initSvcSelect(){
+      if(this.svcTS)return;
       if(!window.TomSelect||!this.$refs.svcSel)return;
+      if(this.$refs.svcSel.tomselect)return;
       const self=this;
       this.svcTS=new TomSelect(this.$refs.svcSel,{
         options:this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'})),
