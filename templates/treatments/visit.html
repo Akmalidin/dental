@@ -121,17 +121,41 @@
       <button @click="adult=false" :class="!adult?'tab-btn active':'tab-btn'">Дети</button>
     </div>
     <div class="space-y-1">
-      <div class="flex justify-center gap-0.5 flex-wrap">
+      <!-- Верхний ряд: картинки зубов -->
+      <div class="flex justify-center items-end gap-0.5 flex-wrap mb-1">
         <template x-for="n in upperTeeth()" :key="n">
-          <button @click="selectTooth(n)" class="w-9 h-9 rounded-lg border text-xs font-bold"
-                  :style="toothStyle(n)" :class="selectedTooth===n?'ring-2 ring-indigo-500':''" x-text="n"></button>
+          <div class="flex flex-col items-center cursor-pointer group" @click="selectTooth(n)">
+            <div :style="`width:${toothW(n)}px;height:${toothH(n)}px`">
+              <svg :viewBox="`0 0 ${toothW(n)} ${toothH(n)}`" class="w-full h-full overflow-visible">
+                <path :d="toothPath(n,'upper')"
+                      :fill="statusColor(teeth[n]) ? statusColor(teeth[n])+'33' : 'white'"
+                      :stroke="selectedTooth===n ? '#6366F1' : (statusColor(teeth[n]) || '#93C5FD')"
+                      :stroke-width="selectedTooth===n ? 2.5 : 1.5" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <span class="text-[10px] mt-0.5"
+                  :class="selectedTooth===n ? 'text-indigo-600 font-bold' : (statusColor(teeth[n]) ? 'font-bold' : 'text-slate-400')"
+                  :style="statusColor(teeth[n]) ? ('color:'+statusColor(teeth[n])) : ''" x-text="n"></span>
+          </div>
         </template>
       </div>
-      <div class="border-t border-dashed border-slate-200 my-1"></div>
-      <div class="flex justify-center gap-0.5 flex-wrap">
+      <div class="border-t-2 border-dashed border-slate-200 my-1 mx-4"></div>
+      <!-- Нижний ряд: картинки зубов -->
+      <div class="flex justify-center items-start gap-0.5 flex-wrap mt-1">
         <template x-for="n in lowerTeeth()" :key="n">
-          <button @click="selectTooth(n)" class="w-9 h-9 rounded-lg border text-xs font-bold"
-                  :style="toothStyle(n)" :class="selectedTooth===n?'ring-2 ring-indigo-500':''" x-text="n"></button>
+          <div class="flex flex-col items-center cursor-pointer group" @click="selectTooth(n)">
+            <span class="text-[10px] mb-0.5"
+                  :class="selectedTooth===n ? 'text-indigo-600 font-bold' : (statusColor(teeth[n]) ? 'font-bold' : 'text-slate-400')"
+                  :style="statusColor(teeth[n]) ? ('color:'+statusColor(teeth[n])) : ''" x-text="n"></span>
+            <div :style="`width:${toothW(n)}px;height:${toothH(n)}px`">
+              <svg :viewBox="`0 0 ${toothW(n)} ${toothH(n)}`" class="w-full h-full overflow-visible">
+                <path :d="toothPath(n,'lower')"
+                      :fill="statusColor(teeth[n]) ? statusColor(teeth[n])+'33' : 'white'"
+                      :stroke="selectedTooth===n ? '#6366F1' : (statusColor(teeth[n]) || '#93C5FD')"
+                      :stroke-width="selectedTooth===n ? 2.5 : 1.5" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
         </template>
       </div>
     </div>
@@ -390,6 +414,29 @@ function visitWizard(){
     selectTooth(n){ this.selectedTooth=n; },
     statusColor(code){ const s=this.STATUSES.find(x=>x.code===code); return s?s.color:''; },
     toothStyle(n){ const c=this.statusColor(this.teeth[n]); return c?('background:'+c+'22;border-color:'+c+';color:'+c):'border-color:#e2e8f0;color:#64748b'; },
+    // Картинки зубов (SVG-формы)
+    toothType(n){
+      if([16,17,18,26,27,28,36,37,38,46,47,48,55,65,75,85].includes(n))return 'molar';
+      if([14,15,24,25,34,35,44,45,54,64,74,84].includes(n))return 'premolar';
+      if([13,23,33,43,53,63,73,83].includes(n))return 'canine';
+      return 'incisor';
+    },
+    toothW(n){ return {molar:28,premolar:22,canine:18,incisor:16}[this.toothType(n)]; },
+    toothH(n){ return {molar:38,premolar:40,canine:42,incisor:40}[this.toothType(n)]; },
+    toothPath(n,row){
+      const t=this.toothType(n); const w=this.toothW(n),h=this.toothH(n),hw=w/2;
+      if(row==='upper'){
+        if(t==='incisor')  return `M2,2 Q${hw},0 ${w-2},2 L${w-2},${h*.55} Q${hw},${h} 2,${h*.55} Z`;
+        if(t==='canine')   return `M2,3 Q${hw},0 ${w-2},3 L${w-3},${h*.5} Q${hw},${h} 3,${h*.5} Z`;
+        if(t==='premolar') return `M2,4 Q${hw*.5},0 ${hw},2 Q${hw},0 ${hw*1.5},2 Q${w-2},0 ${w-2},4 L${w-3},${h*.52} Q${hw},${h} 3,${h*.52} Z`;
+        return `M2,5 Q${hw*.4},0 ${hw*.8},2 Q${hw},0 ${hw*1.2},2 Q${hw*1.6},0 ${w-2},5 L${w-3},${h*.5} Q${hw},${h} 3,${h*.5} Z`;
+      } else {
+        if(t==='incisor')  return `M2,${h-2} Q${hw},${h} ${w-2},${h-2} L${w-2},${h*.45} Q${hw},0 2,${h*.45} Z`;
+        if(t==='canine')   return `M2,${h-3} Q${hw},${h} ${w-2},${h-3} L${w-3},${h*.5} Q${hw},0 3,${h*.5} Z`;
+        if(t==='premolar') return `M2,${h-4} Q${hw*.5},${h} ${hw},${h-2} Q${hw},${h} ${hw*1.5},${h-2} Q${w-2},${h} ${w-2},${h-4} L${w-3},${h*.48} Q${hw},0 3,${h*.48} Z`;
+        return `M2,${h-5} Q${hw*.4},${h} ${hw*.8},${h-2} Q${hw},${h} ${hw*1.2},${h-2} Q${hw*1.6},${h} ${w-2},${h-5} L${w-3},${h*.5} Q${hw},0 3,${h*.5} Z`;
+      }
+    },
     dxFor(code){ return this.STATUS_DX[code] || {dx:'',mkb:''}; },
     setToothStatus(code){
       if(!this.selectedTooth)return;
