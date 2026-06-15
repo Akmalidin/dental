@@ -13,7 +13,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils.translation import gettext_lazy as _
 
-from .models import Treatment, TreatmentCure
+from .models import Treatment, TreatmentCure, TreatmentFile
 from .models_emr import MedicalRecord
 from .models_teeth import ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES
 from .icd10 import DENTAL_ICD10, suggest_icd
@@ -109,9 +109,13 @@ def visit_wizard(request, pk):
               "qty": c.quantity, "price": float(c.price), "done": True}
              for c in treatment.cures.all()]
     # уже загруженные снимки/файлы этого приёма
+    from django.utils import timezone as _tz
     files = [{"id": f.pk, "url": f.file.url, "name": f.name,
-              "tooth": f.tooth_number, "is_image": f.is_image}
-             for f in treatment.files.all()]
+              "tooth": f.tooth_number, "is_image": f.is_image,
+              "kind": f.kind, "kind_label": f.get_kind_display(), "comment": f.comment or "",
+              "date": _tz.localtime(f.uploaded_at).strftime("%d.%m.%Y %H:%M"),
+              "by": f.uploaded_by.name if f.uploaded_by else ""}
+             for f in treatment.files.select_related("uploaded_by").all()]
 
     emr_json = {
         "complaints": emr.complaints or "",
@@ -133,6 +137,7 @@ def visit_wizard(request, pk):
         "tooth_conditions_json": tooth_conditions,
         "cures_json": cures,
         "files_json": files,
+        "file_kinds_json": [{"code": k, "label": lbl} for k, lbl in TreatmentFile.KIND_CHOICES],
         "icd_list_json": [{"code": c, "name": n} for c, n in DENTAL_ICD10],
         "doctors": clinic_doctors(get_current_clinic()),
     })
@@ -192,16 +197,24 @@ def visit_file_upload(request, pk):
         return JsonResponse({"error": "Максимум 10 файлов за раз"}, status=400)
     tooth = request.POST.get("tooth_number") or ""
     tooth_num = int(tooth) if str(tooth).isdigit() else None
+    valid_kinds = {k for k, _ in TreatmentFile.KIND_CHOICES}
+    kind = request.POST.get("kind") or "intraoral"
+    if kind not in valid_kinds:
+        kind = "intraoral"
+    comment = (request.POST.get("comment") or "").strip()
+    from django.utils import timezone as _tz
     created = []
     for f in files:
-        name = (f.name or "").lower()
-        kind = "xray" if name.endswith(".pdf") else "before"
         obj = TreatmentFile.objects.create(
             treatment=treatment, file=f, tooth_number=tooth_num,
-            kind=kind, name=f.name, uploaded_by=request.user,
+            kind=kind, comment=comment, name=f.name, uploaded_by=request.user,
         )
         created.append({"id": obj.pk, "url": obj.file.url, "name": obj.name,
-                        "tooth": tooth_num, "is_image": obj.is_image})
+                        "tooth": tooth_num, "is_image": obj.is_image,
+                        "kind": obj.kind, "kind_label": obj.get_kind_display(),
+                        "comment": obj.comment,
+                        "date": _tz.localtime(obj.uploaded_at).strftime("%d.%m.%Y %H:%M"),
+                        "by": request.user.name if hasattr(request.user, "name") else ""})
     return JsonResponse({"files": created})
 
 

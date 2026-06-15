@@ -7,6 +7,7 @@
 {{ tooth_conditions_json|json_script:"v-conditions" }}
 {{ cures_json|json_script:"v-cures" }}
 {{ files_json|json_script:"v-files" }}
+{{ file_kinds_json|json_script:"v-filekinds" }}
 {{ icd_list_json|json_script:"v-icd" }}
 {{ emr_json|json_script:"v-emr" }}
 <script>
@@ -171,39 +172,58 @@
 
     <div><label class="fld">Внешний осмотр / объективно</label><textarea x-model="objective" rows="2"></textarea></div>
 
-    <!-- Снимки и фото -->
-    <div class="files-block">
-      <div class="flex items-center justify-between mb-2">
-        <h4 class="font-semibold text-sm" style="color:var(--text)">Снимки и фото
-          <span class="muted font-normal" x-show="selectedTooth">· зуб <span x-text="selectedTooth"></span></span></h4>
-        <label class="btn btn-ghost btn-sm cursor-pointer">
-          + Добавить снимок
-          <input type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.pdf" @change="uploadFiles($event.target.files); $event.target.value=''">
-        </label>
-      </div>
-      <p x-show="uploading" class="text-xs muted">Загрузка…</p>
-      <div class="flex flex-wrap gap-2">
-        <template x-for="f in files" :key="f.id">
-          <a :href="f.url" target="_blank" class="block relative">
-            <template x-if="f.is_image">
-              <img :src="f.url" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
-            </template>
-            <template x-if="!f.is_image">
-              <span class="flex items-center justify-center text-xs font-bold" style="width:80px;height:80px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2)">PDF</span>
-            </template>
-            <span x-show="f.tooth" class="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full" x-text="f.tooth"></span>
-          </a>
-        </template>
-        <span x-show="files.length===0" class="text-xs muted py-6">Снимков пока нет</span>
-      </div>
-    </div>
-
     <div class="flex justify-between"><button @click="go(1)" class="btn btn-ghost">← Назад</button><button @click="go(3)" class="btn btn-primary">Далее →</button></div>
   </div>
 
-  <!-- STEP 3 — Диагноз -->
-  <div x-show="step===3" class="card card-pad space-y-3">
-    <h3 class="font-bold" style="color:var(--text)">3. Диагноз</h3>
+  <!-- STEP 3 — Снимки и рентгены -->
+  <div x-show="step===3" class="card card-pad space-y-4">
+    <h3 class="font-bold" style="color:var(--text)">3. Снимки и рентгены</h3>
+    <div class="rounded-xl p-3 grid grid-cols-1 md:grid-cols-4 gap-3 items-end" style="background:var(--surface-2)">
+      <div>
+        <label class="fld">Тип исследования</label>
+        <select class="no-tom" x-model="upKind">
+          <template x-for="k in FILE_KINDS" :key="k.code"><option :value="k.code" x-text="k.label"></option></template>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="fld">Комментарий (необязательно)</label>
+        <input type="text" x-model="upComment" placeholder="напр. Ретенция 48 зуба">
+      </div>
+      <div>
+        <label class="btn btn-primary btn-sm w-full justify-center cursor-pointer">
+          + Загрузить
+          <input type="file" class="hidden" multiple accept=".jpg,.jpeg,.png,.pdf" @change="uploadFiles($event.target.files); $event.target.value=''">
+        </label>
+      </div>
+    </div>
+    <p class="text-xs muted" x-show="selectedTooth">Привяжется к зубу <span x-text="selectedTooth"></span> (выбран на шаге Осмотр).</p>
+    <p x-show="uploading" class="text-sm muted">Загрузка…</p>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <template x-for="f in files" :key="f.id">
+        <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border)">
+          <div class="relative cursor-pointer" @click="openViewer(f)" style="background:var(--surface-2)">
+            <template x-if="f.is_image"><img :src="f.url" style="width:100%;height:120px;object-fit:cover"></template>
+            <template x-if="!f.is_image"><div class="flex items-center justify-center" style="height:120px"><span class="text-3xl">📄</span></div></template>
+            <span class="absolute top-1 left-1 text-[10px] font-bold text-white px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,.9)" x-text="f.kind_label"></span>
+            <span x-show="f.tooth" class="absolute top-1 right-1 bg-white/90 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded" x-text="'зуб '+f.tooth"></span>
+          </div>
+          <div class="px-2 py-1.5">
+            <p class="text-[11px] muted" x-text="f.date"></p>
+            <p class="text-[11px] muted truncate" x-show="f.by" x-text="f.by"></p>
+            <p class="text-xs truncate" x-show="f.comment" :title="f.comment" x-text="f.comment" style="color:var(--text)"></p>
+          </div>
+        </div>
+      </template>
+      <span x-show="files.length===0" class="col-span-full text-center text-sm muted py-8">Снимков пока нет — загрузите прицельный, ОПТГ, КЛКТ или фото.</span>
+    </div>
+
+    <div class="flex justify-between"><button @click="go(2)" class="btn btn-ghost">← Назад</button><button @click="go(4)" class="btn btn-primary">Далее →</button></div>
+  </div>
+
+  <!-- STEP 4 — Диагноз -->
+  <div x-show="step===4" class="card card-pad space-y-3">
+    <h3 class="font-bold" style="color:var(--text)">4. Диагноз</h3>
     <div>
       <label class="fld">Диагноз</label>
       <input type="text" x-model="diagnosis" @input="autoIcd()" placeholder="напр. Хронический апикальный периодонтит">
@@ -219,12 +239,12 @@
       </div>
       <div><label class="fld">Рекомендации</label><textarea x-model="recommendations" rows="2"></textarea></div>
     </div>
-    <div class="flex justify-between"><button @click="go(2)" class="btn btn-ghost">← Назад</button><button @click="go(4)" class="btn btn-primary">Далее →</button></div>
+    <div class="flex justify-between"><button @click="go(3)" class="btn btn-ghost">← Назад</button><button @click="go(5)" class="btn btn-primary">Далее →</button></div>
   </div>
 
-  <!-- STEP 4 — План лечения -->
-  <div x-show="step===4" class="card card-pad space-y-3">
-    <h3 class="font-bold" style="color:var(--text)">4. План лечения</h3>
+  <!-- STEP 5 — План лечения -->
+  <div x-show="step===5" class="card card-pad space-y-3">
+    <h3 class="font-bold" style="color:var(--text)">5. План лечения</h3>
     <div class="flex items-center gap-2">
       <select x-ref="svcSel" class="no-tom flex-1" style="min-width:0;width:100%"></select>
       <button @click="addPlanItem()" class="btn btn-primary btn-sm shrink-0">+ Добавить</button>
@@ -251,12 +271,12 @@
       <span class="muted">Весь план: <b style="color:var(--text)" x-text="fmt(planTotal())"></b> сом</span>
       <span>Сегодня (✓): <b class="text-emerald-600" x-text="fmt(doneTotal())"></b> сом</span>
     </div>
-    <div class="flex justify-between"><button @click="go(3)" class="btn btn-ghost">← Назад</button><button @click="go(5)" class="btn btn-primary">Далее →</button></div>
+    <div class="flex justify-between"><button @click="go(4)" class="btn btn-ghost">← Назад</button><button @click="go(6)" class="btn btn-primary">Далее →</button></div>
   </div>
 
-  <!-- STEP 5 — Итог -->
-  <div x-show="step===5" class="card card-pad space-y-4">
-    <h3 class="font-bold" style="color:var(--text)">5. Итог</h3>
+  <!-- STEP 6 — Итог -->
+  <div x-show="step===6" class="card card-pad space-y-4">
+    <h3 class="font-bold" style="color:var(--text)">6. Итог</h3>
     <div class="rounded-xl p-4 text-sm space-y-1" style="background:var(--surface-2)">
       <p><b>Жалобы:</b> <span x-text="complaintsSummary() || '—'"></span></p>
       <p><b>Диагноз:</b> <span x-text="(diagnosis||'—') + (icd ? ' ('+icd+')' : '')"></span></p>
@@ -269,9 +289,36 @@
       <div><label class="fld">Заметка к визиту</label><input type="text" x-model="next.note" placeholder="напр. коронка"></div>
     </div>
     <div class="flex flex-wrap gap-2 pt-2">
-      <button @click="go(4)" class="btn btn-ghost">← Назад</button>
+      <button @click="go(5)" class="btn btn-ghost">← Назад</button>
       <a :href="'/treatments/{{ treatment.pk }}/emr/print/'" target="_blank" class="btn btn-ghost">🖨 Протокол</a>
       <button @click="finish()" :disabled="saving" class="btn btn-primary ml-auto">✓ Завершить приём</button>
+    </div>
+  </div>
+
+  <!-- Просмотр снимка (lightbox + zoom) -->
+  <div x-show="viewer" x-cloak class="fixed inset-0 z-[80] flex flex-col" style="background:rgba(0,0,0,.85)" @click.self="closeViewer()">
+    <div class="flex items-center justify-between px-4 py-3 text-white text-sm shrink-0">
+      <div class="min-w-0">
+        <span class="font-bold" x-text="viewer ? viewer.kind_label : ''"></span>
+        <span class="opacity-70 ml-2" x-text="viewer ? viewer.date : ''"></span>
+        <span class="opacity-70 ml-2" x-show="viewer && viewer.tooth" x-text="viewer ? ('· зуб '+viewer.tooth) : ''"></span>
+        <p class="opacity-80 text-xs truncate" x-show="viewer && viewer.comment" x-text="viewer ? viewer.comment : ''"></p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button @click="zoom(-0.25)" class="w-9 h-9 rounded-lg bg-white/15 hover:bg-white/25 text-lg">−</button>
+        <span class="text-xs w-12 text-center" x-text="Math.round(vzoom*100)+'%'"></span>
+        <button @click="zoom(0.25)" class="w-9 h-9 rounded-lg bg-white/15 hover:bg-white/25 text-lg">+</button>
+        <a :href="viewer ? viewer.url : '#'" target="_blank" class="px-3 h-9 flex items-center rounded-lg bg-white/15 hover:bg-white/25 text-xs">Открыть</a>
+        <button @click="closeViewer()" class="w-9 h-9 rounded-lg bg-white/15 hover:bg-white/25 text-xl">&times;</button>
+      </div>
+    </div>
+    <div class="flex-1 overflow-auto flex items-center justify-center p-4" @wheel.prevent="zoom($event.deltaY < 0 ? 0.15 : -0.15)">
+      <template x-if="viewer && viewer.is_image">
+        <img :src="viewer ? viewer.url : ''" :style="`transform:scale(${vzoom});transition:transform .1s;max-width:none`" class="rounded-lg shadow-2xl select-none">
+      </template>
+      <template x-if="viewer && !viewer.is_image">
+        <iframe :src="viewer ? viewer.url : ''" class="w-full h-full rounded-lg bg-white" style="min-height:70vh"></iframe>
+      </template>
     </div>
   </div>
 
@@ -282,7 +329,7 @@
 <script>
 function visitWizard(){
   return {
-    steps: ['Жалобы','Осмотр','Диагноз','План','Итог'],
+    steps: ['Жалобы','Осмотр','Снимки','Диагноз','План','Итог'],
     step: 1, saving:false, uploading:false, adult:true, selectedTooth:null,
     showExtra:false, dxAutofilled:false, pendingDx:null, lastSaved:null,
     SERVICES: JSON.parse(document.getElementById('v-services').textContent),
@@ -296,9 +343,11 @@ function visitWizard(){
       to_remove:{dx:'Хронический периодонтит',mkb:'K04.5'},
       missing:{dx:'',mkb:''},
     },
+    FILE_KINDS: JSON.parse(document.getElementById('v-filekinds').textContent),
     complaintChoices:['Боль','Реакция на холодное','Реакция на горячее','Кровоточит десна','Отёк','Скол','Подвижность','Запах','Эстетика','Профосмотр'],
     complaintTags:[], complaintsText:'', anamnesis:'', objective:'',
     diagnosis:'', icd:'', recommendations:'',
+    upKind:'intraoral', upComment:'', viewer:null, vzoom:1,
     teeth:{}, examTeeth:{}, plan:[], files:[], next:{date:'',time:'',note:''}, svcTS:null,
 
     init(){
@@ -318,12 +367,17 @@ function visitWizard(){
     },
     go(n){
       this.save();
-      // авто-подстановка диагноза по статусу зуба при входе на шаг Диагноз
-      if(n===3 && !this.diagnosis && this.pendingDx && this.pendingDx.dx){
+      // авто-подстановка диагноза по статусу зуба при входе на шаг Диагноз (шаг 4)
+      if(n===4 && !this.diagnosis && this.pendingDx && this.pendingDx.dx){
         this.diagnosis=this.pendingDx.dx; this.icd=this.pendingDx.mkb||''; this.dxAutofilled=true;
       }
       this.step=n;
     },
+
+    // ── Просмотр снимка ──
+    openViewer(f){ this.viewer=f; this.vzoom=1; },
+    closeViewer(){ this.viewer=null; },
+    zoom(d){ this.vzoom=Math.min(5, Math.max(0.25, +(this.vzoom+d).toFixed(2))); },
 
     // ── Жалобы ──
     toggleComplaint(t){ const i=this.complaintTags.indexOf(t); i>=0?this.complaintTags.splice(i,1):this.complaintTags.push(t); },
@@ -362,6 +416,8 @@ function visitWizard(){
       const form=new FormData();
       Array.from(fileList).forEach(f=>form.append('files',f));
       if(this.selectedTooth) form.append('tooth_number', this.selectedTooth);
+      form.append('kind', this.upKind||'intraoral');
+      form.append('comment', this.upComment||'');
       this.uploading=true;
       fetch(VISIT.uploadUrl,{method:'POST',headers:{'X-CSRFToken':getCsrf()},body:form})
         .then(r=>r.json())

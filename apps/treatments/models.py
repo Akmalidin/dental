@@ -128,9 +128,14 @@ class TreatmentFile(models.Model):
     """X-rays, documents, and other files attached to a treatment."""
 
     KIND_CHOICES = [
-        ("xray", "Рентген"),
+        ("intraoral", "Прицельный снимок"),
+        ("opg", "ОПТГ (панорамный)"),
+        ("cbct", "КЛКТ (3D)"),
+        ("photo_oral", "Фото полости рта"),
+        ("photo_face", "Фото лица"),
         ("before", "Фото «до»"),
         ("after", "Фото «после»"),
+        ("xray", "Рентген"),
         ("document", "Документ"),
         ("other", "Другое"),
     ]
@@ -138,8 +143,9 @@ class TreatmentFile(models.Model):
     treatment = models.ForeignKey(Treatment, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="treatments/%Y/%m/")
     tooth_number = models.IntegerField(null=True, blank=True, verbose_name="Зуб (FDI)")
-    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="xray", verbose_name="Тип")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="intraoral", verbose_name="Тип")
     name = models.CharField(max_length=200, verbose_name="Название")
+    comment = models.TextField(blank=True, verbose_name="Комментарий врача")
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, verbose_name="Загрузил"
     )
