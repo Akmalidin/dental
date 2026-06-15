@@ -271,49 +271,39 @@ const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.bran
       {% if treatments %}
       {% for t in treatments %}
       <!-- Treatment card -->
-      <div class="card overflow-hidden">
-        <!-- Header (clickable → treatment detail) -->
-        <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-indigo-50/40"
-             style="border-bottom:1px solid var(--border)"
-             onclick="window.location='/treatments/{{ t.pk }}/'">
-          <span class="font-extrabold text-base" style="color:var(--text)">#{{ t.pk }}</span>
-          <span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'in_progress' %}badge-purple{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span>
-          <span class="text-xs muted flex items-center gap-1">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            {{ t.created_at|date:"d.m.Y H:i" }}
+      <div class="card overflow-hidden hover:shadow-md transition-shadow">
+        <!-- Header -->
+        <div class="flex items-center gap-2.5 px-4 py-2.5" style="border-bottom:1px solid var(--border-2)">
+          <a href="/treatments/{{ t.pk }}/" class="font-black text-sm hover:underline" style="color:var(--primary)">#{{ t.pk }}</a>
+          <span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'in_progress' %}badge-orange{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span>
+          <span class="text-xs muted hidden sm:inline">{{ t.created_at|date:"d.m.Y H:i" }}</span>
+          <span class="text-xs muted hidden md:flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
           </span>
-          <span class="text-xs muted flex items-center gap-1.5">
-            <span class="avatar w-5 h-5 text-[10px]">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
-          </span>
-          <span class="ml-auto text-sm">
-            <span class="muted">Итого:</span> <span class="font-bold" style="color:var(--text)">{{ t.display_total|floatformat:0 }} сом</span>
-            {% if t.debt > 0 %}<span class="mx-1 faint">·</span><span class="muted">долг:</span> <span class="font-bold text-red-500">{{ t.debt|floatformat:0 }} сом</span>{% endif %}
-          </span>
-          <div class="flex gap-1.5 ml-2" onclick="event.stopPropagation()">
+          <div class="ml-auto flex items-center gap-3">
+            <div class="text-right leading-tight">
+              <span class="font-bold text-sm" style="color:var(--text)">{{ t.display_total|floatformat:0 }} сом</span>
+              {% if t.debt > 0 %}<p class="text-[11px] font-semibold text-red-500">долг {{ t.debt|floatformat:0 }}</p>{% endif %}
+            </div>
             <a href="/treatments/{{ t.pk }}/receipt/" target="_blank" class="row-act ra-view" title="Чек">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             </a>
-            <a href="/treatments/{{ t.pk }}/" class="row-act ra-edit" title="Открыть">
+            <a href="/treatments/visit/{{ t.pk }}/" class="row-act ra-edit" title="Открыть приём">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </a>
           </div>
         </div>
-        <!-- Procedures list -->
-        <table class="tbl">
-          <tbody>
-            {% for cure in t.cures.all %}
-            <tr class="cursor-pointer" onclick="window.location='/treatments/{{ t.pk }}/'">
-              <td class="font-semibold">{{ cure.service.name }}</td>
-              <td class="muted text-xs">{% if cure.tooth_number %}🦷 {{ cure.tooth_number }}{% else %}—{% endif %}</td>
-              <td class="text-center muted">×{{ cure.quantity }}</td>
-              <td class="font-bold">{{ cure.subtotal|floatformat:0 }} сом</td>
-              <td class="muted text-xs">{{ cure.doctor.name }}</td>
-            </tr>
-            {% empty %}
-            <tr><td class="muted text-sm py-3">Нет процедур в этом приёме</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <!-- Procedures -->
+        {% for cure in t.cures.all %}
+        <div class="flex items-center gap-3 px-4 py-2 text-sm {% if not forloop.last %}border-b{% endif %}" style="border-color:var(--border-2)">
+          <span class="flex-1 font-medium truncate" style="color:var(--text)">{{ cure.service.name }}</span>
+          {% if cure.tooth_number %}<span class="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0" style="background:var(--primary-light);color:var(--primary)">🦷 {{ cure.tooth_number }}</span>{% endif %}
+          <span class="muted text-xs w-8 text-center shrink-0">×{{ cure.quantity }}</span>
+          <span class="font-bold w-24 text-right shrink-0" style="color:var(--text)">{{ cure.subtotal|floatformat:0 }} сом</span>
+        </div>
+        {% empty %}
+        <div class="px-4 py-3 muted text-sm">Нет процедур в этом приёме</div>
+        {% endfor %}
       </div>
       {% endfor %}
       {% else %}
