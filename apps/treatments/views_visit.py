@@ -236,18 +236,26 @@ def visit_commit(request, pk):
     future_items = [it for it in items if not it.get("done")]
 
     # — Выполнено сегодня → процедуры приёма (перезаписываем набор) —
+    # Перед перезаписью запомним, было ли уже списание материалов по этому приёму,
+    # чтобы не списывать дважды при повторном «Завершить».
+    from .views import _auto_writeoff_materials
+    already_written_off = treatment.cures.exists()
     treatment.cures.all().delete()
     for it in done_items:
         svc = Service.objects.filter(pk=it.get("service_id")).first()
         if not svc:
             continue
+        qty = max(1, int(it.get("qty") or 1))
         TreatmentCure.objects.create(
             treatment=treatment, service=svc,
             tooth_number=str(it.get("tooth") or ""),
-            quantity=max(1, int(it.get("qty") or 1)),
+            quantity=qty,
             price=Decimal(str(it.get("price") if it.get("price") not in (None, "") else svc.price)),
             doctor=treatment.doctor,
         )
+        # Автосписание материалов со склада по нормам услуги (только при первом завершении)
+        if not already_written_off:
+            _auto_writeoff_materials(svc, qty, treatment.branch, request.user)
     treatment.recalculate_total()
 
     # — Запланировано на будущее → план лечения —

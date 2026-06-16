@@ -379,14 +379,25 @@ def plan_create(request):
 @login_required
 @require_POST
 def plan_item_toggle(request, pk):
-    """Toggle a plan item status (pending <-> done)."""
+    """Toggle a plan item status (pending <-> done).
+    При отметке «выполнено» можно привязать пункт к конкретному приёму (treatment_id)."""
     from .models_plan import TreatmentPlanItem
     item = get_object_or_404(TreatmentPlanItem, pk=pk)
-    item.status = (TreatmentPlanItem.STATUS_PENDING
-                   if item.status == TreatmentPlanItem.STATUS_DONE
-                   else TreatmentPlanItem.STATUS_DONE)
-    item.save(update_fields=["status"])
+    now_done = item.status != TreatmentPlanItem.STATUS_DONE
+    item.status = TreatmentPlanItem.STATUS_DONE if now_done else TreatmentPlanItem.STATUS_PENDING
+    fields = ["status"]
+    if now_done:
+        tid = request.POST.get("treatment_id")
+        if tid and Treatment.objects.filter(pk=tid, patient=item.plan.patient).exists():
+            item.treatment_id = int(tid)
+            fields.append("treatment")
+    else:
+        item.treatment = None
+        fields.append("treatment")
+    item.save(update_fields=fields)
+    tname = ("приём #%s" % item.treatment_id) if item.treatment_id else ""
     return JsonResponse({"ok": True, "status": item.status,
+                         "treatment_id": item.treatment_id, "treatment_label": tname,
                          "completion": item.plan.completion_pct})
 
 

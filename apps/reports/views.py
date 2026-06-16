@@ -151,6 +151,15 @@ def report_dashboard(request):
     )
     retention_pct = int(returning / all_patients.count() * 100) if all_patients.count() else 0
 
+    # ── Отток: были раньше, но не приходили >90 дней ──
+    from django.db.models import Max
+    churn_cutoff = today - timedelta(days=90)
+    lapsed = (Patient.objects.annotate(last_v=Max("treatments__created_at"))
+              .filter(last_v__isnull=False, last_v__date__lt=churn_cutoff).count())
+    # ── Новые vs повторные за период (по первому визиту) ──
+    new_in_period = new_patients
+    repeat_in_period = max(0, treatments.values("patient").distinct().count() - new_in_period)
+
     return render(request, "reports/dashboard.html", {
         "period": period,
         "treatments": treatments,
@@ -172,6 +181,8 @@ def report_dashboard(request):
         "sources": sources,
         "returning": returning,
         "retention_pct": retention_pct,
+        "lapsed": lapsed,
+        "repeat_in_period": repeat_in_period,
         "total_patients": all_patients.count(),
         # расширенная статистика
         "avg_check": avg_check,
