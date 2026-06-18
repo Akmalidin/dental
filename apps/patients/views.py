@@ -18,23 +18,83 @@ def patient_list(request):
     from decimal import Decimal
 
     qs = Patient.objects.select_related("branch", "source", "primary_doctor").prefetch_related("tags")
-    q = request.GET.get("q", "")
-    branch_id = request.GET.get("branch", "")
-    doctor_id = request.GET.get("doctor", "")
+    G = request.GET
+    q = G.get("q", "")
+    branch_id = G.get("branch", "")
+    doctor_id = G.get("doctor", "")
+    gender = G.get("gender", "")
+    source_id = G.get("source", "")
+    tag_id = G.get("tag", "")
+    blood = G.get("blood", "")
+    debt = G.get("debt", "")
+    insurance = G.get("insurance", "")
+    allergy_f = G.get("allergy", "")
+    birth_from = G.get("birth_from", "")
+    birth_to = G.get("birth_to", "")
+    age_min = G.get("age_min", "")
+    age_max = G.get("age_max", "")
+    bmonth = G.get("bmonth", "")
+    reg_from = G.get("reg_from", "")
+    reg_to = G.get("reg_to", "")
+
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+
+    def years_ago(n):
+        try:
+            return today.replace(year=today.year - n)
+        except ValueError:  # 29 февраля
+            return today.replace(year=today.year - n, day=28)
+
     if q:
         qs = qs.filter(
             Q(first_name__icontains=q)
             | Q(last_name__icontains=q)
             | Q(middle_name__icontains=q)
             | Q(phone__icontains=q)
+            | Q(phone2__icontains=q)
         )
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     if doctor_id:
         qs = qs.filter(primary_doctor_id=doctor_id)
-
-    today = date.today()
-    week_ago = today - timedelta(days=7)
+    if gender:
+        qs = qs.filter(gender=gender)
+    if source_id:
+        qs = qs.filter(source_id=source_id)
+    if tag_id:
+        qs = qs.filter(tags__id=tag_id)
+    if blood:
+        qs = qs.filter(blood_group=blood)
+    if debt == "yes":
+        qs = qs.filter(balance__lt=0)
+    elif debt == "no":
+        qs = qs.filter(balance__gte=0)
+    elif debt == "over":
+        qs = qs.filter(balance__gt=0)
+    if insurance == "yes":
+        qs = qs.filter(Q(insurance__isnull=False) | ~Q(insurance_policy=""))
+    elif insurance == "no":
+        qs = qs.filter(insurance__isnull=True, insurance_policy="")
+    if allergy_f == "yes":
+        qs = qs.exclude(Q(allergy__isnull=True) | Q(allergy=""))
+    elif allergy_f == "no":
+        qs = qs.filter(Q(allergy__isnull=True) | Q(allergy=""))
+    if birth_from:
+        qs = qs.filter(birth_date__gte=birth_from)
+    if birth_to:
+        qs = qs.filter(birth_date__lte=birth_to)
+    if age_min.isdigit():
+        qs = qs.filter(birth_date__lte=years_ago(int(age_min)))
+    if age_max.isdigit():
+        qs = qs.filter(birth_date__gt=years_ago(int(age_max) + 1))
+    if bmonth.isdigit():
+        qs = qs.filter(birth_date__month=int(bmonth))
+    if reg_from:
+        qs = qs.filter(created_at__date__gte=reg_from)
+    if reg_to:
+        qs = qs.filter(created_at__date__lte=reg_to)
+    qs = qs.distinct()
 
     # Stats
     all_count = Patient.objects.count()
@@ -58,6 +118,21 @@ def patient_list(request):
     from apps.tenancy import get_current_clinic
     branches = Branch.objects.all()
 
+    blood_groups = list(
+        Patient.objects.exclude(blood_group="").order_by("blood_group")
+        .values_list("blood_group", flat=True).distinct()
+    )
+
+    # Текущие значения фильтров (для повторного выбора в форме) + счётчик активных
+    f = {
+        "branch": branch_id, "doctor": doctor_id, "gender": gender, "source": source_id,
+        "tag": tag_id, "blood": blood, "debt": debt, "insurance": insurance,
+        "allergy": allergy_f, "birth_from": birth_from, "birth_to": birth_to,
+        "age_min": age_min, "age_max": age_max, "bmonth": bmonth,
+        "reg_from": reg_from, "reg_to": reg_to,
+    }
+    adv_count = sum(1 for v in f.values() if v)
+
     return render(request, "patients/list.html", {
         "patients": qs,
         "q": q,
@@ -65,6 +140,17 @@ def patient_list(request):
         "branches": branches,
         "doctors": clinic_doctors(get_current_clinic()),
         "sel_doctor": doctor_id,
+        "genders": Patient.GENDER_CHOICES,
+        "tags": Tag.objects.all(),
+        "blood_groups": blood_groups,
+        "months": [
+            (1, "Январь"), (2, "Февраль"), (3, "Март"), (4, "Апрель"),
+            (5, "Май"), (6, "Июнь"), (7, "Июль"), (8, "Август"),
+            (9, "Сентябрь"), (10, "Октябрь"), (11, "Ноябрь"), (12, "Декабрь"),
+        ],
+        "f": f,
+        "adv_count": adv_count,
+        "result_count": qs.count(),
         "all_count": all_count,
         "new_count": new_count,
         "birthday_count": birthday_count,

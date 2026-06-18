@@ -2,6 +2,10 @@
 {% block page_title %}Пациенты{% endblock %}
 
 {% block content %}
+<style>
+  .fl-lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#94a3b8);margin-bottom:4px}
+  #pf .grid select,#pf .grid input{font-size:13px}
+</style>
 <div class="space-y-5">
 
   <!-- Stat cards -->
@@ -26,35 +30,116 @@
 
   <!-- Table -->
   <div class="card">
-    <div class="flex flex-wrap items-center gap-3 px-5 py-4">
-      <div class="search-box flex-1 min-w-48" x-data="searchInput('/patients/')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" value="{{ q }}" placeholder="Поиск пациента..." x-model="query" @input="run()">
-      </div>
-      <form method="get" id="bf" class="flex items-center gap-2">
-        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
-        {% if branches %}
-        <select name="branch" onchange="document.getElementById('bf').submit()" class="w-44">
-          <option value="">Все филиалы</option>
-          {% for b in branches %}<option value="{{ b.pk }}" {% if request.GET.branch == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
-        </select>
+    <form method="get" id="pf" x-data="{adv: {{ adv_count }} > 0}">
+      <!-- Строка 1: поиск + переключатель фильтров + действия -->
+      <div class="flex flex-wrap items-center gap-3 px-5 py-4">
+        <div class="search-box flex-1 min-w-48">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" name="q" value="{{ q }}" placeholder="Поиск: имя, телефон…"
+                 oninput="clearTimeout(window._pq);window._pq=setTimeout(()=>document.getElementById('pf').submit(),500)">
+        </div>
+        <button type="button" @click="adv=!adv"
+                class="btn btn-sm inline-flex items-center gap-1.5"
+                :class="adv ? 'btn-primary' : 'btn-ghost'">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+          Фильтры{% if adv_count %} <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/25 text-[11px] font-bold">{{ adv_count }}</span>{% endif %}
+        </button>
+        {% if adv_count or q %}
+        <a href="/patients/" class="btn btn-ghost btn-sm" title="Сбросить все фильтры">✕ Сброс</a>
         {% endif %}
-        <select name="doctor" onchange="document.getElementById('bf').submit()" class="w-48">
-          <option value="">Все врачи</option>
-          {% for d in doctors %}<option value="{{ d.pk }}" {% if sel_doctor == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
-        </select>
-      </form>
-      <div class="ml-auto flex items-center gap-2">
-        <a href="/patients/export/" class="btn btn-ghost btn-sm" title="Скачать Excel">⬇ Excel</a>
-        <button type="button" onclick="document.getElementById('pat-import').click()" class="btn btn-ghost btn-sm" title="Загрузить из Excel">⬆ Импорт</button>
-        <form method="post" action="/patients/import/" enctype="multipart/form-data" class="hidden">
-          {% csrf_token %}
-          <input id="pat-import" type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
-        </form>
-        <a href="/patients/blacklist/" class="btn btn-ghost btn-sm" title="Общий чёрный список">⛔ Чёрный список</a>
-        <a href="/patients/create/" class="btn btn-primary btn-sm">+ Создать</a>
+        <div class="ml-auto flex items-center gap-2">
+          <a href="/patients/export/" class="btn btn-ghost btn-sm" title="Скачать Excel">⬇ Excel</a>
+          <button type="button" onclick="document.getElementById('pat-import').click()" class="btn btn-ghost btn-sm" title="Загрузить из Excel">⬆ Импорт</button>
+          <a href="/patients/blacklist/" class="btn btn-ghost btn-sm" title="Общий чёрный список">⛔ Чёрный список</a>
+          <a href="/patients/create/" class="btn btn-primary btn-sm">+ Создать</a>
+        </div>
       </div>
-    </div>
+
+      <!-- Строка 2: расширенные фильтры -->
+      <div x-show="adv" x-cloak x-transition class="px-5 pb-4 pt-1">
+        <div class="rounded-2xl p-4" style="background:var(--surface-2);border:1px solid var(--border)">
+          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {% if branches %}
+            <div><label class="fl-lbl">Филиал</label>
+              <select name="branch" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все филиалы</option>
+                {% for b in branches %}<option value="{{ b.pk }}" {% if f.branch == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+              </select></div>
+            {% endif %}
+            <div><label class="fl-lbl">Врач</label>
+              <select name="doctor" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все врачи</option>
+                {% for d in doctors %}<option value="{{ d.pk }}" {% if f.doctor == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Пол</label>
+              <select name="gender" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Любой</option>
+                {% for val,label in genders %}<option value="{{ val }}" {% if f.gender == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Источник</label>
+              <select name="source" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все источники</option>
+                {% for s in sources %}<option value="{{ s.pk }}" {% if f.source == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Тег</label>
+              <select name="tag" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все теги</option>
+                {% for t in tags %}<option value="{{ t.pk }}" {% if f.tag == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Группа крови</label>
+              <select name="blood" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Любая</option>
+                {% for bg in blood_groups %}<option value="{{ bg }}" {% if f.blood == bg %}selected{% endif %}>{{ bg }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Долг / баланс</label>
+              <select name="debt" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все</option>
+                <option value="yes" {% if f.debt == "yes" %}selected{% endif %}>С долгом</option>
+                <option value="no" {% if f.debt == "no" %}selected{% endif %}>Без долга</option>
+                <option value="over" {% if f.debt == "over" %}selected{% endif %}>С переплатой (аванс)</option>
+              </select></div>
+            <div><label class="fl-lbl">Страховка ДМС</label>
+              <select name="insurance" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все</option>
+                <option value="yes" {% if f.insurance == "yes" %}selected{% endif %}>Есть</option>
+                <option value="no" {% if f.insurance == "no" %}selected{% endif %}>Нет</option>
+              </select></div>
+            <div><label class="fl-lbl">Аллергия</label>
+              <select name="allergy" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все</option>
+                <option value="yes" {% if f.allergy == "yes" %}selected{% endif %}>Есть</option>
+                <option value="no" {% if f.allergy == "no" %}selected{% endif %}>Нет</option>
+              </select></div>
+            <div><label class="fl-lbl">День рождения (месяц)</label>
+              <select name="bmonth" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Любой месяц</option>
+                {% for m in months %}<option value="{{ m.0 }}" {% if f.bmonth == m.0|stringformat:"s" %}selected{% endif %}>{{ m.1 }}</option>{% endfor %}
+              </select></div>
+            <div><label class="fl-lbl">Возраст от</label>
+              <input type="number" name="age_min" min="0" max="120" value="{{ f.age_min }}" placeholder="0" class="w-full"></div>
+            <div><label class="fl-lbl">Возраст до</label>
+              <input type="number" name="age_max" min="0" max="120" value="{{ f.age_max }}" placeholder="120" class="w-full"></div>
+            <div><label class="fl-lbl">Дата рождения с</label>
+              <input type="date" name="birth_from" value="{{ f.birth_from }}" class="w-full"></div>
+            <div><label class="fl-lbl">Дата рождения по</label>
+              <input type="date" name="birth_to" value="{{ f.birth_to }}" class="w-full"></div>
+            <div><label class="fl-lbl">Регистрация с</label>
+              <input type="date" name="reg_from" value="{{ f.reg_from }}" class="w-full"></div>
+            <div><label class="fl-lbl">Регистрация по</label>
+              <input type="date" name="reg_to" value="{{ f.reg_to }}" class="w-full"></div>
+          </div>
+          <div class="flex items-center gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+            <a href="/patients/" class="btn btn-ghost btn-sm">Сбросить</a>
+            <span class="ml-auto text-xs muted">Найдено: <b style="color:var(--text)">{{ result_count }}</b></span>
+          </div>
+        </div>
+      </div>
+    </form>
+    <form method="post" action="/patients/import/" enctype="multipart/form-data" class="hidden">
+      {% csrf_token %}
+      <input id="pat-import" type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
+    </form>
 
     <table class="tbl">
       <thead>
