@@ -58,6 +58,13 @@ def visit_start(request):
     if appt:
         treatment = (Treatment.objects.filter(appointment=appt)
                      .exclude(status="cancelled").order_by("-created_at").first())
+    # Приём уже завершён/оплачен → не запускаем мастер заново, открываем карточку (просмотр)
+    if treatment is not None and treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
+        return redirect("treatment_detail", pk=treatment.pk)
+    # Запись уже завершена, но приёма нет → не создаём новый «пустой» приём
+    if appt is not None and appt.status == "completed" and treatment is None:
+        messages.info(request, _("Запись уже завершена. Новый приём не создаётся."))
+        return redirect("patient_detail", pk=patient.pk)
     if treatment is None:
         clinic = get_current_clinic()
         doctor = None
@@ -181,6 +188,9 @@ def visit_save(request, pk):
                 patient=treatment.patient, tooth_number=tnum,
                 defaults={"status": status},
             )
+    # план/процедуры — сохраняем и при автосохранении (без списания материалов)
+    if isinstance(data.get("plan"), list):
+        _apply_plan(treatment, data["plan"], request.user, do_writeoff=False)
     return JsonResponse({"ok": True})
 
 
@@ -218,6 +228,65 @@ def visit_file_upload(request, pk):
     return JsonResponse({"files": created})
 
 
+def _apply_plan(treatment, items, user, do_writeoff=False):
+    """Сохранить набор услуг приёма из мастера (идемпотентно).
+
+    Выполнено сегодня (done) → процедуры приёма (TreatmentCure).
+    Остальное → один план лечения, привязанный к этому приёму (переиспользуется).
+    do_writeoff=True (только при «Завершить») → списать материалы по нормам услуг.
+    """
+    from apps.services.models import Service
+    from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
+    from .views import _auto_writeoff_materials
+    items = items or []
+    done_items = [it for it in items if it.get("done")]
+    future_items = [it for it in items if not it.get("done")]
+
+    def _price(it, svc):
+        v = it.get("price")
+        return Decimal(str(v if v not in (None, "") else svc.price))
+
+    # — Процедуры (выполнено сегодня) — перезаписываем набор —
+    already = treatment.cures.exists()
+    treatment.cures.all().delete()
+    for it in done_items:
+        svc = Service.objects.filter(pk=it.get("service_id")).first()
+        if not svc:
+            continue
+        qty = max(1, int(it.get("qty") or 1))
+        TreatmentCure.objects.create(
+            treatment=treatment, service=svc, tooth_number=str(it.get("tooth") or ""),
+            quantity=qty, price=_price(it, svc), doctor=treatment.doctor,
+        )
+        if do_writeoff and not already:
+            _auto_writeoff_materials(svc, qty, treatment.branch, user)
+    treatment.recalculate_total()
+
+    # — План на будущее — один план на приём, переиспользуем (без дублей при автосохранении) —
+    plan_title = "План по приёму #%s" % treatment.pk
+    plan = TreatmentPlan.objects.filter(patient=treatment.patient, title=plan_title).first()
+    if future_items:
+        if plan is None:
+            plan = TreatmentPlan.objects.create(
+                patient=treatment.patient, doctor=treatment.doctor,
+                title=plan_title, status=TreatmentPlan.STATUS_APPROVED,
+            )
+        stage = plan.stages.first() or TreatmentPlanStage.objects.create(plan=plan, title="Этап 1", sort_order=0)
+        plan.items.all().delete()
+        for i, it in enumerate(future_items):
+            svc = Service.objects.filter(pk=it.get("service_id")).first()
+            if not svc:
+                continue
+            TreatmentPlanItem.objects.create(
+                plan=plan, stage=stage, service=svc, tooth_number=str(it.get("tooth") or ""),
+                price=_price(it, svc), quantity=max(1, int(it.get("qty") or 1)),
+                doctor=treatment.doctor, sort_order=i,
+            )
+    elif plan is not None:
+        # план опустел → убираем авто-план
+        plan.delete()
+
+
 @login_required
 @require_POST
 def visit_commit(request, pk):
@@ -232,50 +301,8 @@ def visit_commit(request, pk):
         return JsonResponse({"error": "bad json"}, status=400)
 
     items = data.get("plan", [])
-    done_items = [it for it in items if it.get("done")]
-    future_items = [it for it in items if not it.get("done")]
-
-    # — Выполнено сегодня → процедуры приёма (перезаписываем набор) —
-    # Перед перезаписью запомним, было ли уже списание материалов по этому приёму,
-    # чтобы не списывать дважды при повторном «Завершить».
-    from .views import _auto_writeoff_materials
-    already_written_off = treatment.cures.exists()
-    treatment.cures.all().delete()
-    for it in done_items:
-        svc = Service.objects.filter(pk=it.get("service_id")).first()
-        if not svc:
-            continue
-        qty = max(1, int(it.get("qty") or 1))
-        TreatmentCure.objects.create(
-            treatment=treatment, service=svc,
-            tooth_number=str(it.get("tooth") or ""),
-            quantity=qty,
-            price=Decimal(str(it.get("price") if it.get("price") not in (None, "") else svc.price)),
-            doctor=treatment.doctor,
-        )
-        # Автосписание материалов со склада по нормам услуги (только при первом завершении)
-        if not already_written_off:
-            _auto_writeoff_materials(svc, qty, treatment.branch, request.user)
-    treatment.recalculate_total()
-
-    # — Запланировано на будущее → план лечения —
-    if future_items:
-        plan = TreatmentPlan.objects.create(
-            patient=treatment.patient, doctor=treatment.doctor,
-            title="План по приёму #%s" % treatment.pk, status=TreatmentPlan.STATUS_APPROVED,
-        )
-        stage = TreatmentPlanStage.objects.create(plan=plan, title="Этап 1", sort_order=0)
-        for i, it in enumerate(future_items):
-            svc = Service.objects.filter(pk=it.get("service_id")).first()
-            if not svc:
-                continue
-            TreatmentPlanItem.objects.create(
-                plan=plan, stage=stage, service=svc,
-                tooth_number=str(it.get("tooth") or ""),
-                price=Decimal(str(it.get("price") if it.get("price") not in (None, "") else svc.price)),
-                quantity=max(1, int(it.get("qty") or 1)),
-                doctor=treatment.doctor, sort_order=i,
-            )
+    # применяем план + списываем материалы (это финальное сохранение)
+    _apply_plan(treatment, items, request.user, do_writeoff=True)
 
     # — Завершить приём и запись —
     treatment.status = Treatment.STATUS_COMPLETED

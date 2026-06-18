@@ -31,15 +31,19 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input type="text" value="{{ q }}" placeholder="Поиск пациента..." x-model="query" @input="run()">
       </div>
-      {% if branches %}
-      <form method="get" id="bf">
+      <form method="get" id="bf" class="flex items-center gap-2">
         {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        {% if branches %}
         <select name="branch" onchange="document.getElementById('bf').submit()" class="w-44">
           <option value="">Все филиалы</option>
           {% for b in branches %}<option value="{{ b.pk }}" {% if request.GET.branch == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
         </select>
+        {% endif %}
+        <select name="doctor" onchange="document.getElementById('bf').submit()" class="w-48">
+          <option value="">Все врачи</option>
+          {% for d in doctors %}<option value="{{ d.pk }}" {% if sel_doctor == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
       </form>
-      {% endif %}
       <div class="ml-auto flex items-center gap-2">
         <a href="/patients/export/" class="btn btn-ghost btn-sm" title="Скачать Excel">⬇ Excel</a>
         <button type="button" onclick="document.getElementById('pat-import').click()" class="btn btn-ghost btn-sm" title="Загрузить из Excel">⬆ Импорт</button>
@@ -74,6 +78,11 @@
             <div class="flex items-center gap-2">
               <div class="avatar w-7 h-7 text-[10px]">{{ lt.doctor.name|first|upper }}</div>
               <div><p class="text-xs font-semibold" style="color:var(--primary)">{{ lt.doctor.name }}</p><p class="text-xs muted">{{ lt.created_at|date:"d.m.Y H:i" }}</p></div>
+            </div>
+            {% elif patient.primary_doctor %}
+            <div class="flex items-center gap-2">
+              <div class="avatar w-7 h-7 text-[10px]">{{ patient.primary_doctor.name|first|upper }}</div>
+              <div><p class="text-xs font-semibold" style="color:var(--primary)">{{ patient.primary_doctor.name }}</p><p class="text-xs muted">лечащий врач</p></div>
             </div>
             {% else %}<span class="muted text-xs">—</span>{% endif %}
             {% endwith %}

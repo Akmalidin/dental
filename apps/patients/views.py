@@ -17,9 +17,10 @@ def patient_list(request):
     from django.db.models import Sum
     from decimal import Decimal
 
-    qs = Patient.objects.select_related("branch", "source").prefetch_related("tags")
+    qs = Patient.objects.select_related("branch", "source", "primary_doctor").prefetch_related("tags")
     q = request.GET.get("q", "")
     branch_id = request.GET.get("branch", "")
+    doctor_id = request.GET.get("doctor", "")
     if q:
         qs = qs.filter(
             Q(first_name__icontains=q)
@@ -29,6 +30,8 @@ def patient_list(request):
         )
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
+    if doctor_id:
+        qs = qs.filter(primary_doctor_id=doctor_id)
 
     today = date.today()
     week_ago = today - timedelta(days=7)
@@ -51,7 +54,8 @@ def patient_list(request):
     debtors_count = debtors.count()
     debtors_total = debtors.aggregate(s=Sum("balance"))["s"] or Decimal(0)
 
-    from apps.users.models import Branch
+    from apps.users.models import Branch, clinic_doctors
+    from apps.tenancy import get_current_clinic
     branches = Branch.objects.all()
 
     return render(request, "patients/list.html", {
@@ -59,6 +63,8 @@ def patient_list(request):
         "q": q,
         "sources": LeadSource.objects.filter(is_active=True),
         "branches": branches,
+        "doctors": clinic_doctors(get_current_clinic()),
+        "sel_doctor": doctor_id,
         "all_count": all_count,
         "new_count": new_count,
         "birthday_count": birthday_count,
