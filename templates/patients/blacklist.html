@@ -28,10 +28,14 @@
           <td class="text-right font-bold {% if e.total_debt > 0 %}text-red-600{% else %}text-emerald-600{% endif %}">{{ e.total_debt|floatformat:0 }} сом</td>
           <td class="muted text-xs">{{ e.clinic.name|default:"—" }}<br>{{ e.added_by.name|default:"—" }} · {{ e.created_at|date:"d.m.Y" }}</td>
           <td class="text-right pr-5">
-            <form method="post" onsubmit="return confirm('Убрать из чёрного списка?')">{% csrf_token %}
+            {% if e.can_remove %}
+            <form method="post" onsubmit="return confirm('Убрать из чёрного списка? (только для вашей клиники, у других останется)')">{% csrf_token %}
               <input type="hidden" name="action" value="remove"><input type="hidden" name="id" value="{{ e.pk }}">
-              <button class="row-act ra-del" title="Убрать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+              <button class="row-act ra-del" title="Убрать (только своя клиника)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
             </form>
+            {% else %}
+            <span class="text-slate-300" title="Добавила другая клиника — убрать может только она">🔒</span>
+            {% endif %}
           </td>
         </tr>
         <tr x-show="open" x-cloak>

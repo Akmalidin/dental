@@ -270,6 +270,7 @@ def blacklist_view(request):
     """Общий чёрный список (по номеру телефона). Просмотр + добавить/удалить."""
     from .models import BlacklistEntry
     from apps.tenancy import get_current_clinic
+    cur = get_current_clinic()
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "add":
@@ -278,12 +279,19 @@ def blacklist_view(request):
                 BlacklistEntry.objects.create(
                     phone=phone, name=(request.POST.get("name") or "").strip(),
                     reason=(request.POST.get("reason") or "").strip(),
-                    clinic=get_current_clinic(), added_by=request.user,
+                    clinic=cur, added_by=request.user,
                 )
                 messages.success(request, _("Добавлено в чёрный список"))
         elif action == "remove":
-            BlacklistEntry.objects.filter(pk=request.POST.get("id")).delete()
-            messages.success(request, _("Удалено из чёрного списка"))
+            # Убрать можно только запись СВОЕЙ клиники. Флаги других клиник остаются —
+            # у каждой клиники свой флаг по номеру. Суперадмин (cur=None) может убрать любую.
+            qs = BlacklistEntry.objects.filter(pk=request.POST.get("id"))
+            if cur is not None:
+                qs = qs.filter(clinic=cur)
+            if qs.delete()[0]:
+                messages.success(request, _("Убрано из чёрного списка (только для вашей клиники)"))
+            else:
+                messages.error(request, _("Эту запись добавила другая клиника — убрать её может только она."))
         return redirect("blacklist")
     q = (request.GET.get("q") or "").strip()
     entries = list(BlacklistEntry.objects.select_related("clinic", "added_by"))
@@ -316,6 +324,7 @@ def blacklist_view(request):
                          "treatments": agg["cnt"] or 0, "billed": billed, "debt": debt})
         e.cross = rows
         e.total_debt = total
+        e.can_remove = (cur is None) or (e.clinic_id == cur.id)
     return render(request, "patients/blacklist.html", {"entries": entries, "q": q})
 
 
