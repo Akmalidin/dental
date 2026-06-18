@@ -17,15 +17,16 @@
 
   <div class="card overflow-hidden">
     <table class="tbl">
-      <thead><tr><th>Телефон</th><th>ФИО</th><th>Причина</th><th>Клиника</th><th>Добавил</th><th class="text-right pr-5"></th></tr></thead>
+      <thead><tr><th class="w-6"></th><th>Телефон</th><th>ФИО</th><th>Причина</th><th class="text-right">Долг (все клиники)</th><th>Добавил</th><th class="text-right pr-5"></th></tr></thead>
       <tbody>
         {% for e in entries %}
-        <tr>
-          <td class="font-semibold">{{ e.phone }}</td>
+        <tr x-data="{open:false}">
+          <td><button @click="open=!open" class="text-slate-400 hover:text-indigo-600" title="Показать данные по клиникам"><span x-text="open?'▾':'▸'"></span></button></td>
+          <td class="font-semibold cursor-pointer" @click="open=!open">{{ e.phone }}</td>
           <td>{{ e.name|default:"—" }}</td>
           <td class="muted">{{ e.reason|default:"—" }}</td>
-          <td class="muted text-xs">{{ e.clinic.name|default:"—" }}</td>
-          <td class="muted text-xs">{{ e.added_by.name|default:"—" }}<br>{{ e.created_at|date:"d.m.Y" }}</td>
+          <td class="text-right font-bold {% if e.total_debt > 0 %}text-red-600{% else %}text-emerald-600{% endif %}">{{ e.total_debt|floatformat:0 }} сом</td>
+          <td class="muted text-xs">{{ e.clinic.name|default:"—" }}<br>{{ e.added_by.name|default:"—" }} · {{ e.created_at|date:"d.m.Y" }}</td>
           <td class="text-right pr-5">
             <form method="post" onsubmit="return confirm('Убрать из чёрного списка?')">{% csrf_token %}
               <input type="hidden" name="action" value="remove"><input type="hidden" name="id" value="{{ e.pk }}">
@@ -33,8 +34,31 @@
             </form>
           </td>
         </tr>
+        <tr x-show="open" x-cloak>
+          <td></td>
+          <td colspan="6" class="pb-3">
+            <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border)">
+              <table class="w-full text-sm">
+                <thead><tr style="background:var(--surface-2)"><th class="text-left px-3 py-2">Клиника</th><th class="text-left px-3 py-2">Пациент</th><th class="text-center px-3 py-2">Приёмов</th><th class="text-right px-3 py-2">Начислено</th><th class="text-right px-3 py-2">Долг</th></tr></thead>
+                <tbody>
+                  {% for c in e.cross %}
+                  <tr style="border-top:1px solid var(--border-2)">
+                    <td class="px-3 py-2 font-semibold">{{ c.clinic }}</td>
+                    <td class="px-3 py-2">{{ c.name }}</td>
+                    <td class="px-3 py-2 text-center muted">{{ c.treatments }}</td>
+                    <td class="px-3 py-2 text-right">{{ c.billed|floatformat:0 }} сом</td>
+                    <td class="px-3 py-2 text-right font-bold {% if c.debt > 0 %}text-red-600{% else %}muted{% endif %}">{{ c.debt|floatformat:0 }} сом</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="5" class="px-3 py-3 text-center muted">Нет данных о пациенте в клиниках (только номер в списке)</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center py-10 muted">Чёрный список пуст</td></tr>
+        <tr><td colspan="7" class="text-center py-10 muted">Чёрный список пуст</td></tr>
         {% endfor %}
       </tbody>
     </table>

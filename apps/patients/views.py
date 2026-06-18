@@ -286,9 +286,36 @@ def blacklist_view(request):
             messages.success(request, _("Удалено из чёрного списка"))
         return redirect("blacklist")
     q = (request.GET.get("q") or "").strip()
-    entries = BlacklistEntry.objects.select_related("clinic", "added_by")
+    entries = list(BlacklistEntry.objects.select_related("clinic", "added_by"))
     if q:
-        entries = entries.filter(Q(phone__icontains=q) | Q(name__icontains=q) | Q(reason__icontains=q))
+        ql = q.lower()
+        entries = [e for e in entries if ql in (e.phone or "").lower()
+                   or ql in (e.name or "").lower() or ql in (e.reason or "").lower()]
+
+    # Кросс-клиниковая сводка по каждому номеру: где есть пациент, долг, кол-во приёмов
+    from decimal import Decimal
+    from .models import normalize_phone
+    from django.db.models import Sum, Count
+    for e in entries:
+        norm = e.phone_norm
+        pts = (Patient.all_objects.select_related("clinic")
+               .filter(Q(phone__contains=norm) | Q(phone2__contains=norm)))
+        rows, total = [], Decimal(0)
+        for pt in pts:
+            if normalize_phone(pt.phone) != norm and normalize_phone(pt.phone2) != norm:
+                continue
+            agg = (Treatment.all_objects.filter(patient_id=pt.pk, is_deleted=False)
+                   .exclude(status="cancelled")
+                   .aggregate(tot=Sum("total_amount"), disc=Sum("discount"), cnt=Count("id")))
+            billed = (agg["tot"] or Decimal(0)) - (agg["disc"] or Decimal(0))
+            # balance < 0 => пациент должен; долг = -balance
+            debt = max(Decimal(0), -(pt.balance or Decimal(0)))
+            total += debt
+            rows.append({"clinic": pt.clinic.name if pt.clinic else "—",
+                         "patient_id": pt.pk, "name": pt.full_name,
+                         "treatments": agg["cnt"] or 0, "billed": billed, "debt": debt})
+        e.cross = rows
+        e.total_debt = total
     return render(request, "patients/blacklist.html", {"entries": entries, "q": q})
 
 
