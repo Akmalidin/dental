@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block page_title %}Чёрный список{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{addOpen:false}">
+
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h2 class="text-xl font-extrabold" style="color:var(--text)">⛔ Общий чёрный список</h2>
+      <p class="text-xs muted">Общий для всех клиник, по номеру телефона. Только предупреждение — запись не блокируется.</p>
+    </div>
+    <button @click="addOpen=true" class="btn btn-primary btn-sm">+ Добавить</button>
+  </div>
+
+  <form method="get" class="card card-pad py-3">
+    <input type="text" name="q" value="{{ q }}" placeholder="Поиск: номер, имя, причина…" class="w-full md:w-96">
+  </form>
+
+  <div class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>Телефон</th><th>ФИО</th><th>Причина</th><th>Клиника</th><th>Добавил</th><th class="text-right pr-5"></th></tr></thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td class="font-semibold">{{ e.phone }}</td>
+          <td>{{ e.name|default:"—" }}</td>
+          <td class="muted">{{ e.reason|default:"—" }}</td>
+          <td class="muted text-xs">{{ e.clinic.name|default:"—" }}</td>
+          <td class="muted text-xs">{{ e.added_by.name|default:"—" }}<br>{{ e.created_at|date:"d.m.Y" }}</td>
+          <td class="text-right pr-5">
+            <form method="post" onsubmit="return confirm('Убрать из чёрного списка?')">{% csrf_token %}
+              <input type="hidden" name="action" value="remove"><input type="hidden" name="id" value="{{ e.pk }}">
+              <button class="row-act ra-del" title="Убрать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-10 muted">Чёрный список пуст</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add modal -->
+  <div x-show="addOpen" x-cloak class="modal-overlay" @click.self="addOpen=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold" style="color:var(--text)">Добавить в чёрный список</h3>
+        <button @click="addOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" class="p-6 space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        <div><label class="fld">Телефон *</label><input type="text" name="phone" required placeholder="+996 ..."></div>
+        <div><label class="fld">ФИО (необязательно)</label><input type="text" name="name"></div>
+        <div><label class="fld">Причина</label><textarea name="reason" rows="3" placeholder="напр. неоднократные неявки, конфликт, неоплата"></textarea></div>
+        <div class="flex justify-end gap-3 pt-1">
+          <button type="submit" class="btn btn-primary">Добавить</button>
+          <button type="button" @click="addOpen=false" class="btn btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

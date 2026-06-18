@@ -51,6 +51,7 @@
           {% csrf_token %}
           <input id="pat-import" type="file" name="file" accept=".xlsx" onchange="this.form.submit()">
         </form>
+        <a href="/patients/blacklist/" class="btn btn-ghost btn-sm" title="Общий чёрный список">⛔ Чёрный список</a>
         <a href="/patients/create/" class="btn btn-primary btn-sm">+ Создать</a>
       </div>
     </div>

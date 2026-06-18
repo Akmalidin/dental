@@ -21,6 +21,41 @@ class LeadSource(models.Model):
         return self.name
 
 
+def normalize_phone(phone):
+    """Нормализация телефона для сравнения: цифры, последние 9 (без кода страны/8)."""
+    d = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return d[-9:] if len(d) >= 9 else d
+
+
+class BlacklistEntry(models.Model):
+    """Общий (на все клиники) чёрный список — по номеру телефона. Только предупреждение."""
+    phone = models.CharField(max_length=30, verbose_name="Телефон")
+    phone_norm = models.CharField(max_length=15, db_index=True, editable=False, default="")
+    name = models.CharField(max_length=200, blank=True, verbose_name="ФИО (если известно)")
+    reason = models.TextField(verbose_name="Причина")
+    clinic = models.ForeignKey(
+        "users.Clinic", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Добавила клиника",
+    )
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Добавил",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Чёрный список"
+        verbose_name_plural = "Чёрный список"
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        self.phone_norm = normalize_phone(self.phone)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return "%s (%s)" % (self.name or "—", self.phone)
+
+
 class Tag(models.Model):
     name = models.CharField(max_length=80, verbose_name="Тег")
     color = models.CharField(max_length=7, default="#3B82F6", verbose_name="Цвет (hex)")
@@ -132,6 +167,15 @@ class Patient(ClinicSoftDeleteModel):
     def display_number(self):
         """Номер для показа: порядковый в клинике, иначе глобальный id."""
         return self.number or self.pk
+
+    @property
+    def blacklist_entry(self):
+        """Запись общего чёрного списка по телефону пациента (или None)."""
+        norms = {normalize_phone(self.phone), normalize_phone(self.phone2)}
+        norms.discard("")
+        if not norms:
+            return None
+        return BlacklistEntry.objects.filter(phone_norm__in=norms).first()
 
     def related_summary(self):
         """Счётчики связанных данных — для предупреждения перед безвозвратным удалением."""

@@ -262,6 +262,54 @@ def patient_import(request):
 
 
 @login_required
+def blacklist_view(request):
+    """Общий чёрный список (по номеру телефона). Просмотр + добавить/удалить."""
+    from .models import BlacklistEntry
+    from apps.tenancy import get_current_clinic
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "add":
+            phone = (request.POST.get("phone") or "").strip()
+            if phone:
+                BlacklistEntry.objects.create(
+                    phone=phone, name=(request.POST.get("name") or "").strip(),
+                    reason=(request.POST.get("reason") or "").strip(),
+                    clinic=get_current_clinic(), added_by=request.user,
+                )
+                messages.success(request, _("Добавлено в чёрный список"))
+        elif action == "remove":
+            BlacklistEntry.objects.filter(pk=request.POST.get("id")).delete()
+            messages.success(request, _("Удалено из чёрного списка"))
+        return redirect("blacklist")
+    q = (request.GET.get("q") or "").strip()
+    entries = BlacklistEntry.objects.select_related("clinic", "added_by")
+    if q:
+        entries = entries.filter(Q(phone__icontains=q) | Q(name__icontains=q) | Q(reason__icontains=q))
+    return render(request, "patients/blacklist.html", {"entries": entries, "q": q})
+
+
+@login_required
+@require_POST
+def patient_blacklist_toggle(request, pk):
+    """Быстро добавить/убрать пациента из общего ЧС (из карточки)."""
+    from .models import BlacklistEntry, normalize_phone
+    from apps.tenancy import get_current_clinic
+    patient = get_object_or_404(Patient, pk=pk)
+    existing = patient.blacklist_entry
+    if existing:
+        existing.delete()
+        messages.success(request, _("Пациент убран из чёрного списка"))
+    elif patient.phone:
+        BlacklistEntry.objects.create(
+            phone=patient.phone, name=patient.full_name,
+            reason=(request.POST.get("reason") or "").strip(),
+            clinic=get_current_clinic(), added_by=request.user,
+        )
+        messages.success(request, _("Пациент добавлен в чёрный список"))
+    return redirect("patient_detail", pk=pk)
+
+
+@login_required
 def patient_card043_print(request, pk):
     """Печатная «Медицинская карта стоматологического больного» (форма 043/У, КР)."""
     from django.utils import timezone

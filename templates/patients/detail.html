@@ -68,6 +68,25 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         {% endif %}
       </div>
 
+      <!-- Blacklist badge (общий чёрный список) -->
+      {% with bl=patient.blacklist_entry %}
+      <div class="px-4 pb-1">
+        {% if bl %}
+        <div class="rounded-xl px-3 py-2 text-xs font-bold flex items-start gap-1.5 allergy-pulse" style="background:#1f2937;border:1px solid #111;color:#fff" title="{{ bl.reason }}">
+          <span>⛔</span><span>В чёрном списке{% if bl.reason %}: {{ bl.reason }}{% endif %}</span>
+        </div>
+        {% endif %}
+        <form method="post" action="/patients/{{ patient.pk }}/blacklist-toggle/" class="mt-1.5"
+              {% if not bl %}onsubmit="this.reason.value=prompt('Причина добавления в чёрный список:')||''; return this.reason.value!==''"{% else %}onsubmit="return confirm('Убрать пациента из чёрного списка?')"{% endif %}>
+          {% csrf_token %}
+          {% if not bl %}<input type="hidden" name="reason" value="">{% endif %}
+          <button class="w-full text-xs font-semibold py-1.5 rounded-lg border {% if bl %}border-slate-200 text-slate-500 hover:bg-slate-50{% else %}border-slate-800 text-slate-700 hover:bg-slate-800 hover:text-white{% endif %}">
+            {% if bl %}Убрать из чёрного списка{% else %}⛔ В чёрный список{% endif %}
+          </button>
+        </form>
+      </div>
+      {% endwith %}
+
       <!-- Debt block (self-contained Alpine island) -->
       {% with debt=patient.debt %}
       {% if debt > 0 %}
