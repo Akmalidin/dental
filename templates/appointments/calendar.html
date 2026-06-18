@@ -221,6 +221,9 @@
         <div>
           <label class="fld">Пациент</label>
           <select id="bk-patient" class="no-tom" x-ref="patientSel"></select>
+          <div x-show="bkBlacklisted()" x-cloak class="mt-1.5 rounded-lg px-3 py-2 text-xs font-semibold flex items-start gap-1.5" style="background:#1f2937;color:#fff">
+            <span>⛔</span><span>Пациент в общем чёрном списке. Запись не блокируется.</span>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -279,6 +282,7 @@ function calendarPage() {
     schedules: JSON.parse(document.getElementById('cal-schedules').textContent),
     bk: { patient:'', doctor:'{{ doctors.first.pk }}', service:'', date:'', dateLabel:'', timeFrom:'09:00', timeTo:'09:30', status:'scheduled', notes:'', fromSlot:false },
     patientTS: null, doctorTS: null, serviceTS: null,
+    bkBlacklisted(){ const p = this.patients.find(x=>String(x.id)===String(this.bk.patient)); return (p && p.bl) ? p : null; },
     showView: false, av: {},
     nextDlg: { open:false, complete:false, date:'' },
     ctx: { open:false, x:0, y:0, id:null, pid:null, status:'' },

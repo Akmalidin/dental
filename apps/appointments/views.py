@@ -175,9 +175,11 @@ def calendar_view(request):
     default_doctor = (request.user.pk if (request.user.is_doctor and not request.user.is_admin
                                           and not request.user.can_view_all_appointments) else "")
     branches = request.user.branches.all()
-    from apps.patients.models import Patient
+    from apps.patients.models import Patient, BlacklistEntry, normalize_phone
     from apps.services.models import Service
     patients = Patient.objects.order_by("last_name").values("id", "first_name", "last_name", "phone")
+    # нормализованные телефоны из общего чёрного списка — для пометки в выпадающем списке
+    bl_norms = set(BlacklistEntry.objects.values_list("phone_norm", flat=True))
     services = Service.objects.filter(is_active=True).values("id", "name", "price", "duration")
     return render(request, "appointments/calendar.html", {
         "doctors": doctors,
@@ -185,7 +187,8 @@ def calendar_view(request):
         "branches": branches,
         "all_services": Service.objects.filter(is_active=True).order_by("name"),
         "patients_json": [
-            {"id": p["id"], "name": f'{p["last_name"]} {p["first_name"]}', "phone": p["phone"]}
+            {"id": p["id"], "name": f'{p["last_name"]} {p["first_name"]}', "phone": p["phone"],
+             "bl": normalize_phone(p["phone"]) in bl_norms}
             for p in patients
         ],
         "services_json": [
