@@ -91,9 +91,14 @@ def visit_start(request):
 def visit_wizard(request, pk):
     """Страница мастера приёма (6 шагов)."""
     treatment = get_object_or_404(
-        Treatment.objects.select_related("patient", "doctor", "branch").prefetch_related("cures__service"),
+        Treatment.objects.select_related("patient", "doctor", "branch", "appointment").prefetch_related("cures__service"),
         pk=pk,
     )
+    # Приём уже завершён/оплачен (или запись отмечена «Завершён») → мастер не открываем,
+    # показываем карточку приёма (просмотр). Правки — через вкладку ЭМК карточки.
+    appt_done = treatment.appointment_id and treatment.appointment.status == "completed"
+    if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID) or appt_done:
+        return redirect("treatment_detail", pk=treatment.pk)
     emr, _c = MedicalRecord.objects.get_or_create(
         treatment=treatment,
         defaults={"patient": treatment.patient, "doctor": treatment.doctor},

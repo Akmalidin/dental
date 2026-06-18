@@ -589,7 +589,10 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <div class="card overflow-hidden">
         <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
           <h3 class="font-bold text-slate-800">Документы для печати</h3>
-          <a href="/settings/documents/" class="text-xs text-indigo-600 hover:underline">Управление шаблонами →</a>
+          <div class="flex items-center gap-3">
+            <a href="/patients/{{ patient.pk }}/card043/print/" target="_blank" class="btn btn-primary btn-sm">🖨 Карта 043/У</a>
+            <a href="/settings/documents/" class="text-xs text-indigo-600 hover:underline">Управление шаблонами →</a>
+          </div>
         </div>
         <div class="p-5 grid grid-cols-2 md:grid-cols-3 gap-3">
           {% for tpl in doc_templates %}

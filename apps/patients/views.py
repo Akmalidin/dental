@@ -262,6 +262,61 @@ def patient_import(request):
 
 
 @login_required
+def patient_card043_print(request, pk):
+    """Печатная «Медицинская карта стоматологического больного» (форма 043/У, КР)."""
+    from django.utils import timezone
+    from apps.treatments.models_teeth import ToothCondition
+    from apps.settings_clinic.models import ClinicSettings
+    patient = get_object_or_404(Patient.objects.select_related("primary_doctor", "branch"), pk=pk)
+    clinic = ClinicSettings.get()
+
+    # Зубная формула: наш статус → обозначение КР
+    KR = {"healthy": "", "caries": "C", "filling": "П", "root_canal": "Pt",
+          "crown": "K", "implant": "И", "bridge": "И", "to_remove": "R",
+          "missing": "0", "veneer": "П"}
+    cond = {tc.tooth_number: KR.get(tc.status.code if tc.status else "", "")
+            for tc in ToothCondition.objects.filter(patient=patient).select_related("status")}
+    upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
+    lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+    formula_upper = [(n, cond.get(n, "")) for n in upper]
+    formula_lower = [(n, cond.get(n, "")) for n in lower]
+
+    # Последняя медкарта — для шапки (диагноз/жалобы/анамнез/осмотр)
+    treatments = (Treatment.objects.filter(patient=patient).exclude(status="cancelled")
+                  .select_related("doctor").prefetch_related("emr", "cures__service")
+                  .order_by("created_at"))
+    last_emr = None
+    for t in treatments.order_by("-created_at"):
+        if getattr(t, "emr", None):
+            last_emr = t.emr
+            break
+
+    # Дневник — строки по приёмам
+    diary = []
+    for t in treatments:
+        emr = getattr(t, "emr", None)
+        parts = []
+        if emr and emr.diagnosis:
+            parts.append("Дз: " + emr.diagnosis + (" (%s)" % emr.icd_code if emr.icd_code else ""))
+        cures = ", ".join("%s%s" % (c.service.name, (" з.%s" % c.tooth_number if c.tooth_number else "")) for c in t.cures.all())
+        if cures:
+            parts.append("Лечение: " + cures)
+        if emr and emr.recommendations:
+            parts.append("Реком.: " + emr.recommendations)
+        diary.append({
+            "date": timezone.localtime(t.created_at).strftime("%d.%m.%Y"),
+            "text": ". ".join(parts) or "—",
+            "doctor": t.doctor.name if t.doctor else "",
+        })
+
+    return render(request, "patients/card043_print.html", {
+        "patient": patient, "clinic": clinic, "today": timezone.localdate(),
+        "formula_upper": formula_upper, "formula_lower": formula_lower,
+        "emr": last_emr, "diary": diary,
+    })
+
+
+@login_required
 @require_POST
 def patient_tooth_set(request, pk):
     """AJAX: установить/снять статус конкретного зуба пациента."""

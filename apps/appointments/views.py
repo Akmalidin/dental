@@ -554,6 +554,12 @@ def appointment_status(request, pk):
         else:
             appt.save(update_fields=["status"])
             gcal_push(appt)
+            # Завершение записи → завершаем и связанный приём (синхронизация статусов)
+            if new_status == Appointment.STATUS_COMPLETED:
+                from apps.treatments.models import Treatment
+                Treatment.objects.filter(
+                    appointment=appt, status=Treatment.STATUS_IN_PROGRESS
+                ).update(status=Treatment.STATUS_COMPLETED)
         messages.success(request, _("Статус записи изменён"))
         # WhatsApp пациенту при подтверждении приёма (Green-API; если включено в env)
         if (new_status == Appointment.STATUS_CONFIRMED
