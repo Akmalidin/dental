@@ -18,9 +18,9 @@
   <div class="card overflow-hidden">
     <table class="tbl">
       <thead><tr><th class="w-6"></th><th>Телефон</th><th>ФИО</th><th>Причина</th><th class="text-right">Долг (все клиники)</th><th>Добавил</th><th class="text-right pr-5"></th></tr></thead>
-      <tbody>
         {% for e in entries %}
-        <tr x-data="{open:false}">
+        <tbody x-data="{open:false}">
+        <tr>
           <td><button @click="open=!open" class="text-slate-400 hover:text-indigo-600" title="Показать данные по клиникам"><span x-text="open?'▾':'▸'"></span></button></td>
           <td class="font-semibold cursor-pointer" @click="open=!open">{{ e.phone }}</td>
           <td>{{ e.name|default:"—" }}</td>
@@ -61,10 +61,10 @@
             </div>
           </td>
         </tr>
+        </tbody>
         {% empty %}
-        <tr><td colspan="7" class="text-center py-10 muted">Чёрный список пуст</td></tr>
+        <tbody><tr><td colspan="7" class="text-center py-10 muted">Чёрный список пуст</td></tr></tbody>
         {% endfor %}
-      </tbody>
     </table>
   </div>
 
