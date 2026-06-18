@@ -707,6 +707,8 @@ def appointment_detail_json(request, pk):
             "phone": p.phone if p else "",
             "debt": float(p.debt) if p else 0,
             "first_visit": first_visit,
+            "blacklisted": bool(p and p.blacklist_entry),
+            "bl_reason": (p.blacklist_entry.reason if p and p.blacklist_entry else ""),
         },
         "treatment_id": treatment_id,
         "procedures": procedures,

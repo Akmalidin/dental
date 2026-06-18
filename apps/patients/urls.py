@@ -7,6 +7,7 @@ urlpatterns = [
     path("import/", views.patient_import, name="patient_import"),
     path("create/", views.patient_create, name="patient_create"),
     path("blacklist/", views.blacklist_view, name="blacklist"),
+    path("blacklist/check/", views.blacklist_check, name="blacklist_check"),
     path("<int:pk>/blacklist-toggle/", views.patient_blacklist_toggle, name="patient_blacklist_toggle"),
     path("<int:pk>/", views.patient_detail, name="patient_detail"),
     path("<int:pk>/tooth-set/", views.patient_tooth_set, name="patient_tooth_set"),

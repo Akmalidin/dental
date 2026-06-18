@@ -82,6 +82,10 @@ def patient_create(request):
         patient.save()
         form.save_m2m()
         messages.success(request, _("Пациент добавлен"))
+        bl = patient.blacklist_entry
+        if bl:
+            messages.warning(request, _("⛔ Внимание: номер в общем чёрном списке%(r)s") % {
+                "r": (": " + bl.reason) if bl.reason else ""})
         return redirect("patient_detail", pk=patient.pk)
     return render(request, "patients/form.html", {"form": form, "title": _("Новый пациент")})
 
@@ -286,6 +290,22 @@ def blacklist_view(request):
     if q:
         entries = entries.filter(Q(phone__icontains=q) | Q(name__icontains=q) | Q(reason__icontains=q))
     return render(request, "patients/blacklist.html", {"entries": entries, "q": q})
+
+
+@login_required
+def blacklist_check(request):
+    """AJAX: проверить номер по общему чёрному списку. ?phone=... → {match, reason, ...}."""
+    from django.http import JsonResponse
+    from .models import BlacklistEntry, normalize_phone
+    norm = normalize_phone(request.GET.get("phone", ""))
+    if not norm:
+        return JsonResponse({"match": False})
+    e = BlacklistEntry.objects.filter(phone_norm=norm).select_related("clinic").first()
+    if not e:
+        return JsonResponse({"match": False})
+    return JsonResponse({"match": True, "reason": e.reason or "", "name": e.name or "",
+                         "clinic": e.clinic.name if e.clinic else "",
+                         "date": e.created_at.strftime("%d.%m.%Y")})
 
 
 @login_required

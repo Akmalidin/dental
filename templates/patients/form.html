@@ -19,6 +19,11 @@
       </div>
       {% endif %}
 
+      <!-- Предупреждение: номер в общем чёрном списке -->
+      <div id="bl-warn" class="hidden rounded-xl px-4 py-3 text-sm font-semibold flex items-start gap-2" style="background:#1f2937;color:#fff">
+        <span>⛔</span><span id="bl-warn-text"></span>
+      </div>
+
       <!-- Name row -->
       <div>
         <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -169,4 +174,27 @@
     </form>
   </div>
 </div>
+<script>
+(function(){
+  var inp = document.querySelector('input[name="phone"]');
+  var warn = document.getElementById('bl-warn'), txt = document.getElementById('bl-warn-text');
+  if(!inp || !warn) return;
+  var t=null;
+  function check(){
+    var v = inp.value.trim();
+    if(v.replace(/\D/g,'').length < 6){ warn.classList.add('hidden'); return; }
+    fetch('/patients/blacklist/check/?phone='+encodeURIComponent(v))
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.match){
+          txt.textContent = 'Номер в ОБЩЕМ чёрном списке' + (d.reason? (': '+d.reason):'')
+            + (d.clinic? (' — добавила клиника '+d.clinic):'') + '. Регистрация не блокируется.';
+          warn.classList.remove('hidden');
+        } else { warn.classList.add('hidden'); }
+      }).catch(function(){});
+  }
+  inp.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(check, 500); });
+  check(); // проверка при загрузке (для редактирования)
+})();
+</script>
 {% endblock %}

@@ -106,6 +106,7 @@
             <p class="font-bold" style="color:var(--text)"><a :href="av.patient_id ? '/patients/'+av.patient_id+'/' : '#'" style="color:var(--primary)" class="hover:underline" x-text="av.patient_name"></a> <span class="muted font-normal" x-show="av.patient_age" x-text="'('+av.patient_age+' лет)'"></span></p>
             <p class="text-xs muted">ID пациента: #<span x-text="av.patient_id"></span></p>
             <div x-show="av.first_visit" class="mt-1"><span class="badge badge-green">★ Первый визит</span></div>
+            <div x-show="av.blacklisted" class="mt-1"><span class="badge" style="background:#1f2937;color:#fff" :title="av.bl_reason">⛔ Чёрный список<span x-show="av.bl_reason" x-text="': '+av.bl_reason"></span></span></div>
           </div>
           <div class="text-right shrink-0">
             <a :href="'tel:'+av.phone" class="text-sm font-semibold" style="color:var(--primary)" x-show="av.phone" x-text="av.phone"></a>
@@ -355,6 +356,7 @@ function calendarPage() {
           cancelled: a.cancelled, cancel_reason: a.cancel_reason, cancel_note: a.cancel_note,
           patient_id: p.id, patient_name: p.name, patient_age: p.age,
           phone: p.phone, debt: p.debt, first_visit: p.first_visit,
+          blacklisted: p.blacklisted, bl_reason: p.bl_reason,
           treatment_id: d.treatment_id, procedures: d.procedures || [],
         };
       } catch (e) {}
