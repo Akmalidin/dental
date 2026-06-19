@@ -255,6 +255,15 @@ def clinic_doctors(clinic=None):
     return qs
 
 
+def clinic_staff(clinic=None):
+    """Весь активный персонал клиники (врачи, администраторы и т.д.), кроме суперпользователя."""
+    qs = (User.objects.filter(is_active=True)
+          .exclude(is_superuser=True).select_related("role").distinct())
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    return qs
+
+
 class UserActivity(models.Model):
     """Audit log for user actions."""
 

@@ -70,20 +70,42 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
 
       <!-- Blacklist badge (общий чёрный список) -->
       {% with bl=patient.blacklist_entry %}
-      <div class="px-4 pb-1">
+      <div class="px-4 pb-1" x-data="{blOpen:false}">
         {% if bl %}
         <div class="rounded-xl px-3 py-2 text-xs font-bold flex items-start gap-1.5 allergy-pulse" style="background:#1f2937;border:1px solid #111;color:#fff" title="{{ bl.reason }}">
           <span>⛔</span><span>В чёрном списке{% if bl.reason %}: {{ bl.reason }}{% endif %}</span>
         </div>
-        {% endif %}
         <form method="post" action="/patients/{{ patient.pk }}/blacklist-toggle/" class="mt-1.5"
-              {% if not bl %}onsubmit="this.reason.value=prompt('Причина добавления в чёрный список:')||''; return this.reason.value!==''"{% else %}onsubmit="return confirm('Убрать пациента из чёрного списка?')"{% endif %}>
+              onsubmit="return confirm('Убрать пациента из чёрного списка?')">
           {% csrf_token %}
-          {% if not bl %}<input type="hidden" name="reason" value="">{% endif %}
-          <button class="w-full text-xs font-semibold py-1.5 rounded-lg border {% if bl %}border-slate-200 text-slate-500 hover:bg-slate-50{% else %}border-slate-800 text-slate-700 hover:bg-slate-800 hover:text-white{% endif %}">
-            {% if bl %}Убрать из чёрного списка{% else %}⛔ В чёрный список{% endif %}
+          <button class="w-full text-xs font-semibold py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50">
+            Убрать из чёрного списка
           </button>
         </form>
+        {% else %}
+        <button type="button" @click="blOpen=true" class="w-full mt-1.5 text-xs font-semibold py-1.5 rounded-lg border border-slate-800 text-slate-700 hover:bg-slate-800 hover:text-white">
+          ⛔ В чёрный список
+        </button>
+        <!-- Add-to-blacklist modal (причина в модале, не в alert) -->
+        <div x-show="blOpen" x-cloak class="modal-overlay" @click.self="blOpen=false">
+          <div class="modal-box max-w-md">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 class="font-bold" style="color:var(--text)">⛔ В чёрный список</h3>
+              <button type="button" @click="blOpen=false" class="text-2xl muted">&times;</button>
+            </div>
+            <form method="post" action="/patients/{{ patient.pk }}/blacklist-toggle/" class="p-6 space-y-3">
+              {% csrf_token %}
+              <p class="text-xs muted">Пациент: <b>{{ patient.full_name }}</b> · {{ patient.phone }}</p>
+              <div><label class="fld">Причина *</label>
+                <textarea name="reason" rows="3" required placeholder="напр. неоднократные неявки, конфликт, неоплата"></textarea></div>
+              <div class="flex justify-end gap-3 pt-1">
+                <button type="submit" class="btn btn-primary">Добавить</button>
+                <button type="button" @click="blOpen=false" class="btn btn-ghost">Отмена</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        {% endif %}
       </div>
       {% endwith %}
 

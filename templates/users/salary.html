@@ -11,7 +11,7 @@
       <p class="text-lg font-black text-white">{{ date_from }} — {{ date_to }}</p>
     </div>
     <div class="card-gradient stat-emerald p-5 rounded-2xl">
-      <p class="text-emerald-100 text-xs font-semibold uppercase tracking-wide mb-2">Врачей</p>
+      <p class="text-emerald-100 text-xs font-semibold uppercase tracking-wide mb-2">Сотрудников</p>
       <p class="text-3xl font-black text-white">{{ rows|length }}</p>
     </div>
     <div class="card-gradient stat-amber p-5 rounded-2xl">
@@ -35,12 +35,13 @@
     </div>
     <table class="data-table">
       <thead>
-        <tr><th>Врач</th><th>Схема</th><th>Приёмов</th><th>Заверш.</th><th>Ср. чек</th><th>Выручка</th><th>Оплачено</th><th>К выплате</th><th class="text-right pr-5">Настройка</th></tr>
+        <tr><th>Сотрудник</th><th>Должность</th><th>Схема</th><th>Приёмов</th><th>Заверш.</th><th>Ср. чек</th><th>Выручка</th><th>Оплачено</th><th>К выплате</th><th class="text-right pr-5">Настройка</th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
         <tr>
           <td class="font-semibold text-slate-800">{{ row.doctor.name }}</td>
+          <td><span class="text-xs text-slate-500">{{ row.role_label|default:"—" }}</span></td>
           <td>
             {% if row.scheme %}
             <span class="badge badge-blue">{{ row.scheme.get_scheme_type_display }}</span>
@@ -62,12 +63,12 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" class="text-center py-12 text-slate-400">Врачей нет</td></tr>
+        <tr><td colspan="10" class="text-center py-12 text-slate-400">Сотрудников нет</td></tr>
         {% endfor %}
       </tbody>
       <tfoot>
         <tr class="bg-slate-50 border-t-2 border-slate-200">
-          <td colspan="5" class="px-5 py-3 text-right font-bold text-slate-600">Итого:</td>
+          <td colspan="6" class="px-5 py-3 text-right font-bold text-slate-600">Итого:</td>
           <td class="px-5 py-3 font-bold text-slate-700">{{ total_revenue|floatformat:0 }}</td>
           <td class="px-5 py-3 font-bold text-emerald-600">{{ total_paid|floatformat:0 }}</td>
           <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ total_salary|floatformat:0 }} сом</td>

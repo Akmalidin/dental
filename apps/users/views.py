@@ -1132,9 +1132,9 @@ def _salary_rows(date_from, date_to, completed_only=False):
     from django.db.models import Sum, Count, Q
     from apps.treatments.models import Treatment
     from apps.finance.models import Payment
-    from apps.users.models import clinic_doctors
+    from apps.users.models import clinic_staff
     from apps.tenancy import get_current_clinic
-    doctors = clinic_doctors(get_current_clinic()).select_related("role")
+    doctors = clinic_staff(get_current_clinic())
     rows = []
     for doc in doctors:
         t_qs = Treatment.objects.filter(
@@ -1151,8 +1151,12 @@ def _salary_rows(date_from, date_to, completed_only=False):
         avg = (revenue / c_count) if (completed_only and c_count) else ((revenue / t_count) if t_count else Decimal(0))
         scheme = getattr(doc, "salary_scheme", None)
         salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else Decimal(0)
+        role_label = ""
+        if getattr(doc, "role", None):
+            role_label = doc.role.get_name_display() if hasattr(doc.role, "get_name_display") else str(doc.role)
         rows.append({
-            "doctor": doc, "scheme": scheme, "revenue": revenue, "paid": paid,
+            "doctor": doc, "role_label": role_label, "scheme": scheme,
+            "revenue": revenue, "paid": paid,
             "treatments_count": t_count, "completed_count": c_count,
             "avg_check": avg, "salary": salary,
         })
@@ -1248,17 +1252,18 @@ def salary_export(request):
     rows = _salary_rows(date_from, date_to, request.GET.get("completed") == "1")
     wb = Workbook(); ws = wb.active; ws.title = "Зарплата"
     ws.append([f"Зарплатная ведомость {date_from}—{date_to}"])
-    ws.append(["Врач", "Схема", "Приёмов", "Завершено", "Выручка", "Оплачено", "Средний чек", "Зарплата"])
+    ws.append(["Сотрудник", "Должность", "Схема", "Приёмов", "Завершено", "Выручка", "Оплачено", "Средний чек", "Зарплата"])
     for r in rows:
         ws.append([
             r["doctor"].name,
+            r.get("role_label") or "—",
             r["scheme"].get_scheme_type_display() if r["scheme"] else "—",
             r["treatments_count"], r["completed_count"],
             float(r["revenue"]), float(r["paid"]), float(r["avg_check"]), float(r["salary"]),
         ])
     ws.append([])
-    ws.append(["ИТОГО", "", "", "", "", "", "", float(sum(r["salary"] for r in rows))])
-    for i, w in enumerate([26, 20, 10, 10, 14, 14, 14, 14], start=1):
+    ws.append(["ИТОГО", "", "", "", "", "", "", "", float(sum(r["salary"] for r in rows))])
+    for i, w in enumerate([26, 18, 20, 10, 10, 14, 14, 14, 14], start=1):
         ws.column_dimensions[chr(64 + i)].width = w
     resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     resp["Content-Disposition"] = f'attachment; filename="salary_{date_from}_{date_to}.xlsx"'

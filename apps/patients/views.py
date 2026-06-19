@@ -378,6 +378,19 @@ def blacklist_view(request):
                 messages.success(request, _("Убрано из чёрного списка (только для вашей клиники)"))
             else:
                 messages.error(request, _("Эту запись добавила другая клиника — убрать её может только она."))
+        elif action == "edit_reason":
+            # Изменить причину может только клиника, добавившая запись (или суперадмин).
+            qs = BlacklistEntry.objects.filter(pk=request.POST.get("id"))
+            if cur is not None:
+                qs = qs.filter(clinic=cur)
+            obj = qs.first()
+            if obj:
+                obj.reason = (request.POST.get("reason") or "").strip()
+                obj.name = (request.POST.get("name") or obj.name).strip()
+                obj.save(update_fields=["reason", "name"])
+                messages.success(request, _("Причина обновлена"))
+            else:
+                messages.error(request, _("Эту запись добавила другая клиника — изменить её может только она."))
         return redirect("blacklist")
     q = (request.GET.get("q") or "").strip()
     entries = list(BlacklistEntry.objects.select_related("clinic", "added_by"))

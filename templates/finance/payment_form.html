@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block page_title %}Новый платёж{% endblock %}
+{% block page_title %}{% if edit %}Изменить платёж{% else %}Новый платёж{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-lg">
   <div class="card overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#10B981,#059669)">
-      <h2 class="font-bold text-white text-lg">Принять платёж</h2>
+      <h2 class="font-bold text-white text-lg">{% if edit %}Изменить платёж #{{ payment.pk }}{% else %}Принять платёж{% endif %}</h2>
     </div>
     <form method="post" class="p-6 space-y-4">
       {% csrf_token %}
@@ -18,6 +18,10 @@
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пациент *</label>
         {{ form.patient }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Приём</label>
+        {{ form.treatment }}
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label>
@@ -42,7 +46,7 @@
         {{ form.notes }}
       </div>
       <div class="flex gap-3 pt-2">
-        <button type="submit" class="btn-success">Принять платёж</button>
+        <button type="submit" class="btn-success">{% if edit %}Сохранить{% else %}Принять платёж{% endif %}</button>
         <a href="/finance/payments/" class="btn-ghost">Отмена</a>
       </div>
     </form>
