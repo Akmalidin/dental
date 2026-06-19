@@ -3,10 +3,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from apps.finance.views import payment_public
 
 urlpatterns = [
     # Django admin (per-tenant)
     path("django-admin/", admin.site.urls),
+
+    # Публичный чек по QR (без логина)
+    path("r/<uuid:token>/", payment_public, name="payment_public"),
 
     # Auth
     path("", include("apps.users.urls")),

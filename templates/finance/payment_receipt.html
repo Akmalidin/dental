@@ -21,6 +21,11 @@
   @media print { .noprint { display: none; } }
   .noprint { text-align:center; margin-top:18px; }
   .noprint button { padding:9px 22px; border:none; border-radius:8px; background:#2563EB; color:#fff; font-size:13px; cursor:pointer; }
+  .qr { margin: 8px auto 0; width: 150px; }
+  .qr svg { width: 100%; height: auto; }
+{% if w80 %}
+  .qr { width: 38mm; }
+{% endif %}
 {% if w80 %}
   /* Формат 80мм для термопринтера ККМ */
   @page { size: 80mm auto; margin: 0; }
@@ -57,6 +62,14 @@
   <div class="row"><span class="k">Принял</span><span class="v">{{ payment.received_by.name }}</span></div>
   <div class="row"><span class="k">Дата</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>
   <hr>
+
+  {% if qr_svg %}
+  <hr>
+  <div style="text-align:center">
+    <div class="qr">{{ qr_svg|safe }}</div>
+    <p style="font-size:10px;color:#666;margin:4px 0 0">Отсканируйте — детали оплаты:<br>услуги, цены, врач</p>
+  </div>
+  {% endif %}
 
   <div class="footer">Спасибо! Сохраните чек для контроля оплаты.</div>
 

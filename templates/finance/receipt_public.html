@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Чек №{{ payment.pk }} — {% if clinic_settings %}{{ clinic_settings.name }}{% else %}Клиника{% endif %}</title>
+<style>
+  :root{--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--green:#16a34a;--red:#dc2626;--brand:#4f46e5}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f1f5f9;font-family:'Segoe UI',system-ui,Arial,sans-serif;color:var(--ink);padding:16px}
+  .card{max-width:440px;margin:0 auto;background:#fff;border-radius:18px;box-shadow:0 6px 30px rgba(15,23,42,.08);overflow:hidden}
+  .head{padding:22px 20px;text-align:center;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+  .head h1{margin:0 0 2px;font-size:19px}
+  .head p{margin:0;font-size:12px;opacity:.9}
+  .sec{padding:16px 20px}
+  .amt{text-align:center;padding:18px 0 6px}
+  .amt .n{font-size:34px;font-weight:800;color:var(--green)}
+  .amt .n.refund{color:var(--red)}
+  .amt .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:14px}
+  .row .k{color:var(--muted)}
+  .row .v{font-weight:600;text-align:right}
+  hr{border:none;border-top:1px dashed var(--line);margin:0}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 4px;border-bottom:1px solid var(--line)}
+  td{padding:8px 4px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  td.r,th.r{text-align:right}
+  .tot{display:flex;justify-content:space-between;font-weight:800;font-size:16px;padding:12px 0 2px}
+  .badge{display:inline-block;background:#eef2ff;color:var(--brand);border-radius:8px;padding:2px 8px;font-size:12px;font-weight:600}
+  .foot{padding:14px 20px 22px;text-align:center;color:#94a3b8;font-size:11px}
+  .title{font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}Стоматология{% endif %}</h1>
+    {% if clinic_settings %}<p>{{ clinic_settings.address }}{% if clinic_settings.phone %} · {{ clinic_settings.phone }}{% endif %}</p>{% endif %}
+  </div>
+
+  <div class="amt">
+    <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} сом</div>
+    <div class="l">{{ payment.get_type_display }} · Чек №{{ payment.pk }}</div>
+  </div>
+
+  <hr>
+  <div class="sec">
+    <div class="row"><span class="k">Пациент</span><span class="v">{{ payment.patient.full_name }}</span></div>
+    {% if treatment and treatment.doctor %}<div class="row"><span class="k">Врач</span><span class="v">{{ treatment.doctor.name }}</span></div>{% endif %}
+    <div class="row"><span class="k">Филиал</span><span class="v">{{ payment.branch.name }}</span></div>
+    <div class="row"><span class="k">Метод оплаты</span><span class="v"><span class="badge">{{ payment.get_method_display }}</span></span></div>
+    <div class="row"><span class="k">Принял</span><span class="v">{{ payment.received_by.name }}</span></div>
+    <div class="row"><span class="k">Дата</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>
+  </div>
+
+  {% if cures %}
+  <hr>
+  <div class="sec">
+    <p class="title">Выполненные услуги</p>
+    <table>
+      <thead><tr><th>Услуга</th><th class="r">Кол-во</th><th class="r">Цена</th><th class="r">Сумма</th></tr></thead>
+      <tbody>
+        {% for c in cures %}
+        <tr>
+          <td>{{ c.service.name }}{% if c.tooth_number %}<br><span style="color:#94a3b8;font-size:11px">зуб {{ c.tooth_number }}</span>{% endif %}</td>
+          <td class="r">{{ c.quantity }}</td>
+          <td class="r">{{ c.price|floatformat:0 }}</td>
+          <td class="r">{{ c.subtotal|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if treatment %}
+    <div class="tot"><span>Итого по приёму</span><span>{{ treatment.total_amount|floatformat:0 }} сом</span></div>
+    {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} сом</span></div>{% endif %}
+    <div class="row"><span class="k">Оплачено по приёму</span><span class="v" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} сом</span></div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="foot">
+    Электронный чек. {% if clinic_settings %}{{ clinic_settings.name }}{% endif %}<br>
+    Спасибо за доверие!
+  </div>
+</div>
+</body>
+</html>

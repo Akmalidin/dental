@@ -36,8 +36,18 @@ def finance_dashboard(request):
 @login_required
 def payment_list(request):
     payments = Payment.objects.select_related("patient", "received_by", "treatment").order_by("-created_at")
-    form = PaymentForm()
-    return render(request, "finance/payments.html", {"payments": payments, "form": form})
+    patient_id = request.GET.get("patient") or ""
+    preselect = None
+    initial = {}
+    if patient_id:
+        p = Patient.objects.filter(pk=patient_id).first()
+        if p:
+            initial["patient"] = p.pk
+            preselect = {"id": p.pk, "name": p.full_name}
+    form = PaymentForm(initial=initial)
+    return render(request, "finance/payments.html", {
+        "payments": payments, "form": form, "preselect": preselect,
+    })
 
 
 def _recalc_patient_balance(patient):
@@ -80,16 +90,76 @@ def _notify_cashier_payment(request, payment):
                           link="/finance/payments/", actor=u)
 
 
+def _qr_svg(data):
+    """Inline-SVG QR-код (без Pillow). Возвращает строку <svg…> или ''."""
+    try:
+        import io, qrcode, qrcode.image.svg
+        img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage, box_size=10, border=2)
+        buf = io.BytesIO(); img.save(buf)
+        svg = buf.getvalue().decode()
+        return svg[svg.find("<svg"):]  # отрезаем XML-декларацию
+    except Exception:
+        return ""
+
+
 @login_required
 def payment_receipt(request, pk):
     """Печатный чек платежа. ?w=80 — формат 80мм для ККМ (термопринтер)."""
     payment = get_object_or_404(
         Payment.objects.select_related("patient", "received_by", "treatment", "branch"), pk=pk)
     from apps.settings_clinic.models import ClinicSettings
+    public_url = request.build_absolute_uri(f"/r/{payment.public_token}/")
     return render(request, "finance/payment_receipt.html", {
         "payment": payment, "clinic_settings": ClinicSettings.get(),
         "w80": request.GET.get("w") == "80",
+        "public_url": public_url, "qr_svg": _qr_svg(public_url),
     })
+
+
+def payment_public(request, token):
+    """Публичная страница чека (по QR, без логина): услуги+цены, пациент, клиника, врач."""
+    payment = get_object_or_404(
+        Payment._base_manager.select_related("patient", "received_by", "treatment", "treatment__doctor", "branch", "clinic"),
+        public_token=token)
+    treatment = payment.treatment
+    cures = []
+    if treatment:
+        cures = list(treatment.cures.select_related("service", "doctor").all())
+    from apps.settings_clinic.models import ClinicSettings
+    # Настройки клиники чека (название/адрес/телефон) — по клинике платежа, если есть
+    cs = ClinicSettings.get()
+    return render(request, "finance/receipt_public.html", {
+        "payment": payment, "treatment": treatment, "cures": cures,
+        "clinic": getattr(payment, "clinic", None), "clinic_settings": cs,
+    })
+
+
+@login_required
+def send_to_cashier(request, patient_id):
+    """«В кассу»: уведомить администратора/кассира принять оплату и выдать чек.
+    Сам платёж здесь НЕ создаётся — врач не принимает оплату через эту кнопку."""
+    patient = get_object_or_404(Patient, pk=patient_id)
+    from apps.notifications.models import Notification
+    from apps.users.models import clinic_staff
+    from apps.tenancy import get_current_clinic
+    u = request.user
+    debt = getattr(patient, "debt", Decimal(0)) or Decimal(0)
+    title = _("Принять оплату в кассе")
+    body = _("Пациент %(p)s. Долг: %(d)s сом. Направил: %(u)s. Примите оплату и выдайте чек.") % {
+        "p": patient.full_name, "d": f"{debt:.0f}", "u": u.name,
+    }
+    admins = (clinic_staff(get_current_clinic())
+              .filter(role__name__in=["superadmin", "admin_main", "admin"]))
+    sent = 0
+    for admin in admins:
+        Notification.send(user=admin, title=title, body=body, type="payment",
+                          link=f"/finance/payments/?patient={patient.pk}", actor=u)
+        sent += 1
+    if sent:
+        messages.success(request, _("Отправлено в кассу — администратор примет оплату и выдаст чек"))
+    else:
+        messages.warning(request, _("В клинике нет администратора-кассира для приёма оплаты"))
+    return redirect("patient_detail", pk=patient_id)
 
 
 @login_required

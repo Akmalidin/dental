@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% block page_title %}Платежи{% endblock %}
 {% block content %}
-<div class="space-y-4" x-data="{showCreate:false}">
+<div class="space-y-4" x-data="{showCreate: {% if preselect %}true{% else %}false{% endif %}}">
   <div class="flex items-center justify-between">
     <h2 class="text-slate-700 text-sm">Все платежи клиники</h2>
     <button @click="showCreate=true" class="btn-success">+ Принять платёж</button>
   </div>
+  {% if preselect %}
+  <div class="rounded-xl px-4 py-2.5 text-sm flex items-center gap-2" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">
+    💵 Приём оплаты от пациента: <b>{{ preselect.name }}</b>
+  </div>
+  {% endif %}
 
   <div class="card overflow-hidden">
     <table class="data-table">

@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.conf import settings
 from apps.users.models import Branch
@@ -57,6 +58,8 @@ class Payment(ClinicScopedModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
+    # Публичный токен для QR-чека (открывается без логина при сканировании).
+    public_token = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
 
     class Meta:
         verbose_name = "Платёж"
