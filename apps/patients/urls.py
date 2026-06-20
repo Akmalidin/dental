@@ -9,6 +9,7 @@ urlpatterns = [
     path("blacklist/", views.blacklist_view, name="blacklist"),
     path("blacklist/check/", views.blacklist_check, name="blacklist_check"),
     path("<int:pk>/blacklist-toggle/", views.patient_blacklist_toggle, name="patient_blacklist_toggle"),
+    path("<int:pk>/visits/", views.patient_visits, name="patient_visits"),
     path("<int:pk>/", views.patient_detail, name="patient_detail"),
     path("<int:pk>/tooth-set/", views.patient_tooth_set, name="patient_tooth_set"),
     path("<int:pk>/card043/print/", views.patient_card043_print, name="patient_card043_print"),

@@ -259,6 +259,13 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       {% endif %}
     </div>
 
+    <!-- Журнал посещений -->
+    <div class="px-4 pb-4">
+      <a href="/patients/{{ patient.pk }}/visits/" class="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-bold" style="background:#eef2ff;color:#4f46e5;text-decoration:none">
+        📋 Журнал посещений
+      </a>
+    </div>
+
     <!-- Quick stats -->
     <div class="card p-4 grid grid-cols-2 gap-3 text-center">
       <div>

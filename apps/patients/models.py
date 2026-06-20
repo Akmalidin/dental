@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
-from apps.tenancy import ClinicSoftDeleteModel
+from apps.tenancy import ClinicSoftDeleteModel, ClinicScopedModel
 from .models_insurance import InsuranceCompany  # noqa: F401 — re-exported
 
 
@@ -267,3 +267,44 @@ class Patient(ClinicSoftDeleteModel):
         Patient.all_objects.filter(pk=self.pk).update(balance=balance)
         self.balance = balance
         return balance
+
+
+class PatientVisit(ClinicScopedModel):
+    """Журнал посещений клиники пациентом.
+    Заполняется автоматически при создании записи (Appointment) и вручную сотрудниками клиники."""
+    SOURCE_AUTO = "auto"
+    SOURCE_MANUAL = "manual"
+    SOURCE_CHOICES = [
+        (SOURCE_AUTO, "Автоматически (запись)"),
+        (SOURCE_MANUAL, "Вручную"),
+    ]
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="visits", verbose_name="Пациент"
+    )
+    visited_at = models.DateTimeField(verbose_name="Дата и время посещения")
+    doctor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Врач",
+    )
+    purpose = models.CharField(max_length=300, blank=True, verbose_name="Повод / услуга")
+    note = models.TextField(blank=True, verbose_name="Заметка")
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=SOURCE_MANUAL, verbose_name="Источник")
+    appointment = models.ForeignKey(
+        "appointments.Appointment", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Связанная запись",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Добавил",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Посещение"
+        verbose_name_plural = "Посещения"
+        ordering = ["-visited_at"]
+
+    def __str__(self):
+        return f"{self.patient} — {self.visited_at:%d.%m.%Y %H:%M}"

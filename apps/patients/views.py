@@ -465,6 +465,58 @@ def patient_blacklist_toggle(request, pk):
 
 
 @login_required
+def patient_visits(request, pk):
+    """Журнал посещений пациента. Просмотр + добавление/редактирование/удаление (сотрудники клиники)."""
+    from .models import PatientVisit
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    from django.utils import timezone
+    patient = get_object_or_404(Patient, pk=pk)
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "add":
+            visited_at = request.POST.get("visited_at") or None
+            PatientVisit.objects.create(
+                patient=patient,
+                visited_at=visited_at or timezone.now(),
+                doctor_id=request.POST.get("doctor") or None,
+                purpose=(request.POST.get("purpose") or "").strip(),
+                note=(request.POST.get("note") or "").strip(),
+                source=PatientVisit.SOURCE_MANUAL,
+                created_by=request.user,
+            )
+            messages.success(request, _("Посещение добавлено"))
+        elif action == "edit":
+            v = PatientVisit.objects.filter(pk=request.POST.get("id"), patient=patient).first()
+            if v:
+                if request.POST.get("visited_at"):
+                    v.visited_at = request.POST.get("visited_at")
+                v.doctor_id = request.POST.get("doctor") or None
+                v.purpose = (request.POST.get("purpose") or "").strip()
+                v.note = (request.POST.get("note") or "").strip()
+                v.save(update_fields=["visited_at", "doctor", "purpose", "note", "updated_at"])
+                messages.success(request, _("Посещение обновлено"))
+        elif action == "delete":
+            PatientVisit.objects.filter(pk=request.POST.get("id"), patient=patient).delete()
+            messages.success(request, _("Посещение удалено"))
+        return redirect("patient_visits", pk=pk)
+
+    visits = list(PatientVisit.objects.filter(patient=patient).select_related("doctor", "appointment"))
+    visits_json = {
+        str(v.pk): {
+            "visited_at": timezone.localtime(v.visited_at).strftime("%Y-%m-%dT%H:%M") if v.visited_at else "",
+            "doctor": v.doctor_id or "",
+            "purpose": v.purpose or "",
+            "note": v.note or "",
+        } for v in visits
+    }
+    return render(request, "patients/visits.html", {
+        "patient": patient, "visits": visits, "visits_json": visits_json,
+        "doctors": clinic_doctors(get_current_clinic()),
+    })
+
+
+@login_required
 def patient_card043_print(request, pk):
     """Печатная «Медицинская карта стоматологического больного» (форма 043/У, КР)."""
     from django.utils import timezone
