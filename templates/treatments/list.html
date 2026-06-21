@@ -42,9 +42,14 @@
           <td><span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'cancelled' %}badge-gray{% else %}badge-yellow{% endif %}">{{ t.get_status_display }}</span></td>
           <td class="text-slate-400 text-xs">{{ t.created_at|date:"d.m.Y" }}</td>
           <td>
-            <div class="flex gap-1.5">
+            <div class="flex gap-1.5 flex-wrap items-center">
               <a href="/treatments/{{ t.pk }}/" class="badge badge-blue hover:bg-indigo-100">Открыть</a>
-              <a href="/treatments/{{ t.pk }}/print/" target="_blank" class="badge badge-gray hover:bg-slate-200">Чек</a>
+              <a href="/treatments/{{ t.pk }}/receipt-print/?w=80" target="_blank" class="badge badge-green hover:bg-emerald-100" title="Чек 80мм (автопечать) + QR">🧾 80мм</a>
+              <a href="/treatments/{{ t.pk }}/receipt-print/" target="_blank" class="badge badge-gray hover:bg-slate-200" title="Чек A4 + QR">Чек A4</a>
+              <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Переместить приём #{{ t.pk }} в корзину?')" style="display:inline">
+                {% csrf_token %}
+                <button class="badge badge-red hover:bg-red-100" title="В корзину">🗑</button>
+              </form>
             </div>
           </td>
         </tr>

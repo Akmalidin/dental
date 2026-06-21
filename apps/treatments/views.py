@@ -737,3 +737,50 @@ def treatment_print(request, pk):
         return response
     except ImportError:
         return HttpResponse(html, content_type="text/html")
+
+
+@login_required
+def treatment_receipt_html(request, pk):
+    """HTML-чек приёма с QR. ?w=80 — термолента 80мм (автопечать), иначе A4."""
+    from apps.finance.views import _qr_svg
+    from apps.settings_clinic.models import ClinicSettings
+    treatment = get_object_or_404(
+        Treatment.objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch"),
+        pk=pk)
+    public_url = request.build_absolute_uri(f"/t/{treatment.public_token}/")
+    return render(request, "treatments/receipt_thermal.html", {
+        "treatment": treatment, "clinic_settings": ClinicSettings.get(),
+        "w80": request.GET.get("w") == "80",
+        "public_url": public_url, "qr_svg": _qr_svg(public_url),
+    })
+
+
+def treatment_public(request, token):
+    """Публичная страница приёма по QR (без логина): услуги+цены, пациент, врач, файлы, зубная формула."""
+    treatment = get_object_or_404(
+        Treatment._base_manager.select_related("patient", "doctor", "branch", "clinic"),
+        public_token=token)
+    patient = treatment.patient
+    cures = list(treatment.cures.select_related("service", "doctor").all())
+    files = list(treatment.files.all())
+    for f in files:
+        try:
+            f.abs_url = request.build_absolute_uri(f.file.url)
+        except Exception:
+            f.abs_url = ""
+    from .models_teeth import ToothCondition
+    tooth_map = {}
+    if patient:
+        for tc in ToothCondition.objects.filter(patient=patient).select_related("status"):
+            tooth_map[tc.tooth_number] = tc
+    upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
+    lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+    from apps.settings_clinic.models import ClinicSettings
+    return render(request, "finance/receipt_public.html", {
+        "payment": None, "treatment": treatment, "patient": patient,
+        "cures": cures, "files": files,
+        "formula_upper": [(n, tooth_map.get(n)) for n in upper],
+        "formula_lower": [(n, tooth_map.get(n)) for n in lower],
+        "has_formula": bool(tooth_map),
+        "clinic": getattr(treatment, "clinic", None), "clinic_settings": ClinicSettings.get(),
+    })

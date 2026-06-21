@@ -16,10 +16,11 @@ from apps.patients.models import Patient
 def finance_dashboard(request):
     today = date.today()
     month_start = today.replace(day=1)
-    income_today = Payment.objects.filter(
+    _pay = payments_visible_to(Payment.objects.all(), request.user)
+    income_today = _pay.filter(
         created_at__date=today, type="income"
     ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    income_month = Payment.objects.filter(
+    income_month = _pay.filter(
         created_at__date__gte=month_start, type="income"
     ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
     expenses_month = Expense.objects.filter(date__gte=month_start).aggregate(s=Sum("amount"))["s"] or Decimal(0)
@@ -33,9 +34,28 @@ def finance_dashboard(request):
     })
 
 
+def payments_visible_to(qs, user):
+    """Видимость платежей по роли:
+    - суперадмин/директор — все;
+    - администратор (кассир) — только кассовые (отправленные/принятые в кассе);
+    - врач — только свои."""
+    from apps.users.models import Role
+    if getattr(user, "is_superadmin", False):
+        return qs
+    roles = user.all_role_names
+    if Role.ADMIN_MAIN in roles:          # директор
+        return qs
+    if Role.ADMIN in roles:               # администратор-кассир
+        return qs.filter(via_cashier=True)
+    if Role.DOCTOR in roles:              # врач — только принятые им
+        return qs.filter(received_by=user)
+    return qs.filter(received_by=user)
+
+
 @login_required
 def payment_list(request):
     payments = Payment.objects.select_related("patient", "received_by", "treatment").order_by("-created_at")
+    payments = payments_visible_to(payments, request.user)
     patient_id = request.GET.get("patient") or ""
     preselect = None
     initial = {}
@@ -117,19 +137,41 @@ def payment_receipt(request, pk):
 
 
 def payment_public(request, token):
-    """Публичная страница чека (по QR, без логина): услуги+цены, пациент, клиника, врач."""
+    """Публичная страница чека (по QR, без логина): услуги+цены, пациент, врач,
+    файлы/снимки/рентген, зубная формула."""
     payment = get_object_or_404(
         Payment._base_manager.select_related("patient", "received_by", "treatment", "treatment__doctor", "branch", "clinic"),
         public_token=token)
     treatment = payment.treatment
-    cures = []
+    patient = payment.patient
+    cures, files = [], []
     if treatment:
         cures = list(treatment.cures.select_related("service", "doctor").all())
+        files = list(treatment.files.all())
+    for f in files:
+        try:
+            f.abs_url = request.build_absolute_uri(f.file.url)
+        except Exception:
+            f.abs_url = ""
+
+    # Зубная формула пациента (FDI): верхний и нижний ряд + цвет/название статуса
+    tooth_map = {}
+    if patient:
+        from apps.treatments.models_teeth import ToothCondition
+        for tc in ToothCondition.objects.filter(patient=patient).select_related("status"):
+            tooth_map[tc.tooth_number] = tc
+    upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
+    lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+    formula_upper = [(n, tooth_map.get(n)) for n in upper]
+    formula_lower = [(n, tooth_map.get(n)) for n in lower]
+    has_formula = bool(tooth_map)
+
     from apps.settings_clinic.models import ClinicSettings
-    # Настройки клиники чека (название/адрес/телефон) — по клинике платежа, если есть
     cs = ClinicSettings.get()
     return render(request, "finance/receipt_public.html", {
-        "payment": payment, "treatment": treatment, "cures": cures,
+        "payment": payment, "treatment": treatment, "patient": patient,
+        "cures": cures, "files": files,
+        "formula_upper": formula_upper, "formula_lower": formula_lower, "has_formula": has_formula,
         "clinic": getattr(payment, "clinic", None), "clinic_settings": cs,
     })
 
@@ -188,6 +230,14 @@ def payment_create(request):
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
+        # Канал: касса (channel=cashier) или врач напрямую. Если не указан — определяем по роли.
+        channel = request.POST.get("channel", "")
+        if channel == "cashier":
+            payment.via_cashier = True
+        elif channel == "doctor":
+            payment.via_cashier = False
+        else:
+            payment.via_cashier = not getattr(request.user, "is_doctor", False)
         if not payment.branch_id:   # по умолчанию — активный/основной филиал
             from apps.users.models import Branch
             payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()

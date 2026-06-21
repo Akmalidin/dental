@@ -60,6 +60,8 @@ class Payment(ClinicScopedModel):
     notes = models.TextField(blank=True)
     # Публичный токен для QR-чека (открывается без логина при сканировании).
     public_token = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    # True — оплата принята в кассе (администратором). False — принял врач напрямую.
+    via_cashier = models.BooleanField(default=False, db_index=True, verbose_name="Принято в кассе")
 
     class Meta:
         verbose_name = "Платёж"

@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from apps.finance.views import payment_public
+from apps.treatments.views import treatment_public
 
 urlpatterns = [
     # Django admin (per-tenant)
@@ -11,6 +12,7 @@ urlpatterns = [
 
     # Публичный чек по QR (без логина)
     path("r/<uuid:token>/", payment_public, name="payment_public"),
+    path("t/<uuid:token>/", treatment_public, name="treatment_public"),
 
     # Auth
     path("", include("apps.users.urls")),

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Чек №{{ payment.pk }} — {% if clinic_settings %}{{ clinic_settings.name }}{% else %}Клиника{% endif %}</title>
+<title>{% if payment %}Чек №{{ payment.pk }}{% else %}Приём №{{ treatment.pk }}{% endif %} — {% if clinic_settings %}{{ clinic_settings.name }}{% else %}Клиника{% endif %}</title>
 <style>
   :root{--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--green:#16a34a;--red:#dc2626;--brand:#4f46e5}
   *{box-sizing:border-box}
@@ -28,7 +28,15 @@
   .tot{display:flex;justify-content:space-between;font-weight:800;font-size:16px;padding:12px 0 2px}
   .badge{display:inline-block;background:#eef2ff;color:var(--brand);border-radius:8px;padding:2px 8px;font-size:12px;font-weight:600}
   .foot{padding:14px 20px 22px;text-align:center;color:#94a3b8;font-size:11px}
-  .title{font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}
+  .title{font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
+  .teeth{display:flex;flex-direction:column;gap:6px;overflow-x:auto}
+  .teeth-row{display:flex;gap:3px;justify-content:center;min-width:max-content}
+  .tooth .t-box{display:flex;align-items:center;justify-content:center;width:24px;height:28px;border:1px solid var(--line);border-radius:5px;font-size:10px;font-weight:600;background:#fff;color:#475569}
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .g-item{display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);text-decoration:none}
+  .g-item img{width:100%;height:90px;object-fit:cover;display:block}
+  .g-cap{display:block;font-size:10px;color:var(--muted);padding:3px 5px;text-align:center}
+  .g-doc{grid-column:span 3;display:block;padding:9px 12px;border:1px solid var(--line);border-radius:10px;color:var(--brand);text-decoration:none;font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
@@ -39,18 +47,37 @@
   </div>
 
   <div class="amt">
+    {% if payment %}
     <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} сом</div>
     <div class="l">{{ payment.get_type_display }} · Чек №{{ payment.pk }}</div>
+    {% else %}
+    <div class="n">{{ treatment.display_total|floatformat:0 }} сом</div>
+    <div class="l">Приём №{{ treatment.pk }} · {{ treatment.created_at|date:"d.m.Y" }}</div>
+    {% endif %}
   </div>
 
   <hr>
   <div class="sec">
-    <div class="row"><span class="k">Пациент</span><span class="v">{{ payment.patient.full_name }}</span></div>
+    <p class="title">Пациент</p>
+    <div class="row"><span class="k">ФИО</span><span class="v">{{ patient.full_name }}</span></div>
+    {% if patient.birth_date %}<div class="row"><span class="k">Дата рождения</span><span class="v">{{ patient.birth_date|date:"d.m.Y" }}{% if patient.age %} ({{ patient.age }} л.){% endif %}</span></div>{% endif %}
+    {% if patient.phone %}<div class="row"><span class="k">Телефон</span><span class="v">{{ patient.phone }}</span></div>{% endif %}
+    {% if patient.blood_group %}<div class="row"><span class="k">Группа крови</span><span class="v">{{ patient.blood_group }}</span></div>{% endif %}
+    {% if patient.allergy %}<div class="row"><span class="k">⚠️ Аллергии</span><span class="v" style="color:#dc2626">{{ patient.allergy }}</span></div>{% endif %}
+  </div>
+
+  <hr>
+  <div class="sec">
+    <p class="title">Приём</p>
     {% if treatment and treatment.doctor %}<div class="row"><span class="k">Врач</span><span class="v">{{ treatment.doctor.name }}</span></div>{% endif %}
-    <div class="row"><span class="k">Филиал</span><span class="v">{{ payment.branch.name }}</span></div>
+    {% if treatment %}<div class="row"><span class="k">Филиал</span><span class="v">{{ treatment.branch.name }}</span></div>{% endif %}
+    {% if payment %}
     <div class="row"><span class="k">Метод оплаты</span><span class="v"><span class="badge">{{ payment.get_method_display }}</span></span></div>
     <div class="row"><span class="k">Принял</span><span class="v">{{ payment.received_by.name }}</span></div>
-    <div class="row"><span class="k">Дата</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>
+    <div class="row"><span class="k">Дата оплаты</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>
+    {% else %}
+    <div class="row"><span class="k">Дата приёма</span><span class="v">{{ treatment.created_at|date:"d.m.Y H:i" }}</span></div>
+    {% endif %}
   </div>
 
   {% if cures %}
@@ -75,6 +102,48 @@
     {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} сом</span></div>{% endif %}
     <div class="row"><span class="k">Оплачено по приёму</span><span class="v" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} сом</span></div>
     {% endif %}
+  </div>
+  {% endif %}
+
+  {% if has_formula %}
+  <hr>
+  <div class="sec">
+    <p class="title">Зубная формула</p>
+    <div class="teeth">
+      <div class="teeth-row">
+        {% for n, tc in formula_upper %}
+        <div class="tooth" title="{% if tc and tc.status %}{{ tc.status.name }}{% endif %}">
+          <span class="t-box" style="{% if tc and tc.status %}background:{{ tc.status.color }};color:#fff;border-color:{{ tc.status.color }}{% endif %}">{{ n }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="teeth-row">
+        {% for n, tc in formula_lower %}
+        <div class="tooth" title="{% if tc and tc.status %}{{ tc.status.name }}{% endif %}">
+          <span class="t-box" style="{% if tc and tc.status %}background:{{ tc.status.color }};color:#fff;border-color:{{ tc.status.color }}{% endif %}">{{ n }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if files %}
+  <hr>
+  <div class="sec">
+    <p class="title">Снимки и файлы</p>
+    <div class="gallery">
+      {% for f in files %}
+      {% if f.is_image %}
+      <a href="{{ f.abs_url }}" target="_blank" class="g-item">
+        <img src="{{ f.abs_url }}" alt="{{ f.name }}" loading="lazy">
+        <span class="g-cap">{{ f.get_kind_display }}{% if f.tooth_number %} · зуб {{ f.tooth_number }}{% endif %}</span>
+      </a>
+      {% else %}
+      <a href="{{ f.abs_url }}" target="_blank" class="g-doc">📄 {{ f.name|default:f.get_kind_display }}</a>
+      {% endif %}
+      {% endfor %}
+    </div>
   </div>
   {% endif %}
 

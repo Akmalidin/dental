@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from django.db import models
 from .models_plan import TreatmentPlan, TreatmentPlanItem  # noqa: F401
@@ -51,6 +52,8 @@ class Treatment(ClinicSoftDeleteModel):
     notes = models.TextField(blank=True, verbose_name="Заметки")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Публичный токен для QR (открывается без логина при сканировании чека).
+    public_token = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
 
     history = HistoricalRecords()
 

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Чек приёма #{{ treatment.pk }}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #222; margin: 0; padding: 24px; }
+  .wrap { max-width: 360px; margin: 0 auto; }
+  .clinic { text-align: center; margin-bottom: 14px; }
+  .clinic h1 { font-size: 18px; margin: 0 0 4px; }
+  .clinic p { margin: 0; font-size: 11px; color: #666; }
+  hr { border: none; border-top: 1px dashed #bbb; margin: 12px 0; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .row .k { color: #666; } .row .v { font-weight: 600; text-align: right; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  td { padding: 4px 0; vertical-align: top; }
+  td.r { text-align: right; white-space: nowrap; padding-left: 6px; }
+  .tot { display:flex; justify-content:space-between; font-weight:800; font-size:15px; margin-top:8px; }
+  .footer { margin-top: 16px; text-align: center; font-size: 10px; color: #999; }
+  .qr { margin: 8px auto 0; width: 150px; } .qr svg { width: 100%; height: auto; }
+  @media print { .noprint { display: none; } }
+  .noprint { text-align:center; margin-top:18px; }
+  .noprint button { padding:9px 22px; border:none; border-radius:8px; background:#2563EB; color:#fff; font-size:13px; cursor:pointer; }
+{% if w80 %}
+  @page { size: 80mm auto; margin: 0; }
+  body { padding: 4mm 3mm; font-size: 12px; }
+  .wrap { max-width: 74mm; }
+  .clinic h1 { font-size: 15px; }
+  .qr { width: 38mm; }
+{% endif %}
+</style>
+</head>
+<body onload="window.print()">
+<div class="wrap">
+  <div class="clinic">
+    <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}Стоматология{% endif %}</h1>
+    {% if clinic_settings %}<p>{{ clinic_settings.address }}{% if clinic_settings.phone %} · {{ clinic_settings.phone }}{% endif %}</p>{% endif %}
+  </div>
+  <hr>
+  <p style="text-align:center;font-weight:700;margin:0">Чек приёма №{{ treatment.pk }}</p>
+  <hr>
+  <div class="row"><span class="k">Пациент</span><span class="v">{{ treatment.patient.full_name }}</span></div>
+  {% if treatment.doctor %}<div class="row"><span class="k">Врач</span><span class="v">{{ treatment.doctor.name }}</span></div>{% endif %}
+  <div class="row"><span class="k">Дата</span><span class="v">{{ treatment.created_at|date:"d.m.Y H:i" }}</span></div>
+  <hr>
+  <table>
+    {% for c in treatment.cures.all %}
+    <tr>
+      <td>{{ c.service.name }}{% if c.tooth_number %} (зуб {{ c.tooth_number }}){% endif %}<br><span style="color:#888">×{{ c.quantity }} · {{ c.price|floatformat:0 }} сом</span></td>
+      <td class="r">{{ c.subtotal|floatformat:0 }} сом</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="2" style="color:#888">Нет услуг</td></tr>
+    {% endfor %}
+  </table>
+  <hr>
+  <div class="tot"><span>Итого</span><span>{{ treatment.display_total|floatformat:0 }} сом</span></div>
+  {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} сом</span></div>{% endif %}
+  <div class="row"><span class="k">Оплачено</span><span class="v" style="color:#16a34a">{{ treatment.paid_amount|floatformat:0 }} сом</span></div>
+  {% if treatment.debt > 0 %}<div class="row"><span class="k">Долг</span><span class="v" style="color:#dc2626">{{ treatment.debt|floatformat:0 }} сом</span></div>{% endif %}
+
+  {% if qr_svg %}
+  <hr>
+  <div style="text-align:center">
+    <div class="qr">{{ qr_svg|safe }}</div>
+    <p style="font-size:10px;color:#666;margin:4px 0 0">Отсканируйте — полная информация:<br>услуги, снимки, зубная формула</p>
+  </div>
+  {% endif %}
+
+  <div class="footer">Спасибо за доверие!</div>
+  <div class="noprint"><button onclick="window.print()">🖨 Печать</button></div>
+</div>
+</body>
+</html>

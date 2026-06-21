@@ -34,4 +34,5 @@ urlpatterns = [
     path("<int:pk>/emr/print/", views.treatment_emr_print, name="treatment_emr_print"),
     path("<int:pk>/receipt/", views.treatment_print, name="treatment_receipt"),
     path("<int:pk>/print/", views.treatment_print, name="treatment_print"),
+    path("<int:pk>/receipt-print/", views.treatment_receipt_html, name="treatment_receipt_html"),
 ]

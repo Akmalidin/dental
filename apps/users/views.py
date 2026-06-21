@@ -773,12 +773,13 @@ def dashboard_view(request):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
         from apps.finance.models import Payment, Expense
+        from apps.finance.views import payments_visible_to as _visible_payments_for
         from apps.treatments.models import Treatment
         today = date.today()
         year_start = today.replace(month=1, day=1)
-        income_today = Payment.objects.filter(
+        income_today = _visible_payments_for(Payment.objects.filter(
             created_at__date=today, type="income"
-        ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        ), user).aggregate(s=Sum("amount"))["s"] or Decimal(0)
 
         # Monthly appointment stats (bar chart): scheduled vs cancelled
         months_ru = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"]
@@ -804,7 +805,8 @@ def dashboard_view(request):
             "income_today": income_today,
             "debtors_count": Patient.objects.filter(balance__lt=0).count(),
             "top_debtors": Patient.objects.filter(balance__lt=0).order_by("balance")[:5],
-            "recent_payments": Payment.objects.select_related("patient").order_by("-created_at")[:6],
+            "recent_payments": _visible_payments_for(
+                Payment.objects.select_related("patient").order_by("-created_at"), request.user)[:6],
             "upcoming_treatments": Treatment.objects.select_related("patient", "doctor")
                 .filter(status__in=["planned", "in_progress"]).order_by("-created_at")[:6],
             "chart_months": months_ru,
