@@ -213,6 +213,48 @@ def treatment_delete(request, pk):
 
 
 @login_required
+@require_POST
+def treatment_notify_wa(request, pk):
+    """Отправить пациенту в WhatsApp состав приёма: услуги, сумма, оплачено, долг."""
+    treatment = get_object_or_404(Treatment.objects.select_related("patient"), pk=pk)
+    patient = treatment.patient
+    from apps.notifications.whatsapp import wa_send_text, wa_enabled
+    from apps.notifications.models import WaMessage
+    from apps.settings_clinic.models import ClinicSettings
+    if not patient or not patient.phone:
+        messages.error(request, _("У пациента нет телефона"))
+        return redirect("patient_detail", pk=patient.pk if patient else None)
+    if not wa_enabled():
+        messages.error(request, _("WhatsApp не настроен"))
+        return redirect("patient_detail", pk=patient.pk)
+
+    cs = ClinicSettings.get()
+    clinic_name = (cs.name if cs and cs.name else "Клиника")
+    lines = [f"*{clinic_name}*", f"Здравствуйте, {patient.first_name}!",
+             f"Приём №{treatment.pk} от {treatment.created_at:%d.%m.%Y}:"]
+    for c in treatment.cures.select_related("service").all():
+        lines.append(f"• {c.service.name} x{c.quantity} — {c.subtotal:.0f} сом")
+    lines.append(f"Итого: {treatment.display_total:.0f} сом")
+    if treatment.discount:
+        lines.append(f"Скидка: {treatment.discount:.0f} сом")
+    lines.append(f"Оплачено: {treatment.paid_amount:.0f} сом")
+    if treatment.debt > 0:
+        lines.append(f"Долг: {treatment.debt:.0f} сом")
+    else:
+        lines.append("Оплачено полностью. Спасибо!")
+    text = "\n".join(lines)
+
+    ok = wa_send_text(patient.phone, text)
+    WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
+                             body=text, sent_by=request.user, ok=ok)
+    if ok:
+        messages.success(request, _("Сообщение по приёму отправлено в WhatsApp"))
+    else:
+        messages.error(request, _("Не удалось отправить (проверьте номер/инстанс WhatsApp)"))
+    return redirect("patient_detail", pk=patient.pk)
+
+
+@login_required
 def treatment_edit(request, pk):
     treatment = get_object_or_404(Treatment, pk=pk)
     form = TreatmentForm(request.POST or None, instance=treatment)

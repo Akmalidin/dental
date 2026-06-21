@@ -154,6 +154,7 @@ def patient_list(request):
         "all_count": all_count,
         "new_count": new_count,
         "birthday_count": birthday_count,
+        "today_month": today.month,
         "debtors_count": debtors_count,
         "debtors_total": abs(debtors_total),
     })

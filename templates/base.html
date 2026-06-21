@@ -220,6 +220,12 @@
       <button class="icon-btn" @click="toggleSidebar()" style="border:none;background:transparent">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
       </button>
+      <button class="icon-btn" onclick="history.back()" title="Назад" style="border:none;background:transparent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button class="icon-btn" onclick="history.forward()" title="Вперёд" style="border:none;background:transparent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
       <h1>{% block page_title %}{% endblock %}</h1>
 
       <div class="flex-1"></div>
@@ -332,6 +338,12 @@
     </div>
     {% endif %}
 
+    {% if request.session.impersonator_id %}
+    <div class="mx-7 mt-4 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3" style="background:#1f2937;color:#fff">
+      <span class="text-sm font-semibold">👁 Режим просмотра: вы вошли как <b>{{ request.user.name }}</b></span>
+      <a href="/users/stop-impersonate/" class="text-xs font-bold px-3 py-1.5 rounded-lg" style="background:#fff;color:#1f2937;text-decoration:none">Вернуться в свой аккаунт</a>
+    </div>
+    {% endif %}
     <main class="px-7 pb-10 page-fade">
       {% block content %}{% endblock %}
     </main>

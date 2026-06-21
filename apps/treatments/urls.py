@@ -26,6 +26,7 @@ urlpatterns = [
     path("<int:pk>/", views.treatment_detail, name="treatment_detail"),
     path("<int:pk>/edit/", views.treatment_edit, name="treatment_edit"),
     path("<int:pk>/delete/", views.treatment_delete, name="treatment_delete"),
+    path("<int:pk>/notify-wa/", views.treatment_notify_wa, name="treatment_notify_wa"),
     path("<int:pk>/status/", views.treatment_status, name="treatment_status"),
     path("<int:pk>/files/upload/", views.treatment_file_upload, name="treatment_file_upload"),
     path("<int:pk>/files/<int:file_pk>/delete/", views.treatment_file_delete, name="treatment_file_delete"),

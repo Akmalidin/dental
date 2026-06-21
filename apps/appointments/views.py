@@ -422,6 +422,27 @@ def appointment_list(request):
         )
     form = AppointmentForm(initial={"doctor": request.user if request.user.is_doctor else None})
 
+    # Первичный / вторичный визит: первая по времени запись каждого пациента — первичная.
+    PRIMARY_FEE = 50  # сбор администратора за каждый первичный визит, сом
+    first_map = {}
+    for a in Appointment.objects.order_by("patient_id", "start_at").values("id", "patient_id"):
+        if a["patient_id"] not in first_map:
+            first_map[a["patient_id"]] = a["id"]
+    primary_ids = set(first_map.values())
+    total_appts = Appointment.objects.count()
+    primary_count = len(primary_ids)
+    secondary_count = total_appts - primary_count
+
+    visit = request.GET.get("visit", "")
+    if visit == "primary":
+        qs = qs.filter(pk__in=primary_ids)
+    elif visit == "secondary":
+        qs = qs.exclude(pk__in=primary_ids)
+
+    appts = list(qs[:500])
+    for a in appts:
+        a.is_primary = a.pk in primary_ids
+
     # Прошедшие записи без отметки исхода — «требуют внимания»
     from django.utils import timezone
     stale = (Appointment.objects.select_related("patient", "doctor")
@@ -431,13 +452,19 @@ def appointment_list(request):
     stale_count = stale.count()
 
     return render(request, "appointments/list.html", {
-        "appointments": qs,
+        "appointments": appts,
         "current_status": current_status,
         "q": q,
         "form": form,
         "cancel_reasons": CancellationReason.objects.filter(is_active=True),
         "stale_appointments": stale[:100],
         "stale_count": stale_count,
+        "total_appts": total_appts,
+        "primary_count": primary_count,
+        "secondary_count": secondary_count,
+        "primary_fee_total": primary_count * PRIMARY_FEE,
+        "primary_fee": PRIMARY_FEE,
+        "current_visit": visit,
     })
 
 

@@ -834,7 +834,53 @@ def staff_list(request):
     if not request.user.is_superadmin:
         users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
     form = UserForm()
-    return render(request, "users/list.html", {"users": users, "form": form})
+    can_impersonate = request.user.is_superadmin or request.user.is_director
+    return render(request, "users/list.html", {
+        "users": users, "form": form, "can_impersonate": can_impersonate,
+    })
+
+
+@login_required
+@require_POST
+def staff_login_as(request, pk):
+    """Директор входит в аккаунт сотрудника для просмотра его данных."""
+    from django.contrib.auth import login
+    actor = request.user
+    if not (actor.is_superadmin or actor.is_director):
+        messages.error(request, _("Доступ запрещён"))
+        return redirect("staff_list")
+    target = get_object_or_404(User, pk=pk)
+    # директор может войти только за сотрудника СВОЕЙ клиники и не за суперпользователя
+    if target.is_superadmin and not actor.is_superadmin:
+        messages.error(request, _("Нельзя войти за суперпользователя"))
+        return redirect("staff_list")
+    if not actor.is_superadmin and target.clinic_id != actor.clinic_id:
+        messages.error(request, _("Можно войти только за сотрудника своей клиники"))
+        return redirect("staff_list")
+    if target.pk == actor.pk:
+        return redirect("staff_list")
+    original_id = request.session.get("impersonator_id") or actor.pk
+    target.backend = "django.contrib.auth.backends.ModelBackend"
+    login(request, target)
+    request.session["impersonator_id"] = original_id
+    messages.success(request, _("Вы вошли как %(n)s. Режим просмотра.") % {"n": target.name})
+    return redirect("/")
+
+
+@login_required
+def staff_stop_impersonate(request):
+    """Вернуться в свой аккаунт после просмотра данных сотрудника."""
+    from django.contrib.auth import login
+    orig_id = request.session.get("impersonator_id")
+    if not orig_id:
+        return redirect("/")
+    orig = User.objects.filter(pk=orig_id).first()
+    if orig:
+        orig.backend = "django.contrib.auth.backends.ModelBackend"
+        login(request, orig)  # сбрасывает сессию, impersonator_id уходит
+    request.session.pop("impersonator_id", None)
+    messages.success(request, _("Вы вернулись в свой аккаунт"))
+    return redirect("staff_list")
 
 
 def _is_protected_target(target, actor):

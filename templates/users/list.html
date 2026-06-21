@@ -29,6 +29,12 @@
           <button type="submit" class="badge badge-yellow hover:bg-amber-100" title="Сбросить пароль">🔑 Пароль</button>
         </form>
         <a href="/users/{{ u.pk }}/edit/" class="badge badge-gray hover:bg-slate-200">Ред.</a>
+        {% if can_impersonate and u.pk != request.user.pk and not u.is_superuser %}
+        <form method="post" action="/users/{{ u.pk }}/login-as/" onsubmit="return confirm('Войти как {{ u.name|escapejs }} и посмотреть его данные?')">
+          {% csrf_token %}
+          <button type="submit" class="badge badge-blue hover:bg-indigo-100" title="Войти за сотрудника (просмотр данных)">↪ Войти</button>
+        </form>
+        {% endif %}
       </div>
     </div>
     {% empty %}

@@ -240,8 +240,8 @@ class Patient(ClinicSoftDeleteModel):
     def debt(self):
         from django.db.models import Sum
         from decimal import Decimal
-        # отменённые приёмы не создают долг
-        qs = self.treatments.exclude(status="cancelled")
+        # отменённые приёмы и черновики не создают долг
+        qs = self.treatments.exclude(status__in=["cancelled", "draft"])
         total = qs.aggregate(total=Sum("total_amount"))["total"] or Decimal(0)
         disc = qs.aggregate(disc=Sum("discount"))["disc"] or Decimal(0)
         paid = qs.aggregate(paid=Sum("paid_amount"))["paid"] or Decimal(0)
@@ -260,7 +260,7 @@ class Patient(ClinicSoftDeleteModel):
         refund = (Payment.all_clinics.filter(patient_id=self.pk, type=Payment.TYPE_REFUND)
                   .aggregate(s=Sum("amount"))["s"] or Decimal(0))
         agg = (Treatment.all_objects.filter(patient_id=self.pk, is_deleted=False)
-               .exclude(status="cancelled").aggregate(tot=Sum("total_amount"), disc=Sum("discount")))
+               .exclude(status__in=["cancelled", "draft"]).aggregate(tot=Sum("total_amount"), disc=Sum("discount")))
         treatments_total = agg["tot"] or Decimal(0)
         discount_total = agg["disc"] or Decimal(0)
         balance = income - refund - (treatments_total - discount_total)

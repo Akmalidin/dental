@@ -12,6 +12,7 @@ from apps.tenancy import ClinicSoftDeleteModel
 
 
 class Treatment(ClinicSoftDeleteModel):
+    STATUS_DRAFT = "draft"
     STATUS_PLANNED = "planned"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_COMPLETED = "completed"
@@ -19,12 +20,15 @@ class Treatment(ClinicSoftDeleteModel):
     STATUS_PAID = "paid"
 
     STATUS_CHOICES = [
+        (STATUS_DRAFT, "Черновик"),
         (STATUS_PLANNED, "Запланирован"),
         (STATUS_IN_PROGRESS, "В процессе"),
         (STATUS_COMPLETED, "Завершён"),
         (STATUS_CANCELLED, "Отменён"),
         (STATUS_PAID, "Оплачен"),
     ]
+    # Статусы, НЕ влияющие на баланс/долг пациента (черновик — услуги есть, но долг не считается)
+    NON_BILLABLE_STATUSES = (STATUS_DRAFT, STATUS_CANCELLED)
 
     patient = models.ForeignKey(
         Patient, on_delete=models.PROTECT, related_name="treatments", verbose_name="Пациент"
@@ -64,13 +68,23 @@ class Treatment(ClinicSoftDeleteModel):
         return self.status == self.STATUS_CANCELLED
 
     @property
+    def is_draft(self):
+        return self.status == self.STATUS_DRAFT
+
+    @property
+    def is_billable(self):
+        """Учитывается ли приём в балансе/долге пациента."""
+        return self.status not in self.NON_BILLABLE_STATUSES
+
+    @property
     def display_total(self):
-        """Сумма для отображения: отменённый приём = 0."""
+        """Сумма для отображения: отменённый приём = 0 (черновик показывает сумму услуг)."""
         return Decimal(0) if self.is_cancelled else self.total_amount
 
     @property
     def debt(self):
-        if self.is_cancelled:
+        # Черновик и отменённый — долг не учитывается
+        if not self.is_billable:
             return Decimal(0)
         return max(Decimal(0), self.total_amount - self.discount - self.paid_amount)
 

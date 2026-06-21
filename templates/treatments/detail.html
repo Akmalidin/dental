@@ -17,7 +17,7 @@
       <div>
         <div class="flex items-center gap-3 mb-2">
           <h2 class="text-xl font-extrabold" style="color:var(--text)">Приём #{{ treatment.pk }}</h2>
-          <span class="badge {% if treatment.status == 'paid' %}badge-green{% elif treatment.status == 'completed' %}badge-blue{% elif treatment.status == 'cancelled' %}badge-gray{% elif treatment.status == 'in_progress' %}badge-purple{% else %}badge-orange{% endif %}">{{ treatment.get_status_display }}</span>
+          <span class="badge {% if treatment.status == 'paid' %}badge-green{% elif treatment.status == 'completed' %}badge-blue{% elif treatment.status == 'cancelled' %}badge-gray{% elif treatment.status == 'draft' %}badge-gray{% elif treatment.status == 'in_progress' %}badge-purple{% else %}badge-orange{% endif %}">{% if treatment.status == 'draft' %}✏️ {% endif %}{{ treatment.get_status_display }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm muted">
           <a href="/patients/{{ treatment.patient.pk }}/" class="font-semibold" style="color:var(--primary)">{{ treatment.patient.full_name }}</a>

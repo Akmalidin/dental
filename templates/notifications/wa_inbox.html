@@ -1,17 +1,23 @@
 {% extends "base.html" %}
 {% block page_title %}WhatsApp — чаты{% endblock %}
 {% block content %}
-<div class="w-full max-w-2xl space-y-4">
+<div class="w-full max-w-2xl space-y-4" x-data="{q:''}">
   <div class="flex items-center justify-between flex-wrap gap-2">
     <h2 class="text-xl font-bold" style="color:var(--text)">💬 WhatsApp-чаты
       {% if total_unread %}<span class="badge badge-green ml-1">{{ total_unread }} новых</span>{% endif %}</h2>
     <a href="/notifications/wa-broadcast/" class="btn btn-primary btn-sm">📣 Массовая рассылка</a>
   </div>
 
+  <div class="search-box">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" x-model="q" placeholder="Поиск клиента по имени или телефону…">
+  </div>
+
   <div class="card overflow-hidden">
     {% for r in rows %}
     <a href="/patients/{{ r.patient.pk }}/notify/" class="flex items-center gap-3 px-5 py-3 transition"
-       style="border-bottom:1px solid var(--border-2);text-decoration:none">
+       style="border-bottom:1px solid var(--border-2);text-decoration:none"
+       x-show="q==='' || '{{ r.patient.full_name|escapejs }} {{ r.patient.phone|escapejs }}'.toLowerCase().includes(q.toLowerCase())">
       <div class="avatar w-10 h-10">{{ r.patient.first_name|first|upper }}</div>
       <div class="flex-1 min-w-0">
         <p class="font-semibold" style="color:var(--text)">{{ r.patient.full_name }}

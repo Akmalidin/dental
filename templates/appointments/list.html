@@ -25,6 +25,26 @@
   </div>
 
 
+  <!-- Stat cards: визиты + сбор администратора -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <a href="/appointments/" class="stat {% if not current_visit %}ring-2 ring-indigo-200{% endif %}">
+      <div class="stat-icon ic-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+      <div><p class="stat-label">Всего записей</p><p class="stat-value">{{ total_appts }}</p></div>
+    </a>
+    <a href="/appointments/?visit=primary" class="stat {% if current_visit == 'primary' %}ring-2 ring-emerald-300{% endif %}" title="Показать первичные визиты">
+      <div class="stat-icon ic-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="11" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div>
+      <div><p class="stat-label">Первичные визиты</p><p class="stat-value">{{ primary_count }}</p></div>
+    </a>
+    <a href="/appointments/?visit=secondary" class="stat {% if current_visit == 'secondary' %}ring-2 ring-amber-300{% endif %}" title="Показать вторичные (повторные) визиты">
+      <div class="stat-icon ic-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9 9 0 00-9 9z"/><path d="M3 3v6h6"/></svg></div>
+      <div><p class="stat-label">Вторичные визиты</p><p class="stat-value">{{ secondary_count }}</p></div>
+    </a>
+    <div class="stat">
+      <div class="stat-icon ic-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
+      <div><p class="stat-label">Сбор админ. ({{ primary_fee }}с × первичные)</p><p class="stat-value">{{ primary_fee_total|floatformat:0 }} <span class="text-sm">сом</span></p></div>
+    </div>
+  </div>
+
   {% if stale_count %}
   <div class="card" style="border:1px solid #FCD34D;background:#FFFBEB;overflow:hidden">
     <div class="px-5 py-3 flex items-center gap-2" style="border-bottom:1px solid #FDE68A">
@@ -110,7 +130,9 @@
             <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black text-white shrink-0" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ a.patient.first_name|first|upper }}</div><div><a href="/patients/{{ a.patient.pk }}/" class="font-semibold hover:underline" style="color:var(--text)">{{ a.patient.full_name }}</a><p class="text-xs muted">{{ a.patient.phone }}</p></div></div>
             {% else %}<span class="muted">Без пациента</span>{% endif %}
           </td>
-          <td class="muted">{{ a.doctor.name }}</td>
+          <td class="muted">{{ a.doctor.name }}
+            {% if a.is_primary %}<span class="badge badge-green" title="Первый визит пациента">Первичный</span>{% else %}<span class="badge badge-gray" title="Повторный визит">Вторичный</span>{% endif %}
+          </td>
           <td><p class="font-semibold">{{ a.start_at|date:"d.m.Y" }}</p><p class="text-xs muted">{{ a.start_at|time:"H:i" }} – {{ a.end_at|time:"H:i" }}</p></td>
           <td class="muted text-xs">{{ a.service.name|default:"—" }}</td>
           <td>
