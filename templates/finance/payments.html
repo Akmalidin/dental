@@ -46,6 +46,7 @@
   </div>
 
   <!-- Create modal -->
+  {{ treatments_json|json_script:"treatments-data" }}
   <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
     <div class="modal-box max-w-md" x-data="paymentForm()">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
@@ -56,8 +57,12 @@
         {% csrf_token %}
         <input type="hidden" name="channel" value="cashier">
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пациент *</label>{{ form.patient }}</div>
-        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Приём</label>{{ form.treatment }}</div>
-        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label><input type="number" name="amount" required placeholder="0.00" step="0.01"></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Приём (из какого вычесть)</label>
+          <select name="treatment" id="cashier-treatment" class="no-tom w-full">
+            <option value="">— авто (по долгу) —</option>
+          </select>
+        </div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label><input type="number" name="amount" id="cashier-amount" required placeholder="0.00" step="0.01" value="{% if preselect %}{{ preselect.amount }}{% endif %}"></div>
         <div class="grid grid-cols-2 gap-4">
           <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Метод</label>{{ form.method }}</div>
           <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Тип</label>{{ form.type }}</div>
@@ -71,4 +76,27 @@
     </div>
   </div>
 </div>
+<script>
+(function(){
+  var MAP = {};
+  try { MAP = JSON.parse(document.getElementById('treatments-data').textContent); } catch(e){}
+  var patientSel = document.querySelector('select[name="patient"]');
+  var trSel = document.getElementById('cashier-treatment');
+  var preTr = "{% if preselect %}{{ preselect.treatment }}{% endif %}";
+  function fill(pid){
+    if(!trSel) return;
+    trSel.innerHTML = '<option value="">— авто (по долгу) —</option>';
+    (MAP[String(pid)]||[]).forEach(function(t){
+      var o=document.createElement('option'); o.value=t.id; o.textContent='Приём '+t.label;
+      if(String(t.id)===String(preTr)) o.selected=true;
+      trSel.appendChild(o);
+    });
+  }
+  if(patientSel){
+    patientSel.addEventListener('change', function(){ fill(this.value); });
+    // начальное значение (предвыбор пациента)
+    if(patientSel.value) fill(patientSel.value);
+  }
+})();
+</script>
 {% endblock %}

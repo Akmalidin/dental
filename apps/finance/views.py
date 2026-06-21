@@ -56,17 +56,34 @@ def payments_visible_to(qs, user):
 def payment_list(request):
     payments = Payment.objects.select_related("patient", "received_by", "treatment").order_by("-created_at")
     payments = payments_visible_to(payments, request.user)
+    from apps.treatments.models import Treatment
     patient_id = request.GET.get("patient") or ""
+    amount = request.GET.get("amount") or ""
+    treatment_id = request.GET.get("treatment") or ""
     preselect = None
     initial = {}
+    form = PaymentForm()
     if patient_id:
         p = Patient.objects.filter(pk=patient_id).first()
         if p:
             initial["patient"] = p.pk
-            preselect = {"id": p.pk, "name": p.full_name}
-    form = PaymentForm(initial=initial)
+            if treatment_id:
+                initial["treatment"] = treatment_id
+            form = PaymentForm(initial=initial)
+            # приёмы только этого пациента
+            form.fields["treatment"].queryset = Treatment.objects.filter(patient=p).order_by("-created_at")
+            preselect = {"id": p.pk, "name": p.full_name, "amount": amount, "treatment": treatment_id}
+
+    # карта приёмов по пациентам для динамической фильтрации в модале
+    treatments_json = {}
+    for t in Treatment.objects.exclude(status="cancelled").select_related("patient")[:1000]:
+        treatments_json.setdefault(str(t.patient_id), []).append({
+            "id": t.pk,
+            "label": f"#{t.pk} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
+        })
     return render(request, "finance/payments.html", {
         "payments": payments, "form": form, "preselect": preselect,
+        "treatments_json": treatments_json,
     })
 
 
@@ -165,13 +182,19 @@ def payment_public(request, token):
     formula_upper = [(n, tooth_map.get(n)) for n in upper]
     formula_lower = [(n, tooth_map.get(n)) for n in lower]
     has_formula = bool(tooth_map)
+    _seen = {}
+    for tc in tooth_map.values():
+        if tc.status:
+            _seen[tc.status_id] = {"name": tc.status.name, "color": tc.status.color}
+    tooth_legend = list(_seen.values())
 
     from apps.settings_clinic.models import ClinicSettings
     cs = ClinicSettings.get()
     return render(request, "finance/receipt_public.html", {
         "payment": payment, "treatment": treatment, "patient": patient,
         "cures": cures, "files": files,
-        "formula_upper": formula_upper, "formula_lower": formula_lower, "has_formula": has_formula,
+        "formula_upper": formula_upper, "formula_lower": formula_lower,
+        "has_formula": has_formula, "tooth_legend": tooth_legend,
         "clinic": getattr(payment, "clinic", None), "clinic_settings": cs,
     })
 
@@ -186,16 +209,31 @@ def send_to_cashier(request, patient_id):
     from apps.tenancy import get_current_clinic
     u = request.user
     debt = getattr(patient, "debt", Decimal(0)) or Decimal(0)
+    amount = (request.POST.get("amount") or "").strip()
+    treatment_id = (request.POST.get("treatment") or "").strip()
+    # сумма платежа: указанная врачом, иначе весь долг
+    sum_str = amount if amount else f"{debt:.0f}"
+    # приём, из которого вычесть (для чека)
+    tr_part = ""
+    link = f"/finance/payments/?patient={patient.pk}"
+    if amount:
+        link += f"&amount={amount}"
+    if treatment_id:
+        from apps.treatments.models import Treatment as _T
+        t = _T.objects.filter(pk=treatment_id, patient=patient).first()
+        if t:
+            tr_part = _(" Из приёма №%(t)s.") % {"t": t.pk}
+            link += f"&treatment={treatment_id}"
     title = _("Принять оплату в кассе")
-    body = _("Пациент %(p)s. Долг: %(d)s сом. Направил: %(u)s. Примите оплату и выдайте чек.") % {
-        "p": patient.full_name, "d": f"{debt:.0f}", "u": u.name,
+    body = _("Пациент %(p)s. К оплате: %(s)s сом (долг %(d)s).%(tr)s Направил: %(u)s. Примите оплату и выдайте чек.") % {
+        "p": patient.full_name, "s": sum_str, "d": f"{debt:.0f}", "tr": tr_part, "u": u.name,
     }
     admins = (clinic_staff(get_current_clinic())
               .filter(role__name__in=["superadmin", "admin_main", "admin"]))
     sent = 0
     for admin in admins:
         Notification.send(user=admin, title=title, body=body, type="payment",
-                          link=f"/finance/payments/?patient={patient.pk}", actor=u)
+                          link=link, actor=u)
         sent += 1
     if sent:
         messages.success(request, _("Отправлено в кассу — администратор примет оплату и выдаст чек"))

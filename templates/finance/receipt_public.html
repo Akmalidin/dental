@@ -29,9 +29,15 @@
   .badge{display:inline-block;background:#eef2ff;color:var(--brand);border-radius:8px;padding:2px 8px;font-size:12px;font-weight:600}
   .foot{padding:14px 20px 22px;text-align:center;color:#94a3b8;font-size:11px}
   .title{font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
-  .teeth{display:flex;flex-direction:column;gap:6px;overflow-x:auto}
-  .teeth-row{display:flex;gap:3px;justify-content:center;min-width:max-content}
-  .tooth .t-box{display:flex;align-items:center;justify-content:center;width:24px;height:28px;border:1px solid var(--line);border-radius:5px;font-size:10px;font-weight:600;background:#fff;color:#475569}
+  .teeth{display:flex;flex-direction:column;gap:4px;overflow-x:auto}
+  .teeth-row{display:flex;gap:2px;justify-content:center;min-width:max-content}
+  .tooth{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .tooth .t-svg{width:18px;height:20px;display:block}
+  .tooth .t-svg.flip{transform:rotate(180deg)}
+  .tooth .t-num{font-size:8.5px;color:#94a3b8;line-height:1}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+  .legend .lg{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+  .legend .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
   .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .g-item{display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);text-decoration:none}
   .g-item img{width:100%;height:90px;object-fit:cover;display:block}
@@ -112,19 +118,38 @@
     <div class="teeth">
       <div class="teeth-row">
         {% for n, tc in formula_upper %}
-        <div class="tooth" title="{% if tc and tc.status %}{{ tc.status.name }}{% endif %}">
-          <span class="t-box" style="{% if tc and tc.status %}background:{{ tc.status.color }};color:#fff;border-color:{{ tc.status.color }}{% endif %}">{{ n }}</span>
+        <div class="tooth" title="Зуб {{ n }}{% if tc and tc.status %} — {{ tc.status.name }}{% endif %}">
+          <svg viewBox="0 0 24 26" class="t-svg"><path d="M12 1C7.5 1 4.5 3.3 4.5 7.5c0 3 1 5 1.6 8.2.5 2.7 1 8.3 2.7 8.3 1.2 0 1.4-3 2.2-5.2.3-.8.7-.8 1 0 .8 2.2 1 5.2 2.2 5.2 1.7 0 2.2-5.6 2.7-8.3.6-3.2 1.6-5.2 1.6-8.2C19.5 3.3 16.5 1 12 1z"
+            fill="{% if tc and tc.status %}{{ tc.status.color }}{% else %}#ffffff{% endif %}"
+            stroke="{% if tc and tc.status %}{{ tc.status.color }}{% else %}#cbd5e1{% endif %}" stroke-width="1"/></svg>
+          <span class="t-num">{{ n }}</span>
         </div>
         {% endfor %}
       </div>
       <div class="teeth-row">
         {% for n, tc in formula_lower %}
-        <div class="tooth" title="{% if tc and tc.status %}{{ tc.status.name }}{% endif %}">
-          <span class="t-box" style="{% if tc and tc.status %}background:{{ tc.status.color }};color:#fff;border-color:{{ tc.status.color }}{% endif %}">{{ n }}</span>
+        <div class="tooth" title="Зуб {{ n }}{% if tc and tc.status %} — {{ tc.status.name }}{% endif %}">
+          <span class="t-num">{{ n }}</span>
+          <svg viewBox="0 0 24 26" class="t-svg flip"><path d="M12 1C7.5 1 4.5 3.3 4.5 7.5c0 3 1 5 1.6 8.2.5 2.7 1 8.3 2.7 8.3 1.2 0 1.4-3 2.2-5.2.3-.8.7-.8 1 0 .8 2.2 1 5.2 2.2 5.2 1.7 0 2.2-5.6 2.7-8.3.6-3.2 1.6-5.2 1.6-8.2C19.5 3.3 16.5 1 12 1z"
+            fill="{% if tc and tc.status %}{{ tc.status.color }}{% else %}#ffffff{% endif %}"
+            stroke="{% if tc and tc.status %}{{ tc.status.color }}{% else %}#cbd5e1{% endif %}" stroke-width="1"/></svg>
         </div>
         {% endfor %}
       </div>
     </div>
+    {% if tooth_legend %}
+    <div class="legend">
+      {% for s in tooth_legend %}<span class="lg"><span class="dot" style="background:{{ s.color }}"></span>{{ s.name }}</span>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if treatment and treatment.notes %}
+  <hr>
+  <div class="sec">
+    <p class="title">Заметки врача</p>
+    <p style="font-size:13.5px;white-space:pre-line">{{ treatment.notes }}</p>
   </div>
   {% endif %}
 

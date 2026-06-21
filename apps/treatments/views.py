@@ -775,12 +775,16 @@ def treatment_public(request, token):
             tooth_map[tc.tooth_number] = tc
     upper = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
     lower = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+    _seen = {}
+    for tc in tooth_map.values():
+        if tc.status:
+            _seen[tc.status_id] = {"name": tc.status.name, "color": tc.status.color}
     from apps.settings_clinic.models import ClinicSettings
     return render(request, "finance/receipt_public.html", {
         "payment": None, "treatment": treatment, "patient": patient,
         "cures": cures, "files": files,
         "formula_upper": [(n, tooth_map.get(n)) for n in upper],
         "formula_lower": [(n, tooth_map.get(n)) for n in lower],
-        "has_formula": bool(tooth_map),
+        "has_formula": bool(tooth_map), "tooth_legend": list(_seen.values()),
         "clinic": getattr(treatment, "clinic", None), "clinic_settings": ClinicSettings.get(),
     })
