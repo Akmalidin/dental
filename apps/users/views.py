@@ -836,7 +836,7 @@ def staff_list(request):
     if not request.user.is_superadmin:
         users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
     form = UserForm()
-    can_impersonate = request.user.is_superadmin or request.user.is_director
+    can_impersonate = request.user.is_superadmin or request.user.is_admin_main
     return render(request, "users/list.html", {
         "users": users, "form": form, "can_impersonate": can_impersonate,
     })
@@ -848,7 +848,7 @@ def staff_login_as(request, pk):
     """Директор входит в аккаунт сотрудника для просмотра его данных."""
     from django.contrib.auth import login
     actor = request.user
-    if not (actor.is_superadmin or actor.is_director):
+    if not (actor.is_superadmin or actor.is_admin_main):
         messages.error(request, _("Доступ запрещён"))
         return redirect("staff_list")
     target = get_object_or_404(User, pk=pk)
