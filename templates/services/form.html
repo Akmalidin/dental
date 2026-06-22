@@ -50,6 +50,17 @@
       {{ form.is_active }} <span>Активна (видна в прайс-листе)</span>
     </label>
 
+    <div class="rounded-xl p-4" style="background:#faf5ff;border:1px solid #e9d5ff">
+      <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer" style="color:#7c3aed">
+        {{ form.is_lab }} <span>👷 Лабораторная работа (требует зубного техника)</span>
+      </label>
+      <div class="grid grid-cols-2 gap-4 mt-3">
+        <div><label class="fld">Гарантия (мес.)</label>{{ form.warranty_months }}</div>
+        <div><label class="fld">Срок изготовления (дней)</label>{{ form.lab_days }}</div>
+      </div>
+      <p class="text-xs muted mt-2">При отметке «лабораторная» в мастере приёма у этой услуги появится выбор техника. Гарантия считается от даты установки.</p>
+    </div>
+
     <div class="flex items-center gap-3 pt-2">
       <button type="submit" class="btn btn-primary px-8">Сохранить</button>
       <a href="/services/" class="btn btn-ghost">Отмена</a>

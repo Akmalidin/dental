@@ -173,7 +173,7 @@
         <div class="relative group rounded-xl overflow-hidden" style="border:1px solid var(--border)">
           <span class="absolute top-1.5 left-1.5 z-10 badge {% if f.kind == 'before' %}badge-orange{% elif f.kind == 'after' %}badge-green{% elif f.kind == 'xray' %}badge-blue{% else %}badge-gray{% endif %}" style="font-size:10px">{{ f.get_kind_display }}</span>
           {% if f.is_image %}
-          <a href="{{ f.file.url }}" target="_blank" title="{{ f.name }}">
+          <a data-lightbox="tr-files" data-full="{{ f.file.url }}" data-cap="{{ f.name }} · {{ f.get_kind_display }}" title="{{ f.name }}">
             <img src="{{ f.file.url }}" alt="{{ f.name }}" class="w-full h-32 object-cover" loading="lazy">
           </a>
           {% else %}

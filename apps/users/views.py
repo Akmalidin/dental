@@ -744,7 +744,10 @@ def dashboard_view(request):
     from django.db.models import Sum, Count
     from decimal import Decimal
     user = request.user
-    context = {"user": user}
+    from apps.tenancy import get_current_clinic
+    _clinic = get_current_clinic() or getattr(user, "clinic", None)
+    clinic_tz = getattr(_clinic, "timezone", "") or "Asia/Bishkek"
+    context = {"user": user, "clinic_tz": clinic_tz}
 
     if user.is_doctor:
         from apps.appointments.models import Appointment

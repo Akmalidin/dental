@@ -95,7 +95,10 @@
       <tbody>
         {% for c in cures %}
         <tr>
-          <td>{{ c.service.name }}{% if c.tooth_number %}<br><span style="color:#94a3b8;font-size:11px">зуб {{ c.tooth_number }}</span>{% endif %}</td>
+          <td>{{ c.service.name }}{% if c.tooth_number %}<br><span style="color:#94a3b8;font-size:11px">зуб {{ c.tooth_number }}</span>{% endif %}
+            {% if c.technician %}<br><span style="color:#64748b;font-size:11px">👷 {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}</span>{% endif %}
+            {% if c.warranty_until %}<br><span style="color:#16a34a;font-size:11px">🛡 гарантия до {{ c.warranty_until|date:"d.m.Y" }}</span>{% endif %}
+          </td>
           <td class="r">{{ c.quantity }}</td>
           <td class="r">{{ c.price|floatformat:0 }}</td>
           <td class="r">{{ c.subtotal|floatformat:0 }}</td>
@@ -160,7 +163,7 @@
     <div class="gallery">
       {% for f in files %}
       {% if f.is_image %}
-      <a href="{{ f.abs_url }}" target="_blank" class="g-item">
+      <a data-lightbox="receipt-files" data-full="{{ f.abs_url }}" data-cap="{{ f.get_kind_display }}{% if f.tooth_number %} · зуб {{ f.tooth_number }}{% endif %}" class="g-item">
         <img src="{{ f.abs_url }}" alt="{{ f.name }}" loading="lazy">
         <span class="g-cap">{{ f.get_kind_display }}{% if f.tooth_number %} · зуб {{ f.tooth_number }}{% endif %}</span>
       </a>
@@ -177,5 +180,48 @@
     Спасибо за доверие!
   </div>
 </div>
+
+<div id="lightbox" class="lb">
+  <button class="lb-btn lb-close">&times;</button>
+  <button class="lb-btn lb-prev">&#8249;</button>
+  <img class="lb-img" alt="">
+  <button class="lb-btn lb-next">&#8250;</button>
+  <div class="lb-cap"></div>
+</div>
+<style>
+  .lb{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center}
+  .lb.open{display:flex}
+  .lb-img{max-width:92vw;max-height:86vh;border-radius:10px;object-fit:contain}
+  .lb-btn{position:absolute;background:rgba(255,255,255,.16);color:#fff;border:none;cursor:pointer;border-radius:12px;display:flex;align-items:center;justify-content:center}
+  .lb-btn:hover{background:rgba(255,255,255,.3)}
+  .lb-close{top:18px;right:20px;width:44px;height:44px;font-size:26px}
+  .lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:50px;height:62px;font-size:36px}
+  .lb-prev{left:14px}.lb-next{right:14px}
+  .lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e2e8f0;font-size:13px}
+  [data-lightbox]{cursor:zoom-in}
+</style>
+<script>
+(function(){
+  var lb=document.getElementById('lightbox'); if(!lb) return;
+  var img=lb.querySelector('.lb-img'), cap=lb.querySelector('.lb-cap'), items=[], idx=0;
+  function srcOf(el){ return el.getAttribute('data-full')||el.getAttribute('href')||''; }
+  function show(){ var el=items[idx]; if(el){ img.src=srcOf(el); cap.textContent=el.getAttribute('data-cap')||''; } }
+  function step(d){ if(items.length){ idx=(idx+d+items.length)%items.length; show(); } }
+  document.addEventListener('click', function(e){
+    var t=e.target.closest('[data-lightbox]'); if(!t) return; e.preventDefault();
+    items=Array.prototype.slice.call(document.querySelectorAll('[data-lightbox="'+t.getAttribute('data-lightbox')+'"]'));
+    idx=items.indexOf(t); show(); lb.classList.add('open');
+  });
+  lb.querySelector('.lb-close').addEventListener('click', function(){lb.classList.remove('open');});
+  lb.querySelector('.lb-prev').addEventListener('click', function(e){e.stopPropagation();step(-1);});
+  lb.querySelector('.lb-next').addEventListener('click', function(e){e.stopPropagation();step(1);});
+  lb.addEventListener('click', function(e){ if(e.target===lb) lb.classList.remove('open'); });
+  document.addEventListener('keydown', function(e){
+    if(!lb.classList.contains('open')) return;
+    if(e.key==='Escape') lb.classList.remove('open');
+    else if(e.key==='ArrowRight') step(1); else if(e.key==='ArrowLeft') step(-1);
+  });
+})();
+</script>
 </body>
 </html>

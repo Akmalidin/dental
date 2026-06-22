@@ -21,7 +21,12 @@
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Приём</label>
-        {{ form.treatment }}
+        <select name="treatment" id="pf-treatment" class="no-tom w-full">
+          <option value="">—</option>
+          {% for t in form.treatment.field.queryset %}
+          <option value="{{ t.pk }}" {% if form.treatment.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label>
@@ -52,4 +57,24 @@
     </form>
   </div>
 </div>
+{{ treatments_json|json_script:"pf-treatments-data" }}
+<script>
+(function(){
+  var MAP={}; try{ MAP=JSON.parse(document.getElementById('pf-treatments-data').textContent);}catch(e){}
+  var pSel=document.querySelector('select[name="patient"]'), tSel=document.getElementById('pf-treatment');
+  if(!pSel||!tSel) return;
+  var initial=tSel.value;
+  function fill(pid, keep){
+    tSel.innerHTML='<option value="">—</option>';
+    (MAP[String(pid)]||[]).forEach(function(t){
+      var o=document.createElement('option'); o.value=t.id; o.textContent='Приём '+t.label;
+      if(keep && String(t.id)===String(initial)) o.selected=true;
+      tSel.appendChild(o);
+    });
+  }
+  pSel.addEventListener('change', function(){ fill(this.value, false); });
+  // не перезатираем серверный список при первой загрузке, если приёмы уже отрисованы
+  if(pSel.value && !tSel.options.length) fill(pSel.value, true);
+})();
+</script>
 {% endblock %}

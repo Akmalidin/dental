@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block page_title %}Расчёты с техниками{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="pill-tabs">
+    <a href="/technicians/" class="pill-tab">Техники</a>
+    <a href="/technicians/tasks/" class="pill-tab">Заказы</a>
+    <a href="/technicians/payouts/" class="pill-tab active">Расчёты</a>
+  </div>
+
+  <p class="text-sm muted">К выплате — заказы со статусом «Установлено», ещё не оплаченные технику. Выплата создаёт расход «Оплата лаборатории» в финансах.</p>
+
+  <div class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>Техник</th><th>Лаборатория</th><th class="text-center">Заказов</th><th class="text-right">К выплате</th><th class="text-right pr-5">Действие</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="font-semibold"><a href="/technicians/{{ r.tech.pk }}/" class="hover:underline" style="color:var(--primary)">{{ r.tech.name }}</a></td>
+          <td class="muted text-sm">{{ r.tech.lab_name|default:"—" }}</td>
+          <td class="text-center">{{ r.count }}</td>
+          <td class="text-right font-bold text-red-600">{{ r.sum|floatformat:0 }} сом</td>
+          <td class="text-right pr-5">
+            <form method="post" action="/technicians/{{ r.tech.pk }}/pay/" onsubmit="return confirm('Выплатить {{ r.sum|floatformat:0 }} сом технику {{ r.tech.name|escapejs }}? Будет создан расход.')">
+              {% csrf_token %}
+              <button class="btn btn-primary btn-sm">Выплатить</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-12 muted">Нет заказов к выплате</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

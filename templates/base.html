@@ -434,5 +434,61 @@ setupWebPush();
 </script>
 {% endif %}
 {% block extra_js %}{% endblock %}
+
+<!-- Глобальный лайтбокс для фото (слайдер вместо открытия в новой вкладке) -->
+<div id="lightbox" class="lb" aria-hidden="true">
+  <button class="lb-btn lb-close" title="Закрыть (Esc)">&times;</button>
+  <button class="lb-btn lb-prev" title="Назад (←)">&#8249;</button>
+  <img class="lb-img" alt="">
+  <button class="lb-btn lb-next" title="Вперёд (→)">&#8250;</button>
+  <div class="lb-cap"></div>
+</div>
+<style>
+  .lb{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center}
+  .lb.open{display:flex}
+  .lb-img{max-width:92vw;max-height:86vh;border-radius:10px;box-shadow:0 10px 50px rgba(0,0,0,.5);object-fit:contain;user-select:none}
+  .lb-btn{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:none;cursor:pointer;border-radius:12px;display:flex;align-items:center;justify-content:center}
+  .lb-btn:hover{background:rgba(255,255,255,.28)}
+  .lb-close{top:18px;right:20px;width:44px;height:44px;font-size:26px;line-height:1}
+  .lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:52px;height:64px;font-size:38px;line-height:1}
+  .lb-prev{left:16px}.lb-next{right:16px}
+  .lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e2e8f0;font-size:13px;padding:0 16px}
+  [data-lightbox]{cursor:zoom-in}
+  @media(max-width:640px){.lb-prev,.lb-next{width:40px;height:52px;font-size:30px}}
+</style>
+<script>
+(function(){
+  var lb=document.getElementById('lightbox');
+  if(!lb) return;
+  var img=lb.querySelector('.lb-img'), cap=lb.querySelector('.lb-cap');
+  var items=[], idx=0;
+  function srcOf(el){ return el.getAttribute('data-full') || el.getAttribute('href') || el.getAttribute('src') || ''; }
+  function show(){ var el=items[idx]; if(!el) return; img.src=srcOf(el); cap.textContent=el.getAttribute('data-cap')||''; }
+  function open(group, start){
+    items=Array.prototype.slice.call(document.querySelectorAll('[data-lightbox="'+group+'"]'));
+    idx=start<0?0:start; show(); lb.classList.add('open'); lb.setAttribute('aria-hidden','false');
+  }
+  function close(){ lb.classList.remove('open'); lb.setAttribute('aria-hidden','true'); img.src=''; }
+  function step(d){ if(!items.length)return; idx=(idx+d+items.length)%items.length; show(); }
+  document.addEventListener('click', function(e){
+    var t=e.target.closest('[data-lightbox]');
+    if(!t) return;
+    e.preventDefault();
+    var g=t.getAttribute('data-lightbox');
+    var grp=Array.prototype.slice.call(document.querySelectorAll('[data-lightbox="'+g+'"]'));
+    open(g, grp.indexOf(t));
+  });
+  lb.querySelector('.lb-close').addEventListener('click', close);
+  lb.querySelector('.lb-prev').addEventListener('click', function(e){e.stopPropagation();step(-1);});
+  lb.querySelector('.lb-next').addEventListener('click', function(e){e.stopPropagation();step(1);});
+  lb.addEventListener('click', function(e){ if(e.target===lb) close(); });
+  document.addEventListener('keydown', function(e){
+    if(!lb.classList.contains('open')) return;
+    if(e.key==='Escape') close();
+    else if(e.key==='ArrowRight') step(1);
+    else if(e.key==='ArrowLeft') step(-1);
+  });
+})();
+</script>
 </body>
 </html>

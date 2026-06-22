@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 
 from .models import Patient, Tag, LeadSource
 from .forms import PatientForm
-from apps.treatments.models import Treatment
+from apps.treatments.models import Treatment, TreatmentCure
 from apps.finance.models import Payment
 
 
@@ -226,6 +226,19 @@ def patient_detail(request, pk):
                                "name": tc.status.name if tc.status else ""}
         for tc in ToothCondition.objects.filter(patient=patient).select_related("status")
     }
+    # Лабораторные работы по зубам (техник + гарантия) — для подсказки в зубной карте
+    tooth_lab_json = {}
+    for c in (TreatmentCure.objects.filter(treatment__patient=patient, technician__isnull=False)
+              .select_related("technician", "service").order_by("-id")):
+        key = str(c.tooth_number or "").strip()
+        if not key or key in tooth_lab_json:
+            continue
+        parts = [c.service.name, f"техник: {c.technician.name}"]
+        if c.technician.lab_name:
+            parts.append(c.technician.lab_name)
+        if c.warranty_until:
+            parts.append(f"гарантия до {c.warranty_until:%d.%m.%Y}")
+        tooth_lab_json[key] = " · ".join(parts)
     from apps.settings_clinic.models_documents import DocumentTemplate
     doc_templates = DocumentTemplate.objects.filter(is_active=True)
     from apps.users.models import Branch
@@ -254,6 +267,7 @@ def patient_detail(request, pk):
         "all_services_json": all_services_json,
         "tooth_statuses_json": tooth_statuses_json,
         "tooth_conditions_json": tooth_conditions_json,
+        "tooth_lab_json": tooth_lab_json,
         "service_categories_json": service_categories_json,
         "service_categories": ServiceCategory.objects.order_by("name"),
         "doctors": doctors,

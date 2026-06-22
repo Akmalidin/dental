@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block page_title %}{{ tech.name }}{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{tab:'orders', editOpen:false, wcOpen:false}">
+  <div class="flex items-center gap-3 flex-wrap">
+    <a href="/technicians/" class="btn btn-ghost btn-sm">← Техники</a>
+    <h2 class="text-xl font-extrabold" style="color:var(--text)">{{ tech.name }}</h2>
+    {% if not tech.is_active %}<span class="badge badge-gray">неактивен</span>{% endif %}
+    <button @click="editOpen=true" class="btn btn-ghost btn-sm ml-auto">✏️ Редактировать</button>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card card-pad"><p class="stat-label">Специализация</p><p class="font-bold">{{ tech.get_specialization_display|default:"—" }}</p></div>
+    <div class="card card-pad"><p class="stat-label">Лаборатория</p><p class="font-bold">{{ tech.lab_name|default:"—" }}</p><p class="text-xs muted">{{ tech.lab_contact }}</p></div>
+    <div class="card card-pad"><p class="stat-label">Телефон</p><p class="font-bold">{{ tech.phone|default:"—" }}</p></div>
+    <div class="card card-pad"><p class="stat-label">К выплате</p><p class="font-bold {% if payable_sum %}text-red-600{% endif %}">{{ payable_sum|floatformat:0 }} сом</p><p class="text-xs muted">{{ payable_count }} заказ(ов)</p></div>
+  </div>
+
+  <div class="pill-tabs">
+    <button @click="tab='orders'" :class="tab==='orders'?'pill-tab active':'pill-tab'">Заказы ({{ orders|length }})</button>
+    <button @click="tab='prices'" :class="tab==='prices'?'pill-tab active':'pill-tab'">Расценки</button>
+    <button @click="tab='warranty'" :class="tab==='warranty'?'pill-tab active':'pill-tab'">Гарантийные случаи ({{ warranty_cases|length }})</button>
+  </div>
+
+  <!-- Orders -->
+  <div x-show="tab==='orders'" class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Пациент</th><th>Работа</th><th>Статус</th><th>Гарантия до</th><th class="text-right pr-5">Сумма</th></tr></thead>
+      <tbody>
+        {% for t in orders %}
+        <tr>
+          <td class="muted">{{ t.pk }}</td>
+          <td>{% if t.patient %}<a href="/patients/{{ t.patient.pk }}/" class="hover:underline" style="color:var(--primary)">{{ t.patient.full_name }}</a>{% else %}—{% endif %}</td>
+          <td>{{ t.service.name }}{% if t.tooth_number %} · зуб {{ t.tooth_number }}{% endif %}</td>
+          <td><span class="badge {% if t.status == 'installed' %}badge-green{% elif t.status == 'cancelled' %}badge-gray{% elif t.status == 'ready' %}badge-blue{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span></td>
+          <td class="text-xs muted">{{ t.warranty_until|date:"d.m.Y"|default:"—" }}</td>
+          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} сом {% if t.paid %}<span class="badge badge-green" style="font-size:10px">оплачен</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-10 muted">Заказов нет</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Prices -->
+  <div x-show="tab==='prices'" x-cloak class="card card-pad space-y-3">
+    <table class="tbl">
+      <thead><tr><th>Услуга</th><th>Цена техника</th><th></th></tr></thead>
+      <tbody>
+        {% for a in agreements %}
+        <tr>
+          <td>{{ a.service.name }}</td><td class="font-semibold">{{ a.price|floatformat:0 }} сом</td>
+          <td class="text-right">
+            <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="del_price"><input type="hidden" name="id" value="{{ a.pk }}">
+              <button class="text-red-400 hover:text-red-600">✕</button></form>
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="3" class="muted text-center py-4">Расценки не заданы</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <form method="post" class="flex items-end gap-2">
+      {% csrf_token %}<input type="hidden" name="action" value="add_price">
+      <div class="flex-1"><label class="fld">Услуга</label>
+        <select name="service" class="no-tom w-full" required>
+          <option value="">—</option>
+          {% for s in services %}<option value="{{ s.pk }}">{{ s.name }}{% if s.is_lab %} (лаб.){% endif %}</option>{% endfor %}
+        </select></div>
+      <div><label class="fld">Цена</label><input type="number" name="price" step="0.01" required style="width:120px"></div>
+      <button class="btn btn-primary btn-sm">Добавить</button>
+    </form>
+  </div>
+
+  <!-- Warranty cases -->
+  <div x-show="tab==='warranty'" x-cloak class="card card-pad space-y-3">
+    <div class="flex justify-end"><button @click="wcOpen=true" class="btn btn-ghost btn-sm">+ Зафиксировать случай</button></div>
+    <table class="tbl">
+      <thead><tr><th>Дата</th><th>Пациент</th><th>Причина</th><th>Статус</th></tr></thead>
+      <tbody>
+        {% for w in warranty_cases %}
+        <tr>
+          <td class="muted text-xs">{{ w.created_at|date:"d.m.Y" }}</td>
+          <td>{{ w.patient.full_name|default:"—" }}</td>
+          <td>{{ w.reason }}</td>
+          <td>{% if w.resolved %}<span class="badge badge-green">решено</span>{% else %}<span class="badge badge-orange">открыт</span>{% endif %}</td>
+        </tr>
+        {% empty %}<tr><td colspan="4" class="muted text-center py-4">Гарантийных случаев нет</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Edit modal -->
+  <div x-show="editOpen" x-cloak class="modal-overlay" @click.self="editOpen=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold">Редактировать техника</h3><button @click="editOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" class="p-6 space-y-3">
+        {% csrf_token %}<input type="hidden" name="action" value="edit">
+        <div><label class="fld">ФИО</label><input type="text" name="name" value="{{ tech.name }}" required></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="fld">Телефон</label><input type="text" name="phone" value="{{ tech.phone }}"></div>
+          <div><label class="fld">Срок (дней)</label><input type="number" name="default_lead_days" value="{{ tech.default_lead_days }}"></div>
+        </div>
+        <div><label class="fld">Лаборатория</label><input type="text" name="lab_name" value="{{ tech.lab_name }}"></div>
+        <div><label class="fld">Контакт</label><input type="text" name="lab_contact" value="{{ tech.lab_contact }}"></div>
+        <div><label class="fld">Специализация</label>
+          <select name="specialization" class="no-tom w-full">
+            <option value="">—</option>
+            {% for v,l in tech.SPEC_CHOICES %}<option value="{{ v }}" {% if tech.specialization == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select></div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="is_active" {% if tech.is_active %}checked{% endif %}> Активен</label>
+        <div><label class="fld">Заметки</label><textarea name="notes" rows="2">{{ tech.notes }}</textarea></div>
+        <div class="flex justify-end gap-3"><button class="btn btn-primary">Сохранить</button><button type="button" @click="editOpen=false" class="btn btn-ghost">Отмена</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Warranty case modal -->
+  <div x-show="wcOpen" x-cloak class="modal-overlay" @click.self="wcOpen=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold">Гарантийный случай</h3><button @click="wcOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" action="/technicians/{{ tech.pk }}/warranty-case/" class="p-6 space-y-3">
+        {% csrf_token %}
+        <div><label class="fld">Заказ (необязательно)</label>
+          <select name="task" class="no-tom w-full">
+            <option value="">—</option>
+            {% for t in orders %}{% if t.status == 'installed' %}<option value="{{ t.pk }}">#{{ t.pk }} · {{ t.patient.full_name }} · {{ t.service.name }}</option>{% endif %}{% endfor %}
+          </select></div>
+        <div><label class="fld">Причина обращения *</label><textarea name="reason" rows="3" required></textarea></div>
+        <div class="flex justify-end gap-3"><button class="btn btn-primary">Зафиксировать</button><button type="button" @click="wcOpen=false" class="btn btn-ghost">Отмена</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

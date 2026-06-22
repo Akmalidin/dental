@@ -12,7 +12,8 @@ class ServiceCategoryForm(forms.ModelForm):
 class ServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ["name", "code", "category", "price", "dms_price", "duration", "is_active", "description"]
+        fields = ["name", "code", "category", "price", "dms_price", "duration", "is_active", "description",
+                  "is_lab", "warranty_months", "lab_days"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "category": forms.Select(attrs={"class": "searchable"}),

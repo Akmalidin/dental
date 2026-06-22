@@ -1,0 +1,27 @@
+<script>
+(function(){
+  var el = document.getElementById('live-clock');
+  if (!el) return;
+  var tz = el.getAttribute('data-tz') || 'Asia/Bishkek';
+  var months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  function tick(){
+    var now = new Date();
+    var parts;
+    try {
+      // время в часовом поясе клиники
+      var f = new Intl.DateTimeFormat('ru-RU', {
+        timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+      });
+      parts = {};
+      f.formatToParts(now).forEach(function(p){ parts[p.type]=p.value; });
+      var m = months[parseInt(parts.month,10)-1] || parts.month;
+      el.textContent = parts.day + ' ' + m + ' ' + parts.year + ', ' + parts.hour + ':' + parts.minute + ':' + parts.second;
+    } catch(e) {
+      el.textContent = now.toLocaleString('ru-RU');
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>

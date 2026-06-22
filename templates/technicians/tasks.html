@@ -1,30 +1,78 @@
 {% extends "base.html" %}
-{% block page_title %}Задания техников{% endblock %}
-
+{% block page_title %}Заказы техникам{% endblock %}
 {% block content %}
-<div class="card overflow-hidden">
-  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-    <h3 class="font-bold text-slate-800">Все задания</h3>
-    <a href="/technicians/" class="btn-ghost text-xs py-1.5">← Техники</a>
+<div class="space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div class="pill-tabs">
+      <a href="/technicians/" class="pill-tab">Техники</a>
+      <a href="/technicians/tasks/" class="pill-tab active">Заказы</a>
+      <a href="/technicians/payouts/" class="pill-tab">Расчёты</a>
+    </div>
   </div>
-  <table class="data-table">
-    <thead>
-      <tr><th>Техник</th><th>Услуга</th><th>Приём</th><th>Статус</th><th>Сумма</th><th>Срок</th></tr>
-    </thead>
-    <tbody>
-      {% for task in tasks %}
-      <tr>
-        <td class="font-semibold text-slate-800">{{ task.technician.name }}</td>
-        <td class="text-slate-600">{{ task.service.name }}</td>
-        <td class="text-slate-500 text-xs">{% if task.treatment %}#{{ task.treatment.pk }}{% else %}—{% endif %}</td>
-        <td><span class="badge {% if task.status == 'done' %}badge-green{% elif task.status == 'in_progress' %}badge-blue{% else %}badge-yellow{% endif %}">{{ task.get_status_display }}</span></td>
-        <td class="font-semibold">{{ task.amount|floatformat:0 }} сом</td>
-        <td class="text-slate-400 text-xs">{{ task.deadline|date:"d.m.Y"|default:"—" }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="6" class="text-center py-12 text-slate-400">Нет заданий</td></tr>
+
+  {% if overdue_count %}
+  <div class="card" style="border:1px solid #FCA5A5;background:#FEF2F2;overflow:hidden">
+    <div class="px-5 py-3 flex items-center gap-2" style="border-bottom:1px solid #FECACA">
+      <span class="text-xl">⏰</span>
+      <p class="font-bold" style="color:#991B1B">Просрочены по сроку готовности ({{ overdue_count }}) — напомните технику</p>
+    </div>
+    <div style="max-height:240px;overflow-y:auto">
+      {% for t in overdue %}
+      <div class="flex items-center gap-3 px-5 py-2 text-sm" style="border-bottom:1px solid #FECACA">
+        <span class="font-semibold">{{ t.patient.full_name|default:"—" }}</span>
+        <span class="muted">· {{ t.service.name }}{% if t.tooth_number %} · зуб {{ t.tooth_number }}{% endif %}</span>
+        <span class="muted">· {{ t.technician.name }}</span>
+        <span class="ml-auto text-red-600 font-semibold">до {{ t.expected_ready|date:"d.m.Y" }}</span>
+      </div>
       {% endfor %}
-    </tbody>
-  </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="get" class="card card-pad py-3 flex flex-wrap items-end gap-3">
+    <div><label class="fld">Поиск</label><input type="text" name="q" value="{{ f_q }}" placeholder="пациент, услуга, зуб" class="w-56"></div>
+    <div><label class="fld">Техник</label>
+      <select name="tech" class="no-tom" onchange="this.form.submit()">
+        <option value="">Все</option>
+        {% for t in technicians %}<option value="{{ t.pk }}" {% if f_tech == t.pk|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="fld">Статус</label>
+      <select name="status" class="no-tom" onchange="this.form.submit()">
+        <option value="">Все</option>
+        {% for val,label in statuses %}<option value="{{ val }}" {% if f_status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-primary btn-sm">Применить</button>
+    {% if f_q or f_tech or f_status %}<a href="/technicians/tasks/" class="btn btn-ghost btn-sm">Сброс</a>{% endif %}
+  </form>
+
+  <div class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Пациент</th><th>Зуб</th><th>Работа</th><th>Техник</th><th>Готовность</th><th>Статус</th><th class="text-right pr-5">Сумма</th></tr></thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr>
+          <td class="font-semibold muted">{{ t.pk }}</td>
+          <td>{% if t.patient %}<a href="/patients/{{ t.patient.pk }}/" class="font-semibold hover:underline" style="color:var(--primary)">{{ t.patient.full_name }}</a>{% else %}—{% endif %}</td>
+          <td class="text-center">{{ t.tooth_number|default:"—" }}</td>
+          <td>{{ t.service.name }}{% if t.material %}<br><span class="text-xs muted">{{ t.material }}{% if t.vita_color %} · {{ t.vita_color }}{% endif %}</span>{% endif %}</td>
+          <td class="text-sm">{{ t.technician.name }}</td>
+          <td class="text-xs {% if t.is_overdue %}text-red-600 font-bold{% else %}muted{% endif %}">{{ t.expected_ready|date:"d.m.Y"|default:"—" }}</td>
+          <td>
+            <form method="post" action="/technicians/orders/{{ t.pk }}/status/" class="inline">
+              {% csrf_token %}
+              <select name="status" class="no-tom" style="font-size:12px;padding:3px 6px" onchange="this.form.submit()">
+                {% for val,label in statuses %}<option value="{{ val }}" {% if t.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </form>
+            {% if t.paid %}<span class="badge badge-green ml-1" style="font-size:10px">оплачен</span>{% endif %}
+          </td>
+          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} сом</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center py-12 muted">Заказов нет. Они создаются автоматически при завершении приёма с лабораторной услугой.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

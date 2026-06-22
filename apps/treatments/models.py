@@ -128,6 +128,12 @@ class TreatmentCure(models.Model):
         related_name="cures",
         verbose_name="Техник",
     )
+    # Гарантия на лабораторную работу (хранится конкретной датой — переживает удаление заказа)
+    warranty_until = models.DateField(null=True, blank=True, verbose_name="Гарантия до")
+    lab_order = models.ForeignKey(
+        "technicians.TechnicianTask", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Заказ технику",
+    )
 
     class Meta:
         verbose_name = "Процедура приёма"

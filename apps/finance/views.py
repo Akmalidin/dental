@@ -255,16 +255,25 @@ def payment_edit(request, pk):
             _recalc_patient_balance(old_patient)
         messages.success(request, _("Платёж изменён"))
         return redirect("payment_list")
-    return render(request, "finance/payment_form.html", {"form": form, "edit": True, "payment": payment})
+    if payment.patient_id:
+        from apps.treatments.models import Treatment
+        form.fields["treatment"].queryset = Treatment.objects.filter(patient_id=payment.patient_id).order_by("-created_at")
+    return render(request, "finance/payment_form.html", {
+        "form": form, "edit": True, "payment": payment, "treatments_json": _treatments_by_patient(),
+    })
 
 
 @login_required
 def payment_create(request):
+    from apps.treatments.models import Treatment
     patient_id = request.POST.get("patient") or request.GET.get("patient")
     treatment_id = request.POST.get("treatment") or request.GET.get("treatment")
     form = PaymentForm(request.POST or None, initial={
         "patient": patient_id, "treatment": treatment_id
     })
+    # показывать в выпадающем списке только приёмы выбранного пациента
+    if patient_id:
+        form.fields["treatment"].queryset = Treatment.objects.filter(patient_id=patient_id).order_by("-created_at")
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
@@ -291,7 +300,20 @@ def payment_create(request):
         if patient_id:
             return redirect("patient_detail", pk=patient_id)
         return redirect("payment_list")
-    return render(request, "finance/payment_form.html", {"form": form})
+    return render(request, "finance/payment_form.html", {
+        "form": form, "treatments_json": _treatments_by_patient(),
+    })
+
+
+def _treatments_by_patient():
+    """Карта приёмов по пациентам для динамической фильтрации в форме платежа."""
+    from apps.treatments.models import Treatment
+    data = {}
+    for t in Treatment.objects.exclude(status="cancelled").select_related("patient")[:2000]:
+        data.setdefault(str(t.patient_id), []).append({
+            "id": t.pk, "label": f"#{t.pk} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
+        })
+    return data
 
 
 @login_required

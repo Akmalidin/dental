@@ -109,9 +109,14 @@ def visit_wizard(request, pk):
     from apps.tenancy import get_current_clinic
 
     services = [{"id": s.pk, "name": s.name, "price": float(s.price),
-                 "cat": s.category.name if s.category else ""}
+                 "cat": s.category.name if s.category else "",
+                 "is_lab": s.is_lab, "warranty_months": s.warranty_months, "lab_days": s.lab_days}
                 for s in Service.objects.filter(is_active=True).select_related("category")
                 .order_by("category__sort_order", "name")]
+    from apps.technicians.models import Technician
+    technicians_json = [{"id": t.pk, "name": t.name, "lead": t.default_lead_days,
+                         "spec": t.get_specialization_display()}
+                        for t in Technician.objects.filter(is_active=True)]
     statuses = [{"code": s.code, "name": s.name, "color": s.color} for s in ToothStatus.objects.all()]
     # сохранённые состояния зубов пациента (для предзаполнения карты)
     tooth_conditions = {str(tc.tooth_number): (tc.status.code if tc.status else "")
@@ -145,6 +150,7 @@ def visit_wizard(request, pk):
         "emr_json": emr_json,
         "exam_data": emr.exam_data or {},
         "services_json": services,
+        "technicians_json": technicians_json,
         "tooth_statuses_json": statuses,
         "tooth_conditions_json": tooth_conditions,
         "cures_json": cures,
@@ -233,12 +239,13 @@ def visit_file_upload(request, pk):
     return JsonResponse({"files": created})
 
 
-def _apply_plan(treatment, items, user, do_writeoff=False):
+def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
     """Сохранить набор услуг приёма из мастера (идемпотентно).
 
     Выполнено сегодня (done) → процедуры приёма (TreatmentCure).
     Остальное → один план лечения, привязанный к этому приёму (переиспользуется).
     do_writeoff=True (только при «Завершить») → списать материалы по нормам услуг.
+    create_orders=True (при «Завершить») → создать заказы технику по лаб-услугам.
     """
     from apps.services.models import Service
     from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
@@ -259,12 +266,15 @@ def _apply_plan(treatment, items, user, do_writeoff=False):
         if not svc:
             continue
         qty = max(1, int(it.get("qty") or 1))
-        TreatmentCure.objects.create(
+        cure = TreatmentCure.objects.create(
             treatment=treatment, service=svc, tooth_number=str(it.get("tooth") or ""),
             quantity=qty, price=_price(it, svc), doctor=treatment.doctor,
         )
         if do_writeoff and not already:
             _auto_writeoff_materials(svc, qty, treatment.branch, user)
+        # — Заказ технику по лабораторной услуге —
+        if create_orders and svc.is_lab and it.get("technician_id"):
+            _create_lab_order(treatment, cure, svc, it, user)
     treatment.recalculate_total()
 
     # — План на будущее — один план на приём, переиспользуем (без дублей при автосохранении) —
@@ -292,6 +302,38 @@ def _apply_plan(treatment, items, user, do_writeoff=False):
         plan.delete()
 
 
+def _create_lab_order(treatment, cure, svc, it, user):
+    """Создать заказ зуботехнику по лабораторной услуге приёма."""
+    from datetime import timedelta as _td
+    from django.utils import timezone as _tz
+    from apps.technicians.models import Technician, TechnicianAgreement, TechnicianTask, TechnicianOrderEvent
+    tech = Technician.objects.filter(pk=it.get("technician_id")).first()
+    if not tech:
+        return
+    today = _tz.localdate()
+    lead = it.get("lead_days")
+    try:
+        lead = int(lead)
+    except (TypeError, ValueError):
+        lead = tech.default_lead_days or svc.lab_days or 5
+    # себестоимость работы техника: из договора, иначе 0
+    agr = TechnicianAgreement.objects.filter(technician=tech, service=svc).first()
+    amount = agr.price if agr else Decimal(0)
+    order = TechnicianTask.objects.create(
+        technician=tech, treatment=treatment, patient=treatment.patient, cure=cure,
+        service=svc, tooth_number=str(it.get("tooth") or ""),
+        material=(it.get("material") or "").strip(), vita_color=(it.get("vita") or "").strip(),
+        amount=amount, doctor_comment=(it.get("tech_comment") or "").strip(),
+        status=TechnicianTask.STATUS_TRANSFERRED, transferred_at=today,
+        expected_ready=today + _td(days=lead),
+    )
+    TechnicianOrderEvent.objects.create(task=order, status=order.status, by=user)
+    # сразу проставим техника в процедуру (гарантия — при установке)
+    cure.technician = tech
+    cure.lab_order = order
+    cure.save(update_fields=["technician", "lab_order"])
+
+
 @login_required
 @require_POST
 def visit_commit(request, pk):
@@ -306,8 +348,8 @@ def visit_commit(request, pk):
         return JsonResponse({"error": "bad json"}, status=400)
 
     items = data.get("plan", [])
-    # применяем план + списываем материалы (это финальное сохранение)
-    _apply_plan(treatment, items, request.user, do_writeoff=True)
+    # применяем план + списываем материалы + создаём заказы технику (финальное сохранение)
+    _apply_plan(treatment, items, request.user, do_writeoff=True, create_orders=True)
 
     # — Завершить приём и запись —
     treatment.status = Treatment.STATUS_COMPLETED

@@ -6,6 +6,7 @@
 {{ service_categories_json|json_script:"service-categories-data" }}
 {{ tooth_statuses_json|json_script:"tooth-statuses-data" }}
 {{ tooth_conditions_json|json_script:"tooth-conditions-data" }}
+{{ tooth_lab_json|json_script:"tooth-lab-data" }}
 <script>
 const ALL_SERVICES = JSON.parse(document.getElementById('all-services-data').textContent);
 const SERVICE_CATEGORIES = JSON.parse(document.getElementById('service-categories-data').textContent);
@@ -368,7 +369,10 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         <!-- Procedures -->
         {% for cure in t.cures.all %}
         <div class="flex items-center gap-3 px-4 py-2 text-sm {% if not forloop.last %}border-b{% endif %}" style="border-color:var(--border-2)">
-          <span class="flex-1 font-medium truncate" style="color:var(--text)">{{ cure.service.name }}</span>
+          <div class="flex-1 min-w-0">
+            <span class="font-medium" style="color:var(--text)">{{ cure.service.name }}</span>
+            {% if cure.technician %}<span class="text-[11px] px-1.5 py-0.5 rounded-full font-semibold ml-1" style="background:#faf5ff;color:#7c3aed" title="{% if cure.warranty_until %}Гарантия до {{ cure.warranty_until|date:'d.m.Y' }}{% endif %}">👷 {{ cure.technician.name }}{% if cure.warranty_until %} · 🛡 до {{ cure.warranty_until|date:"d.m.Y" }}{% endif %}</span>{% endif %}
+          </div>
           {% if cure.tooth_number %}<span class="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0" style="background:var(--primary-light);color:var(--primary)">🦷 {{ cure.tooth_number }}</span>{% endif %}
           <span class="muted text-xs w-8 text-center shrink-0">×{{ cure.quantity }}</span>
           <span class="font-bold w-24 text-right shrink-0" style="color:var(--text)">{{ cure.subtotal|floatformat:0 }} сом</span>
@@ -414,7 +418,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <!-- Upper teeth -->
           <div class="flex justify-center items-end gap-0.5 mb-1">
             <template x-for="n in upperTeeth()" :key="n">
-              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)">
+              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)" :title="toothTip(n)">
                 <div class="relative"
                      :class="teeth.includes(n)?'tooth-selected':'tooth-normal'"
                      :style="`width:${toothW(n)}px;height:${toothH(n,'upper')}px`">
@@ -437,7 +441,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <!-- Lower teeth -->
           <div class="flex justify-center items-start gap-0.5 mt-1">
             <template x-for="n in lowerTeeth()" :key="n">
-              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)">
+              <div class="flex flex-col items-center cursor-pointer group" @click="toggleTooth(n)" :title="toothTip(n)">
                 <span class="text-[10px] mb-0.5"
                       :class="teeth.includes(n)?'text-indigo-600 font-bold':'text-slate-400'" x-text="n"></span>
                 <div class="relative"
@@ -625,9 +629,16 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
         <h3 class="font-bold text-slate-800">Файлы и документы</h3>
       </div>
-      <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-3">
         {% for t in treatments %}
           {% for f in t.files.all %}
+          {% if f.is_image %}
+          <a data-lightbox="patient-files" data-full="{{ f.file.url }}" data-cap="{{ f.name }} · {{ f.get_kind_display }} · {{ f.uploaded_at|date:'d.m.Y' }}"
+             class="block border border-slate-200 rounded-xl overflow-hidden hover:border-indigo-300 group">
+            <img src="{{ f.file.url }}" alt="{{ f.name }}" loading="lazy" class="w-full h-28 object-cover">
+            <p class="text-xs text-slate-500 truncate px-2 py-1">{{ f.get_kind_display }}</p>
+          </a>
+          {% else %}
           <a href="{{ f.file.url }}" target="_blank"
              class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-colors group">
             <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
@@ -638,6 +649,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
               <p class="text-xs text-slate-400">{{ f.uploaded_at|date:"d.m.Y" }}</p>
             </div>
           </a>
+          {% endif %}
           {% endfor %}
         {% endfor %}
         {% with total_files=0 %}{% endwith %}
@@ -1003,7 +1015,15 @@ function patientDetail() {
     // Зубная карта: справочник статусов + сохранённые состояния зубов
     TSTATUSES: TOOTH_STATUSES,
     toothConditions: Object.assign({}, TOOTH_CONDITIONS),
+    TOOTH_LAB: (function(){ try { return JSON.parse(document.getElementById('tooth-lab-data').textContent)||{}; } catch(e){ return {}; } })(),
     toothColor(n) { const c = this.toothConditions[n]; return c ? c.color : ''; },
+    toothTip(n) {
+      const c = this.toothConditions[n];
+      let s = c && c.name ? ('Зуб ' + n + ': ' + c.name) : ('Зуб ' + n);
+      const lab = this.TOOTH_LAB[n];
+      if (lab) s += '\n' + lab;
+      return s;
+    },
     async setStatusForSelected(st) {
       const ids = this.teeth.slice();
       for (const n of ids) {

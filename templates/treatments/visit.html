@@ -8,6 +8,7 @@
 {{ cures_json|json_script:"v-cures" }}
 {{ files_json|json_script:"v-files" }}
 {{ file_kinds_json|json_script:"v-filekinds" }}
+{{ technicians_json|json_script:"v-techs" }}
 {{ icd_list_json|json_script:"v-icd" }}
 {{ emr_json|json_script:"v-emr" }}
 <script>
@@ -276,8 +277,8 @@
     <p class="text-xs muted -mt-1">Выберите услугу — она добавится автоматически.</p>
     <table class="tbl">
       <thead><tr><th class="text-center">Сегодня</th><th>Услуга</th><th>Зуб</th><th class="text-center">Кол.</th><th>Цена</th><th>Итого</th><th></th></tr></thead>
-      <tbody>
-        <template x-for="(it,idx) in plan" :key="idx">
+      <template x-for="(it,idx) in plan" :key="idx">
+        <tbody>
           <tr>
             <td class="text-center"><input type="checkbox" x-model="it.done" title="Выполнено сегодня"></td>
             <td class="font-semibold" x-text="it.name"></td>
@@ -287,9 +288,25 @@
             <td class="font-bold" x-text="fmt((it.price||0)*(it.qty||1))"></td>
             <td><button @click="plan.splice(idx,1)" class="text-red-400 hover:text-red-600">✕</button></td>
           </tr>
-        </template>
-        <tr x-show="plan.length===0"><td colspan="7" class="text-center muted py-4">Добавьте услуги в план</td></tr>
-      </tbody>
+          <tr x-show="it.is_lab">
+            <td></td>
+            <td colspan="6" class="pb-2">
+              <div class="rounded-xl p-2.5 flex flex-wrap items-center gap-2" style="background:#faf5ff;border:1px solid #e9d5ff">
+                <span class="text-xs font-bold" style="color:#7c3aed">👷 Лаборатория:</span>
+                <select x-model="it.technician_id" class="no-tom" style="font-size:12px;padding:4px 6px;min-width:150px">
+                  <option value="">— выбрать техника —</option>
+                  <template x-for="t in TECHS" :key="t.id"><option :value="t.id" x-text="t.name + (t.spec?(' · '+t.spec):'')"></option></template>
+                </select>
+                <input type="text" x-model="it.material" placeholder="материал (керамика…)" style="width:160px;font-size:12px;padding:4px 6px">
+                <input type="text" x-model="it.vita" placeholder="цвет Vita (A2…)" style="width:110px;font-size:12px;padding:4px 6px">
+                <input type="number" x-model.number="it.lead_days" placeholder="срок, дн" title="срок изготовления" style="width:90px;font-size:12px;padding:4px 6px">
+                <input type="text" x-model="it.tech_comment" placeholder="комментарий технику" style="flex:1;min-width:140px;font-size:12px;padding:4px 6px">
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </template>
+      <tbody><tr x-show="plan.length===0"><td colspan="7" class="text-center muted py-4">Добавьте услуги в план</td></tr></tbody>
     </table>
     <div class="flex items-center justify-end gap-6 text-sm">
       <span class="muted">Весь план: <b style="color:var(--text)" x-text="fmt(planTotal())"></b> сом</span>
@@ -374,11 +391,15 @@ function visitWizard(){
     diagnosis:'', icd:'', recommendations:'',
     upKind:'intraoral', upComment:'', viewer:null, vzoom:1,
     teeth:{}, examTeeth:{}, plan:[], files:[], next:{date:'',time:'',note:''}, svcTS:null,
+    TECHS: JSON.parse(document.getElementById('v-techs').textContent) || [],
+
+    svcById(id){ return this.SERVICES.find(s=>String(s.id)===String(id)) || {}; },
 
     init(){
       this.teeth = JSON.parse(document.getElementById('v-conditions').textContent) || {};
       const cures = JSON.parse(document.getElementById('v-cures').textContent) || [];
-      this.plan = cures.map(c=>({service_id:c.service_id,name:c.name,tooth:c.tooth||'',qty:c.qty||1,price:c.price||0,done:true}));
+      this.plan = cures.map(c=>{const s=this.svcById(c.service_id); return {service_id:c.service_id,name:c.name,tooth:c.tooth||'',qty:c.qty||1,price:c.price||0,done:true,
+        is_lab:!!s.is_lab, technician_id:'', material:'', vita:'', lead_days:(s.lab_days||''), tech_comment:''};});
       this.files = JSON.parse(document.getElementById('v-files').textContent) || [];
       const e = JSON.parse(document.getElementById('v-emr').textContent) || {};
       this.anamnesis=e.anamnesis||''; this.objective=e.objective||'';
@@ -489,7 +510,8 @@ function visitWizard(){
       // val передаётся из onChange; иначе берём текущее значение селекта
       const v = val || (this.svcTS?this.svcTS.getValue():''); if(!v) return;
       const s=this.SERVICES.find(x=>String(x.id)===String(v)); if(!s)return;
-      this.plan.push({service_id:s.id,name:s.name,tooth:(this.selectedTooth||''),qty:1,price:Math.round(s.price),done:true});
+      this.plan.push({service_id:s.id,name:s.name,tooth:(this.selectedTooth||''),qty:1,price:Math.round(s.price),done:true,
+        is_lab:!!s.is_lab, technician_id:'', material:'', vita:'', lead_days:(s.lab_days||''), tech_comment:''});
       // сбрасываем выбор (без повторного onChange-добавления)
       this.svcTS.clear(true);
       this.svcTS.blur();

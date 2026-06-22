@@ -5,7 +5,8 @@
 
   <div>
     <h2 class="text-xl font-extrabold" style="color:var(--text)">Здравствуйте, {{ user.name|truncatewords:2 }}! 👋</h2>
-    <p class="muted text-sm">Хорошего рабочего дня</p>
+    <p class="muted text-sm">Хорошего рабочего дня · <span id="live-clock" data-tz="{{ clinic_tz }}" class="font-semibold" style="color:var(--primary)"></span></p>
+    {% include "dashboard/_clock.html" %}
   </div>
 
   <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">

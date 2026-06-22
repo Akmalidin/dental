@@ -45,7 +45,10 @@
     {% for cure in treatment.cures.all %}
     <tr>
       <td>{{ forloop.counter }}</td>
-      <td>{{ cure.service.name }}</td>
+      <td>{{ cure.service.name }}
+        {% if cure.technician %}<br><small style="color:#555">Изготовил: {{ cure.technician.name }}{% if cure.technician.lab_name %} ({{ cure.technician.lab_name }}){% endif %}</small>{% endif %}
+        {% if cure.warranty_until %}<br><small style="color:#555">Гарантия на работу до {{ cure.warranty_until|date:"d.m.Y" }}</small>{% endif %}
+      </td>
       <td>{{ cure.tooth_number|default:"—" }}</td>
       <td>{{ cure.quantity }}</td>
       <td>{{ cure.price }} сом</td>

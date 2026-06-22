@@ -34,6 +34,10 @@ class Service(ClinicSoftDeleteModel):
     duration = models.PositiveIntegerField(default=30, verbose_name="Длительность (мин)")
     is_active = models.BooleanField(default=True, verbose_name="Активна")
     description = models.TextField(blank=True, verbose_name="Описание")
+    # Лабораторная работа (требует зубного техника): коронки, протезы и т.д.
+    is_lab = models.BooleanField(default=False, verbose_name="Лабораторная работа")
+    warranty_months = models.PositiveIntegerField(default=0, verbose_name="Гарантия (мес.)")
+    lab_days = models.PositiveIntegerField(default=0, verbose_name="Срок изготовления (дней)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
