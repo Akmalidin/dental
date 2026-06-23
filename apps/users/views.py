@@ -879,13 +879,16 @@ def staff_stop_impersonate(request):
     orig_id = request.session.get("impersonator_id")
     if not orig_id:
         return redirect("/")
-    orig = User.objects.filter(pk=orig_id).first()
-    if orig:
-        orig.backend = "django.contrib.auth.backends.ModelBackend"
-        login(request, orig)  # сбрасывает сессию, impersonator_id уходит
+    orig = User.objects.filter(pk=orig_id, is_active=True).first()
+    if not orig:
+        request.session.pop("impersonator_id", None)
+        return redirect("/")
+    orig.backend = "django.contrib.auth.backends.ModelBackend"
+    login(request, orig)  # пересоздаёт сессию (impersonator_id уходит вместе со старой)
     request.session.pop("impersonator_id", None)
     messages.success(request, _("Вы вернулись в свой аккаунт"))
-    return redirect("staff_list")
+    # на дашборд — он доступен любой роли (staff_list ограничен ролями)
+    return redirect("/")
 
 
 def _is_protected_target(target, actor):
@@ -1394,3 +1397,75 @@ def schedule_edit(request, pk):
         "branches": branches,
         "day_rows": day_rows,
     })
+
+
+# ─── АУДИТ-ЦЕНТР (только для владельца/суперадмина) ─────────────────────────
+@login_required
+def audit_center(request):
+    """Журнал изменений (история правок) + откат отдельных записей. Только суперадмин."""
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступ только для владельца системы"))
+        return redirect("/")
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+
+    rows = []
+    HP = Patient.history.model
+    HT = Treatment.history.model
+    type_label = {"+": "Создание", "~": "Изменение", "-": "Удаление"}
+    for h in HP.objects.select_related("history_user").order_by("-history_date")[:150]:
+        rows.append({
+            "model": "patient", "model_label": "Пациент", "obj_id": h.id,
+            "title": f"{h.last_name} {h.first_name}".strip() or f"#{h.id}",
+            "type": type_label.get(h.history_type, h.history_type),
+            "raw_type": h.history_type,
+            "user": h.history_user.name if h.history_user else "—",
+            "date": h.history_date, "hid": h.history_id,
+        })
+    for h in HT.objects.select_related("history_user").order_by("-history_date")[:150]:
+        rows.append({
+            "model": "treatment", "model_label": "Приём", "obj_id": h.id,
+            "title": f"Приём #{h.id}",
+            "type": type_label.get(h.history_type, h.history_type),
+            "raw_type": h.history_type,
+            "user": h.history_user.name if h.history_user else "—",
+            "date": h.history_date, "hid": h.history_id,
+        })
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    rows = rows[:200]
+
+    # Корзина (удалённые записи) — кратко
+    deleted = []
+    for Model, label in ((Patient, "Пациент"), (Treatment, "Приём")):
+        try:
+            for o in Model.all_objects.filter(is_deleted=True).order_by("-deleted_at")[:50]:
+                deleted.append({"label": label, "title": str(o), "pk": o.pk,
+                                "deleted_at": o.deleted_at,
+                                "by": o.deleted_by.name if o.deleted_by else "—"})
+        except Exception:
+            pass
+    deleted.sort(key=lambda x: x["deleted_at"] or 0, reverse=True)
+
+    return render(request, "users/audit.html", {"rows": rows, "deleted": deleted[:60]})
+
+
+@login_required
+@require_POST
+def audit_revert(request, model, hid):
+    """Откатить запись к выбранной версии истории (по history_id)."""
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступ только для владельца системы"))
+        return redirect("/")
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    Model = {"patient": Patient, "treatment": Treatment}.get(model)
+    if not Model:
+        return redirect("audit_center")
+    h = Model.history.filter(history_id=hid).first()
+    if not h:
+        messages.error(request, _("Версия не найдена"))
+        return redirect("audit_center")
+    inst = h.instance  # объект в состоянии этой версии
+    inst.save()
+    messages.success(request, _("Запись восстановлена к версии от %(d)s") % {"d": h.history_date.strftime("%d.%m.%Y %H:%M")})
+    return redirect("audit_center")

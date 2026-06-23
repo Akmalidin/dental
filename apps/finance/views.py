@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Sum, Q
@@ -87,6 +88,54 @@ def payment_list(request):
     })
 
 
+def _recompute_treatment_paid(treatment):
+    """paid_amount приёма = сумма распределений всех платежей на него."""
+    from .models import PaymentAllocation
+    from apps.treatments.models import Treatment
+    total = PaymentAllocation.objects.filter(treatment=treatment).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+    Treatment.all_objects.filter(pk=treatment.pk).update(paid_amount=total)
+
+
+def _allocate_income(payment):
+    """Распределить income-платёж по приёмам пациента: сначала привязанный приём,
+    затем остальные по возрастанию даты, заполняя остаток долга. Создаёт PaymentAllocation."""
+    from .models import PaymentAllocation
+    from apps.treatments.models import Treatment
+    patient = payment.patient
+    if not patient:
+        return
+    # уже распределено по этому платежу — не дублируем
+    PaymentAllocation.objects.filter(payment=payment).delete()
+    treatments = list(Treatment.objects.filter(patient=patient)
+                      .exclude(status__in=["cancelled", "draft"]).order_by("created_at"))
+    # привязанный приём — первым
+    if payment.treatment_id:
+        treatments.sort(key=lambda t: 0 if t.pk == payment.treatment_id else 1)
+    left = payment.amount
+    affected = []
+    for t in treatments:
+        if left <= 0:
+            break
+        # уже распределено на t (другими платежами)
+        already = PaymentAllocation.objects.filter(treatment=t).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        billed = (t.total_amount or Decimal(0)) - (t.discount or Decimal(0))
+        remaining = billed - already
+        if remaining <= 0:
+            continue
+        alloc = min(left, remaining)
+        PaymentAllocation.objects.create(payment=payment, treatment=t, amount=alloc)
+        left -= alloc
+        affected.append(t)
+    # если остался нераспределённый остаток (переплата) и есть привязанный приём — на него
+    if left > 0 and payment.treatment_id:
+        t = Treatment.all_objects.filter(pk=payment.treatment_id).first()
+        if t:
+            PaymentAllocation.objects.create(payment=payment, treatment=t, amount=left)
+            affected.append(t)
+    for t in set(affected):
+        _recompute_treatment_paid(t)
+
+
 def _recalc_patient_balance(patient):
     """Пересчёт баланса пациента по платежам и долгам приёмов."""
     if not patient:
@@ -99,8 +148,11 @@ def _recalc_patient_balance(patient):
 
 
 def _notify_cashier_payment(request, payment):
-    """Уведомить администраторов клиники о принятой оплате."""
+    """Уведомить администраторов клиники о принятой оплате.
+    Только по кассовым платежам — оплаты, принятые врачом напрямую, не уведомляют админа."""
     if payment.type != "income":
+        return
+    if not getattr(payment, "via_cashier", False):
         return
     from apps.notifications.models import Notification
     from apps.users.models import clinic_staff
@@ -264,6 +316,45 @@ def payment_edit(request, pk):
 
 
 @login_required
+def payment_allocations(request, pk):
+    """JSON: на что распределён платёж (для модала «распределение»)."""
+    from django.http import JsonResponse
+    payment = get_object_or_404(Payment.objects.select_related("patient"), pk=pk)
+    rows = [{
+        "treatment": a.treatment_id,
+        "label": f"Приём #{a.treatment_id}",
+        "date": a.treatment.created_at.strftime("%d.%m.%Y") if a.treatment_id else "",
+        "services": ", ".join(c.service.name for c in a.treatment.cures.all()[:6]) if a.treatment_id else "",
+        "amount": float(a.amount),
+    } for a in payment.allocations.select_related("treatment").all()]
+    return JsonResponse({
+        "amount": float(payment.amount),
+        "patient": payment.patient.full_name if payment.patient else "",
+        "allocated": sum(r["amount"] for r in rows),
+        "rows": rows,
+    })
+
+
+@login_required
+@require_POST
+def payment_delete(request, pk):
+    """Удалить платёж. Разрешено только создателю системы (суперадмину)."""
+    if not getattr(request.user, "is_superadmin", False):
+        messages.error(request, _("Удалять платежи может только владелец (суперадмин)"))
+        return redirect("payment_list")
+    payment = get_object_or_404(Payment, pk=pk)
+    patient = payment.patient
+    affected = [a.treatment for a in payment.allocations.select_related("treatment").all()]
+    payment.delete()  # каскадом удалит allocations
+    for t in set(affected):
+        _recompute_treatment_paid(t)
+    if patient:
+        _recalc_patient_balance(patient)
+    messages.success(request, _("Платёж удалён"))
+    return redirect("payment_list")
+
+
+@login_required
 def payment_create(request):
     from apps.treatments.models import Treatment
     patient_id = request.POST.get("patient") or request.GET.get("patient")
@@ -292,6 +383,20 @@ def payment_create(request):
                               or request.user.branches.first()
                               or Branch.objects.first())
         payment.save()
+        # Скидка на выбранный приём (если указана)
+        discount = request.POST.get("discount")
+        if discount and payment.treatment_id:
+            try:
+                from decimal import Decimal as _D
+                d = _D(str(discount))
+                if d > 0:
+                    payment.treatment.discount = d
+                    payment.treatment.save(update_fields=["discount", "updated_at"])
+            except Exception:
+                pass
+        # Распределение платежа по приёмам (счетам)
+        if payment.type == Payment.TYPE_INCOME:
+            _allocate_income(payment)
         # update patient balance
         _recalc_patient_balance(payment.patient)
         # уведомление администраторам о принятой оплате

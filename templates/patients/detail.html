@@ -764,8 +764,23 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <input type="hidden" name="patient" value="{{ patient.pk }}">
       <input type="hidden" name="channel" value="doctor">
       <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Сумма (сом) *</label>
-        <input type="number" name="amount" required placeholder="0.00" step="0.01">
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Приём (счёт)</label>
+        <select name="treatment" class="no-tom w-full">
+          <option value="">— авто (по долгу) —</option>
+          {% for t in treatments %}{% if t.status != 'cancelled' and t.status != 'draft' %}
+          <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} сом</option>
+          {% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Сумма (сом) *</label>
+          <input type="number" name="amount" required placeholder="0.00" step="0.01">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Скидка на приём (сом)</label>
+          <input type="number" name="discount" placeholder="0" step="0.01">
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>

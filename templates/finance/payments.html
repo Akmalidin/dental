@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block page_title %}Платежи{% endblock %}
 {% block content %}
-<div class="space-y-4" x-data="{showCreate: {% if preselect %}true{% else %}false{% endif %}}">
+<div class="space-y-4" x-data="{showCreate: {% if preselect %}true{% else %}false{% endif %},
+     alloc:{open:false,loading:false,amount:0,patient:'',allocated:0,rows:[]},
+     openAlloc(pk){ this.alloc.open=true; this.alloc.loading=true; this.alloc.rows=[];
+       fetch('/finance/payments/'+pk+'/allocations/').then(r=>r.json()).then(d=>{ this.alloc={open:true,loading:false,...d}; }).catch(()=>{this.alloc.loading=false;}); }
+   }">
   <div class="flex items-center justify-between">
     <h2 class="text-slate-700 text-sm">Все платежи клиники</h2>
     <button @click="showCreate=true" class="btn-success">+ Принять платёж</button>
@@ -19,8 +23,10 @@
         {% for p in payments %}
         <tr>
           <td><a href="/patients/{{ p.patient.pk }}/" class="font-semibold text-slate-800 hover:text-indigo-600">{{ p.patient.full_name }}</a></td>
-          <td class="font-bold text-lg {% if p.type == 'income' %}text-emerald-600{% else %}text-red-500{% endif %}">
-            {% if p.type == 'income' %}+{% else %}−{% endif %}{{ p.amount|floatformat:0 }} сом
+          <td>
+            <button type="button" @click="openAlloc({{ p.pk }})" class="font-bold text-lg hover:underline {% if p.type == 'income' %}text-emerald-600{% else %}text-red-500{% endif %}" title="Показать распределение">
+              {% if p.type == 'income' %}+{% else %}−{% endif %}{{ p.amount|floatformat:0 }} сом
+            </button>
           </td>
           <td><span class="badge badge-blue">{{ p.get_method_display }}</span></td>
           <td><span class="badge {% if p.type == 'income' %}badge-green{% else %}badge-red{% endif %}">{{ p.get_type_display }}</span></td>
@@ -35,6 +41,14 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               </a>
               <a href="/finance/payments/{{ p.pk }}/receipt/?w=80" target="_blank" class="btn btn-ghost btn-sm" title="Чек 80мм (ККМ)">🧾 80мм</a>
+              {% if request.user.is_superadmin %}
+              <form method="post" action="/finance/payments/{{ p.pk }}/delete/" onsubmit="return confirm('Удалить платёж {{ p.amount|floatformat:0 }} сом? Действие необратимо.')">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" title="Удалить платёж">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                </button>
+              </form>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -62,7 +76,10 @@
             <option value="">— авто (по долгу) —</option>
           </select>
         </div>
-        <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label><input type="number" name="amount" id="cashier-amount" required placeholder="0.00" step="0.01" value="{% if preselect %}{{ preselect.amount }}{% endif %}"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом) *</label><input type="number" name="amount" id="cashier-amount" required placeholder="0.00" step="0.01" value="{% if preselect %}{{ preselect.amount }}{% endif %}"></div>
+          <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Скидка на приём (сом)</label><input type="number" name="discount" placeholder="0" step="0.01"></div>
+        </div>
         <div class="grid grid-cols-2 gap-4">
           <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Метод</label>{{ form.method }}</div>
           <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Тип</label>{{ form.type }}</div>
@@ -73,6 +90,33 @@
           <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Allocation modal: на что распределён платёж -->
+  <div x-show="alloc.open" x-cloak class="modal-overlay" @click.self="alloc.open=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Распределение платежа</h3>
+        <button @click="alloc.open=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <p class="text-sm text-slate-500" x-show="!alloc.loading">Платёж <b x-text="Math.round(alloc.amount).toLocaleString('ru-RU')"></b> сом · <span x-text="alloc.patient"></span></p>
+        <p x-show="alloc.loading" class="text-sm text-slate-400">Загрузка…</p>
+        <table class="tbl" x-show="!alloc.loading">
+          <thead><tr><th>Приём</th><th>Услуги</th><th class="text-right">Сумма</th></tr></thead>
+          <tbody>
+            <template x-for="r in alloc.rows" :key="r.treatment">
+              <tr>
+                <td><a :href="'/treatments/'+r.treatment+'/'" class="font-semibold" style="color:var(--primary)" x-text="'#'+r.treatment+' · '+r.date"></a></td>
+                <td class="text-xs text-slate-500" x-text="r.services"></td>
+                <td class="text-right font-bold" x-text="Math.round(r.amount).toLocaleString('ru-RU')+' сом'"></td>
+              </tr>
+            </template>
+            <tr x-show="alloc.rows.length===0"><td colspan="3" class="text-center text-slate-400 py-3">Платёж не распределён (аванс)</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

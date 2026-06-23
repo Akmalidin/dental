@@ -107,6 +107,20 @@ class Payment(ClinicScopedModel):
         Treatment.objects.filter(pk=self.treatment_id).update(paid_amount=paid - refund)
 
 
+class PaymentAllocation(models.Model):
+    """Распределение платежа по приёмам (счетам): на что пошла сумма."""
+    payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name="allocations")
+    treatment = models.ForeignKey("treatments.Treatment", on_delete=models.CASCADE, related_name="payment_allocations")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма")
+
+    class Meta:
+        verbose_name = "Распределение платежа"
+        verbose_name_plural = "Распределения платежей"
+
+    def __str__(self):
+        return f"{self.payment_id} → приём #{self.treatment_id}: {self.amount}"
+
+
 class Expense(ClinicScopedModel):
     category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name="expenses", verbose_name="Категория")
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма")

@@ -78,6 +78,7 @@ class Notification(models.Model):
         ("appointment", "Запись"),
         ("task", "Задача"),
         ("payment", "Платёж"),
+        ("wa", "WhatsApp"),
         ("system", "Система"),
         ("reminder", "Напоминание"),
     ]

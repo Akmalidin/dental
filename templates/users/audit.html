@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block page_title %}Аудит-центр{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{tab:'changes'}">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h2 class="text-xl font-extrabold" style="color:var(--text)">🛡 Аудит-центр</h2>
+      <p class="text-xs muted">Журнал изменений и восстановление записей. Доступно только владельцу.</p>
+    </div>
+    <a href="/users/recycle-bin/" class="btn btn-ghost btn-sm">🗑 Корзина</a>
+  </div>
+
+  <div class="rounded-xl px-4 py-3 text-sm" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af">
+    ℹ️ Отдельные записи (пациенты, приёмы) можно откатить к прошлой версии здесь. Полный откат всей базы «на час назад»
+    делается из <b>резервной копии сервера</b> — она снимается автоматически перед каждым обновлением системы.
+  </div>
+
+  <div class="pill-tabs">
+    <button @click="tab='changes'" :class="tab==='changes'?'pill-tab active':'pill-tab'">История изменений</button>
+    <button @click="tab='deleted'" :class="tab==='deleted'?'pill-tab active':'pill-tab'">Удалённые ({{ deleted|length }})</button>
+  </div>
+
+  <!-- История изменений -->
+  <div x-show="tab==='changes'" class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>Когда</th><th>Объект</th><th>Действие</th><th>Кто</th><th class="text-right pr-5">Откат</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-xs muted">{{ r.date|date:"d.m.Y H:i:s" }}</td>
+          <td>
+            <span class="text-xs muted">{{ r.model_label }}</span><br>
+            <a href="/{% if r.model == 'patient' %}patients{% else %}treatments{% endif %}/{{ r.obj_id }}/" class="font-semibold hover:underline" style="color:var(--primary)">{{ r.title }}</a>
+          </td>
+          <td>
+            <span class="badge {% if r.raw_type == '+' %}badge-green{% elif r.raw_type == '-' %}badge-red{% else %}badge-blue{% endif %}">{{ r.type }}</span>
+          </td>
+          <td class="text-sm">{{ r.user }}</td>
+          <td class="text-right pr-5">
+            {% if r.raw_type != '-' %}
+            <form method="post" action="/users/audit/revert/{{ r.model }}/{{ r.hid }}/" onsubmit="return confirm('Откатить «{{ r.title|escapejs }}» к этой версии ({{ r.date|date:'d.m.Y H:i' }})?')">
+              {% csrf_token %}
+              <button class="btn btn-ghost btn-sm" title="Восстановить эту версию">↩ Откатить</button>
+            </form>
+            {% else %}<span class="muted text-xs">в корзине</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-10 muted">Записей истории нет</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Удалённые -->
+  <div x-show="tab==='deleted'" x-cloak class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th>Удалено</th><th>Тип</th><th>Объект</th><th>Кем</th><th class="text-right pr-5"></th></tr></thead>
+      <tbody>
+        {% for d in deleted %}
+        <tr>
+          <td class="text-xs muted">{{ d.deleted_at|date:"d.m.Y H:i" }}</td>
+          <td><span class="badge badge-gray">{{ d.label }}</span></td>
+          <td>{{ d.title }}</td>
+          <td class="text-sm">{{ d.by }}</td>
+          <td class="text-right pr-5"><a href="/users/recycle-bin/" class="text-xs" style="color:var(--primary)">в корзине →</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-10 muted">Удалённых записей нет</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

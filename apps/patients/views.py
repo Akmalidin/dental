@@ -66,12 +66,32 @@ def patient_list(request):
         qs = qs.filter(tags__id=tag_id)
     if blood:
         qs = qs.filter(blood_group=blood)
+    # Точный пересчёт долгов по агрегатам (баланс-поле может быть устаревшим)
+    from collections import defaultdict
+    inc_map, ref_map, billed_map = defaultdict(Decimal), defaultdict(Decimal), defaultdict(Decimal)
+    for r in Payment.objects.filter(type="income").values("patient_id").annotate(s=Sum("amount")):
+        inc_map[r["patient_id"]] = r["s"] or Decimal(0)
+    for r in Payment.objects.filter(type="refund").values("patient_id").annotate(s=Sum("amount")):
+        ref_map[r["patient_id"]] = r["s"] or Decimal(0)
+    for r in (Treatment.objects.exclude(status__in=["cancelled", "draft"])
+              .values("patient_id").annotate(t=Sum("total_amount"), d=Sum("discount"))):
+        billed_map[r["patient_id"]] = (r["t"] or Decimal(0)) - (r["d"] or Decimal(0))
+    debt_map = {}
+    over_ids = set()
+    for pid in set(inc_map) | set(ref_map) | set(billed_map):
+        bal = inc_map[pid] - ref_map[pid] - billed_map[pid]
+        if bal < 0:
+            debt_map[pid] = -bal
+        elif bal > 0:
+            over_ids.add(pid)
+    debtor_ids = set(debt_map)
+
     if debt == "yes":
-        qs = qs.filter(balance__lt=0)
+        qs = qs.filter(pk__in=debtor_ids)
     elif debt == "no":
-        qs = qs.filter(balance__gte=0)
+        qs = qs.exclude(pk__in=debtor_ids)
     elif debt == "over":
-        qs = qs.filter(balance__gt=0)
+        qs = qs.filter(pk__in=over_ids)
     if insurance == "yes":
         qs = qs.filter(Q(insurance__isnull=False) | ~Q(insurance_policy=""))
     elif insurance == "no":
@@ -110,9 +130,9 @@ def patient_list(request):
         if today <= bd <= today + timedelta(days=7):
             birthday_count += 1
 
-    debtors = Patient.objects.filter(balance__lt=0)
-    debtors_count = debtors.count()
-    debtors_total = debtors.aggregate(s=Sum("balance"))["s"] or Decimal(0)
+    # долги — из точного пересчёта (см. выше debt_map)
+    debtors_count = len(debt_map)
+    debtors_total = sum(debt_map.values()) if debt_map else Decimal(0)
 
     from apps.users.models import Branch, clinic_doctors
     from apps.tenancy import get_current_clinic
@@ -165,6 +185,18 @@ def patient_create(request):
     form = PatientForm(request.POST or None)
     if form.is_valid():
         patient = form.save(commit=False)
+        # Дубликат: совпадают ФИО И телефон → не создаём (другой телефон — создаём)
+        from .models import normalize_phone
+        pnorm = normalize_phone(patient.phone)
+        if pnorm:
+            dup = (Patient.objects.filter(
+                last_name__iexact=patient.last_name.strip(),
+                first_name__iexact=patient.first_name.strip())
+                .filter(Q(phone__contains=pnorm) | Q(phone2__contains=pnorm)))
+            dup = [p for p in dup if normalize_phone(p.phone) == pnorm or normalize_phone(p.phone2) == pnorm]
+            if dup:
+                messages.error(request, _("Пациент с таким ФИО и телефоном уже существует (№%(n)s). Открыт существующий.") % {"n": dup[0].display_number})
+                return redirect("patient_detail", pk=dup[0].pk)
         patient.created_by = request.user
         patient.save()
         form.save_m2m()

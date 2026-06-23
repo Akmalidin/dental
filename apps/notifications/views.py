@@ -267,10 +267,19 @@ def wa_webhook(request):
                     if patient.primary_doctor_id:
                         recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
                     snippet = (text[:80] + "…") if len(text) > 80 else text
+                    link = "/patients/%s/notify/" % patient.pk
+                    from django.utils import timezone as _tz
                     for u in recipients.distinct():
-                        Notification.send(u, "💬 Сообщение в WhatsApp",
-                                          "%s: %s" % (patient.full_name, snippet),
-                                          type="system", link="/patients/%s/notify/" % patient.pk)
+                        # компактно: одно уведомление на пациента — обновляем существующее непрочитанное
+                        existing = Notification.objects.filter(
+                            user=u, link=link, type="wa", is_read=False).first()
+                        if existing:
+                            Notification.objects.filter(pk=existing.pk).update(
+                                body="%s: %s" % (patient.full_name, snippet), created_at=_tz.now())
+                        else:
+                            Notification.send(u, "💬 WhatsApp",
+                                              "%s: %s" % (patient.full_name, snippet),
+                                              type="wa", link=link)
                 except Exception:
                     pass
     return JsonResponse({"ok": True})
