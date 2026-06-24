@@ -344,7 +344,7 @@
     </div>
     {% endif %}
 
-    {% if request.session.impersonator_id %}
+    {% if request.session.imp_as %}
     <div class="mx-7 mt-4 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3" style="background:#1f2937;color:#fff">
       <span class="text-sm font-semibold">👁 Режим просмотра: вы вошли как <b>{{ request.user.name }}</b></span>
       <a href="/users/stop-impersonate/" class="text-xs font-bold px-3 py-1.5 rounded-lg" style="background:#fff;color:#1f2937;text-decoration:none">Вернуться в свой аккаунт</a>

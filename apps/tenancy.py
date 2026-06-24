@@ -48,6 +48,38 @@ def _is_unscoped():
     return getattr(_state, "unscoped", False)
 
 
+class ImpersonationMiddleware:
+    """«Войти как сотрудник» (директор/суперадмин) — оверлей request.user на время запроса.
+
+    Реальный аутентифицированный пользователь в сессии НЕ меняется (ключ imp_as хранит
+    id цели). Это надёжнее переключения через login()/flush, который в этой конфигурации
+    (БД-сессии) не всегда переключал пользователя обратно. «Выход» = удаление ключа imp_as.
+    Должен стоять сразу после AuthenticationMiddleware и до CurrentClinicMiddleware.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        tid = request.session.get("imp_as")
+        if tid:
+            real = getattr(request, "user", None)
+            ok = False
+            if real is not None and real.is_authenticated and (
+                    getattr(real, "is_superadmin", False) or getattr(real, "is_admin_main", False)):
+                from apps.users.models import User
+                target = (User._base_manager.filter(pk=tid, is_active=True)
+                          .select_related("role", "clinic").first())
+                if (target and target.pk != real.pk
+                        and not (getattr(target, "is_superadmin", False) and not real.is_superadmin)
+                        and (real.is_superadmin or target.clinic_id == real.clinic_id)):
+                    request.impersonator = real
+                    request.user = target
+                    ok = True
+            if not ok:
+                request.session.pop("imp_as", None)
+        return self.get_response(request)
+
+
 class CurrentClinicMiddleware:
     """Ставит текущую клинику из request.user (или из выбора суперадмина)."""
     def __init__(self, get_response):

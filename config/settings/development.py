@@ -66,6 +66,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.tenancy.ImpersonationMiddleware",
     "apps.tenancy.CurrentClinicMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
     "apps.tenancy.PublicSiteMiddleware",

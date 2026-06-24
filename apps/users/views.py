@@ -848,14 +848,17 @@ def staff_list(request):
 @login_required
 @require_POST
 def staff_login_as(request, pk):
-    """Директор входит в аккаунт сотрудника для просмотра его данных."""
-    from django.contrib.auth import login
-    actor = request.user
+    """Директор/суперадмин «входит как сотрудник» (режим просмотра).
+
+    Реальный пользователь сессии НЕ меняется — сохраняем id цели в imp_as, а оверлей
+    request.user делает ImpersonationMiddleware. «Выход» мгновенный и надёжный.
+    """
+    # реальный пользователь (если уже в режиме просмотра — берём настоящего)
+    actor = getattr(request, "impersonator", None) or request.user
     if not (actor.is_superadmin or actor.is_admin_main):
         messages.error(request, _("Доступ запрещён"))
         return redirect("staff_list")
     target = get_object_or_404(User, pk=pk)
-    # директор может войти только за сотрудника СВОЕЙ клиники и не за суперпользователя
     if target.is_superadmin and not actor.is_superadmin:
         messages.error(request, _("Нельзя войти за суперпользователя"))
         return redirect("staff_list")
@@ -864,34 +867,17 @@ def staff_login_as(request, pk):
         return redirect("staff_list")
     if target.pk == actor.pk:
         return redirect("staff_list")
-    original_id = request.session.get("impersonator_id") or actor.pk
-    target.backend = "django.contrib.auth.backends.ModelBackend"
-    login(request, target)
-    request.session["impersonator_id"] = original_id
+    request.session["imp_as"] = target.pk
+    request.session.modified = True
     messages.success(request, _("Вы вошли как %(n)s. Режим просмотра.") % {"n": target.name})
     return redirect("/")
 
 
 @login_required
 def staff_stop_impersonate(request):
-    """Вернуться в свой аккаунт после просмотра данных сотрудника.
-
-    Восстанавливаем исходного пользователя, выставляя ключи аутентификации в той же
-    сессии напрямую (без login()/flush) — надёжно при БД-сессиях под django_tenants,
-    где пересоздание сессии через login() не всегда переключает пользователя обратно.
-    """
-    from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
-    orig_id = request.session.get("impersonator_id")
-    if not orig_id:
-        return redirect("/")
-    orig = User._base_manager.filter(pk=orig_id, is_active=True).first()
-    request.session.pop("impersonator_id", None)
-    if not orig:
-        request.session.modified = True
-        return redirect("/")
-    request.session[SESSION_KEY] = str(orig.pk)
-    request.session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
-    request.session[HASH_SESSION_KEY] = orig.get_session_auth_hash()
+    """Выйти из режима просмотра — просто убираем оверлей (реальный пользователь не менялся)."""
+    request.session.pop("imp_as", None)
+    request.session.pop("impersonator_id", None)  # очистка старого ключа, если остался
     request.session.modified = True
     messages.success(request, _("Вы вернулись в свой аккаунт"))
     return redirect("/")
