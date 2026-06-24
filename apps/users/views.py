@@ -874,20 +874,26 @@ def staff_login_as(request, pk):
 
 @login_required
 def staff_stop_impersonate(request):
-    """Вернуться в свой аккаунт после просмотра данных сотрудника."""
-    from django.contrib.auth import login
+    """Вернуться в свой аккаунт после просмотра данных сотрудника.
+
+    Восстанавливаем исходного пользователя, выставляя ключи аутентификации в той же
+    сессии напрямую (без login()/flush) — надёжно при БД-сессиях под django_tenants,
+    где пересоздание сессии через login() не всегда переключает пользователя обратно.
+    """
+    from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
     orig_id = request.session.get("impersonator_id")
     if not orig_id:
         return redirect("/")
-    orig = User.objects.filter(pk=orig_id, is_active=True).first()
-    if not orig:
-        request.session.pop("impersonator_id", None)
-        return redirect("/")
-    orig.backend = "django.contrib.auth.backends.ModelBackend"
-    login(request, orig)  # пересоздаёт сессию (impersonator_id уходит вместе со старой)
+    orig = User._base_manager.filter(pk=orig_id, is_active=True).first()
     request.session.pop("impersonator_id", None)
+    if not orig:
+        request.session.modified = True
+        return redirect("/")
+    request.session[SESSION_KEY] = str(orig.pk)
+    request.session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
+    request.session[HASH_SESSION_KEY] = orig.get_session_auth_hash()
+    request.session.modified = True
     messages.success(request, _("Вы вернулись в свой аккаунт"))
-    # на дашборд — он доступен любой роли (staff_list ограничен ролями)
     return redirect("/")
 
 
