@@ -171,9 +171,9 @@ def calendar_view(request):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
     doctors = clinic_doctors(get_current_clinic())
-    # врач без права «видеть всех» — фильтр в календаре предзаполняется собой
-    default_doctor = (request.user.pk if (request.user.is_doctor and not request.user.is_admin
-                                          and not request.user.can_view_all_appointments) else "")
+    # врач (даже с правом «видеть всех») — по умолчанию фильтр на себя; админ/директор — все
+    default_doctor = (request.user.pk if (request.user.is_doctor
+                                          and not (request.user.is_admin or request.user.is_superadmin)) else "")
     branches = request.user.branches.all()
     from apps.patients.models import Patient, BlacklistEntry, normalize_phone
     from apps.services.models import Service
@@ -408,7 +408,12 @@ def appointment_list(request):
         "patient", "doctor", "branch", "cabinet", "service", "cancellation_reason"
     ).order_by("-start_at")
     from .api_views import apply_appt_visibility
-    qs = apply_appt_visibility(qs, request.user, request.GET.get("doctor"))
+    # Фильтр по врачу: врач по умолчанию видит свои; админ/директор — всех.
+    is_admin = request.user.is_admin or request.user.is_superadmin
+    sel_doctor = request.GET.get("doctor")
+    if sel_doctor is None and request.user.is_doctor and not is_admin:
+        sel_doctor = str(request.user.pk)
+    qs = apply_appt_visibility(qs, request.user, sel_doctor)
     current_status = request.GET.get("status", "")
     if current_status:
         qs = qs.filter(status=current_status)
@@ -448,14 +453,19 @@ def appointment_list(request):
     stale = (Appointment.objects.select_related("patient", "doctor")
              .filter(status__in=["scheduled", "confirmed"], end_at__lt=timezone.now())
              .order_by("start_at"))
-    stale = apply_appt_visibility(stale, request.user, None)
+    stale = apply_appt_visibility(stale, request.user, sel_doctor)
     stale_count = stale.count()
 
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
     return render(request, "appointments/list.html", {
         "appointments": appts,
         "current_status": current_status,
         "q": q,
         "form": form,
+        "doctors": clinic_doctors(get_current_clinic()),
+        "sel_doctor": sel_doctor or "",
+        "can_pick_doctor": is_admin or request.user.can_view_all_appointments,
         "cancel_reasons": CancellationReason.objects.filter(is_active=True),
         "stale_appointments": stale[:100],
         "stale_count": stale_count,

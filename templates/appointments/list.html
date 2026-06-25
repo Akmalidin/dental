@@ -78,8 +78,20 @@
       <a href="?status=no_show" class="pill-tab {% if current_status == 'no_show' %}active{% endif %}">Не пришёл</a>
     </div>
     <div class="flex gap-2 items-center">
+      {% if can_pick_doctor %}
+      <form method="get" id="docfilter">
+        {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+        {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        {% if current_visit %}<input type="hidden" name="visit" value="{{ current_visit }}">{% endif %}
+        <select name="doctor" class="no-tom w-44" onchange="document.getElementById('docfilter').submit()">
+          <option value="">Все врачи</option>
+          {% for d in doctors %}<option value="{{ d.pk }}" {% if sel_doctor == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select>
+      </form>
+      {% endif %}
       <form method="get" class="search-box w-64">
         {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+        {% if sel_doctor %}<input type="hidden" name="doctor" value="{{ sel_doctor }}">{% endif %}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input type="text" name="q" value="{{ q }}" placeholder="Поиск: пациент, врач, услуга, телефон...">
       </form>
