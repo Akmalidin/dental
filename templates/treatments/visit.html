@@ -267,14 +267,17 @@
     <div class="flex justify-between"><button @click="go(3)" class="btn btn-ghost">← Назад</button><button @click="go(5)" class="btn btn-primary">Далее →</button></div>
   </div>
 
-  <!-- STEP 5 — План лечения -->
+  <!-- STEP 5 — Услуги и план -->
   <div x-show="step===5" class="card card-pad space-y-3">
-    <h3 class="font-bold" style="color:var(--text)">5. План лечения</h3>
+    <h3 class="font-bold" style="color:var(--text)">5. Услуги и план лечения</h3>
     <div class="flex items-center gap-2">
       <select x-ref="svcSel" class="no-tom flex-1" style="min-width:0;width:100%"></select>
       <button @click="addPlanItem()" class="btn btn-primary btn-sm shrink-0">+ Добавить</button>
     </div>
-    <p class="text-xs muted -mt-1">Выберите услугу — она добавится автоматически.</p>
+    <div class="rounded-xl px-3 py-2 text-xs" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe">
+      Добавьте оказанные/планируемые услуги. Галочка <b>«Сегодня»</b> = услуга выполнена сейчас (попадёт в чек и спишет материалы).
+      Без галочки — останется в <b>плане лечения</b> на будущее.
+    </div>
     <table class="tbl">
       <thead><tr><th class="text-center">Сегодня</th><th>Услуга</th><th>Зуб</th><th class="text-center">Кол.</th><th>Цена</th><th>Итого</th><th></th></tr></thead>
       <template x-for="(it,idx) in plan" :key="idx">
