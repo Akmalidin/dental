@@ -2,9 +2,10 @@
 {% block page_title %}Журнал посещений{% endblock %}
 {% block content %}
 <div class="space-y-4" x-data="vjournal()">
-  <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
-    <div class="stat"><div class="stat-icon ic-purple">📋</div><div><p class="stat-label">Всего посещений</p><p class="stat-value">{{ total_visits }}</p></div></div>
-    <div class="stat"><div class="stat-icon ic-green">👤</div><div><p class="stat-label">Пациентов</p><p class="stat-value">{{ uniq_patients }}</p></div></div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <a href="/patients/journal/" class="stat {% if not visit %}ring-2 ring-indigo-200{% endif %}"><div class="stat-icon ic-purple">📋</div><div><p class="stat-label">Всего посещений</p><p class="stat-value">{{ total_visits }}</p></div></a>
+    <a href="/patients/journal/?visit=primary" class="stat {% if visit == 'primary' %}ring-2 ring-emerald-300{% endif %}" title="Пациенты, посетившие 1 раз"><div class="stat-icon ic-green">🟢</div><div><p class="stat-label">Первичные</p><p class="stat-value">{{ primary_count }}</p></div></a>
+    <a href="/patients/journal/?visit=secondary" class="stat {% if visit == 'secondary' %}ring-2 ring-amber-300{% endif %}" title="Повторные пациенты (2+ посещений)"><div class="stat-icon ic-orange">🔁</div><div><p class="stat-label">Вторичные</p><p class="stat-value">{{ secondary_count }}</p></div></a>
     <div class="stat"><div class="stat-icon ic-orange">📅</div><div><p class="stat-label">Сегодня</p><p class="stat-value">{{ visits_today }}</p></div></div>
   </div>
 
@@ -26,8 +27,10 @@
     {% endif %}
   </div>
 
-  <form method="get" class="card card-pad py-3">
+  <form method="get" class="card card-pad py-3 flex items-center gap-2">
+    {% if visit %}<input type="hidden" name="visit" value="{{ visit }}">{% endif %}
     <input type="text" name="q" value="{{ q }}" placeholder="Поиск в таблице: имя или телефон…" class="w-full md:w-96">
+    {% if visit or q %}<a href="/patients/journal/" class="btn btn-ghost btn-sm">Сброс</a>{% endif %}
   </form>
 
   <div class="card overflow-hidden">
@@ -38,7 +41,7 @@
         <tr>
           <td><button @click="open=!open; if(open) load({{ r.patient.pk }}, $data)" class="text-slate-400 hover:text-indigo-600"><span x-text="open?'▾':'▸'"></span></button></td>
           <td class="font-semibold"><a href="/patients/{{ r.patient.pk }}/" class="hover:underline" style="color:var(--primary)">{{ r.patient.full_name }}</a><div class="text-xs muted">{{ r.patient.phone }}</div></td>
-          <td class="text-center"><span class="badge badge-blue">{{ r.count }}</span></td>
+          <td class="text-center"><span class="badge badge-blue">{{ r.count }}</span> {% if r.count == 1 %}<span class="badge badge-green">первичный</span>{% else %}<span class="badge badge-orange">вторичный</span>{% endif %}</td>
           <td class="text-sm muted">{{ r.last|date:"d.m.Y H:i" }}</td>
           <td class="text-right pr-5">
             <button @click="openAdd('{{ r.patient.pk }}', '{{ r.patient.full_name|escapejs }}')" class="btn btn-ghost btn-sm" title="Отметить ещё одно посещение">+ ещё</button>

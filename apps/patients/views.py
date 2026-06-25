@@ -560,11 +560,14 @@ def visits_journal(request):
             return redirect("visits_journal")
 
     q = (request.GET.get("q") or "").strip()
+    visit = request.GET.get("visit", "")  # '', primary (1 визит), secondary (2+)
     from django.db.models import Count, Max
-    agg = (PatientVisit.objects.values("patient")
-           .annotate(cnt=Count("id"), last=Max("visited_at")).order_by("-last"))
+    agg = list(PatientVisit.objects.values("patient")
+               .annotate(cnt=Count("id"), last=Max("visited_at")).order_by("-last"))
     pat_ids = [a["patient"] for a in agg]
     pmap = {p.pk: p for p in Patient.objects.filter(pk__in=pat_ids)}
+    primary_count = sum(1 for a in agg if a["cnt"] == 1)   # первичные: были 1 раз
+    secondary_count = sum(1 for a in agg if a["cnt"] > 1)  # вторичные: повторные пациенты
     rows = []
     for a in agg:
         p = pmap.get(a["patient"])
@@ -572,17 +575,23 @@ def visits_journal(request):
             continue
         if q and q.lower() not in p.full_name.lower() and q not in (p.phone or ""):
             continue
+        if visit == "primary" and a["cnt"] != 1:
+            continue
+        if visit == "secondary" and a["cnt"] <= 1:
+            continue
         rows.append({"patient": p, "count": a["cnt"], "last": a["last"]})
     today = timezone.localdate()
     visits_today = PatientVisit.objects.filter(visited_at__date=today).count()
     from apps.services.models import Service
     return render(request, "patients/visits_journal.html", {
-        "rows": rows, "q": q,
+        "rows": rows, "q": q, "visit": visit,
         "patients": Patient.objects.order_by("last_name", "first_name"),
         "services": Service.objects.filter(is_active=True).order_by("name"),
         "total_visits": PatientVisit.objects.count(),
         "visits_today": visits_today,
         "uniq_patients": len(pat_ids),
+        "primary_count": primary_count,
+        "secondary_count": secondary_count,
         "can_toggle": request.user.is_superadmin or request.user.is_admin_main,
     })
 
