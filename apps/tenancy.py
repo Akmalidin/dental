@@ -60,6 +60,10 @@ class ImpersonationMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # На странице выхода НЕ подменяем пользователя — иначе SectionAccessMiddleware
+        # заблокирует выход (цель может не иметь доступа к разделу). Выходит реальный.
+        if request.path.rstrip("/").endswith("/stop-impersonate"):
+            return self.get_response(request)
         tid = request.session.get("imp_as")
         if tid:
             real = getattr(request, "user", None)
