@@ -193,6 +193,26 @@
             <input type="number" :value="toothParam('eod')" @input="setParam('eod',$event.target.value)" placeholder="напр. 100"></div>
         </div>
       </div>
+
+      <!-- Услуга прямо на выбранный зуб (попадёт в шаг «Услуги и план») -->
+      <div class="mt-3 pt-3" style="border-top:1px dashed var(--border)">
+        <label class="fld">➕ Услуга на этот зуб (необязательно)</label>
+        <select class="no-tom w-full" @change="if($event.target.value){addPlanItem($event.target.value); $event.target.value='';}">
+          <option value="">+ выбрать услугу…</option>
+          <template x-for="s in SERVICES" :key="s.id"><option :value="s.id" x-text="s.name + ' · ' + Math.round(s.price) + ' сом'"></option></template>
+        </select>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <template x-for="(it,idx) in plan" :key="idx">
+            <template x-if="String(it.tooth)===String(selectedTooth)">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:var(--primary-light);color:var(--primary)">
+                <span x-text="it.name"></span>
+                <button @click="plan.splice(idx,1)" class="text-red-500 leading-none">✕</button>
+              </span>
+            </template>
+          </template>
+        </div>
+        <p class="text-[11px] muted mt-1">Добавленные услуги попадут в шаг «Услуги и план» (по умолчанию как выполненные сегодня).</p>
+      </div>
     </div>
 
     <div><label class="fld">Внешний осмотр / объективно</label><textarea x-model="objective" rows="2"></textarea></div>
