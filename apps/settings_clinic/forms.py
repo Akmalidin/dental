@@ -9,4 +9,6 @@ class ClinicSettingsForm(forms.ModelForm):
             "logo", "name", "phone", "address",
             "appointment_slot", "currency", "language",
             "require_unique_phone", "telegram_bot_token",
+            "visits_journal_staff", "warranty_terms",
         ]
+        widgets = {"warranty_terms": forms.Textarea(attrs={"rows": 3})}

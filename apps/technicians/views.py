@@ -107,6 +107,18 @@ def technician_tasks(request):
 
 
 @login_required
+def technician_kanban(request):
+    """Канбан заказов: колонки по статусам, быстрая смена статуса."""
+    cols = []
+    for val, label in TechnicianTask.STATUS_CHOICES:
+        items = list(TechnicianTask.objects.filter(status=val)
+                     .select_related("patient", "service", "technician").order_by("-created_at")[:100])
+        cols.append({"status": val, "label": label, "items": items, "count": len(items)})
+    return render(request, "technicians/kanban.html", {
+        "cols": cols, "statuses": TechnicianTask.STATUS_CHOICES})
+
+
+@login_required
 @require_POST
 def order_status(request, pk):
     """Смена статуса заказа + журнал, ключевые даты, гарантия и запись в чек/карту."""

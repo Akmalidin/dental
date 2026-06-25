@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block page_title %}Канбан заказов{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="pill-tabs">
+    <a href="/technicians/" class="pill-tab">Техники</a>
+    <a href="/technicians/tasks/" class="pill-tab">Заказы</a>
+    <a href="/technicians/kanban/" class="pill-tab active">Канбан</a>
+    <a href="/technicians/payouts/" class="pill-tab">Расчёты</a>
+  </div>
+
+  <div class="flex gap-3 overflow-x-auto pb-3">
+    {% for c in cols %}
+    <div class="shrink-0" style="width:260px">
+      <div class="rounded-t-xl px-3 py-2 font-bold text-sm flex items-center justify-between"
+           style="background:var(--surface-2);border:1px solid var(--border)">
+        <span>{{ c.label }}</span><span class="badge badge-gray">{{ c.count }}</span>
+      </div>
+      <div class="space-y-2 p-2 rounded-b-xl" style="background:var(--surface-2);border:1px solid var(--border);border-top:0;min-height:120px">
+        {% for t in c.items %}
+        <div class="card p-2.5">
+          <p class="text-sm font-semibold">{% if t.patient %}<a href="/patients/{{ t.patient.pk }}/" style="color:var(--primary)" class="hover:underline">{{ t.patient.full_name }}</a>{% else %}—{% endif %}</p>
+          <p class="text-xs muted">{{ t.service.name }}{% if t.tooth_number %} · зуб {{ t.tooth_number }}{% endif %}</p>
+          <p class="text-xs muted">{{ t.technician.name }}{% if t.expected_ready %} · до {{ t.expected_ready|date:"d.m" }}{% endif %}{% if t.is_overdue %} <span class="text-red-600 font-bold">просрочено</span>{% endif %}</p>
+          <form method="post" action="/technicians/orders/{{ t.pk }}/status/" class="mt-1.5">
+            {% csrf_token %}
+            <select name="status" class="no-tom w-full" style="font-size:11px;padding:3px 5px" onchange="this.form.submit()">
+              {% for val,label in statuses %}<option value="{{ val }}" {% if t.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </form>
+        </div>
+        {% empty %}
+        <p class="text-xs muted text-center py-3">—</p>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -60,8 +60,13 @@ def entry_create(request):
 
 @login_required
 def distribution_list(request):
-    distributions = WarehouseDistribution.objects.select_related("product", "branch").order_by("-date")
-    return render(request, "warehouse/distributions.html", {"distributions": distributions})
+    distributions = WarehouseDistribution.objects.select_related("product", "branch", "issued_to").order_by("-date", "-id")
+    f = request.GET.get("f", "")
+    if f == "auto":
+        distributions = distributions.filter(notes__startswith="Автосписание")
+    elif f == "manual":
+        distributions = distributions.exclude(notes__startswith="Автосписание")
+    return render(request, "warehouse/distributions.html", {"distributions": distributions[:500], "f": f})
 
 
 @login_required
