@@ -197,10 +197,7 @@
       <!-- Услуга прямо на выбранный зуб (попадёт в шаг «Услуги и план») -->
       <div class="mt-3 pt-3" style="border-top:1px dashed var(--border)">
         <label class="fld">➕ Услуга на этот зуб (необязательно)</label>
-        <select class="no-tom w-full" @change="if($event.target.value){addPlanItem($event.target.value); $event.target.value='';}">
-          <option value="">+ выбрать услугу…</option>
-          <template x-for="s in SERVICES" :key="s.id"><option :value="s.id" x-text="s.name + ' · ' + Math.round(s.price) + ' сом'"></option></template>
-        </select>
+        <select x-ref="svcSel2" class="w-full" placeholder="Поиск услуги…"></select>
         <div class="flex flex-wrap gap-1.5 mt-2">
           <template x-for="(it,idx) in plan" :key="idx">
             <template x-if="String(it.tooth)===String(selectedTooth)">
@@ -413,7 +410,7 @@ function visitWizard(){
     complaintTags:[], complaintsText:'', anamnesis:'', objective:'',
     diagnosis:'', icd:'', recommendations:'',
     upKind:'intraoral', upComment:'', viewer:null, vzoom:1,
-    teeth:{}, examTeeth:{}, plan:[], files:[], next:{date:'',time:'',note:''}, svcTS:null,
+    teeth:{}, examTeeth:{}, plan:[], files:[], next:{date:'',time:'',note:''}, svcTS:null, svcTS2:null,
     TECHS: JSON.parse(document.getElementById('v-techs').textContent) || [],
 
     svcById(id){ return this.SERVICES.find(s=>String(s.id)===String(id)) || {}; },
@@ -519,15 +516,21 @@ function visitWizard(){
 
     // ── План ──
     initSvcSelect(){
-      if(this.svcTS)return;
-      if(!window.TomSelect||!this.$refs.svcSel)return;
-      if(this.$refs.svcSel.tomselect)return;
       const self=this;
-      this.svcTS=new TomSelect(this.$refs.svcSel,{
-        options:this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'})),
-        placeholder:'Выберите услугу…',
-        onChange(v){ if(v){ self.addPlanItem(String(v)); } },
-      });
+      const opts=this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'}));
+      if(window.TomSelect && this.$refs.svcSel && !this.$refs.svcSel.tomselect && !this.svcTS){
+        this.svcTS=new TomSelect(this.$refs.svcSel,{
+          options:opts, placeholder:'Выберите услугу…',
+          onChange(v){ if(v){ self.addPlanItem(String(v)); } },
+        });
+      }
+      // Поиск услуги на шаге «Осмотр» (на выбранный зуб)
+      if(window.TomSelect && this.$refs.svcSel2 && !this.$refs.svcSel2.tomselect && !this.svcTS2){
+        this.svcTS2=new TomSelect(this.$refs.svcSel2,{
+          options:opts, placeholder:'Поиск услуги…',
+          onChange(v){ if(v){ self.addPlanItem(String(v)); self.svcTS2.clear(true); self.svcTS2.blur(); } },
+        });
+      }
     },
     addPlanItem(val){
       // val передаётся из onChange; иначе берём текущее значение селекта
