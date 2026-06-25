@@ -728,7 +728,11 @@ def treatment_print(request, pk):
         Treatment.objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch"),
         pk=pk,
     )
-    html = render_to_string("treatments/receipt.html", {"treatment": treatment, "request": request})
+    from apps.settings_clinic.models import ClinicSettings
+    _has_lab = any(c.warranty_until for c in treatment.cures.all())
+    html = render_to_string("treatments/receipt.html", {
+        "treatment": treatment, "request": request,
+        "clinic_settings": ClinicSettings.get(), "has_lab": _has_lab})
     try:
         from weasyprint import HTML
         pdf = HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf()
@@ -750,6 +754,7 @@ def treatment_receipt_html(request, pk):
     public_url = request.build_absolute_uri(f"/t/{treatment.public_token}/")
     return render(request, "treatments/receipt_thermal.html", {
         "treatment": treatment, "clinic_settings": ClinicSettings.get(),
+        "has_lab": any(c.warranty_until for c in treatment.cures.all()),
         "w80": request.GET.get("w") == "80",
         "public_url": public_url, "qr_svg": _qr_svg(public_url),
     })
@@ -787,4 +792,5 @@ def treatment_public(request, token):
         "formula_lower": [(n, tooth_map.get(n)) for n in lower],
         "has_formula": bool(tooth_map), "tooth_legend": list(_seen.values()),
         "clinic": getattr(treatment, "clinic", None), "clinic_settings": ClinicSettings.get(),
+        "has_lab": any((c.warranty_until for c in cures)),
     })

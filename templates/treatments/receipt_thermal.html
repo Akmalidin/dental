@@ -47,8 +47,8 @@
     {% for c in treatment.cures.all %}
     <tr>
       <td>{{ c.service.name }}{% if c.tooth_number %} (зуб {{ c.tooth_number }}){% endif %}<br><span style="color:#888">×{{ c.quantity }} · {{ c.price|floatformat:0 }} сом</span>
-        {% if c.technician %}<br><span style="color:#555">Изготовил: {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}</span>{% endif %}
-        {% if c.warranty_until %}<br><span style="color:#555">Гарантия до {{ c.warranty_until|date:"d.m.Y" }}</span>{% endif %}
+        {% if c.technician %}<br><span style="color:#555">Изготовил: {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}{% if c.lab_order %}{% if c.lab_order.material %} · {{ c.lab_order.material }}{% endif %}{% if c.lab_order.vita_color %} · {{ c.lab_order.vita_color }}{% endif %}{% endif %}</span>{% endif %}
+        {% if c.warranty_until %}<br><span style="color:#555">🛡 Гарантия до {{ c.warranty_until|date:"d.m.Y" }}</span>{% endif %}
       </td>
       <td class="r">{{ c.subtotal|floatformat:0 }} сом</td>
     </tr>
@@ -70,6 +70,10 @@
   </div>
   {% endif %}
 
+  {% if has_lab and clinic_settings.warranty_terms %}
+  <hr>
+  <div style="font-size:9.5px;color:#555"><b>🛡 Условия гарантии:</b> {{ clinic_settings.warranty_terms }}</div>
+  {% endif %}
   <div class="footer">Спасибо за доверие!</div>
   <div class="noprint"><button onclick="window.print()">🖨 Печать</button></div>
 </div>

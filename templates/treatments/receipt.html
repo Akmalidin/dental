@@ -46,8 +46,8 @@
     <tr>
       <td>{{ forloop.counter }}</td>
       <td>{{ cure.service.name }}
-        {% if cure.technician %}<br><small style="color:#555">Изготовил: {{ cure.technician.name }}{% if cure.technician.lab_name %} ({{ cure.technician.lab_name }}){% endif %}</small>{% endif %}
-        {% if cure.warranty_until %}<br><small style="color:#555">Гарантия на работу до {{ cure.warranty_until|date:"d.m.Y" }}</small>{% endif %}
+        {% if cure.technician %}<br><small style="color:#555">Изготовил: {{ cure.technician.name }}{% if cure.technician.lab_name %} ({{ cure.technician.lab_name }}){% endif %}{% if cure.lab_order %}{% if cure.lab_order.material %} · {{ cure.lab_order.material }}{% endif %}{% if cure.lab_order.vita_color %} · цвет {{ cure.lab_order.vita_color }}{% endif %}{% endif %}</small>{% endif %}
+        {% if cure.warranty_until %}<br><small style="color:#555">🛡 Гарантия на работу до {{ cure.warranty_until|date:"d.m.Y" }}</small>{% endif %}
       </td>
       <td>{{ cure.tooth_number|default:"—" }}</td>
       <td>{{ cure.quantity }}</td>
@@ -86,6 +86,12 @@
 
 {% if treatment.notes %}
 <p style="margin-top: 15px;"><strong>Заметки:</strong> {{ treatment.notes }}</p>
+{% endif %}
+
+{% if has_lab and clinic_settings.warranty_terms %}
+<div style="margin-top:15px;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:11px;color:#444">
+  <strong>🛡 Условия гарантии на лабораторные работы</strong><br>{{ clinic_settings.warranty_terms }}
+</div>
 {% endif %}
 
 <div class="footer">

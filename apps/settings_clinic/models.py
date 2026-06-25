@@ -38,6 +38,11 @@ class ClinicSettings(models.Model):
     tariff_plan = models.CharField(max_length=50, default="full", blank=True, verbose_name="Тарифный план")
     # Журнал посещений виден всему персоналу (директор управляет)
     visits_journal_staff = models.BooleanField(default=True, verbose_name="Журнал посещений виден персоналу")
+    # Условия гарантии на лабораторные работы (печатаются в чеке)
+    warranty_terms = models.TextField(
+        blank=True, verbose_name="Условия гарантии (лаб. работы)",
+        default="Гарантия действует при соблюдении гигиены полости рта и профилактических осмотрах раз в 6 месяцев. "
+                "Не распространяется на механические повреждения, травмы и несоблюдение рекомендаций врача.")
     updated_at = models.DateTimeField(auto_now=True)
 
     # All available modules (key → label) used for the sidebar / tariff toggles

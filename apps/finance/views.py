@@ -247,6 +247,7 @@ def payment_public(request, token):
         "cures": cures, "files": files,
         "formula_upper": formula_upper, "formula_lower": formula_lower,
         "has_formula": has_formula, "tooth_legend": tooth_legend,
+        "has_lab": any((c.warranty_until for c in cures)),
         "clinic": getattr(payment, "clinic", None), "clinic_settings": cs,
     })
 

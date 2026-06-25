@@ -96,7 +96,7 @@
         {% for c in cures %}
         <tr>
           <td>{{ c.service.name }}{% if c.tooth_number %}<br><span style="color:#94a3b8;font-size:11px">зуб {{ c.tooth_number }}</span>{% endif %}
-            {% if c.technician %}<br><span style="color:#64748b;font-size:11px">👷 {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}</span>{% endif %}
+            {% if c.technician %}<br><span style="color:#64748b;font-size:11px">👷 {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}{% if c.lab_order %}{% if c.lab_order.material %} · {{ c.lab_order.material }}{% endif %}{% if c.lab_order.vita_color %} · {{ c.lab_order.vita_color }}{% endif %}{% endif %}</span>{% endif %}
             {% if c.warranty_until %}<br><span style="color:#16a34a;font-size:11px">🛡 гарантия до {{ c.warranty_until|date:"d.m.Y" }}</span>{% endif %}
           </td>
           <td class="r">{{ c.quantity }}</td>
@@ -172,6 +172,14 @@
       {% endif %}
       {% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  {% if has_lab and clinic_settings.warranty_terms %}
+  <hr>
+  <div class="sec">
+    <p class="title">🛡 Условия гарантии</p>
+    <p style="font-size:12px;color:#475569">{{ clinic_settings.warranty_terms }}</p>
   </div>
   {% endif %}
 
