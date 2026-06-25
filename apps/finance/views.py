@@ -430,9 +430,23 @@ def expense_list(request):
 @login_required
 def expense_create(request):
     form = ExpenseForm(request.POST or None)
-    if form.is_valid():
+    if request.method == "POST" and form.is_valid():
         expense = form.save(commit=False)
         expense.created_by = request.user
+        # категория — авто (поле убрано из формы)
+        cat, _x = ExpenseCategory.objects.get_or_create(name="Прочее")
+        expense.category = cat
+        if not expense.branch_id:
+            from apps.users.models import Branch
+            from apps.tenancy import get_current_clinic
+            clinic = get_current_clinic()
+            bqs = Branch.all_clinics.filter(is_active=True)
+            if clinic is not None:
+                bqs = bqs.filter(clinic=clinic)
+            expense.branch = bqs.filter(is_main=True).first() or bqs.first()
+        if not expense.date:
+            from django.utils import timezone
+            expense.date = timezone.localdate()
         expense.save()
         messages.success(request, _("Расход добавлен"))
         return redirect("expense_list")
