@@ -67,6 +67,40 @@
       {% if object %}<a href="/services/{{ object.pk }}/delete/" class="btn btn-ghost ml-auto" style="color:var(--red)">Деактивировать</a>{% endif %}
     </div>
   </form>
+
+  {% if object %}
+  <div class="border-t border-slate-100 mt-2 pt-5">
+    <h3 class="font-bold text-slate-800 mb-1">📦 Нормативы расхода материалов</h3>
+    <p class="text-xs muted mb-3">Материалы автоматически списываются со склада при оказании этой услуги (на филиал приёма).</p>
+    <table class="tbl">
+      <thead><tr><th>Материал</th><th>Расход на 1 услугу</th><th></th></tr></thead>
+      <tbody>
+        {% for n in norms %}
+        <tr>
+          <td>{{ n.product.name }}</td>
+          <td class="font-semibold">{{ n.quantity }} {{ n.product.unit }}</td>
+          <td class="text-right pr-3">
+            <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="del_norm"><input type="hidden" name="id" value="{{ n.pk }}">
+              <button class="text-red-400 hover:text-red-600" title="Удалить">✕</button></form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="muted text-center py-3">Нормативы не заданы — материалы не списываются</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" class="flex items-end gap-2 mt-3">
+      {% csrf_token %}<input type="hidden" name="action" value="add_norm">
+      <div class="flex-1"><label class="fld">Материал</label>
+        <select name="product" class="searchable w-full" required>
+          <option value="">— выберите материал —</option>
+          {% for p in products %}<option value="{{ p.pk }}">{{ p.name }} ({{ p.unit }})</option>{% endfor %}
+        </select></div>
+      <div><label class="fld">Кол-во</label><input type="number" name="quantity" step="0.001" required style="width:120px"></div>
+      <button class="btn btn-primary btn-sm">Добавить</button>
+    </form>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 

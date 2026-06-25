@@ -83,13 +83,31 @@ def service_create(request):
 
 @login_required
 def service_edit(request, pk):
+    from .models import ServiceMaterialNorm
+    from apps.warehouse.models import Product
     service = get_object_or_404(Service, pk=pk)
+    if request.method == "POST" and request.POST.get("action") == "add_norm":
+        prod = Product.objects.filter(pk=request.POST.get("product")).first()
+        qty = request.POST.get("quantity")
+        if prod and qty:
+            ServiceMaterialNorm.objects.update_or_create(
+                service=service, product=prod, defaults={"quantity": qty})
+            messages.success(request, _("Норматив сохранён"))
+        return redirect("service_edit", pk=pk)
+    if request.method == "POST" and request.POST.get("action") == "del_norm":
+        ServiceMaterialNorm.objects.filter(pk=request.POST.get("id"), service=service).delete()
+        return redirect("service_edit", pk=pk)
+
     form = ServiceForm(request.POST or None, instance=service)
-    if form.is_valid():
+    if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, _("Услуга обновлена"))
         return redirect("service_list")
-    return render(request, "services/form.html", {"form": form, "object": service})
+    return render(request, "services/form.html", {
+        "form": form, "object": service,
+        "norms": service.material_norms.select_related("product").all(),
+        "products": Product.objects.order_by("name"),
+    })
 
 
 @login_required
