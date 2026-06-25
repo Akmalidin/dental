@@ -36,6 +36,8 @@ class ClinicSettings(models.Model):
     # Tariff / feature flags: list of enabled module keys. Empty = all enabled.
     enabled_modules = models.JSONField(default=list, blank=True, verbose_name="Доступные модули (тариф)")
     tariff_plan = models.CharField(max_length=50, default="full", blank=True, verbose_name="Тарифный план")
+    # Журнал посещений виден всему персоналу (директор управляет)
+    visits_journal_staff = models.BooleanField(default=True, verbose_name="Журнал посещений виден персоналу")
     updated_at = models.DateTimeField(auto_now=True)
 
     # All available modules (key → label) used for the sidebar / tariff toggles

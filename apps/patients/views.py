@@ -511,6 +511,82 @@ def patient_blacklist_toggle(request, pk):
     return redirect("patient_detail", pk=pk)
 
 
+def _visits_journal_allowed(user):
+    """Кому виден общий журнал: всегда директор/админ/суперадмин; персоналу — если разрешил директор."""
+    if user.is_superadmin or getattr(user, "is_admin", False) or getattr(user, "is_admin_main", False):
+        return True
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    return bool(getattr(cs, "visits_journal_staff", True))
+
+
+@login_required
+def visits_journal(request):
+    """Общий журнал посещений клиники: выбрать пациента, +посещение, сводка кто/сколько/когда."""
+    from .models import PatientVisit
+    from django.utils import timezone
+    if not _visits_journal_allowed(request.user):
+        messages.error(request, _("Журнал посещений скрыт администратором"))
+        return redirect("/")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "toggle_visibility" and (request.user.is_superadmin or request.user.is_admin_main):
+            from apps.settings_clinic.models import ClinicSettings
+            cs = ClinicSettings.get()
+            cs.visits_journal_staff = not cs.visits_journal_staff
+            cs.save(update_fields=["visits_journal_staff", "updated_at"])
+            return redirect("visits_journal")
+        if action == "add":
+            p = Patient.objects.filter(pk=request.POST.get("patient")).first()
+            if p:
+                PatientVisit.objects.create(
+                    patient=p, visited_at=timezone.now(),
+                    note=(request.POST.get("reason") or "").strip(),
+                    source=PatientVisit.SOURCE_MANUAL, created_by=request.user,
+                )
+                messages.success(request, _("Посещение отмечено: %(n)s") % {"n": p.full_name})
+            return redirect("visits_journal")
+
+    q = (request.GET.get("q") or "").strip()
+    from django.db.models import Count, Max
+    agg = (PatientVisit.objects.values("patient")
+           .annotate(cnt=Count("id"), last=Max("visited_at")).order_by("-last"))
+    pat_ids = [a["patient"] for a in agg]
+    pmap = {p.pk: p for p in Patient.objects.filter(pk__in=pat_ids)}
+    rows = []
+    for a in agg:
+        p = pmap.get(a["patient"])
+        if not p:
+            continue
+        if q and q.lower() not in p.full_name.lower() and q not in (p.phone or ""):
+            continue
+        rows.append({"patient": p, "count": a["cnt"], "last": a["last"]})
+    today = timezone.localdate()
+    visits_today = PatientVisit.objects.filter(visited_at__date=today).count()
+    return render(request, "patients/visits_journal.html", {
+        "rows": rows, "q": q,
+        "patients": Patient.objects.order_by("last_name", "first_name"),
+        "total_visits": PatientVisit.objects.count(),
+        "visits_today": visits_today,
+        "uniq_patients": len(pat_ids),
+        "can_toggle": request.user.is_superadmin or request.user.is_admin_main,
+    })
+
+
+@login_required
+def visits_journal_patient(request, pk):
+    """AJAX: детальные даты посещений пациента (кто/когда)."""
+    from django.http import JsonResponse
+    from .models import PatientVisit
+    from django.utils import timezone
+    items = [{"date": timezone.localtime(v.visited_at).strftime("%d.%m.%Y %H:%M"),
+              "doctor": v.doctor.name if v.doctor else "",
+              "note": v.note or "", "source": v.get_source_display()}
+             for v in PatientVisit.objects.filter(patient_id=pk).select_related("doctor").order_by("-visited_at")]
+    return JsonResponse({"items": items})
+
+
 @login_required
 def patient_visits(request, pk):
     """Журнал посещений пациента. Просмотр + добавление/редактирование/удаление (сотрудники клиники)."""

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block page_title %}Журнал посещений{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="vjournal()">
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="stat"><div class="stat-icon ic-purple">📋</div><div><p class="stat-label">Всего посещений</p><p class="stat-value">{{ total_visits }}</p></div></div>
+    <div class="stat"><div class="stat-icon ic-green">👤</div><div><p class="stat-label">Пациентов</p><p class="stat-value">{{ uniq_patients }}</p></div></div>
+    <div class="stat"><div class="stat-icon ic-orange">📅</div><div><p class="stat-label">Сегодня</p><p class="stat-value">{{ visits_today }}</p></div></div>
+  </div>
+
+  <div class="card card-pad flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-56">
+      <label class="fld">Пациент</label>
+      <select id="vj-patient" class="no-tom w-full" x-model="patient">
+        <option value="">— выберите пациента —</option>
+        {% for p in patients %}<option value="{{ p.pk }}">{{ p.full_name }}{% if p.phone %} · {{ p.phone }}{% endif %}</option>{% endfor %}
+      </select>
+    </div>
+    <button @click="openAdd()" :disabled="!patient" class="btn btn-primary"
+            :class="!patient?'opacity-50 cursor-not-allowed':''">+ Отметить посещение</button>
+    {% if can_toggle %}
+    <form method="post" class="ml-auto">{% csrf_token %}<input type="hidden" name="action" value="toggle_visibility">
+      <button class="btn btn-ghost btn-sm" title="Видимость журнала для персонала">
+        {% if clinic_settings.visits_journal_staff %}👁 Виден персоналу{% else %}🚫 Скрыт от персонала{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <form method="get" class="card card-pad py-3">
+    <input type="text" name="q" value="{{ q }}" placeholder="Поиск: имя или телефон…" class="w-full md:w-96">
+  </form>
+
+  <div class="card overflow-hidden">
+    <table class="tbl">
+      <thead><tr><th class="w-6"></th><th>Пациент</th><th class="text-center">Посещений</th><th>Последнее</th><th class="text-right pr-5"></th></tr></thead>
+      {% for r in rows %}
+      <tbody x-data="{open:false, dates:null}">
+        <tr>
+          <td><button @click="open=!open; if(open&&!dates) load({{ r.patient.pk }}, $data)" class="text-slate-400 hover:text-indigo-600"><span x-text="open?'▾':'▸'"></span></button></td>
+          <td class="font-semibold"><a href="/patients/{{ r.patient.pk }}/" class="hover:underline" style="color:var(--primary)">{{ r.patient.full_name }}</a><div class="text-xs muted">{{ r.patient.phone }}</div></td>
+          <td class="text-center"><span class="badge badge-blue">{{ r.count }}</span></td>
+          <td class="text-sm muted">{{ r.last|date:"d.m.Y H:i" }}</td>
+          <td class="text-right pr-5">
+            <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="add"><input type="hidden" name="patient" value="{{ r.patient.pk }}">
+              <button class="btn btn-ghost btn-sm" title="Быстро отметить ещё одно посещение">+ ещё</button>
+            </form>
+          </td>
+        </tr>
+        <tr x-show="open" x-cloak>
+          <td></td>
+          <td colspan="4" class="pb-3">
+            <div class="rounded-xl p-2" style="border:1px solid var(--border);background:var(--surface-2)">
+              <template x-if="!dates"><p class="text-xs muted px-2 py-1">Загрузка…</p></template>
+              <template x-if="dates">
+                <table class="w-full text-sm">
+                  <thead><tr style="background:var(--surface-2)"><th class="text-left px-2 py-1">Дата</th><th class="text-left px-2 py-1">Врач</th><th class="text-left px-2 py-1">Причина</th><th class="text-left px-2 py-1">Источник</th></tr></thead>
+                  <tbody>
+                    <template x-for="(d,i) in dates" :key="i">
+                      <tr style="border-top:1px solid var(--border-2)"><td class="px-2 py-1 font-semibold" x-text="d.date"></td><td class="px-2 py-1" x-text="d.doctor||'—'"></td><td class="px-2 py-1" x-text="d.note||'—'"></td><td class="px-2 py-1 muted" x-text="d.source"></td></tr>
+                    </template>
+                  </tbody>
+                </table>
+              </template>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      {% empty %}
+      <tbody><tr><td colspan="5" class="text-center py-10 muted">Посещений нет</td></tr></tbody>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- Add modal -->
+  <div x-show="addOpen" x-cloak class="modal-overlay" @click.self="addOpen=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold" style="color:var(--text)">Отметить посещение</h3>
+        <button @click="addOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" class="p-6 space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        <input type="hidden" name="patient" :value="patient">
+        <p class="text-sm muted">Пациент: <b x-text="patientName"></b> · сейчас (<span>{{ ""|date:"d.m.Y H:i" }}</span>)</p>
+        <div><label class="fld">Причина (необязательно)</label><textarea name="reason" rows="2" placeholder="напр. консультация, осмотр"></textarea></div>
+        <div class="flex justify-end gap-3 pt-1">
+          <button type="submit" class="btn btn-primary">Отметить</button>
+          <button type="button" @click="addOpen=false" class="btn btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function vjournal(){
+  return {
+    patient:'', addOpen:false, patientName:'',
+    openAdd(){ if(!this.patient) return; const s=document.getElementById('vj-patient'); this.patientName=s.options[s.selectedIndex].text; this.addOpen=true; },
+    async load(pk, scope){
+      try { const r=await fetch(`/patients/journal/${pk}/dates/`); const d=await r.json(); scope.dates=d.items||[]; }
+      catch(e){ scope.dates=[]; }
+    },
+  };
+}
+</script>
+{% endblock %}
