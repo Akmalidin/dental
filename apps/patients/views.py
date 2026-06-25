@@ -537,12 +537,23 @@ def visits_journal(request):
             cs.visits_journal_staff = not cs.visits_journal_staff
             cs.save(update_fields=["visits_journal_staff", "updated_at"])
             return redirect("visits_journal")
+        if action == "delete":
+            PatientVisit.objects.filter(pk=request.POST.get("id")).delete()
+            messages.success(request, _("Посещение удалено"))
+            return redirect("visits_journal")
         if action == "add":
             p = Patient.objects.filter(pk=request.POST.get("patient")).first()
             if p:
+                when = request.POST.get("visited_at") or None
+                note = (request.POST.get("reason") or "").strip()
+                svc_ids = request.POST.getlist("services")
+                if svc_ids:
+                    from apps.services.models import Service
+                    names = list(Service.objects.filter(pk__in=svc_ids).values_list("name", flat=True))
+                    if names:
+                        note = (note + ("\n" if note else "") + "Услуги: " + ", ".join(names)).strip()
                 PatientVisit.objects.create(
-                    patient=p, visited_at=timezone.now(),
-                    note=(request.POST.get("reason") or "").strip(),
+                    patient=p, visited_at=(when or timezone.now()), note=note,
                     source=PatientVisit.SOURCE_MANUAL, created_by=request.user,
                 )
                 messages.success(request, _("Посещение отмечено: %(n)s") % {"n": p.full_name})
@@ -564,9 +575,11 @@ def visits_journal(request):
         rows.append({"patient": p, "count": a["cnt"], "last": a["last"]})
     today = timezone.localdate()
     visits_today = PatientVisit.objects.filter(visited_at__date=today).count()
+    from apps.services.models import Service
     return render(request, "patients/visits_journal.html", {
         "rows": rows, "q": q,
         "patients": Patient.objects.order_by("last_name", "first_name"),
+        "services": Service.objects.filter(is_active=True).order_by("name"),
         "total_visits": PatientVisit.objects.count(),
         "visits_today": visits_today,
         "uniq_patients": len(pat_ids),
@@ -580,7 +593,7 @@ def visits_journal_patient(request, pk):
     from django.http import JsonResponse
     from .models import PatientVisit
     from django.utils import timezone
-    items = [{"date": timezone.localtime(v.visited_at).strftime("%d.%m.%Y %H:%M"),
+    items = [{"id": v.pk, "date": timezone.localtime(v.visited_at).strftime("%d.%m.%Y %H:%M"),
               "doctor": v.doctor.name if v.doctor else "",
               "note": v.note or "", "source": v.get_source_display()}
              for v in PatientVisit.objects.filter(patient_id=pk).select_related("doctor").order_by("-visited_at")]

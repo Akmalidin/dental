@@ -11,13 +11,12 @@
   <div class="card card-pad flex flex-wrap items-end gap-3">
     <div class="flex-1 min-w-56">
       <label class="fld">Пациент</label>
-      <select id="vj-patient" class="no-tom w-full" x-model="patient">
+      <select id="vj-patient" class="searchable w-full">
         <option value="">— выберите пациента —</option>
         {% for p in patients %}<option value="{{ p.pk }}">{{ p.full_name }}{% if p.phone %} · {{ p.phone }}{% endif %}</option>{% endfor %}
       </select>
     </div>
-    <button @click="openAdd()" :disabled="!patient" class="btn btn-primary"
-            :class="!patient?'opacity-50 cursor-not-allowed':''">+ Отметить посещение</button>
+    <button @click="openAddFromSelect()" class="btn btn-primary">+ Отметить посещение</button>
     {% if can_toggle %}
     <form method="post" class="ml-auto">{% csrf_token %}<input type="hidden" name="action" value="toggle_visibility">
       <button class="btn btn-ghost btn-sm" title="Видимость журнала для персонала">
@@ -28,7 +27,7 @@
   </div>
 
   <form method="get" class="card card-pad py-3">
-    <input type="text" name="q" value="{{ q }}" placeholder="Поиск: имя или телефон…" class="w-full md:w-96">
+    <input type="text" name="q" value="{{ q }}" placeholder="Поиск в таблице: имя или телефон…" class="w-full md:w-96">
   </form>
 
   <div class="card overflow-hidden">
@@ -37,14 +36,12 @@
       {% for r in rows %}
       <tbody x-data="{open:false, dates:null}">
         <tr>
-          <td><button @click="open=!open; if(open&&!dates) load({{ r.patient.pk }}, $data)" class="text-slate-400 hover:text-indigo-600"><span x-text="open?'▾':'▸'"></span></button></td>
+          <td><button @click="open=!open; if(open) load({{ r.patient.pk }}, $data)" class="text-slate-400 hover:text-indigo-600"><span x-text="open?'▾':'▸'"></span></button></td>
           <td class="font-semibold"><a href="/patients/{{ r.patient.pk }}/" class="hover:underline" style="color:var(--primary)">{{ r.patient.full_name }}</a><div class="text-xs muted">{{ r.patient.phone }}</div></td>
           <td class="text-center"><span class="badge badge-blue">{{ r.count }}</span></td>
           <td class="text-sm muted">{{ r.last|date:"d.m.Y H:i" }}</td>
           <td class="text-right pr-5">
-            <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="add"><input type="hidden" name="patient" value="{{ r.patient.pk }}">
-              <button class="btn btn-ghost btn-sm" title="Быстро отметить ещё одно посещение">+ ещё</button>
-            </form>
+            <button @click="openAdd('{{ r.patient.pk }}', '{{ r.patient.full_name|escapejs }}')" class="btn btn-ghost btn-sm" title="Отметить ещё одно посещение">+ ещё</button>
           </td>
         </tr>
         <tr x-show="open" x-cloak>
@@ -54,11 +51,20 @@
               <template x-if="!dates"><p class="text-xs muted px-2 py-1">Загрузка…</p></template>
               <template x-if="dates">
                 <table class="w-full text-sm">
-                  <thead><tr style="background:var(--surface-2)"><th class="text-left px-2 py-1">Дата</th><th class="text-left px-2 py-1">Врач</th><th class="text-left px-2 py-1">Причина</th><th class="text-left px-2 py-1">Источник</th></tr></thead>
+                  <thead><tr style="background:var(--surface-2)"><th class="text-left px-2 py-1">Дата</th><th class="text-left px-2 py-1">Врач</th><th class="text-left px-2 py-1">Причина / услуги</th><th class="text-left px-2 py-1">Источник</th><th></th></tr></thead>
                   <tbody>
-                    <template x-for="(d,i) in dates" :key="i">
-                      <tr style="border-top:1px solid var(--border-2)"><td class="px-2 py-1 font-semibold" x-text="d.date"></td><td class="px-2 py-1" x-text="d.doctor||'—'"></td><td class="px-2 py-1" x-text="d.note||'—'"></td><td class="px-2 py-1 muted" x-text="d.source"></td></tr>
+                    <template x-for="(d,i) in dates" :key="d.id">
+                      <tr style="border-top:1px solid var(--border-2)">
+                        <td class="px-2 py-1 font-semibold" x-text="d.date"></td>
+                        <td class="px-2 py-1" x-text="d.doctor||'—'"></td>
+                        <td class="px-2 py-1" style="white-space:pre-line" x-text="d.note||'—'"></td>
+                        <td class="px-2 py-1 muted" x-text="d.source"></td>
+                        <td class="px-2 py-1 text-right">
+                          <button @click="del(d.id, $data, {{ r.patient.pk }})" class="text-red-400 hover:text-red-600" title="Удалить">✕</button>
+                        </td>
+                      </tr>
                     </template>
+                    <template x-if="dates.length===0"><tr><td colspan="5" class="px-2 py-2 muted text-center">Нет записей</td></tr></template>
                   </tbody>
                 </table>
               </template>
@@ -83,8 +89,14 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="add">
         <input type="hidden" name="patient" :value="patient">
-        <p class="text-sm muted">Пациент: <b x-text="patientName"></b> · сейчас (<span>{{ ""|date:"d.m.Y H:i" }}</span>)</p>
-        <div><label class="fld">Причина (необязательно)</label><textarea name="reason" rows="2" placeholder="напр. консультация, осмотр"></textarea></div>
+        <p class="text-sm muted">Пациент: <b x-text="patientName"></b></p>
+        <div><label class="fld">Дата и время</label><input type="datetime-local" name="visited_at" x-model="when"></div>
+        <div><label class="fld">Услуги (необязательно)</label>
+          <select name="services" multiple class="searchable w-full" x-ref="svc">
+            {% for s in services %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><label class="fld">Причина (необязательно)</label><textarea name="reason" rows="2" placeholder="напр. консультация"></textarea></div>
         <div class="flex justify-end gap-3 pt-1">
           <button type="submit" class="btn btn-primary">Отметить</button>
           <button type="button" @click="addOpen=false" class="btn btn-ghost">Отмена</button>
@@ -96,11 +108,26 @@
 <script>
 function vjournal(){
   return {
-    patient:'', addOpen:false, patientName:'',
-    openAdd(){ if(!this.patient) return; const s=document.getElementById('vj-patient'); this.patientName=s.options[s.selectedIndex].text; this.addOpen=true; },
+    patient:'', patientName:'', addOpen:false, when:'',
+    nowLocal(){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); },
+    openAddFromSelect(){
+      const s=document.getElementById('vj-patient'); const v=s.value;
+      if(!v){ s.focus(); return; }
+      this.openAdd(v, s.options[s.selectedIndex].text);
+    },
+    openAdd(pk, name){ this.patient=pk; this.patientName=name; this.when=this.nowLocal(); this.addOpen=true; },
     async load(pk, scope){
       try { const r=await fetch(`/patients/journal/${pk}/dates/`); const d=await r.json(); scope.dates=d.items||[]; }
       catch(e){ scope.dates=[]; }
+    },
+    async del(id, scope, pk){
+      if(!confirm('Удалить это посещение?')) return;
+      const body=new URLSearchParams({action:'delete', id});
+      try {
+        await fetch('/patients/journal/', {method:'POST', headers:{'X-CSRFToken':getCsrf()}, body});
+        scope.dates = (scope.dates||[]).filter(x=>String(x.id)!==String(id));
+        if(window.toast) toast('Посещение удалено');
+      } catch(e){ if(window.toast) toast('Ошибка','error'); }
     },
   };
 }
