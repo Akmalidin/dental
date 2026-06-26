@@ -829,6 +829,7 @@ def dashboard_view(request):
 @login_required
 @role_required("superadmin", "admin_main")
 def staff_list(request):
+    from django.db.models import Q
     from apps.tenancy import get_current_clinic
     users = User.objects.select_related("role").prefetch_related("branches", "roles").filter(is_active=True)
     # изоляция по клинике (User не ClinicScoped — фильтруем явно)
@@ -838,10 +839,25 @@ def staff_list(request):
     # суперпользователя видит только сам суперпользователь
     if not request.user.is_superadmin:
         users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
+
+    role_filter = request.GET.get("role", "all")
+    if role_filter == "doctor":
+        users = users.filter(Q(role__name=Role.DOCTOR) | Q(roles__name=Role.DOCTOR))
+    elif role_filter == "admin":
+        users = users.filter(Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN]) | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
+    elif role_filter == "nurse":
+        users = users.filter(Q(role__name=Role.NURSE) | Q(roles__name=Role.NURSE))
+
+    query = request.GET.get("q", "").strip()
+    if query:
+        users = users.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(login__icontains=query))
+    users = users.distinct()
+
     form = UserForm()
     can_impersonate = request.user.is_superadmin or request.user.is_admin_main
     return render(request, "users/list.html", {
         "users": users, "form": form, "can_impersonate": can_impersonate,
+        "role_filter": role_filter, "query": query,
     })
 
 
@@ -1424,6 +1440,17 @@ def audit_center(request):
             "date": h.history_date, "hid": h.history_id,
         })
     rows.sort(key=lambda r: r["date"], reverse=True)
+    recent_rows = rows[:5]
+
+    date_filter = request.GET.get("date", "").strip()
+    user_filter = request.GET.get("user", "").strip()
+    action_filter = request.GET.get("action", "").strip()
+    if date_filter:
+        rows = [r for r in rows if r["date"].date().isoformat() == date_filter]
+    if user_filter:
+        rows = [r for r in rows if r["user"] == user_filter]
+    if action_filter:
+        rows = [r for r in rows if r["raw_type"] == action_filter]
     rows = rows[:200]
 
     # Корзина (удалённые записи) — кратко
@@ -1438,7 +1465,15 @@ def audit_center(request):
             pass
     deleted.sort(key=lambda x: x["deleted_at"] or 0, reverse=True)
 
-    return render(request, "users/audit.html", {"rows": rows, "deleted": deleted[:60]})
+    from apps.users.models import clinic_staff
+    from apps.tenancy import get_current_clinic
+    staff_names = clinic_staff(get_current_clinic()).values_list("name", flat=True).distinct()
+
+    return render(request, "users/audit.html", {
+        "rows": rows, "deleted": deleted[:60], "recent_rows": recent_rows,
+        "staff_names": staff_names,
+        "date_filter": date_filter, "user_filter": user_filter, "action_filter": action_filter,
+    })
 
 
 @login_required

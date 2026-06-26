@@ -11,19 +11,19 @@
 
     <!-- Finance chart area (placeholder) -->
     <div class="card p-6">
-      <h2 class="font-semibold text-gray-800 mb-4">Финансовая сводка за месяц</h2>
+      <h2 class="font-semibold text-gray-800 mb-4">{{ t('dashboard.monthlySummary') }}</h2>
       <div class="grid grid-cols-3 gap-4 text-center">
         <div>
-          <p class="text-2xl font-bold text-green-600">{{ summary.income }} сом</p>
-          <p class="text-xs text-gray-500 mt-1">Выручка</p>
+          <p class="text-2xl font-bold text-green-600">{{ summary.income }} {{ t('common.currency') }}</p>
+          <p class="text-xs text-gray-500 mt-1">{{ t('dashboard.income') }}</p>
         </div>
         <div>
-          <p class="text-2xl font-bold text-red-500">{{ summary.expenses }} сом</p>
-          <p class="text-xs text-gray-500 mt-1">Расходы</p>
+          <p class="text-2xl font-bold text-red-500">{{ summary.expenses }} {{ t('common.currency') }}</p>
+          <p class="text-xs text-gray-500 mt-1">{{ t('dashboard.expenses') }}</p>
         </div>
         <div>
-          <p class="text-2xl font-bold text-primary">{{ summary.net }} сом</p>
-          <p class="text-xs text-gray-500 mt-1">Прибыль</p>
+          <p class="text-2xl font-bold text-primary">{{ summary.net }} {{ t('common.currency') }}</p>
+          <p class="text-xs text-gray-500 mt-1">{{ t('dashboard.profit') }}</p>
         </div>
       </div>
     </div>
@@ -31,14 +31,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { financeApi } from '@/api'
 
-const stats = ref([
-  { label: 'Приёмов сегодня', value: '—' },
-  { label: 'Новых пациентов', value: '—' },
-  { label: 'Выручка сегодня', value: '—', sub: 'сом' },
-  { label: 'Должников', value: '—' },
+const { t } = useI18n()
+
+const stats = computed(() => [
+  { label: t('dashboard.statAppointmentsToday'), value: '—' },
+  { label: t('dashboard.statNewPatients'), value: '—' },
+  { label: t('dashboard.statIncomeToday'), value: '—', sub: t('common.currency') },
+  { label: t('dashboard.statDebtors'), value: '—' },
 ])
 
 const summary = ref({ income: 0, expenses: 0, net: 0 })

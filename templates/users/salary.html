@@ -5,7 +5,7 @@
 {% block content %}
 <div class="space-y-4">
 
-  <div class="grid grid-cols-3 gap-4">
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
     <div class="card-gradient stat-indigo p-5 rounded-2xl">
       <p class="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-2">Период</p>
       <p class="text-lg font-black text-white">{{ date_from }} — {{ date_to }}</p>
@@ -17,6 +17,10 @@
     <div class="card-gradient stat-amber p-5 rounded-2xl">
       <p class="text-amber-100 text-xs font-semibold uppercase tracking-wide mb-2">Итого к выплате</p>
       <p class="text-3xl font-black text-white">{{ total_salary|floatformat:0 }} <span class="text-sm">сом</span></p>
+    </div>
+    <div class="card-gradient stat-sky p-5 rounded-2xl">
+      <p class="text-sky-100 text-xs font-semibold uppercase tracking-wide mb-2">Общая выручка</p>
+      <p class="text-3xl font-black text-white">{{ total_revenue|floatformat:0 }} <span class="text-sm">сом</span></p>
     </div>
   </div>
 
@@ -40,7 +44,13 @@
       <tbody>
         {% for row in rows %}
         <tr>
-          <td class="font-semibold text-slate-800">{{ row.doctor.name }}</td>
+          <td class="font-semibold text-slate-800">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                    style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ forloop.counter }}</span>
+              {{ row.doctor.name }}
+            </div>
+          </td>
           <td><span class="text-xs text-slate-500">{{ row.role_label|default:"—" }}</span></td>
           <td>
             {% if row.scheme %}

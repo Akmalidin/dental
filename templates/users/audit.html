@@ -15,6 +15,30 @@
     делается из <b>резервной копии сервера</b> — она снимается автоматически перед каждым обновлением системы.
   </div>
 
+  <form method="get" class="flex items-end gap-2 flex-wrap">
+    <div><label class="fld">Дата</label><input type="date" name="date" value="{{ date_filter }}"></div>
+    <div>
+      <label class="fld">Пользователь</label>
+      <select name="user">
+        <option value="">Все пользователи</option>
+        {% for name in staff_names %}
+        <option value="{{ name }}" {% if user_filter == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="fld">Действие</label>
+      <select name="action">
+        <option value="">Все действия</option>
+        <option value="+" {% if action_filter == "+" %}selected{% endif %}>Создание</option>
+        <option value="~" {% if action_filter == "~" %}selected{% endif %}>Изменение</option>
+        <option value="-" {% if action_filter == "-" %}selected{% endif %}>Удаление</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-sm">Найти</button>
+    {% if date_filter or user_filter or action_filter %}<a href="/users/audit/" class="btn btn-ghost btn-sm">Сбросить</a>{% endif %}
+  </form>
+
   <div class="pill-tabs">
     <button @click="tab='changes'" :class="tab==='changes'?'pill-tab active':'pill-tab'">История изменений</button>
     <button @click="tab='deleted'" :class="tab==='deleted'?'pill-tab active':'pill-tab'">Удалённые ({{ deleted|length }})</button>
@@ -70,6 +94,24 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <!-- Последние действия -->
+  <div class="card p-5">
+    <h3 class="font-bold text-slate-800 mb-3">Последние действия</h3>
+    <ul class="space-y-2">
+      {% for r in recent_rows %}
+      <li class="flex items-center gap-2 text-sm">
+        <span class="badge {% if r.raw_type == '+' %}badge-green{% elif r.raw_type == '-' %}badge-red{% else %}badge-blue{% endif %}" style="width:18px;height:18px;border-radius:6px;padding:0;display:inline-flex;align-items:center;justify-content:center">
+          {% if r.raw_type == '+' %}✓{% elif r.raw_type == '-' %}✕{% else %}~{% endif %}
+        </span>
+        <span class="text-slate-600">{{ r.type }}:</span>
+        <span class="font-medium text-slate-800">{{ r.title }}</span>
+      </li>
+      {% empty %}
+      <li class="text-sm muted">Нет недавних действий</li>
+      {% endfor %}
+    </ul>
   </div>
 </div>
 {% endblock %}

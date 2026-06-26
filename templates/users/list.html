@@ -11,6 +11,20 @@
     </div>
   </div>
 
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="pill-tabs">
+      <a href="?role=all{% if query %}&q={{ query }}{% endif %}" class="pill-tab{% if role_filter == 'all' %} active{% endif %}">Все</a>
+      <a href="?role=doctor{% if query %}&q={{ query }}{% endif %}" class="pill-tab{% if role_filter == 'doctor' %} active{% endif %}">Врачи</a>
+      <a href="?role=admin{% if query %}&q={{ query }}{% endif %}" class="pill-tab{% if role_filter == 'admin' %} active{% endif %}">Администраторы</a>
+      <a href="?role=nurse{% if query %}&q={{ query }}{% endif %}" class="pill-tab{% if role_filter == 'nurse' %} active{% endif %}">Ассистенты</a>
+    </div>
+    <form method="get" class="flex-1 max-w-xs">
+      <input type="hidden" name="role" value="{{ role_filter }}">
+      <input type="text" name="q" value="{{ query }}" placeholder="Поиск сотрудника..."
+             class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+    </form>
+  </div>
+
   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
     {% for u in users %}
     <div class="card p-5 flex items-center gap-4">
@@ -20,8 +34,11 @@
       </div>
       <div class="flex-1 min-w-0">
         <p class="font-bold text-slate-800 truncate">{{ u.name }}</p>
-        <p class="text-xs text-slate-500">{{ u.role }}{% for r in u.roles.all %}, {{ r }}{% endfor %}</p>
-        <p class="text-xs text-slate-400 mt-0.5">{{ u.phone|default:u.email }} {% if u.login %}· логин: <b>{{ u.login }}</b>{% endif %}</p>
+        <p class="mt-1 flex flex-wrap gap-1">
+          {% if u.role %}<span class="badge badge-purple">{{ u.role }}</span>{% endif %}
+          {% for r in u.roles.all %}<span class="badge badge-blue">{{ r }}</span>{% endfor %}
+        </p>
+        <p class="text-xs text-slate-400 mt-1">{{ u.phone|default:u.email }} {% if u.login %}· логин: <b>{{ u.login }}</b>{% endif %}</p>
       </div>
       <div class="flex gap-2 shrink-0 items-center">
         <form method="post" action="/users/{{ u.pk }}/set-password/" onsubmit="return resetPw(this)">

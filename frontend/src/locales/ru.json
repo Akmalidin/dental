@@ -1,0 +1,76 @@
+{
+  "common": {
+    "currency": "сом",
+    "loading": "Загрузка...",
+    "patient": "Пациент",
+    "doctor": "Врач",
+    "date": "Дата",
+    "amount": "Сумма",
+    "status": "Статус",
+    "total": "Всего"
+  },
+  "nav": {
+    "appName": "AKM SOFT CLINIC",
+    "appSubtitle": "CRM система",
+    "dashboard": "Дашборд",
+    "patients": "Пациенты",
+    "calendar": "Расписание",
+    "treatments": "Приёмы",
+    "finance": "Финансы",
+    "patientDetail": "Карточка пациента",
+    "appointments": "Записи",
+    "administrator": "Администратор",
+    "logout": "Выйти"
+  },
+  "dashboard": {
+    "statAppointmentsToday": "Приёмов сегодня",
+    "statNewPatients": "Новых пациентов",
+    "statIncomeToday": "Выручка сегодня",
+    "statDebtors": "Должников",
+    "monthlySummary": "Финансовая сводка за месяц",
+    "income": "Выручка",
+    "expenses": "Расходы",
+    "profit": "Прибыль"
+  },
+  "patients": {
+    "searchPlaceholder": "Поиск по имени, телефону...",
+    "newPatient": "+ Новый пациент",
+    "phone": "Телефон",
+    "balance": "Баланс",
+    "yearsOld": "лет",
+    "details": "Подробно",
+    "notFound": "Пациентов не найдено",
+    "prev": "← Пред.",
+    "next": "След. →"
+  },
+  "appointments": {
+    "title": "Записи на приём",
+    "newAppointment": "+ Новая запись",
+    "dateTime": "Дата/время",
+    "service": "Услуга",
+    "calendarTitle": "Расписание",
+    "confirmEdit": "Редактировать эту запись?",
+    "status": {
+      "scheduled": "Записан",
+      "confirmed": "Подтверждён",
+      "arrived": "Пришёл",
+      "in_progress": "Принимается",
+      "completed": "Завершён",
+      "no_show": "Не пришёл",
+      "cancelled": "Отменён"
+    }
+  },
+  "treatments": {
+    "title": "Приёмы",
+    "newTreatment": "+ Новый приём",
+    "paid": "Оплачено",
+    "debt": "Долг"
+  },
+  "finance": {
+    "incomeMonth": "Выручка (месяц)",
+    "expensesMonth": "Расходы (месяц)",
+    "profit": "Прибыль",
+    "recentPayments": "Последние платежи",
+    "method": "Метод"
+  }
+}

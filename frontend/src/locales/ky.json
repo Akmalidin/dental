@@ -1,0 +1,76 @@
+{
+  "common": {
+    "currency": "сом",
+    "loading": "Жүктөлүп жатат...",
+    "patient": "Бейтап",
+    "doctor": "Дарыгер",
+    "date": "Күн",
+    "amount": "Суммасы",
+    "status": "Абал",
+    "total": "Бардыгы"
+  },
+  "nav": {
+    "appName": "AKM SOFT CLINIC",
+    "appSubtitle": "CRM системасы",
+    "dashboard": "Башкы бет",
+    "patients": "Бейтаптар",
+    "calendar": "Жадыбал",
+    "treatments": "Кабылдоолор",
+    "finance": "Каржы",
+    "patientDetail": "Бейтаптын карточкасы",
+    "appointments": "Жазуулар",
+    "administrator": "Администратор",
+    "logout": "Чыгуу"
+  },
+  "dashboard": {
+    "statAppointmentsToday": "Бүгүнкү кабылдоолор",
+    "statNewPatients": "Жаңы бейтаптар",
+    "statIncomeToday": "Бүгүнкү түшүм",
+    "statDebtors": "Карызкорлор",
+    "monthlySummary": "Айлык каржы жыйынтыгы",
+    "income": "Түшүм",
+    "expenses": "Чыгашалар",
+    "profit": "Пайда"
+  },
+  "patients": {
+    "searchPlaceholder": "Аты, телефону боюнча издөө...",
+    "newPatient": "+ Жаңы бейтап",
+    "phone": "Телефон",
+    "balance": "Баланс",
+    "yearsOld": "жаш",
+    "details": "Кеңири",
+    "notFound": "Бейтаптар табылган жок",
+    "prev": "← Мурунку",
+    "next": "Кийинки →"
+  },
+  "appointments": {
+    "title": "Кабылдоого жазылуу",
+    "newAppointment": "+ Жаңы жазуу",
+    "dateTime": "Күн/убакыт",
+    "service": "Кызмат",
+    "calendarTitle": "Жадыбал",
+    "confirmEdit": "Бул жазууну түзөтөсүзбү?",
+    "status": {
+      "scheduled": "Жазылган",
+      "confirmed": "Тастыкталган",
+      "arrived": "Келди",
+      "in_progress": "Кабыл алынып жатат",
+      "completed": "Аякталды",
+      "no_show": "Келбеди",
+      "cancelled": "Жокко чыгарылды"
+    }
+  },
+  "treatments": {
+    "title": "Кабылдоолор",
+    "newTreatment": "+ Жаңы кабылдоо",
+    "paid": "Төлөнгөн",
+    "debt": "Карыз"
+  },
+  "finance": {
+    "incomeMonth": "Түшүм (ай)",
+    "expensesMonth": "Чыгашалар (ай)",
+    "profit": "Пайда",
+    "recentPayments": "Акыркы төлөмдөр",
+    "method": "Ыкма"
+  }
+}

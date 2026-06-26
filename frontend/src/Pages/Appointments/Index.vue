@@ -1,18 +1,18 @@
 <template>
   <div class="space-y-4">
     <div class="flex justify-between items-center">
-      <h2 class="font-semibold text-gray-800">Записи на приём</h2>
-      <button class="btn-primary">+ Новая запись</button>
+      <h2 class="font-semibold text-gray-800">{{ t('appointments.title') }}</h2>
+      <button class="btn-primary">{{ t('appointments.newAppointment') }}</button>
     </div>
     <div class="card overflow-hidden">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
           <tr>
-            <th class="px-6 py-3 text-left">Пациент</th>
-            <th class="px-6 py-3 text-left">Врач</th>
-            <th class="px-6 py-3 text-left">Дата/время</th>
-            <th class="px-6 py-3 text-left">Услуга</th>
-            <th class="px-6 py-3 text-left">Статус</th>
+            <th class="px-6 py-3 text-left">{{ t('common.patient') }}</th>
+            <th class="px-6 py-3 text-left">{{ t('common.doctor') }}</th>
+            <th class="px-6 py-3 text-left">{{ t('appointments.dateTime') }}</th>
+            <th class="px-6 py-3 text-left">{{ t('appointments.service') }}</th>
+            <th class="px-6 py-3 text-left">{{ t('common.status') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -35,7 +35,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { appointmentsApi } from '@/api'
+
+const { t, locale } = useI18n()
 
 const appointments = ref([])
 
@@ -45,18 +48,18 @@ onMounted(async () => {
 })
 
 function formatDT(dt) {
-  return new Date(dt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(dt).toLocaleString(locale.value === 'ky' ? 'ky-KG' : 'ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-const STATUS_MAP = {
-  scheduled: ['Записан', 'badge-yellow'],
-  confirmed: ['Подтверждён', 'badge-blue'],
-  arrived: ['Пришёл', 'badge-blue'],
-  in_progress: ['Принимается', 'badge-blue'],
-  completed: ['Завершён', 'badge-green'],
-  no_show: ['Не пришёл', 'badge-red'],
-  cancelled: ['Отменён', 'badge-gray'],
+const STATUS_CLASS = {
+  scheduled: 'badge-yellow',
+  confirmed: 'badge-blue',
+  arrived: 'badge-blue',
+  in_progress: 'badge-blue',
+  completed: 'badge-green',
+  no_show: 'badge-red',
+  cancelled: 'badge-gray',
 }
-function statusLabel(s) { return STATUS_MAP[s]?.[0] || s }
-function statusClass(s) { return STATUS_MAP[s]?.[1] || 'badge-gray' }
+function statusLabel(s) { return t(`appointments.status.${s}`, s) }
+function statusClass(s) { return STATUS_CLASS[s] || 'badge-gray' }
 </script>

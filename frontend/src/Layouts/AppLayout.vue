@@ -6,8 +6,8 @@
       <div class="flex items-center gap-3 px-5 py-5 border-b border-gray-700">
         <div class="h-9 w-9 rounded-lg bg-primary flex items-center justify-center font-bold text-sm">AKM</div>
         <div>
-          <p class="text-sm font-semibold">AKM SOFT CLINIC</p>
-          <p class="text-xs text-gray-400">CRM система</p>
+          <p class="text-sm font-semibold">{{ t('nav.appName') }}</p>
+          <p class="text-xs text-gray-400">{{ t('nav.appSubtitle') }}</p>
         </div>
       </div>
 
@@ -22,13 +22,14 @@
       </nav>
 
       <!-- User -->
-      <div class="px-4 py-4 border-t border-gray-700">
+      <div class="px-4 py-4 border-t border-gray-700 space-y-3">
+        <LanguageSwitcher />
         <div class="flex items-center gap-3">
           <div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold">A</div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium truncate">Администратор</p>
+            <p class="text-sm font-medium truncate">{{ t('nav.administrator') }}</p>
           </div>
-          <button @click="logout" class="text-gray-400 hover:text-white text-xs">Выйти</button>
+          <button @click="logout" class="text-gray-400 hover:text-white text-xs">{{ t('nav.logout') }}</button>
         </div>
       </div>
     </aside>
@@ -48,28 +49,31 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import LanguageSwitcher from '@/Components/UI/LanguageSwitcher.vue'
 
 const route = useRoute()
+const { t } = useI18n()
 
-const navItems = [
-  { to: '/', label: 'Дашборд', icon: 'span' },
-  { to: '/patients', label: 'Пациенты', icon: 'span' },
-  { to: '/calendar', label: 'Расписание', icon: 'span' },
-  { to: '/treatments', label: 'Приёмы', icon: 'span' },
-  { to: '/finance', label: 'Финансы', icon: 'span' },
-]
+const navItems = computed(() => [
+  { to: '/', label: t('nav.dashboard'), icon: 'span' },
+  { to: '/patients', label: t('nav.patients'), icon: 'span' },
+  { to: '/calendar', label: t('nav.calendar'), icon: 'span' },
+  { to: '/treatments', label: t('nav.treatments'), icon: 'span' },
+  { to: '/finance', label: t('nav.finance'), icon: 'span' },
+])
 
-const titleMap = {
-  dashboard: 'Дашборд',
-  patients: 'Пациенты',
-  'patient-detail': 'Карточка пациента',
-  calendar: 'Расписание',
-  appointments: 'Записи',
-  treatments: 'Приёмы',
-  finance: 'Финансы',
-}
+const titleMap = computed(() => ({
+  dashboard: t('nav.dashboard'),
+  patients: t('nav.patients'),
+  'patient-detail': t('nav.patientDetail'),
+  calendar: t('nav.calendar'),
+  appointments: t('nav.appointments'),
+  treatments: t('nav.treatments'),
+  finance: t('nav.finance'),
+}))
 
-const currentPageTitle = computed(() => titleMap[route.name] || 'AKM SOFT CLINIC')
+const currentPageTitle = computed(() => titleMap.value[route.name] || t('nav.appName'))
 
 async function logout() {
   try {
