@@ -33,11 +33,11 @@
     <form method="get" id="pf" x-data="{adv: {{ adv_count }} > 0}">
       <!-- Строка 1: поиск + переключатель фильтров + действия -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4">
-        <div class="search-box flex-1 min-w-48">
-          <button type="submit" aria-label="Поиск" style="position:absolute;left:0;top:0;bottom:0;width:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;padding:0;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:static;pointer-events:none;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <div class="search-box flex-1 min-w-48" style="position:relative;">
+          <input type="text" name="q" value="{{ q }}" placeholder="Поиск: имя, телефон…" style="padding-left:14px;padding-right:40px;">
+          <button type="submit" aria-label="Поиск" style="position:absolute;right:0;top:0;bottom:0;width:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;padding:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:static;pointer-events:none;width:17px;height:17px;color:var(--text-faint);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </button>
-          <input type="text" name="q" value="{{ q }}" placeholder="Поиск: имя, телефон…">
         </div>
         <button type="button" @click="adv=!adv"
                 class="btn btn-sm inline-flex items-center gap-1.5"
