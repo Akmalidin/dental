@@ -14,8 +14,15 @@ class PaymentForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # филиал проставляется во view (основной), поэтому в форме не обязателен
         self.fields["branch"].required = False
+        # только филиалы текущей клиники
+        from apps.users.models import Branch
+        from apps.tenancy import get_current_clinic
+        clinic = get_current_clinic()
+        qs = Branch.all_clinics.filter(is_active=True)
+        if clinic is not None:
+            qs = qs.filter(clinic=clinic)
+        self.fields["branch"].queryset = qs.order_by("-is_main", "name")
 
 
 class ExpenseForm(forms.ModelForm):

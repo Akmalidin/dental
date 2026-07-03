@@ -706,6 +706,27 @@ def treatment_emr_print(request, pk):
 
 @login_required
 @require_POST
+def treatment_set_discount(request, pk):
+    """Установить/изменить скидку на приём."""
+    from decimal import Decimal, InvalidOperation
+    treatment = get_object_or_404(Treatment, pk=pk)
+    try:
+        d = Decimal(str(request.POST.get("discount", "0") or "0"))
+        if d < 0:
+            d = Decimal("0")
+        treatment.discount = d
+        treatment.save(update_fields=["discount", "updated_at"])
+        treatment.recalculate_total()
+        if treatment.patient_id:
+            treatment.patient.recalc_balance()
+        messages.success(request, f"Скидка обновлена: {d:,.0f} сом")
+    except (InvalidOperation, Exception):
+        messages.error(request, "Неверное значение скидки")
+    return redirect("treatment_detail", pk=pk)
+
+
+@login_required
+@require_POST
 def treatment_status(request, pk):
     """Change treatment status (AJAX or form)."""
     treatment = get_object_or_404(Treatment, pk=pk)

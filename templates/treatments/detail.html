@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false, showPlan:false, showFinish:false}">
+<div class="space-y-4" x-data="{tab:'cures', showPay:false, showStatus:false, showPlan:false, showFinish:false, showDiscount:false}">
 
   <!-- Header card -->
   <div class="card card-pad">
@@ -54,8 +54,8 @@
         <p class="text-xs muted font-semibold uppercase mb-1">Сумма</p>
         <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.display_total|floatformat:0 }} <span class="text-sm muted">сом</span></p>
       </div>
-      <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--orange-bg)">
-        <p class="text-xs font-semibold uppercase mb-1" style="color:var(--orange)">Скидка</p>
+      <div @click="showDiscount=true" class="rounded-2xl px-4 py-3 text-center cursor-pointer hover:ring-2 transition" style="background:var(--orange-bg);--tw-ring-color:rgba(251,146,60,.4)" title="Нажмите чтобы изменить скидку">
+        <p class="text-xs font-semibold uppercase mb-1" style="color:var(--orange)">Скидка ✏️</p>
         <p class="text-xl font-extrabold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} <span class="text-sm">сом</span></p>
       </div>
       <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--green-bg)">
@@ -108,8 +108,11 @@
 
     <!-- Tooth scheme (read-only) -->
     <div x-show="tab==='teeth'" class="p-6" x-cloak>
-      <p class="text-center muted text-sm mb-4">Лечившиеся зубы выделены</p>
       <div id="tooth-view" class="space-y-2"></div>
+      <div id="tooth-empty" class="hidden text-center py-8">
+        <p class="muted text-sm">Зубы не указаны в процедурах этого приёма</p>
+        <p class="text-xs mt-1" style="color:var(--text-faint)">Откройте процедуру и укажите номер зуба</p>
+      </div>
     </div>
 
     <!-- Plan -->
@@ -356,24 +359,69 @@
       </form>
     </div>
   </div>
+
+  <!-- Discount edit modal -->
+  <div x-show="showDiscount" x-cloak class="modal-overlay" @click.self="showDiscount=false">
+    <div class="modal-box max-w-sm">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h3 class="font-bold" style="color:var(--text)">Изменить скидку — Приём #{{ treatment.pk }}</h3>
+        <button @click="showDiscount=false" class="text-2xl muted">&times;</button>
+      </div>
+      <form method="post" action="/treatments/{{ treatment.pk }}/set-discount/" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        <div class="rounded-xl px-4 py-3 text-sm" style="background:var(--surface-2)">
+          <div class="flex justify-between"><span class="muted">Сумма услуг:</span><span class="font-bold" style="color:var(--text)">{{ treatment.total_amount|floatformat:0 }} сом</span></div>
+          <div class="flex justify-between mt-1"><span class="muted">Текущая скидка:</span><span class="font-semibold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} сом</span></div>
+        </div>
+        <div>
+          <label class="fld">Скидка (сом)</label>
+          <input type="number" name="discount" min="0" step="0.01"
+                 value="{{ treatment.discount|floatformat:2 }}"
+                 placeholder="0.00" class="w-full text-lg font-bold" autofocus>
+          <p class="text-xs mt-1" style="color:var(--text-faint)">К оплате = Сумма − Скидка</p>
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" class="btn btn-primary flex-1">Сохранить</button>
+          <button type="button" @click="showDiscount=false" class="btn btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const treated = new Set(JSON.parse(document.getElementById('treated-teeth').textContent));
+  const teethEl = document.getElementById('treated-teeth');
+  const treated = new Set(teethEl ? JSON.parse(teethEl.textContent) : []);
   const upper = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
   const lower = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
   const tooth = n => {
     const on = treated.has(n);
-    return `<div class="flex flex-col items-center"><svg width="20" height="34" viewBox="0 0 20 34"><path d="M2,3 Q10,0 18,3 L17,20 Q10,34 3,20 Z" fill="${on?'#EEF0FF':'transparent'}" stroke="${on?'#6366F1':'#C7C9E0'}" stroke-width="${on?2:1.3}"/></svg><span style="font-size:10px;color:${on?'#6366F1':'#9CA3AF'};font-weight:${on?700:400}">${n}</span></div>`;
+    const tip = on ? `title="Зуб ${n} — обработан в этом приёме"` : `title="Зуб ${n}"`;
+    return `<div class="flex flex-col items-center" style="cursor:${on?'pointer':'default'}" ${tip}>` +
+      `<svg width="22" height="36" viewBox="0 0 22 36">` +
+      `<path d="M2,3 Q11,0 20,3 L19,22 Q11,36 3,22 Z" fill="${on?'#EEF0FF':'transparent'}" stroke="${on?'#6366F1':'#C7C9E0'}" stroke-width="${on?2:1.2}"/>` +
+      `</svg>` +
+      `<span style="font-size:9px;color:${on?'#6366F1':'#9CA3AF'};font-weight:${on?700:400};margin-top:-2px">${n}</span></div>`;
   };
   const wrap = document.getElementById('tooth-view');
+  const empty = document.getElementById('tooth-empty');
+  if (treated.size === 0) {
+    if (wrap) wrap.style.display = 'none';
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
   if (wrap) wrap.innerHTML =
+    '<p style="text-align:center;font-size:12px;color:var(--text-faint);margin-bottom:12px">Верхняя челюсть</p>' +
     '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+upper.map(tooth).join('')+'</div>'+
-    '<div style="border-top:1.5px dashed var(--border);margin:8px 40px"></div>'+
-    '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+lower.map(tooth).join('')+'</div>';
+    '<div style="border-top:1.5px dashed var(--border);margin:10px 40px;position:relative">' +
+      '<span style="position:absolute;left:50%;transform:translateX(-50%) translateY(-50%);background:var(--surface);padding:0 8px;font-size:10px;color:var(--text-faint)">↕</span>' +
+    '</div>'+
+    '<div style="display:flex;justify-content:center;gap:3px;flex-wrap:nowrap">'+lower.map(tooth).join('')+'</div>'+
+    '<p style="text-align:center;font-size:12px;color:var(--text-faint);margin-top:12px">Нижняя челюсть</p>';
 });
 
 function planModal() {
