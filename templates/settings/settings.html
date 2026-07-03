@@ -53,7 +53,26 @@
         <label class="flex items-center gap-2 text-sm font-semibold" style="color:var(--text)">
           {{ form.visits_journal_staff }} <span>📋 Журнал посещений виден всему персоналу</span>
         </label>
-        <div class="mt-3">
+
+        <!-- Receipt format setting -->
+        <div class="mt-4">
+          <label class="fld">🧾 Формат чека при печати</label>
+          <div class="flex flex-wrap gap-2 mt-1">
+            {% for val, label in form.receipt_format.field.choices %}
+            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors"
+                   style="border-color:var(--border)"
+                   :class="''">
+              <input type="radio" name="receipt_format" value="{{ val }}"
+                     {% if form.receipt_format.value == val %}checked{% endif %}
+                     class="accent-indigo-600">
+              <span style="color:var(--text)">{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <p class="text-xs mt-1" style="color:var(--text-faint)">80мм — термолента с QR-кодом (автопечать). A4 — PDF для обычного принтера.</p>
+        </div>
+
+        <div class="mt-4">
           <label class="fld">🛡 Условия гарантии (печатаются в чеке лабораторных работ)</label>
           {{ form.warranty_terms }}
         </div>

@@ -723,16 +723,33 @@ def treatment_status(request, pk):
 
 @login_required
 def treatment_print(request, pk):
-    """PDF receipt for a treatment."""
+    """Чек приёма: формат определяется настройкой клиники (thermal/a4/both)."""
     treatment = get_object_or_404(
         Treatment.objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch"),
         pk=pk,
     )
     from apps.settings_clinic.models import ClinicSettings
+    from django.shortcuts import redirect as _redirect
+    cs = ClinicSettings.get()
+    fmt = getattr(cs, "receipt_format", "thermal")
+    # Явный override через ?fmt=
+    fmt = request.GET.get("fmt", fmt)
+
+    if fmt == "both":
+        # Страница выбора формата
+        return render(request, "treatments/receipt_choose.html", {
+            "treatment": treatment, "clinic_settings": cs,
+        })
+    if fmt == "thermal":
+        base = request.build_absolute_uri(f"/treatments/{pk}/receipt-print/")
+        return _redirect(base)
+
+    # a4 — PDF/HTML
     _has_lab = any(c.warranty_until for c in treatment.cures.all())
     html = render_to_string("treatments/receipt.html", {
         "treatment": treatment, "request": request,
-        "clinic_settings": ClinicSettings.get(), "has_lab": _has_lab})
+        "clinic_settings": cs, "has_lab": _has_lab,
+    })
     try:
         from weasyprint import HTML
         pdf = HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf()

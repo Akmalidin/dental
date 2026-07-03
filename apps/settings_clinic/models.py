@@ -38,6 +38,17 @@ class ClinicSettings(models.Model):
     tariff_plan = models.CharField(max_length=50, default="full", blank=True, verbose_name="Тарифный план")
     # Журнал посещений виден всему персоналу (директор управляет)
     visits_journal_staff = models.BooleanField(default=True, verbose_name="Журнал посещений виден персоналу")
+    # Формат чека
+    RECEIPT_FORMAT_CHOICES = [
+        ("thermal", "80мм термолента (с QR)"),
+        ("a4", "A4 (PDF)"),
+        ("both", "Оба формата (выбор при печати)"),
+    ]
+    receipt_format = models.CharField(
+        max_length=10, choices=RECEIPT_FORMAT_CHOICES, default="thermal",
+        verbose_name="Формат чека",
+    )
+
     # Условия гарантии на лабораторные работы (печатаются в чеке)
     warranty_terms = models.TextField(
         blank=True, verbose_name="Условия гарантии (лаб. работы)",
