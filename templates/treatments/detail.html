@@ -349,7 +349,10 @@
         <input type="hidden" name="patient" value="{{ treatment.patient.pk }}">
         <input type="hidden" name="treatment" value="{{ treatment.pk }}">
         <input type="hidden" name="channel" value="doctor">
-        <div><label class="fld">Сумма (сом)</label><input type="number" name="amount" value="{{ treatment.debt|floatformat:0 }}" required></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="fld">Сумма (сом)</label><input type="number" name="amount" value="{{ treatment.debt|floatformat:0 }}" required></div>
+          <div><label class="fld">Скидка (сом)</label><input type="number" name="discount" value="{{ treatment.discount|floatformat:0|default:'' }}" min="0" placeholder="0"></div>
+        </div>
         <div class="grid grid-cols-2 gap-4">
           <div><label class="fld">Метод</label><select name="method" class="no-tom"><option value="cash">Наличные</option><option value="card">Карта</option><option value="transfer">Перевод</option></select></div>
           <div><label class="fld">Тип</label><select name="type" class="no-tom"><option value="income">Оплата</option><option value="refund">Возврат</option></select></div>

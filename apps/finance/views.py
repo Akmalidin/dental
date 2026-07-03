@@ -146,14 +146,10 @@ def _allocate_income(payment):
 
 
 def _recalc_patient_balance(patient):
-    """Пересчёт баланса пациента по платежам и долгам приёмов."""
+    """Пересчёт баланса пациента через единый метод модели."""
     if not patient:
         return
-    income = Payment.objects.filter(patient=patient, type="income").aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    refunds = Payment.objects.filter(patient=patient, type="refund").aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    total_debt = sum(t.debt for t in patient.treatments.all())
-    patient.balance = income - refunds - total_debt
-    patient.save(update_fields=["balance"])
+    patient.recalc_balance()
 
 
 def _notify_cashier_payment(request, payment):
