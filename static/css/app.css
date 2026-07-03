@@ -132,9 +132,9 @@ body {
 .nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 14px; }
 .nav-section { font-size: 10px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .08em; padding: 14px 12px 6px; white-space: nowrap; }
 .nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 12px; margin-bottom: 2px; border-radius: 12px;
-  color: var(--text-soft); font-size: 14px; font-weight: 500;
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; margin-bottom: 1px; border-radius: 10px;
+  color: var(--text-soft); font-size: 13px; font-weight: 500;
   text-decoration: none; white-space: nowrap; cursor: pointer;
   transition: background .15s, color .15s;
 }

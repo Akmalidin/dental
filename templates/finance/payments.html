@@ -18,7 +18,7 @@
 
   <div class="card overflow-hidden">
     <table class="data-table">
-      <thead><tr><th>Пациент</th><th>Сумма</th><th>Метод</th><th>Тип</th><th>Принял</th><th>Дата</th><th class="text-right pr-5">Действия</th></tr></thead>
+      <thead><tr><th>Пациент</th><th>Сумма</th><th>Скидка</th><th>Метод</th><th>Тип</th><th>Принял</th><th>Дата</th><th class="text-right pr-5">Действия</th></tr></thead>
       <tbody>
         {% for p in payments %}
         <tr>
@@ -27,6 +27,13 @@
             <button type="button" @click="openAlloc({{ p.pk }})" class="font-bold text-lg hover:underline {% if p.type == 'income' %}text-emerald-600{% else %}text-red-500{% endif %}" title="Показать распределение">
               {% if p.type == 'income' %}+{% else %}−{% endif %}{{ p.amount|floatformat:0 }} сом
             </button>
+          </td>
+          <td>
+            {% if p.treatment and p.treatment.discount %}
+              <span class="badge" style="background:#fef3c7;color:#92400e">−{{ p.treatment.discount|floatformat:0 }} сом</span>
+            {% else %}
+              <span class="text-slate-300 text-xs">—</span>
+            {% endif %}
           </td>
           <td><span class="badge badge-blue">{{ p.get_method_display }}</span></td>
           <td><span class="badge {% if p.type == 'income' %}badge-green{% else %}badge-red{% endif %}">{{ p.get_type_display }}</span></td>
@@ -53,7 +60,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-center py-12 text-slate-400">Нет платежей</td></tr>
+        <tr><td colspan="8" class="text-center py-12 text-slate-400">Нет платежей</td></tr>
         {% endfor %}
       </tbody>
     </table>

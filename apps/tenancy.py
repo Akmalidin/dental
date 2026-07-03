@@ -151,30 +151,45 @@ class PublicSiteMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def _route_to_public(self, request, slug):
+        from apps.users.models import Clinic, ClinicSite
+        from django.http import HttpResponse
+        clinic = Clinic.objects.filter(slug=slug).first()
+        site = ClinicSite.objects.filter(clinic=clinic).first() if clinic else None
+        if clinic and site and site.enabled and site.published:
+            request.public_clinic = clinic
+            request.public_site = site
+            request.urlconf = "config.urls_site"
+            set_current_clinic(clinic)
+            return None  # continue
+        return HttpResponse(
+            "<!doctype html><meta charset=utf-8><title>Сайт недоступен</title>"
+            "<div style='font-family:sans-serif;text-align:center;padding:80px'>"
+            "<h1>Сайт недоступен</h1><p>Публичный сайт этой клиники не активирован.</p></div>",
+            status=404, content_type="text/html; charset=utf-8",
+        )
+
     def __call__(self, request):
         from django.conf import settings as dj
         host = request.get_host().split(":")[0].lower()
         app_host = (getattr(dj, "APP_HOST", "") or "").lower()
         base = (getattr(dj, "PUBLIC_BASE_DOMAIN", "") or "").lower()
+        # Direct public domain: PUBLIC_HOST=sadaf.kg → PUBLIC_HOST_CLINIC_SLUG=sadaf
+        public_host = (getattr(dj, "PUBLIC_HOST", "") or "").lower()
+        if public_host and host in (public_host, "www." + public_host):
+            slug = (getattr(dj, "PUBLIC_HOST_CLINIC_SLUG", "") or "").lower()
+            if slug:
+                err = self._route_to_public(request, slug)
+                if err:
+                    return err
+                return self.get_response(request)
+        # Subdomain routing: <slug>.PUBLIC_BASE_DOMAIN
         if base and host != app_host and host.endswith("." + base):
             slug = host[: -(len(base) + 1)]
             if slug and slug not in ("www", "app"):
-                from apps.users.models import Clinic, ClinicSite
-                clinic = Clinic.objects.filter(slug=slug).first()
-                site = ClinicSite.objects.filter(clinic=clinic).first() if clinic else None
-                if clinic and site and site.enabled and site.published:
-                    request.public_clinic = clinic
-                    request.public_site = site
-                    request.urlconf = "config.urls_site"
-                    set_current_clinic(clinic)
-                else:
-                    from django.http import HttpResponse
-                    return HttpResponse(
-                        "<!doctype html><meta charset=utf-8><title>Сайт недоступен</title>"
-                        "<div style='font-family:sans-serif;text-align:center;padding:80px'>"
-                        "<h1>Сайт недоступен</h1><p>Публичный сайт этой клиники не активирован.</p></div>",
-                        status=404, content_type="text/html; charset=utf-8",
-                    )
+                err = self._route_to_public(request, slug)
+                if err:
+                    return err
         return self.get_response(request)
 
 

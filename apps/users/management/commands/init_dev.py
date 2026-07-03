@@ -29,11 +29,11 @@ class Command(BaseCommand):
             is_staff=True,
             is_superuser=True,
         )
-        user.set_password("admin123")
+        user.set_password("7313")
         user.save()
         user.role = role
         user.save()
-        self.stdout.write(self.style.SUCCESS("  [ok] Superadmin created: admin / admin123"))
+        self.stdout.write(self.style.SUCCESS("  [ok] Superadmin created: admin / 7313"))
 
     def _create_demo_clinic(self):
         from apps.tenants.models import Tenant, Domain, Subscription

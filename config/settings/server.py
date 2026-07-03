@@ -43,9 +43,14 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
 
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default="https://denta.tw1.ru,https://sadaf.denta.tw1.ru",
+    default="https://denta.tw1.ru,https://sadaf.denta.tw1.ru,https://sadaf.kg,https://www.sadaf.kg,https://app.sadaf.kg",
     cast=Csv(),
 )
+
+# ─── Domain routing ──────────────────────────────────────────────────────────
+APP_HOST = config("APP_HOST", default="app.sadaf.kg")
+PUBLIC_HOST = config("PUBLIC_HOST", default="sadaf.kg")
+PUBLIC_HOST_CLINIC_SLUG = config("PUBLIC_HOST_CLINIC_SLUG", default="sadaf")
 
 # ─── Logging (в консоль → journald через systemd) ────────────────────────────
 LOGGING = {

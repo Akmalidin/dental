@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal
 
@@ -58,7 +58,7 @@ echo  =====================================================
 echo   Ready!
 echo   URL:      http://127.0.0.1:8000
 echo   Login:    admin
-echo   Password: admin123
+echo   Password: 7313
 echo   Swagger:  http://127.0.0.1:8000/api/docs/
 echo   Admin:    http://127.0.0.1:8000/django-admin/
 echo  =====================================================

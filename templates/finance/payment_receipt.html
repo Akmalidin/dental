@@ -50,6 +50,12 @@
   <p style="text-align:center;font-weight:700;margin:0">Чек платежа №{{ payment.pk }}</p>
 
   <div class="amount">
+    {% if payment.treatment and payment.treatment.discount %}
+    <div style="font-size:11px;color:#666;margin-bottom:4px">
+      К оплате: {{ payment.treatment.total_amount|floatformat:0 }} сом &nbsp;·&nbsp;
+      скидка: <span style="color:#d97706">−{{ payment.treatment.discount|floatformat:0 }} сом</span>
+    </div>
+    {% endif %}
     <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} сом</div>
     <div class="l">{{ payment.get_type_display }}</div>
   </div>
@@ -57,7 +63,12 @@
   <hr>
   <div class="row"><span class="k">Пациент</span><span class="v">{{ payment.patient.full_name }}</span></div>
   <div class="row"><span class="k">Метод оплаты</span><span class="v">{{ payment.get_method_display }}</span></div>
-  {% if payment.treatment %}<div class="row"><span class="k">Приём</span><span class="v">#{{ payment.treatment.pk }}</span></div>{% endif %}
+  {% if payment.treatment %}
+  <div class="row"><span class="k">Приём</span><span class="v">#{{ payment.treatment.pk }}</span></div>
+  {% if payment.treatment.discount %}
+  <div class="row"><span class="k">Скидка</span><span class="v" style="color:#d97706">−{{ payment.treatment.discount|floatformat:0 }} сом</span></div>
+  {% endif %}
+  {% endif %}
   <div class="row"><span class="k">Филиал</span><span class="v">{{ payment.branch.name }}</span></div>
   <div class="row"><span class="k">Принял</span><span class="v">{{ payment.received_by.name }}</span></div>
   <div class="row"><span class="k">Дата</span><span class="v">{{ payment.created_at|date:"d.m.Y H:i" }}</span></div>

@@ -26,12 +26,21 @@ def finance_dashboard(request):
     ).aggregate(s=Sum("amount"))["s"] or Decimal(0)
     expenses_month = Expense.objects.filter(date__gte=month_start).aggregate(s=Sum("amount"))["s"] or Decimal(0)
     top_debtors = Patient.objects.filter(balance__lt=0).order_by("balance")[:5]
+    # График: выручка за последние 7 дней
+    chart_days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    chart_labels = [d.strftime("%d.%m") for d in chart_days]
+    chart_data = [
+        float(_pay.filter(created_at__date=d, type="income").aggregate(s=Sum("amount"))["s"] or 0)
+        for d in chart_days
+    ]
     return render(request, "finance/dashboard.html", {
         "income_today": income_today,
         "income_month": income_month,
         "expenses_month": expenses_month,
         "net_month": income_month - expenses_month,
         "top_debtors": top_debtors,
+        "chart_labels": chart_labels,
+        "chart_data": chart_data,
     })
 
 
@@ -303,6 +312,19 @@ def payment_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         old_patient = Payment.objects.get(pk=pk).patient
         payment = form.save()
+        # Скидка на приём (то же, что и при создании)
+        discount = request.POST.get("discount")
+        if discount and payment.treatment_id:
+            try:
+                from decimal import Decimal as _D
+                d = _D(str(discount))
+                if d >= 0:
+                    payment.treatment.discount = d
+                    payment.treatment.save(update_fields=["discount", "updated_at"])
+            except Exception:
+                pass
+        if payment.type == Payment.TYPE_INCOME:
+            _allocate_income(payment)
         _recalc_patient_balance(payment.patient)
         if old_patient and old_patient != payment.patient:
             _recalc_patient_balance(old_patient)
