@@ -51,6 +51,10 @@ CSRF_TRUSTED_ORIGINS = config(
 APP_HOST = config("APP_HOST", default="app.sadaf.kg")
 PUBLIC_HOST = config("PUBLIC_HOST", default="sadaf.kg")
 PUBLIC_HOST_CLINIC_SLUG = config("PUBLIC_HOST_CLINIC_SLUG", default="sadaf")
+# <slug>.PUBLIC_BASE_DOMAIN → публичный сайт клиники (см. apps/tenancy.py PublicSiteMiddleware).
+# Меняется через env, когда wildcard DNS/сертификат настроены на другом домене
+# (например "sadaf.kg" вместо унаследованного из development.py "denta.tw1.ru").
+PUBLIC_BASE_DOMAIN = config("PUBLIC_BASE_DOMAIN", default=PUBLIC_BASE_DOMAIN)
 
 # ─── Logging (в консоль → journald через systemd) ────────────────────────────
 LOGGING = {
