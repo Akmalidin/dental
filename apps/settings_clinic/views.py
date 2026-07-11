@@ -188,6 +188,14 @@ def tooth_status_delete(request, pk):
 @login_required
 @role_required("superadmin", "admin_main")
 def document_list(request):
+    if request.method == "POST" and request.POST.get("action") == "seed_defaults":
+        from apps.services.seed_data import seed_emr_and_docs
+        res = seed_emr_and_docs()
+        if res["docs"]:
+            messages.success(request, _("Добавлено стандартных шаблонов: %(n)s") % {"n": res["docs"]})
+        else:
+            messages.info(request, _("Все стандартные шаблоны уже есть"))
+        return redirect("document_list")
     templates = DocumentTemplate.objects.all()
     return render(request, "settings/documents.html", {"templates": templates})
 
@@ -245,8 +253,10 @@ def document_render(request, pk, patient_pk):
     patient = get_object_or_404(Patient, pk=patient_pk)
     clinic = ClinicSettings.get()
 
-    # Build last treatment services / teeth
-    last_treatment = patient.treatments.prefetch_related("cures__service").order_by("-created_at").first()
+    # Build last treatment services / teeth (all_objects — по клинике пациента, не активной)
+    from apps.treatments.models import Treatment
+    last_treatment = (Treatment.all_objects.filter(patient=patient, is_deleted=False)
+                       .prefetch_related("cures__service").order_by("-created_at").first())
     services_str = ""
     teeth_str = ""
     if last_treatment:

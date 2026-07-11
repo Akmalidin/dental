@@ -7,7 +7,13 @@
   <div class="card overflow-hidden">
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
       <h3 class="font-bold text-slate-800">Шаблоны печатных форм</h3>
-      <a href="/settings/documents/create/" class="btn-primary text-xs py-1.5">+ Новый шаблон</a>
+      <div class="flex items-center gap-2">
+        <form method="post" style="display:inline">
+          {% csrf_token %}<input type="hidden" name="action" value="seed_defaults">
+          <button class="btn btn-ghost text-xs py-1.5" title="Добавить недостающие стандартные шаблоны (согласие, договор, направление, гарантийный талон)">+ Стандартные шаблоны</button>
+        </form>
+        <a href="/settings/documents/create/" class="btn-primary text-xs py-1.5">+ Новый шаблон</a>
+      </div>
     </div>
     <table class="data-table">
       <thead>
@@ -42,18 +48,18 @@
 
   <div class="card p-5 bg-indigo-50 border-indigo-100">
     <p class="text-sm font-bold text-indigo-700 mb-2">Доступные переменные</p>
-    <div class="grid grid-cols-3 gap-2 text-xs text-indigo-600">
-      <code>{% templatetag openvariable %}patient_name{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}patient_dob{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}patient_phone{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}patient_address{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}doctor_name{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}clinic_name{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}clinic_phone{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}clinic_address{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}date{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}services{% templatetag closevariable %}</code>
-      <code>{% templatetag openvariable %}tooth_numbers{% templatetag closevariable %}</code>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-indigo-600">
+      <div><code>{% templatetag openvariable %}patient_name{% templatetag closevariable %}</code> — имя пациента</div>
+      <div><code>{% templatetag openvariable %}patient_dob{% templatetag closevariable %}</code> — дата рождения пациента</div>
+      <div><code>{% templatetag openvariable %}patient_phone{% templatetag closevariable %}</code> — телефон пациента</div>
+      <div><code>{% templatetag openvariable %}patient_address{% templatetag closevariable %}</code> — адрес пациента</div>
+      <div><code>{% templatetag openvariable %}doctor_name{% templatetag closevariable %}</code> — имя врача</div>
+      <div><code>{% templatetag openvariable %}clinic_name{% templatetag closevariable %}</code> — название клиники</div>
+      <div><code>{% templatetag openvariable %}clinic_phone{% templatetag closevariable %}</code> — телефон клиники</div>
+      <div><code>{% templatetag openvariable %}clinic_address{% templatetag closevariable %}</code> — адрес клиники</div>
+      <div><code>{% templatetag openvariable %}date{% templatetag closevariable %}</code> — сегодняшняя дата</div>
+      <div><code>{% templatetag openvariable %}services{% templatetag closevariable %}</code> — список услуг приёма</div>
+      <div><code>{% templatetag openvariable %}tooth_numbers{% templatetag closevariable %}</code> — номера зубов приёма</div>
     </div>
   </div>
 </div>

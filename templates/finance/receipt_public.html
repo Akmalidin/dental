@@ -48,8 +48,10 @@
 <body>
 <div class="card">
   <div class="head">
-    <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}Стоматология{% endif %}</h1>
-    {% if clinic_settings %}<p>{{ clinic_settings.address }}{% if clinic_settings.phone %} · {{ clinic_settings.phone }}{% endif %}</p>{% endif %}
+    <h1>{% if clinic_settings %}{{ clinic_settings.receipt_display_name }}{% else %}Стоматология{% endif %}</h1>
+    {% if clinic_settings %}<p>{{ clinic_settings.receipt_display_address }}{% if clinic_settings.phone %} · {{ clinic_settings.phone }}{% endif %}</p>
+    {% if clinic_settings.receipt_legal_name or clinic_settings.receipt_inn %}<p>{{ clinic_settings.receipt_legal_name }}{% if clinic_settings.receipt_inn %} · ИНН {{ clinic_settings.receipt_inn }}{% endif %}</p>{% endif %}
+    {% endif %}
   </div>
 
   <div class="amt">
@@ -184,7 +186,7 @@
   {% endif %}
 
   <div class="foot">
-    Электронный чек. {% if clinic_settings %}{{ clinic_settings.name }}{% endif %}<br>
+    Электронный чек. {% if clinic_settings %}{{ clinic_settings.receipt_display_name }}{% endif %}<br>
     Спасибо за доверие!
   </div>
 </div>

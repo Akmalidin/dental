@@ -199,17 +199,22 @@ DOC_TEMPLATES = [
 
 
 def seed_emr_and_docs():
-    """Create standard EMR templates and document templates (idempotent)."""
+    """Create standard EMR templates and document templates (idempotent).
+
+    Uses exists()+create() instead of get_or_create() because some clinics
+    already have duplicate-named rows from earlier, non-idempotent seed runs —
+    get_or_create()'s get() raises MultipleObjectsReturned on those.
+    """
     from apps.treatments.models_emr import MedicalRecordTemplate
     from apps.settings_clinic.models_documents import DocumentTemplate
     created = {"emr": 0, "docs": 0}
     for t in EMR_TEMPLATES:
-        _, made = MedicalRecordTemplate.objects.get_or_create(name=t["name"], defaults=t)
-        if made:
+        if not MedicalRecordTemplate.objects.filter(name=t["name"]).exists():
+            MedicalRecordTemplate.objects.create(**t)
             created["emr"] += 1
     for d in DOC_TEMPLATES:
-        _, made = DocumentTemplate.objects.get_or_create(name=d["name"], defaults=d)
-        if made:
+        if not DocumentTemplate.objects.filter(name=d["name"]).exists():
+            DocumentTemplate.objects.create(**d)
             created["docs"] += 1
     return created
 

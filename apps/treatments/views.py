@@ -12,6 +12,17 @@ from .forms import TreatmentForm, TreatmentCureFormSet
 from apps.patients.models import Patient
 
 
+def _get_own_treatment_or_404(pk, queryset=None):
+    """Приём по pk — ищем по клинике его ПАЦИЕНТА (all_objects), не по активной клинике
+    вызывающего: иначе прямая ссылка на приём со страницы уже открытого пациента могла
+    404-иться при расхождении тегов клиники между пациентом и его приёмами. Граница
+    доступа — сам пациент должен быть виден вызывающему в его текущей клинике."""
+    base = (queryset if queryset is not None else Treatment.all_objects).filter(is_deleted=False)
+    treatment = get_object_or_404(base, pk=pk)
+    get_object_or_404(Patient, pk=treatment.patient_id)
+    return treatment
+
+
 @login_required
 def treatment_list(request):
     qs = Treatment.objects.select_related("patient", "doctor", "branch").order_by("-created_at")
@@ -154,11 +165,10 @@ def treatment_create(request):
 
 @login_required
 def treatment_detail(request, pk):
-    treatment = get_object_or_404(
-        Treatment.objects.select_related("patient", "doctor", "branch").prefetch_related(
+    treatment = _get_own_treatment_or_404(
+        pk, Treatment.all_objects.select_related("patient", "doctor", "branch").prefetch_related(
             "cures__service", "cures__doctor", "files", "followups"
-        ),
-        pk=pk,
+        )
     )
     # Collect treated teeth from cures
     treated_teeth = set()
@@ -205,7 +215,7 @@ def treatment_detail(request, pk):
 @login_required
 @require_POST
 def treatment_delete(request, pk):
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     patient_pk = treatment.patient_id
     treatment.soft_delete(request.user)   # в корзину
     messages.success(request, _("Приём перемещён в корзину"))
@@ -216,7 +226,7 @@ def treatment_delete(request, pk):
 @require_POST
 def treatment_notify_wa(request, pk):
     """Отправить пациенту в WhatsApp состав приёма: услуги, сумма, оплачено, долг."""
-    treatment = get_object_or_404(Treatment.objects.select_related("patient"), pk=pk)
+    treatment = _get_own_treatment_or_404(pk, Treatment.all_objects.select_related("patient"))
     patient = treatment.patient
     from apps.notifications.whatsapp import wa_send_text, wa_enabled
     from apps.notifications.models import WaMessage
@@ -256,7 +266,7 @@ def treatment_notify_wa(request, pk):
 
 @login_required
 def treatment_edit(request, pk):
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     form = TreatmentForm(request.POST or None, instance=treatment)
     formset = TreatmentCureFormSet(request.POST or None, instance=treatment, prefix="cures")
     if request.method == "POST" and form.is_valid() and formset.is_valid():
@@ -463,8 +473,8 @@ def plan_detail(request, pk):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
     doctors = clinic_doctors(get_current_clinic())
-    patient_treatments = (plan.patient.treatments.exclude(status="cancelled")
-                          .order_by("-created_at")[:50])
+    patient_treatments = (Treatment.all_objects.filter(patient=plan.patient, is_deleted=False)
+                          .exclude(status="cancelled").order_by("-created_at")[:50])
     return render(request, "treatments/plan_detail.html", {
         "plan": plan,
         "services_json": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),
@@ -620,7 +630,7 @@ def plan_delete(request, pk):
 def treatment_emr_save(request, pk):
     """Save the EMR (medical record) for a treatment."""
     from .models_emr import MedicalRecord
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     emr, _created = MedicalRecord.objects.get_or_create(
         treatment=treatment,
         defaults={"patient": treatment.patient, "doctor": treatment.doctor},
@@ -645,7 +655,7 @@ def treatment_emr_save(request, pk):
 def treatment_file_upload(request, pk):
     """Загрузка файлов/рентген-снимков к приёму (поддержка нескольких файлов)."""
     from .models import TreatmentFile
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     files = request.FILES.getlist("files") or request.FILES.getlist("file")
     kind = request.POST.get("kind", "xray")
     n = 0
@@ -677,7 +687,7 @@ def treatment_emr_print(request, pk):
     """Printable EMR document."""
     from .models_emr import MedicalRecord, EMR_SECTIONS
     from apps.settings_clinic.models import ClinicSettings
-    treatment = get_object_or_404(Treatment.objects.select_related("patient", "doctor"), pk=pk)
+    treatment = _get_own_treatment_or_404(pk, Treatment.all_objects.select_related("patient", "doctor"))
     from django.utils.html import escape
     emr = getattr(treatment, "emr", None)
     clinic = ClinicSettings.get()
@@ -709,7 +719,7 @@ def treatment_emr_print(request, pk):
 def treatment_set_discount(request, pk):
     """Установить/изменить скидку на приём."""
     from decimal import Decimal, InvalidOperation
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     try:
         d = Decimal(str(request.POST.get("discount", "0") or "0"))
         if d < 0:
@@ -729,7 +739,7 @@ def treatment_set_discount(request, pk):
 @require_POST
 def treatment_status(request, pk):
     """Change treatment status (AJAX or form)."""
-    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment = _get_own_treatment_or_404(pk)
     new_status = request.POST.get("status")
     valid = dict(Treatment.STATUS_CHOICES)
     if new_status in valid:
@@ -745,9 +755,8 @@ def treatment_status(request, pk):
 @login_required
 def treatment_print(request, pk):
     """Чек приёма: формат определяется настройкой клиники (thermal/a4/both)."""
-    treatment = get_object_or_404(
-        Treatment.objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch"),
-        pk=pk,
+    treatment = _get_own_treatment_or_404(
+        pk, Treatment.all_objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch")
     )
     from apps.settings_clinic.models import ClinicSettings
     from django.shortcuts import redirect as _redirect
@@ -786,9 +795,9 @@ def treatment_receipt_html(request, pk):
     """HTML-чек приёма с QR. ?w=80 — термолента 80мм (автопечать), иначе A4."""
     from apps.finance.views import _qr_svg
     from apps.settings_clinic.models import ClinicSettings
-    treatment = get_object_or_404(
-        Treatment.objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch"),
-        pk=pk)
+    treatment = _get_own_treatment_or_404(
+        pk, Treatment.all_objects.prefetch_related("cures__service").select_related("patient", "doctor", "branch")
+    )
     public_url = request.build_absolute_uri(f"/t/{treatment.public_token}/")
     return render(request, "treatments/receipt_thermal.html", {
         "treatment": treatment, "clinic_settings": ClinicSettings.get(),

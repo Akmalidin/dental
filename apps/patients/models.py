@@ -238,19 +238,14 @@ class Patient(ClinicSoftDeleteModel):
 
     @property
     def debt(self):
-        from django.db.models import Sum
+        """Долг = -balance, если пациент должен (balance < 0), иначе 0.
+        balance поддерживается свежим через recalc_balance() из всех точек мутации
+        (платежи, скидка приёма, смена статуса, пересчёт суммы приёма) — уже
+        клинико-независим (all_clinics/all_objects), в отличие от старой формулы
+        через self.treatments, которая давала неверный/нулевой долг, если у
+        просматривающего суперадмина была выбрана другая активная клиника."""
         from decimal import Decimal
-        from apps.finance.models import Payment
-        # Долг = (сумма приёмов − скидки) − (оплаты − возвраты). Считаем по фактическим
-        # платежам пациента (не по paid_amount приёма), чтобы учесть нераспределённые оплаты.
-        qs = self.treatments.exclude(status__in=["cancelled", "draft"])
-        total = qs.aggregate(total=Sum("total_amount"))["total"] or Decimal(0)
-        disc = qs.aggregate(disc=Sum("discount"))["disc"] or Decimal(0)
-        income = (Payment.all_clinics.filter(patient_id=self.pk, type=Payment.TYPE_INCOME)
-                  .aggregate(s=Sum("amount"))["s"] or Decimal(0))
-        refund = (Payment.all_clinics.filter(patient_id=self.pk, type=Payment.TYPE_REFUND)
-                  .aggregate(s=Sum("amount"))["s"] or Decimal(0))
-        return max(Decimal(0), (total - disc) - (income - refund))
+        return max(Decimal(0), -self.balance)
 
     def recalc_balance(self):
         """Пересчитать баланс пациента: платежи − возвраты − (сумма приёмов − скидки).

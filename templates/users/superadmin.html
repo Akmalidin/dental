@@ -62,7 +62,11 @@
         <input type="text" name="clinic_admin_name" placeholder="Имя директора">
         <input type="text" name="clinic_admin_login" placeholder="Логин директора *" required>
         <input type="text" name="clinic_admin_password" placeholder="Пароль директора *" required class="md:col-span-2">
-        <button class="btn btn-primary md:col-span-2">Создать клинику (с услугами, ЭМК, документами)</button>
+        <div class="md:col-span-2 flex items-center gap-4 text-sm" style="color:var(--text)">
+          <label class="flex items-center gap-1.5"><input type="radio" name="clinic_seed" value="1" checked> С демо-услугами, ЭМК и документами</label>
+          <label class="flex items-center gap-1.5"><input type="radio" name="clinic_seed" value="0"> Пустая (только база)</label>
+        </div>
+        <button class="btn btn-primary md:col-span-2">Создать клинику</button>
       </form>
     </div>
   </div>

@@ -704,7 +704,7 @@ def appointment_detail_json(request, pk):
     treatment_id = None
     if p:
         from apps.treatments.models import Treatment
-        last_t = (Treatment.objects.filter(patient=p).exclude(status="cancelled")
+        last_t = (Treatment.all_objects.filter(patient=p, is_deleted=False).exclude(status="cancelled")
                   .order_by("-created_at").prefetch_related("cures__service", "cures__doctor").first())
         if last_t:
             treatment_id = last_t.pk
@@ -721,7 +721,7 @@ def appointment_detail_json(request, pk):
     first_visit = False
     if p:
         from apps.treatments.models import Treatment
-        first_visit = Treatment.objects.filter(patient=p).count() <= 1
+        first_visit = Treatment.all_objects.filter(patient=p, is_deleted=False).count() <= 1
 
     return JsonResponse({
         "ok": True,

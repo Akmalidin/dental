@@ -13,6 +13,18 @@ from .forms import PaymentForm, ExpenseForm
 from apps.patients.models import Patient
 
 
+def _get_own_payment_or_404(pk, queryset=None):
+    """Платёж по pk — ищем по клинике его ПАЦИЕНТА (all_clinics), не по активной клинике
+    вызывающего: иначе прямая ссылка на платёж со страницы уже открытого пациента могла
+    404-иться при расхождении тегов клиники. Граница доступа — сам пациент должен быть
+    виден вызывающему в его текущей клинике."""
+    base = queryset if queryset is not None else Payment.all_clinics
+    payment = get_object_or_404(base, pk=pk)
+    if payment.patient_id:
+        get_object_or_404(Patient, pk=payment.patient_id)
+    return payment
+
+
 @login_required
 def finance_dashboard(request):
     today = date.today()
@@ -80,8 +92,8 @@ def payment_list(request):
             if treatment_id:
                 initial["treatment"] = treatment_id
             form = PaymentForm(initial=initial)
-            # приёмы только этого пациента
-            form.fields["treatment"].queryset = Treatment.objects.filter(patient=p).order_by("-created_at")
+            # приёмы только этого пациента (all_objects — по клинике пациента, не активной)
+            form.fields["treatment"].queryset = Treatment.all_objects.filter(patient=p, is_deleted=False).order_by("-created_at")
             preselect = {"id": p.pk, "name": p.full_name, "amount": amount, "treatment": treatment_id}
 
     # карта приёмов по пациентам для динамической фильтрации в модале
@@ -115,7 +127,9 @@ def _allocate_income(payment):
         return
     # уже распределено по этому платежу — не дублируем
     PaymentAllocation.objects.filter(payment=payment).delete()
-    treatments = list(Treatment.objects.filter(patient=patient)
+    # all_objects — распределяем по клинике ПАЦИЕНТА, а не по активной клинике вызывающего
+    # (иначе платёж суперадмина при другой выбранной клинике не находил бы приёмы вовсе).
+    treatments = list(Treatment.all_objects.filter(patient=patient, is_deleted=False)
                       .exclude(status__in=["cancelled", "draft"]).order_by("created_at"))
     # привязанный приём — первым
     if payment.treatment_id:
@@ -143,6 +157,29 @@ def _allocate_income(payment):
             affected.append(t)
     for t in set(affected):
         _recompute_treatment_paid(t)
+
+
+def _target_treatment_for_discount(payment):
+    """Приём, к которому применяется скидка при создании/правке платежа: явно
+    выбранный (payment.treatment), либо — для «— авто (по долгу) —», когда
+    treatment не указан — тот же приём, что первым получит распределение
+    в _allocate_income (самый старый неоплаченный приём пациента). Без этого
+    скидка при авто-выборе приёма молча терялась."""
+    if payment.treatment_id:
+        return payment.treatment
+    from .models import PaymentAllocation
+    from apps.treatments.models import Treatment
+    patient = payment.patient
+    if not patient:
+        return None
+    treatments = (Treatment.all_objects.filter(patient=patient, is_deleted=False)
+                  .exclude(status__in=["cancelled", "draft"]).order_by("created_at"))
+    for t in treatments:
+        already = PaymentAllocation.objects.filter(treatment=t).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        billed = (t.total_amount or Decimal(0)) - (t.discount or Decimal(0))
+        if billed - already > 0:
+            return t
+    return None
 
 
 def _recalc_patient_balance(patient):
@@ -199,8 +236,8 @@ def _qr_svg(data):
 @login_required
 def payment_receipt(request, pk):
     """Печатный чек платежа. ?w=80 — формат 80мм для ККМ (термопринтер)."""
-    payment = get_object_or_404(
-        Payment.objects.select_related("patient", "received_by", "treatment", "branch"), pk=pk)
+    payment = _get_own_payment_or_404(
+        pk, Payment.all_clinics.select_related("patient", "received_by", "treatment", "branch"))
     from apps.settings_clinic.models import ClinicSettings
     public_url = request.build_absolute_uri(f"/r/{payment.public_token}/")
     return render(request, "finance/payment_receipt.html", {
@@ -303,20 +340,22 @@ def send_to_cashier(request, patient_id):
 @login_required
 def payment_edit(request, pk):
     """Изменить платёж + пересчитать баланс пациента."""
-    payment = get_object_or_404(Payment, pk=pk)
+    payment = _get_own_payment_or_404(pk)
+    old_patient = payment.patient  # запомнить ДО того, как form.is_valid() перезапишет payment.patient
     form = PaymentForm(request.POST or None, instance=payment)
     if request.method == "POST" and form.is_valid():
-        old_patient = Payment.objects.get(pk=pk).patient
         payment = form.save()
         # Скидка на приём (то же, что и при создании)
         discount = request.POST.get("discount")
-        if discount and payment.treatment_id:
+        if discount:
             try:
                 from decimal import Decimal as _D
                 d = _D(str(discount))
                 if d >= 0:
-                    payment.treatment.discount = d
-                    payment.treatment.save(update_fields=["discount", "updated_at"])
+                    target = _target_treatment_for_discount(payment)
+                    if target:
+                        target.discount = d
+                        target.save(update_fields=["discount", "updated_at"])
             except Exception:
                 pass
         if payment.type == Payment.TYPE_INCOME:
@@ -328,9 +367,10 @@ def payment_edit(request, pk):
         return redirect("payment_list")
     if payment.patient_id:
         from apps.treatments.models import Treatment
-        form.fields["treatment"].queryset = Treatment.objects.filter(patient_id=payment.patient_id).order_by("-created_at")
+        form.fields["treatment"].queryset = Treatment.all_objects.filter(patient_id=payment.patient_id, is_deleted=False).order_by("-created_at")
     return render(request, "finance/payment_form.html", {
-        "form": form, "edit": True, "payment": payment, "treatments_json": _treatments_by_patient(),
+        "form": form, "edit": True, "payment": payment,
+        "treatments_json": _treatments_by_patient(payment.patient_id),
     })
 
 
@@ -338,7 +378,7 @@ def payment_edit(request, pk):
 def payment_allocations(request, pk):
     """JSON: на что распределён платёж (для модала «распределение»)."""
     from django.http import JsonResponse
-    payment = get_object_or_404(Payment.objects.select_related("patient"), pk=pk)
+    payment = _get_own_payment_or_404(pk, Payment.all_clinics.select_related("patient"))
     rows = [{
         "treatment": a.treatment_id,
         "label": f"Приём #{a.treatment_id}",
@@ -361,7 +401,7 @@ def payment_delete(request, pk):
     if not getattr(request.user, "is_superadmin", False):
         messages.error(request, _("Удалять платежи может только владелец (суперадмин)"))
         return redirect("payment_list")
-    payment = get_object_or_404(Payment, pk=pk)
+    payment = get_object_or_404(Payment.all_clinics, pk=pk)
     patient = payment.patient
     affected = [a.treatment for a in payment.allocations.select_related("treatment").all()]
     payment.delete()  # каскадом удалит allocations
@@ -381,9 +421,15 @@ def payment_create(request):
     form = PaymentForm(request.POST or None, initial={
         "patient": patient_id, "treatment": treatment_id
     })
-    # показывать в выпадающем списке только приёмы выбранного пациента
-    if patient_id:
-        form.fields["treatment"].queryset = Treatment.objects.filter(patient_id=patient_id).order_by("-created_at")
+    # показывать в выпадающем списке только приёмы выбранного пациента.
+    # Сначала проверяем, что patient_id вообще существует В ДОСТУПНОЙ вызывающему
+    # клинике (Patient.objects — защищённый менеджер, это и есть граница доступа),
+    # и только потом берём ЕЁ приёмы через all_objects — по клинике самого пациента,
+    # а не по активной клинике вызывающего (иначе список приёмов мог быть пуст/неверен
+    # при расхождении тегов клиники между пациентом и его приёмами).
+    verified_patient_id = patient_id if patient_id and Patient.objects.filter(pk=patient_id).exists() else None
+    if verified_patient_id:
+        form.fields["treatment"].queryset = Treatment.all_objects.filter(patient_id=verified_patient_id, is_deleted=False).order_by("-created_at")
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
@@ -402,15 +448,18 @@ def payment_create(request):
                               or request.user.branches.first()
                               or Branch.objects.first())
         payment.save()
-        # Скидка на выбранный приём (если указана)
+        # Скидка на приём (если указана) — на явно выбранный, либо (авто) на тот,
+        # что первым получит распределение платежа в _allocate_income ниже
         discount = request.POST.get("discount")
-        if discount and payment.treatment_id:
+        if discount:
             try:
                 from decimal import Decimal as _D
                 d = _D(str(discount))
                 if d > 0:
-                    payment.treatment.discount = d
-                    payment.treatment.save(update_fields=["discount", "updated_at"])
+                    target = _target_treatment_for_discount(payment)
+                    if target:
+                        target.discount = d
+                        target.save(update_fields=["discount", "updated_at"])
             except Exception:
                 pass
         # Распределение платежа по приёмам (счетам)
@@ -425,17 +474,34 @@ def payment_create(request):
             return redirect("patient_detail", pk=patient_id)
         return redirect("payment_list")
     return render(request, "finance/payment_form.html", {
-        "form": form, "treatments_json": _treatments_by_patient(),
+        "form": form, "treatments_json": _treatments_by_patient(verified_patient_id),
     })
 
 
-def _treatments_by_patient():
-    """Карта приёмов по пациентам для динамической фильтрации в форме платежа."""
+def _treatments_by_patient(verified_patient_id=None):
+    """Карта приёмов по пациентам для динамической фильтрации и панели инфо в форме платежа.
+
+    Без patient_id (страница списка платежей, много пациентов сразу) — берём приёмы
+    ТОЛЬКО активной клиники вызывающего (Treatment.objects), это граница доступа.
+    С patient_id (форма для ОДНОГО уже проверенного пациента — payment_edit/payment_create
+    сами убедились через Patient.objects, что он доступен вызывающему) — берём все её
+    приёмы через all_objects, по клинике самого пациента, а не по активной клинике
+    вызывающего, иначе список/панель могли быть пустыми при расхождении тегов клиники.
+    """
     from apps.treatments.models import Treatment
     data = {}
-    for t in Treatment.objects.exclude(status="cancelled").select_related("patient")[:2000]:
+    if verified_patient_id:
+        qs = (Treatment.all_objects.filter(patient_id=verified_patient_id, is_deleted=False).exclude(status="cancelled")
+              .select_related("patient").prefetch_related("cures__service"))
+    else:
+        qs = (Treatment.objects.exclude(status="cancelled")
+              .select_related("patient").prefetch_related("cures__service")[:2000])
+    for t in qs:
         data.setdefault(str(t.patient_id), []).append({
             "id": t.pk, "label": f"#{t.pk} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
+            "services": [c.service.name for c in t.cures.all() if c.service_id],
+            "total": float(t.total_amount or 0), "discount": float(t.discount or 0),
+            "paid": float(t.paid_amount or 0), "debt": float(t.debt),
         })
     return data
 

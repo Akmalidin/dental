@@ -50,17 +50,23 @@ def superadmin_panel(request):
             )
             au.set_password(apass)
             au.save()
-            # филиал + автозаполнение услуг/материалов/ЭМК/документов в новой клинике
+            # филиал + (опционально) автозаполнение услуг/материалов/ЭМК/документов в новой клинике
+            do_seed = request.POST.get("clinic_seed", "1") != "0"
             set_current_clinic(new_clinic)
             try:
                 Branch.objects.create(name=cname, address="—", phone="—", is_main=True)
-                res = seed_dental()
+                res = seed_dental() if do_seed else None
             finally:
                 clear_current_clinic()
-            messages.success(request, _(
-                "Клиника «%(n)s» создана. Админ: %(l)s. Заполнено: услуг %(s)s, материалов %(m)s, ЭМК %(e)s, документов %(d)s"
-            ) % {"n": cname, "l": alogin, "s": res["services"], "m": res["materials"],
-                 "e": res.get("emr", 0), "d": res.get("docs", 0)})
+            if res:
+                messages.success(request, _(
+                    "Клиника «%(n)s» создана. Админ: %(l)s. Заполнено: услуг %(s)s, материалов %(m)s, ЭМК %(e)s, документов %(d)s"
+                ) % {"n": cname, "l": alogin, "s": res["services"], "m": res["materials"],
+                     "e": res.get("emr", 0), "d": res.get("docs", 0)})
+            else:
+                messages.success(request, _(
+                    "Клиника «%(n)s» создана пустой (без демо-данных). Админ: %(l)s"
+                ) % {"n": cname, "l": alogin})
             return redirect("superadmin_panel")
         if action == "save_modules":
             from apps.tenancy import get_current_clinic
@@ -728,7 +734,19 @@ def login_view(request):
         login(request, user)
         next_url = request.GET.get("next", "/")
         return redirect(next_url)
-    return render(request, "auth/login.html", {"form": form})
+
+    # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники
+    # на странице входа ещё до аутентификации (до логина текущая клиника неизвестна).
+    from apps.tenancy import set_current_clinic, clear_current_clinic
+    from apps.users.models import Clinic
+    clinic_slug = (request.POST.get("clinic") or request.GET.get("clinic") or "").strip()
+    clinic = Clinic.objects.filter(slug=clinic_slug, is_active=True).first() if clinic_slug else None
+    try:
+        if clinic:
+            set_current_clinic(clinic)
+        return render(request, "auth/login.html", {"form": form, "clinic_slug": clinic_slug})
+    finally:
+        clear_current_clinic()
 
 
 @require_POST

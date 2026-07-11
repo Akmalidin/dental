@@ -47,13 +47,18 @@ def patient_list(request):
             return today.replace(year=today.year - n, day=28)
 
     if q:
-        qs = qs.filter(
-            Q(first_name__icontains=q)
-            | Q(last_name__icontains=q)
-            | Q(middle_name__icontains=q)
-            | Q(phone__icontains=q)
-            | Q(phone2__icontains=q)
-        )
+        # Полное имя лежит в разных полях (Фамилия/Имя/Отчество), поэтому запрос вида
+        # "Турдубеков Динара" разбиваем на слова и требуем, чтобы КАЖДОЕ слово нашлось
+        # хоть в одном из полей — иначе "Фамилия Имя" целиком нигде не совпадёт.
+        words = q.split()
+        for word in words:
+            qs = qs.filter(
+                Q(first_name__icontains=word)
+                | Q(last_name__icontains=word)
+                | Q(middle_name__icontains=word)
+                | Q(phone__icontains=word)
+                | Q(phone2__icontains=word)
+            )
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     if doctor_id:
@@ -222,12 +227,14 @@ def patient_detail(request, pk):
         When(status="cancelled", then=Value(4)),
         default=Value(9), output_field=IntegerField(),
     )
-    treatments = Treatment.objects.filter(patient=patient).select_related(
+    # all_objects/all_clinics — приёмы и платежи пациента показываем независимо от того,
+    # какую клинику сейчас просматривает суперадмин (иначе они "пропадают" при переключении).
+    treatments = Treatment.all_objects.filter(patient=patient, is_deleted=False).select_related(
         "doctor", "branch"
     ).prefetch_related(
         "cures__service", "cures__doctor", "files"
     ).annotate(_status_order=status_order).order_by("_status_order", "-created_at")
-    payments = Payment.objects.filter(patient=patient).select_related("received_by").order_by("-created_at")
+    payments = Payment.all_clinics.filter(patient=patient).select_related("received_by").order_by("-created_at")
     from apps.services.models import Service, ServiceCategory
     from apps.users.models import User as StaffUser
     _svcs = Service.objects.filter(is_active=True).select_related("category").order_by("category__sort_order","name").values(
@@ -682,7 +689,7 @@ def patient_card043_print(request, pk):
     formula_lower = [(n, cond.get(n, "")) for n in lower]
 
     # Последняя медкарта — для шапки (диагноз/жалобы/анамнез/осмотр)
-    treatments = (Treatment.objects.filter(patient=patient).exclude(status="cancelled")
+    treatments = (Treatment.all_objects.filter(patient=patient, is_deleted=False).exclude(status="cancelled")
                   .select_related("doctor").prefetch_related("emr", "cures__service")
                   .order_by("created_at"))
     last_emr = None
@@ -713,6 +720,57 @@ def patient_card043_print(request, pk):
         "patient": patient, "clinic": clinic, "today": timezone.localdate(),
         "formula_upper": formula_upper, "formula_lower": formula_lower,
         "emr": last_emr, "diary": diary,
+    })
+
+
+@login_required
+def patient_payments_print(request, pk):
+    """Печатная история оплат пациента: все платежи с датой, временем и приёмом."""
+    from apps.settings_clinic.models import ClinicSettings
+    patient = get_object_or_404(Patient, pk=pk)
+    payments = Payment.all_clinics.filter(patient=patient).select_related(
+        "received_by"
+    ).prefetch_related("allocations__treatment__cures__service").order_by("-created_at")
+    for p in payments:
+        allocs = list(p.allocations.all())
+        if allocs:
+            p.procedure_label = "; ".join(
+                "Приём #{} ({})".format(
+                    a.treatment_id,
+                    ", ".join(c.service.name for c in a.treatment.cures.all()[:4]) or "без услуг",
+                )
+                for a in allocs
+            )
+        else:
+            p.procedure_label = "—"
+    return render(request, "patients/payments_print.html", {
+        "patient": patient, "payments": payments, "clinic_settings": ClinicSettings.get(),
+    })
+
+
+UPPER_TEETH = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
+LOWER_TEETH = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+
+
+@login_required
+def patient_treatments_print(request, pk):
+    """Подробная печать выбранных приёмов: услуги, суммы и зубная схема по каждому."""
+    import re
+    from apps.settings_clinic.models import ClinicSettings
+    patient = get_object_or_404(Patient, pk=pk)
+    ids = [int(x) for x in request.GET.get("ids", "").split(",") if x.strip().isdigit()]
+    treatments = list(
+        Treatment.all_objects.filter(patient=patient, pk__in=ids, is_deleted=False).select_related("doctor", "branch")
+        .prefetch_related("cures__service").order_by("created_at")
+    )
+    for t in treatments:
+        marked = set()
+        for c in t.cures.all():
+            marked.update(int(n) for n in re.findall(r"\d{2}", c.tooth_number or ""))
+        t.upper_marks = [(n, n in marked) for n in UPPER_TEETH]
+        t.lower_marks = [(n, n in marked) for n in LOWER_TEETH]
+    return render(request, "patients/treatments_print.html", {
+        "patient": patient, "treatments": treatments, "clinic_settings": ClinicSettings.get(),
     })
 
 

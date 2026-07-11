@@ -66,6 +66,15 @@ class Treatment(ClinicSoftDeleteModel):
     def __str__(self):
         return f"Приём #{self.pk} — {self.patient}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Баланс пациента должен оставаться свежим при ЛЮБОМ сохранении приёма
+        # (создание, правка суммы/скидки/статуса, soft-delete/восстановление через
+        # save(update_fields=...)) — раньше это делали только отдельные пути в views.py
+        # (recalculate_total(), правка скидки), из-за чего balance мог "протухать".
+        if self.patient_id:
+            self.patient.recalc_balance()
+
     @property
     def is_cancelled(self):
         return self.status == self.STATUS_CANCELLED
@@ -100,10 +109,7 @@ class Treatment(ClinicSoftDeleteModel):
     def recalculate_total(self):
         total = sum(cure.price * cure.quantity for cure in self.cures.all())
         self.total_amount = total
-        self.save(update_fields=["total_amount", "updated_at"])
-        # сумма приёма изменилась → пересчитать баланс пациента
-        if self.patient_id:
-            self.patient.recalc_balance()
+        self.save(update_fields=["total_amount", "updated_at"])  # save() пересчитает баланс пациента
 
 
 class TreatmentCure(models.Model):

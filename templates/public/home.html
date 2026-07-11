@@ -259,7 +259,7 @@
   {% if services %}
   <section id="services">
     <div class="wrap">
-      <div class="shead reveal"><span class="eyebrow">Прайс-лист</span><h2>Услуги и цены</h2><p>Честные цены без скрытых платежей</p></div>
+      <div class="shead reveal"><span class="eyebrow">Услуги</span><h2>Наши услуги</h2><p>Полный спектр стоматологической помощи</p></div>
       <div class="glass price reveal" id="priceList">
         {% for s in services %}
         <div class="prow{% if forloop.counter > 6 %} extra{% endif %}">
@@ -268,7 +268,6 @@
             {% if s.category %}<span class="stag">{{ s.category.name }}</span>{% endif %}
           </div>
           <div class="pright">
-            <span class="p">{{ s.price|floatformat:0 }} сом</span>
             <a href="/service/{{ s.pk }}/" class="more">Подробнее →</a>
           </div>
         </div>

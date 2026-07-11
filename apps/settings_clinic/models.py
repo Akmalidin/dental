@@ -49,6 +49,20 @@ class ClinicSettings(models.Model):
         verbose_name="Формат чека",
     )
 
+    # ─── Реквизиты для чека (юр. данные, показываются на всех печатных чеках) ───
+    # Название клиники для чека: если пусто — используется обычное `name`
+    # (автоматически подставляется, но можно переопределить именно для чека).
+    receipt_clinic_name = models.CharField(
+        max_length=200, blank=True, verbose_name="Название клиники в чеке",
+        help_text="Если не заполнено — используется название клиники выше")
+    receipt_legal_name = models.CharField(
+        max_length=300, blank=True, verbose_name="ИП / юр. лицо",
+        help_text='напр. "ИП Иванов Иван Иванович"')
+    receipt_inn = models.CharField(max_length=30, blank=True, verbose_name="ИНН/ИИН")
+    receipt_address = models.CharField(
+        max_length=500, blank=True, verbose_name="Адрес в чеке",
+        help_text="Если не заполнено — используется адрес клиники выше")
+
     # Условия гарантии на лабораторные работы (печатаются в чеке)
     warranty_terms = models.TextField(
         blank=True, verbose_name="Условия гарантии (лаб. работы)",
@@ -94,6 +108,14 @@ class ClinicSettings(models.Model):
 
     def __str__(self):
         return f"Настройки: {self.name}"
+
+    @property
+    def receipt_display_name(self):
+        return self.receipt_clinic_name or self.name
+
+    @property
+    def receipt_display_address(self):
+        return self.receipt_address or self.address
 
     @classmethod
     def get(cls):

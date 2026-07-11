@@ -17,9 +17,12 @@
 <body>
 
 <div class="clinic">
-  <h1>{% if clinic_settings %}{{ clinic_settings.name }}{% else %}AKM SOFT — CLINIC{% endif %}</h1>
+  <h1>{% if clinic_settings %}{{ clinic_settings.receipt_display_name }}{% else %}AKM SOFT — CLINIC{% endif %}</h1>
   {% if clinic_settings %}
-  <p>{{ clinic_settings.address }} · {{ clinic_settings.phone }}</p>
+  <p>{{ clinic_settings.receipt_display_address }} · {{ clinic_settings.phone }}</p>
+  {% if clinic_settings.receipt_legal_name or clinic_settings.receipt_inn %}
+  <p>{{ clinic_settings.receipt_legal_name }}{% if clinic_settings.receipt_inn %} · ИНН {{ clinic_settings.receipt_inn }}{% endif %}</p>
+  {% endif %}
   {% endif %}
 </div>
 

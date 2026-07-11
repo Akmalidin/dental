@@ -44,8 +44,12 @@
           <td>
             <div class="flex gap-1.5 flex-wrap items-center">
               <a href="/treatments/{{ t.pk }}/" class="badge badge-blue hover:bg-indigo-100">Открыть</a>
+              {% if clinic_settings.receipt_format != 'a4' %}
               <a href="/treatments/{{ t.pk }}/receipt-print/?w=80" target="_blank" class="badge badge-green hover:bg-emerald-100" title="Чек 80мм (автопечать) + QR">🧾 80мм</a>
+              {% endif %}
+              {% if clinic_settings.receipt_format != 'thermal' %}
               <a href="/treatments/{{ t.pk }}/receipt-print/" target="_blank" class="badge badge-gray hover:bg-slate-200" title="Чек A4 + QR">Чек A4</a>
+              {% endif %}
               <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Переместить приём #{{ t.pk }} в корзину?')" style="display:inline">
                 {% csrf_token %}
                 <button class="badge badge-red hover:bg-red-100" title="В корзину">🗑</button>

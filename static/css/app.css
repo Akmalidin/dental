@@ -113,6 +113,15 @@ body {
   .modal-box { max-width: 96vw !important; }
   .tbl, table { font-size: 13px; }
   .pill-tabs { flex-wrap: wrap; }
+  .stat { padding: 12px 14px; gap: 10px; }
+  .stat-icon { width: 36px; height: 36px; border-radius: 10px; }
+  .stat-icon svg { width: 18px; height: 18px; }
+  .stat-value { font-size: 19px; }
+  .stat-label { font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+  .grid-cols-2 > .stat { grid-column: span 2 / span 2; } /* совсем узкий экран — одна колонка */
 }
 
 /* ── Sidebar brand ──────────────────────────────────────────────────── */
@@ -187,7 +196,7 @@ body {
 /* Stat card */
 .stat {
   background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border);
-  padding: 18px 20px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);
+  padding: 18px 20px; display: flex; align-items: flex-start; gap: 14px; box-shadow: var(--shadow-sm);
 }
 .stat-icon { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .stat-icon svg { width: 22px; height: 22px; }
@@ -255,6 +264,9 @@ label.fld { display: block; font-size: 12px; font-weight: 600; color: var(--text
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 
 /* ── Table ──────────────────────────────────────────────────────────── */
+/* Любой контейнер, который напрямую оборачивает <table>, скроллится по
+   горизонтали вместо того, чтобы расталкивать сайдбар/страницу на мобильных. */
+div:has(> table) { overflow-x: auto; }
 .tbl { width: 100%; border-collapse: collapse; }
 .tbl thead th { padding: 14px 18px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-soft); background: var(--surface-2); white-space: nowrap; }
 .tbl thead th:first-child { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
@@ -359,7 +371,7 @@ html.dark .shadow-sm, html.dark .shadow, html.dark .shadow-lg, html.dark .shadow
 /* legacy data-table → tbl */
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead tr { background: var(--surface-2); }
-.data-table th { padding: 13px 18px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-soft); text-transform: none; }
+.data-table th { padding: 13px 18px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-soft); text-transform: none; white-space: nowrap; }
 .data-table td { padding: 14px 18px; font-size: 14px; color: var(--text); border-top: 1px solid var(--border-2); }
 .data-table tbody tr:hover { background: var(--surface-2); }
 .data-table tbody tr:first-child td { border-top: none; }

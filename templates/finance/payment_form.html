@@ -2,7 +2,7 @@
 {% block page_title %}{% if edit %}Изменить платёж{% else %}Новый платёж{% endif %}{% endblock %}
 
 {% block content %}
-<div class="max-w-lg">
+<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,28rem)_1fr] gap-4 items-start max-w-3xl">
   <div class="card overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#10B981,#059669)">
       <h2 class="font-bold text-white text-lg">{% if edit %}Изменить платёж #{{ payment.pk }}{% else %}Принять платёж{% endif %}</h2>
@@ -63,6 +63,30 @@
       </div>
     </form>
   </div>
+
+  <div class="card p-5" id="pf-info-panel" style="display:none">
+    <h3 class="font-bold text-slate-800 text-sm mb-3">Приём <span id="pf-info-num"></span></h3>
+    <div class="space-y-1 mb-4" id="pf-info-services"></div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div class="rounded-xl p-3" style="background:var(--surface-2)">
+        <div class="text-xs muted mb-0.5">Сумма</div>
+        <div class="font-bold" id="pf-info-total">—</div>
+      </div>
+      <div class="rounded-xl p-3" style="background:var(--surface-2)">
+        <div class="text-xs muted mb-0.5">Скидка</div>
+        <div class="font-bold" id="pf-info-discount">—</div>
+      </div>
+      <div class="rounded-xl p-3" style="background:var(--surface-2)">
+        <div class="text-xs muted mb-0.5">Оплачено</div>
+        <div class="font-bold" id="pf-info-paid">—</div>
+      </div>
+      <div class="rounded-xl p-3" style="background:#F6DEDC">
+        <div class="text-xs mb-0.5" style="color:#B3261E">Долг</div>
+        <div class="font-bold" style="color:#B3261E" id="pf-info-debt">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="card p-5 text-sm muted" id="pf-info-empty">Выберите приём слева, чтобы увидеть услуги и долг по нему.</div>
 </div>
 {{ treatments_json|json_script:"pf-treatments-data" }}
 <script>
@@ -71,6 +95,24 @@
   var pSel=document.querySelector('select[name="patient"]'), tSel=document.getElementById('pf-treatment');
   if(!pSel||!tSel) return;
   var initial=tSel.value;
+  var panel=document.getElementById('pf-info-panel'), empty=document.getElementById('pf-info-empty');
+  function fmt(n){ return Math.round(n).toLocaleString('ru-RU')+' сом'; }
+  function findTreatment(pid, tid){
+    return (MAP[String(pid)]||[]).find(function(t){ return String(t.id)===String(tid); });
+  }
+  function showInfo(){
+    var t = findTreatment(pSel.value, tSel.value);
+    if(!t){ panel.style.display='none'; empty.style.display='block'; return; }
+    panel.style.display='block'; empty.style.display='none';
+    document.getElementById('pf-info-num').textContent = '#'+t.id+' · '+t.label.split('·')[1].trim();
+    document.getElementById('pf-info-services').innerHTML = t.services.length
+      ? t.services.map(function(s){ return '<div class="text-sm">• '+s+'</div>'; }).join('')
+      : '<div class="text-sm muted">Услуги не указаны</div>';
+    document.getElementById('pf-info-total').textContent = fmt(t.total);
+    document.getElementById('pf-info-discount').textContent = t.discount ? '−'+fmt(t.discount) : '—';
+    document.getElementById('pf-info-paid').textContent = fmt(t.paid);
+    document.getElementById('pf-info-debt').textContent = fmt(t.debt);
+  }
   function fill(pid, keep){
     tSel.innerHTML='<option value="">—</option>';
     (MAP[String(pid)]||[]).forEach(function(t){
@@ -78,10 +120,13 @@
       if(keep && String(t.id)===String(initial)) o.selected=true;
       tSel.appendChild(o);
     });
+    showInfo();
   }
   pSel.addEventListener('change', function(){ fill(this.value, false); });
+  tSel.addEventListener('change', showInfo);
   // не перезатираем серверный список при первой загрузке, если приёмы уже отрисованы
   if(pSel.value && !tSel.options.length) fill(pSel.value, true);
+  showInfo();
 })();
 </script>
 {% endblock %}

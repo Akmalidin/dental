@@ -72,6 +72,32 @@
           <p class="text-xs mt-1" style="color:var(--text-faint)">80мм — термолента с QR-кодом (автопечать). A4 — PDF для обычного принтера.</p>
         </div>
 
+        <!-- Реквизиты для чека -->
+        <div class="mt-4 rounded-xl p-4" style="background:var(--surface);border:1px solid var(--border)">
+          <label class="fld">🧾 Реквизиты для чека</label>
+          <p class="text-xs mb-3" style="color:var(--text-faint)">Показываются на всех печатных чеках (80мм, A4, публичный чек по QR)</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="fld">Название клиники в чеке</label>
+              {{ form.receipt_clinic_name }}
+              <p class="text-xs mt-1" style="color:var(--text-faint)">Пусто — подставится «{{ form.instance.name }}»</p>
+            </div>
+            <div>
+              <label class="fld">ИП / юр. лицо</label>
+              {{ form.receipt_legal_name }}
+            </div>
+            <div>
+              <label class="fld">ИНН/ИИН</label>
+              {{ form.receipt_inn }}
+            </div>
+            <div>
+              <label class="fld">Адрес в чеке</label>
+              {{ form.receipt_address }}
+              <p class="text-xs mt-1" style="color:var(--text-faint)">Пусто — подставится адрес клиники выше</p>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-4">
           <label class="fld">🛡 Условия гарантии (печатаются в чеке лабораторных работ)</label>
           {{ form.warranty_terms }}

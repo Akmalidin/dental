@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Приёмы — {{ patient.full_name }}</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:820px;margin:24px auto;padding:0 24px;color:#161A18}
+  h1{font-size:19px;margin:0 0 2px}
+  .sub{color:#5C665F;font-size:13px;margin-bottom:18px}
+  .visit{border:1px solid #DCE3DF;border-radius:10px;padding:16px;margin-bottom:22px;page-break-inside:avoid}
+  .visit h2{font-size:15px;margin:0 0 2px}
+  .meta{color:#5C665F;font-size:12px;margin-bottom:10px}
+  table.teeth{border-collapse:collapse;margin:6px 0 14px}
+  table.teeth td{border:1px solid #DCE3DF;width:22px;height:18px;text-align:center;font-size:10px;color:#7A8580}
+  table.teeth td.marked{background:#DCEAE5;color:#2F6F5E;font-weight:700;border-color:#2F6F5E}
+  table.svc{width:100%;border-collapse:collapse;font-size:12px}
+  table.svc th,table.svc td{border-bottom:1px solid #DCE3DF;padding:6px 8px;text-align:left}
+  table.svc th{background:#F4F6F4;font-size:11px;text-transform:uppercase;color:#5C665F}
+  .totals{display:flex;gap:18px;margin-top:10px;font-size:12px}
+  .totals b{font-size:13px}
+  .debt{color:#B3261E}
+  .toolbar{text-align:center;margin:20px 0}
+  .toolbar button{font:inherit;padding:8px 22px;border-radius:8px;border:none;background:#2F6F5E;color:#fff;cursor:pointer}
+  @media print{.toolbar{display:none}}
+</style></head><body>
+
+<h1>{{ clinic_settings.receipt_display_name|default:"Клиника" }}</h1>
+{% if clinic_settings.receipt_display_address or clinic_settings.receipt_legal_name %}
+<div class="sub">{{ clinic_settings.receipt_display_address }}{% if clinic_settings.receipt_legal_name %} · {{ clinic_settings.receipt_legal_name }}{% endif %}{% if clinic_settings.receipt_inn %} · ИНН {{ clinic_settings.receipt_inn }}{% endif %}</div>
+{% endif %}
+<div class="sub">Приёмы — {{ patient.full_name }}{% if patient.phone %} · {{ patient.phone }}{% endif %} · сформировано {% now "d.m.Y H:i" %}</div>
+
+{% for t in treatments %}
+<div class="visit">
+  <h2>Приём #{{ t.pk }} · {{ t.get_status_display }}</h2>
+  <div class="meta">{{ t.created_at|date:"d.m.Y H:i" }} · врач {{ t.doctor.name|default:"—" }}{% if t.branch %} · {{ t.branch.name }}{% endif %}</div>
+
+  <table class="teeth">
+    <tr>{% for n,m in t.upper_marks %}<td class="{% if m %}marked{% endif %}">{{ n }}</td>{% endfor %}</tr>
+    <tr>{% for n,m in t.lower_marks %}<td class="{% if m %}marked{% endif %}">{{ n }}</td>{% endfor %}</tr>
+  </table>
+
+  <table class="svc">
+    <thead><tr><th>Услуга</th><th>Зуб</th><th>Кол.</th><th>Цена</th><th>Сумма</th></tr></thead>
+    <tbody>
+      {% for c in t.cures.all %}
+      <tr>
+        <td>{{ c.service.name }}</td>
+        <td>{{ c.tooth_number|default:"—" }}</td>
+        <td>{{ c.quantity }}</td>
+        <td>{{ c.price|floatformat:0 }} сом</td>
+        <td>{{ c.subtotal|floatformat:0 }} сом</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="text-align:center;color:#7A8580">Услуги не указаны</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div>Сумма: <b>{{ t.total_amount|floatformat:0 }} сом</b></div>
+    {% if t.discount %}<div>Скидка: <b>−{{ t.discount|floatformat:0 }} сом</b></div>{% endif %}
+    <div>Оплачено: <b>{{ t.paid_amount|floatformat:0 }} сом</b></div>
+    {% if t.debt > 0 %}<div class="debt">Долг: <b>{{ t.debt|floatformat:0 }} сом</b></div>{% endif %}
+  </div>
+</div>
+{% empty %}
+<p style="color:#7A8580;text-align:center;padding:40px 0">Приёмы не выбраны</p>
+{% endfor %}
+
+<div class="toolbar"><button onclick="window.print()">🖨 Печать</button></div>
+
+</body></html>

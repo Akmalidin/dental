@@ -55,7 +55,6 @@
       <span class="eyebrow">{% if service.category %}{{ service.category.name }}{% else %}Услуга{% endif %}</span>
       <h1>{{ service.name }}</h1>
       <div class="meta">
-        <div class="m"><div class="l">Цена</div><div class="v">{{ service.price|floatformat:0 }} сом</div></div>
         <div class="m"><div class="l">Длительность</div><div class="v">{{ service.duration }} мин</div></div>
       </div>
     </div>
@@ -75,7 +74,7 @@
       <h2>Похожие услуги</h2>
       <div class="rel-grid">
         {% for r in related %}
-        <a href="/service/{{ r.pk }}/" class="glass rel"><span class="n">{{ r.name }}</span><span class="p">{{ r.price|floatformat:0 }} сом</span></a>
+        <a href="/service/{{ r.pk }}/" class="glass rel"><span class="n">{{ r.name }}</span></a>
         {% endfor %}
       </div>
     </div>

@@ -53,8 +53,8 @@
       <span class="ml-2 font-bold" style="color:var(--text)" x-text="title"></span>
     </div>
 
-    <div class="flex items-center gap-2 ml-auto">
-      <select id="doctorFilter" class="w-48 no-tom" data-default="{{ default_doctor }}">
+    <div class="flex items-center gap-2 ml-auto flex-wrap">
+      <select id="doctorFilter" class="w-full sm:w-48 no-tom" data-default="{{ default_doctor }}">
         <option value="">Все врачи</option>
         {% for doc in doctors %}<option value="{{ doc.pk }}" {% if default_doctor and doc.pk == default_doctor %}selected{% endif %}>{{ doc.name }}</option>{% endfor %}
       </select>
@@ -396,7 +396,9 @@ function calendarPage() {
     },
     openCtx(e, ev) {
       e.preventDefault();
-      this.ctx = { open:true, x:e.clientX, y:e.clientY, id:ev.id,
+      const x = Math.min(e.clientX, window.innerWidth - 220);
+      const y = Math.min(e.clientY, window.innerHeight - 160);
+      this.ctx = { open:true, x, y, id:ev.id,
         pid: ev.extendedProps ? ev.extendedProps.patient_id : null,
         status: ev.extendedProps ? ev.extendedProps.status : '' };
     },

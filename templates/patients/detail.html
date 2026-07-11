@@ -24,10 +24,10 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
 
 {% block content %}
 <div x-data="patientDetail()" @open-payment.window="showPayment=true">
-<div class="flex gap-5 min-h-full">
+<div class="flex flex-col lg:flex-row gap-5 min-h-full">
 
   <!-- ═══ LEFT SIDEBAR ═════════════════════════════════════════════════════ -->
-  <aside class="w-64 shrink-0">
+  <aside class="w-full lg:w-64 shrink-0">
     <div class="card overflow-hidden sticky top-4">
 
       <!-- ── Avatar / Name / Edit ── -->
@@ -73,6 +73,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <p class="text-2xl font-black" style="color:#DC2626">{{ debt|floatformat:0 }} <span class="text-sm font-normal">сом</span></p>
           <p class="text-[11px] mt-0.5" style="color:#F87171">детали долга →</p>
         </div>
+        <template x-teleport="body">
         <div x-show="debtOpen" x-cloak class="modal-overlay" @click.self="debtOpen=false" style="z-index:70">
           <div class="modal-box overflow-hidden" style="max-width:560px" @click.stop>
             <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border)">
@@ -109,6 +110,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
             </div>
           </div>
         </div>
+        </template>
       </div>
       {% elif patient.balance > 0 %}
       <div class="px-4 pb-3">
@@ -147,6 +149,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <button type="button" @click="blOpen=true" class="w-full text-xs py-1.5 rounded-lg border text-slate-500 hover:border-slate-400 hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
             ⛔ В чёрный список
           </button>
+          <template x-teleport="body">
           <div x-show="blOpen" x-cloak class="modal-overlay" @click.self="blOpen=false">
             <div class="modal-box max-w-md">
               <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
@@ -165,6 +168,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
               </form>
             </div>
           </div>
+          </template>
           {% endif %}
         </div>
         {% endwith %}
@@ -283,11 +287,18 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
     <!-- ─── TAB: Процедуры (приёмы) ─────────────────────────────────────── -->
     <div x-show="tab==='procedures'" class="space-y-3">
       {% if treatments %}
+      <div class="flex items-center justify-end">
+        <a :href="printSelUrl()" target="_blank" x-show="selPrint.length>0" x-cloak
+           class="btn btn-ghost text-xs py-1.5" title="Подробная печать выбранных приёмов">
+          🖨 Печать выбранных (<span x-text="selPrint.length"></span>)
+        </a>
+      </div>
       {% for t in treatments %}
       <!-- Treatment card -->
       <div class="card overflow-hidden hover:shadow-md transition-shadow">
         <!-- Header -->
         <div class="flex items-center gap-2.5 px-4 py-2.5" style="border-bottom:1px solid var(--border-2)">
+          <input type="checkbox" @change="togglePrintSel({{ t.pk }})" class="shrink-0" title="Выбрать для печати">
           <a href="/treatments/{{ t.pk }}/" class="font-black text-sm hover:underline" style="color:var(--primary)">#{{ t.pk }}</a>
           <span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'in_progress' %}badge-orange{% elif t.status == 'cancelled' %}badge-gray{% elif t.status == 'draft' %}badge-gray{% else %}badge-orange{% endif %}">{% if t.status == 'draft' %}✏️ {% endif %}{{ t.get_status_display }}</span>
           <span class="text-xs muted hidden sm:inline">{{ t.created_at|date:"d.m.Y H:i" }}</span>
@@ -557,7 +568,10 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
     <div x-show="tab==='payments'" class="card overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
         <h3 class="font-bold text-slate-800">История оплат</h3>
-        <button @click="showPayment=true" class="btn-success text-xs py-1.5">+ Оплата</button>
+        <div class="flex items-center gap-2">
+          <a href="/patients/{{ patient.pk }}/payments/print/" target="_blank" class="btn btn-ghost text-xs py-1.5" title="Печать истории оплат">🖨 Печать</a>
+          <button @click="showPayment=true" class="btn-success text-xs py-1.5">+ Оплата</button>
+        </div>
       </div>
       <table class="data-table">
         <thead>
@@ -566,8 +580,11 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         <tbody>
           {% for pay in payments %}
           <tr>
-            <td class="font-bold {% if pay.type == 'income' %}text-emerald-600{% else %}text-red-600{% endif %}">
-              {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} сом
+            <td>
+              <button type="button" @click="openAlloc({{ pay.pk }})" title="Показать, на какой приём распределён"
+                      class="font-bold hover:underline {% if pay.type == 'income' %}text-emerald-600{% else %}text-red-600{% endif %}">
+                {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} сом
+              </button>
             </td>
             <td>{{ pay.get_method_display }}</td>
             <td><span class="badge {% if pay.type == 'income' %}badge-green{% else %}badge-red{% endif %}">{{ pay.get_type_display }}</span></td>
@@ -709,6 +726,33 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
   </div><!-- end main content -->
 </div><!-- end flex -->
 
+<!-- ─── ALLOCATION MODAL: на какой приём распределён платёж (inside patientDetail() scope) ─── -->
+<div x-show="alloc.open" x-cloak class="modal-overlay" @click.self="alloc.open=false">
+  <div class="modal-box max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+      <h3 class="font-bold text-slate-800">Распределение платежа</h3>
+      <button @click="alloc.open=false" class="text-2xl text-slate-400">&times;</button>
+    </div>
+    <div class="p-6 space-y-3">
+      <p class="text-sm text-slate-500" x-show="!alloc.loading">Платёж <b x-text="Math.round(alloc.amount).toLocaleString('ru-RU')"></b> сом · <span x-text="alloc.patient"></span></p>
+      <p x-show="alloc.loading" class="text-sm text-slate-400">Загрузка…</p>
+      <table class="tbl" x-show="!alloc.loading">
+        <thead><tr><th>Приём</th><th>Услуги</th><th class="text-right">Сумма</th></tr></thead>
+        <tbody>
+          <template x-for="r in alloc.rows" :key="r.treatment">
+            <tr>
+              <td><a :href="'/treatments/'+r.treatment+'/'" class="font-semibold" style="color:var(--primary)" x-text="'#'+r.treatment+' · '+r.date"></a></td>
+              <td class="text-xs text-slate-500" x-text="r.services"></td>
+              <td class="text-right font-bold" x-text="Math.round(r.amount).toLocaleString('ru-RU')+' сом'"></td>
+            </tr>
+          </template>
+          <tr x-show="alloc.rows.length===0"><td colspan="3" class="text-center text-slate-400 py-3">Платёж не распределён (аванс)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ─── PAYMENT MODAL (inside patientDetail() scope) ─────────────────────── -->
 <div x-show="showPayment" x-cloak class="modal-overlay" @click.self="showPayment=false">
   <div class="modal-box max-w-md">
@@ -846,7 +890,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <template x-for="group in filteredServiceGroups()" :key="group.cat">
             <div class="mb-5">
               <p class="text-xs font-black text-slate-700 uppercase tracking-wider mb-2" x-text="group.cat"></p>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <template x-for="svc in group.items" :key="svc.id">
                   <div @click="toggleSvc(svc)"
                        class="border rounded-xl p-3 cursor-pointer transition-all hover:border-indigo-300"
@@ -984,6 +1028,15 @@ function patientDetail() {
     },
     showPayment: false,
     showCashier: false,
+    selPrint: [],
+    togglePrintSel(pk){
+      const i = this.selPrint.indexOf(pk);
+      if(i===-1) this.selPrint.push(pk); else this.selPrint.splice(i,1);
+    },
+    printSelUrl(){ return '/patients/{{ patient.pk }}/treatments/print/?ids='+this.selPrint.join(','); },
+    alloc: {open:false, loading:false, amount:0, patient:'', allocated:0, rows:[]},
+    openAlloc(pk){ this.alloc.open=true; this.alloc.loading=true; this.alloc.rows=[];
+      fetch('/finance/payments/'+pk+'/allocations/').then(r=>r.json()).then(d=>{ this.alloc={open:true,loading:false,...d}; }).catch(()=>{this.alloc.loading=false;}); },
     // Зубная карта: справочник статусов + сохранённые состояния зубов
     TSTATUSES: TOOTH_STATUSES,
     toothConditions: Object.assign({}, TOOTH_CONDITIONS),
