@@ -3,12 +3,20 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import HttpResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from apps.notifications.views import service_worker, web_manifest
 from apps.finance.views import payment_public
 from apps.treatments.views import treatment_public
 
+
+def _app_robots(request):
+    """CRM (app.sadaf.kg) — приватный вход персонала, индексация не нужна."""
+    return HttpResponse("User-agent: *\nDisallow: /\n", content_type="text/plain; charset=utf-8")
+
+
 urlpatterns = [
+    path("robots.txt", _app_robots, name="app_robots"),
     path("django-admin/", admin.site.urls),
     path("i18n/", include("django.conf.urls.i18n")),  # язык переключатель
 

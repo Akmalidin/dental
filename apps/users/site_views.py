@@ -1,7 +1,7 @@
 """Публичный сайт клиники (поддомен). Без логина. Клиника берётся из request.public_clinic
 (ставится PublicSiteMiddleware)."""
 from django.shortcuts import render
-from django.http import Http404
+from django.http import Http404, HttpResponse
 
 
 def _ctx(request):
@@ -10,6 +10,37 @@ def _ctx(request):
     if clinic is None or site is None:
         raise Http404("Сайт недоступен")
     return clinic, site
+
+
+def public_robots(request):
+    """robots.txt для сайта клиники — разрешить индексацию, указать sitemap."""
+    _ctx(request)  # 404, если сайт не активирован на этом поддомене
+    base = request.build_absolute_uri("/")
+    content = f"User-agent: *\nAllow: /\n\nSitemap: {base}sitemap.xml\n"
+    return HttpResponse(content, content_type="text/plain; charset=utf-8")
+
+
+def public_sitemap(request):
+    """sitemap.xml для сайта клиники — главная, запись, врачи, услуги."""
+    clinic, site = _ctx(request)
+    base = request.build_absolute_uri("/").rstrip("/")
+    urls = [base + "/"]
+    if site.show_booking:
+        urls.append(base + "/book/")
+    if site.show_doctors:
+        from apps.users.models import clinic_doctors
+        for d in clinic_doctors(clinic).filter(show_on_site=True):
+            urls.append(f"{base}/doctor/{d.pk}/")
+    if site.show_services:
+        from apps.services.models import Service
+        for s in Service.objects.filter(is_active=True):
+            urls.append(f"{base}/service/{s.pk}/")
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        parts.append(f"  <url><loc>{u}</loc></url>")
+    parts.append("</urlset>")
+    return HttpResponse("\n".join(parts), content_type="application/xml; charset=utf-8")
 
 
 def public_home(request):

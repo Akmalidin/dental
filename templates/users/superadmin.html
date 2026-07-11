@@ -16,6 +16,39 @@
 
 <div class="w-full" x-data="{tab:'clinics'}">
 
+  {% if new_clinic_ready %}
+  <!-- ─── Клиника готова: данные доступа для передачи ───────────────────── -->
+  <div x-data="{open:true,
+    text:{% if new_clinic_ready %}`Доступ в SADAF для «{{ new_clinic_ready.name|escapejs }}»:
+Сайт входа: {{ new_clinic_ready.login_url|escapejs }}
+Логин: {{ new_clinic_ready.login|escapejs }}
+Пароль: {{ new_clinic_ready.password|escapejs }}`{% else %}''{% endif %},
+    copied:false,
+    copyAll(){ navigator.clipboard.writeText(this.text).then(()=>{ this.copied=true; setTimeout(()=>this.copied=false, 2000); }); }
+  }" x-show="open" x-cloak class="modal-overlay" @click.self="open=false">
+    <div class="modal-box max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b" style="border-color:var(--border)">
+        <h3 class="font-bold" style="color:var(--text)">✅ Клиника «{{ new_clinic_ready.name }}» готова</h3>
+        <button @click="open=false" class="text-2xl leading-none" style="color:var(--text-faint)">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <p class="text-sm" style="color:var(--text-soft)">Передайте эти данные клинике — например, скопируйте и отправьте в WhatsApp.</p>
+        <div class="rounded-xl p-4 space-y-2" style="background:var(--surface-2)">
+          <div><p class="text-xs" style="color:var(--text-faint)">Сайт входа</p>
+            <a href="{{ new_clinic_ready.login_url }}" target="_blank" class="font-semibold break-all" style="color:var(--primary)">{{ new_clinic_ready.login_url }}</a></div>
+          <div><p class="text-xs" style="color:var(--text-faint)">Логин</p>
+            <p class="font-bold" style="color:var(--text)">{{ new_clinic_ready.login }}</p></div>
+          <div><p class="text-xs" style="color:var(--text-faint)">Пароль</p>
+            <p class="font-bold" style="color:var(--text)">{{ new_clinic_ready.password }}</p></div>
+        </div>
+        <button @click="copyAll()" class="btn btn-primary w-full justify-center">
+          <span x-show="!copied">📋 Скопировать всё</span><span x-show="copied" x-cloak>✓ Скопировано</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Вкладки -->
   <div class="flex gap-1 mb-5 overflow-x-auto" style="border-bottom:1px solid var(--border)">
     <button class="sa-tab" :class="tab==='clinics' && 'on'" @click="tab='clinics'">🏥 Клиники</button>

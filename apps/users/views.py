@@ -67,6 +67,14 @@ def superadmin_panel(request):
                 messages.success(request, _(
                     "Клиника «%(n)s» создана пустой (без демо-данных). Админ: %(l)s"
                 ) % {"n": cname, "l": alogin})
+            # Данные доступа для передачи новой клинике — одноразовый показ через сессию
+            # (пароль в открытом виде доступен только сейчас, до хеширования уже не достать).
+            from django.conf import settings as dj_settings
+            app_host = getattr(dj_settings, "APP_HOST", "app.sadaf.kg")
+            request.session["new_clinic_ready"] = {
+                "name": cname, "login": alogin, "password": apass, "slug": slug,
+                "login_url": f"https://{app_host}/login/?clinic={slug}",
+            }
             return redirect("superadmin_panel")
         if action == "save_modules":
             from apps.tenancy import get_current_clinic
@@ -140,6 +148,7 @@ def superadmin_panel(request):
         "tariff_presets_json": ClinicSettings.TARIFF_PRESETS,
         "target_clinic": target,
         "clinics": Clinic.objects.all(),
+        "new_clinic_ready": request.session.pop("new_clinic_ready", None),
     })
 
 
