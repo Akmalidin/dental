@@ -781,19 +781,26 @@ def dashboard_view(request):
         from apps.patients.models import Patient
         from apps.tasks.models import Task
         today = date.today()
+        my_tasks = Task.objects.filter(
+            assigned_to=user, status__in=["pending", "in_progress"]
+        ).order_by("-priority", "due_date")
+        my_debtors = Patient.objects.filter(
+            treatments__doctor=user, balance__lt=0
+        ).distinct().order_by("balance")[:5]
         context.update({
             "my_appointments_today": Appointment.objects.filter(doctor=user, start_at__date=today).count(),
             "upcoming_appointments": Appointment.objects.filter(
                 doctor=user, start_at__date__gte=today,
                 status__in=["scheduled", "confirmed"]
-            ).select_related("patient", "service").order_by("start_at")[:10],
+            ).select_related("patient", "service").order_by("start_at")[:8],
             "my_patients_count": Patient.objects.filter(
                 treatments__doctor=user
             ).distinct().count(),
-            "my_tasks_count": Task.objects.filter(
-                assigned_to=user, status__in=["pending", "in_progress"]
-            ).count(),
+            "my_tasks_count": my_tasks.count(),
+            "my_tasks": my_tasks[:5],
+            "my_debtors": my_debtors,
             "followups_count": 0,
+            "today": today,
         })
         template = "dashboard/doctor.html"
 

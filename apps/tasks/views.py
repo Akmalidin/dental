@@ -91,6 +91,9 @@ def task_done(request, pk):
     task.status = Task.STATUS_DONE
     task.save()
     messages.success(request, _("Задача отмечена выполненной"))
+    referer = request.META.get("HTTP_REFERER")
+    if referer:
+        return redirect(referer)
     return redirect("task_list")
 
 
