@@ -203,12 +203,20 @@ def public_book_submit(request):
     if branch is None:
         return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
 
-    patient = Patient.all_objects.filter(clinic=clinic, phone=phone, is_deleted=False).first()
-    if patient is None:
-        parts = name.split(None, 1)
-        patient = Patient(first_name=parts[0], last_name=parts[1] if len(parts) > 1 else "",
-                          phone=phone, branch=branch)
-        patient.save()
+    from apps.patients.models import normalize_phone
+    from django.db import transaction
+    with transaction.atomic():
+        # phone_norm — сравнение по нормализованному номеру (последние 9 цифр),
+        # а не по точному совпадению строки: иначе "+996700000000" и "0700000000"
+        # (тот же номер, разное форматирование) считались бы разными пациентами
+        # и с сайта каждый раз создавалась бы новая дублирующая карточка.
+        patient = (Patient.all_objects.select_for_update()
+                   .filter(clinic=clinic, phone_norm=normalize_phone(phone), is_deleted=False).first())
+        if patient is None:
+            parts = name.split(None, 1)
+            patient = Patient(first_name=parts[0], last_name=parts[1] if len(parts) > 1 else "",
+                              phone=phone, branch=branch)
+            patient.save()
 
     note = "Заявка с сайта"
     if name and patient.full_name.strip().lower() != name.strip().lower():

@@ -60,6 +60,19 @@ def clinic_settings(request):
         except Exception:
             pass
 
+        # Возможные дубли пациентов (по совпадающему номеру телефона) — бейдж
+        # в сайдбаре у «Пациенты», чтобы персонал не держал это в голове сам.
+        try:
+            from apps.patients.models import Patient, SharedPhoneNumber
+            from django.db.models import Count
+            confirmed = set(SharedPhoneNumber.objects.values_list("phone_norm", flat=True))
+            dupe_groups = (Patient.objects.exclude(phone_norm="")
+                           .exclude(phone_norm__in=confirmed)
+                           .values("phone_norm").annotate(c=Count("id")).filter(c__gt=1))
+            ctx["dupe_patients_count"] = sum(g["c"] for g in dupe_groups)
+        except Exception:
+            pass
+
         # Филиалы для переключателя в navbar
         try:
             from apps.users.models import Branch

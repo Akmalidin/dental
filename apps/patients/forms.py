@@ -8,7 +8,7 @@ class PatientForm(forms.ModelForm):
         model = Patient
         fields = [
             "first_name", "last_name", "middle_name",
-            "birth_date", "gender", "phone", "phone2",
+            "birth_date", "gender", "phone", "phone2", "pin",
             "address", "source", "primary_doctor", "tags", "branch",
             "insurance", "insurance_policy", "insurance_valid_until",
             "blood_group", "allergy", "notes",

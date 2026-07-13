@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 
-from .models import Patient, Tag, LeadSource
+from .models import Patient, Tag, LeadSource, SharedPhoneNumber
 from .forms import PatientForm
 from apps.treatments.models import Treatment, TreatmentCure
 from apps.finance.models import Payment
@@ -36,6 +36,8 @@ def patient_list(request):
     bmonth = G.get("bmonth", "")
     reg_from = G.get("reg_from", "")
     reg_to = G.get("reg_to", "")
+    pin_f = G.get("pin", "")
+    dupes_f = G.get("dupes", "")
 
     today = date.today()
     week_ago = today - timedelta(days=7)
@@ -119,6 +121,22 @@ def patient_list(request):
         qs = qs.filter(created_at__date__gte=reg_from)
     if reg_to:
         qs = qs.filter(created_at__date__lte=reg_to)
+    if pin_f == "yes":
+        qs = qs.exclude(pin="")
+    elif pin_f == "no":
+        qs = qs.filter(pin="")
+    # Набор телефонов, встречающихся у нескольких пациентов — нужен всегда (не
+    # только при фильтре ?dupes=1), чтобы показывать кнопку «Есть в базе» только
+    # у реальных дублей, а не у каждого пациента подряд.
+    from django.db.models import Count as _Count
+    confirmed_shared = set(SharedPhoneNumber.objects.values_list("phone_norm", flat=True))
+    dupe_phones = set(
+        Patient.objects.exclude(phone_norm="").exclude(phone_norm__in=confirmed_shared)
+        .values("phone_norm").annotate(c=_Count("id")).filter(c__gt=1)
+        .values_list("phone_norm", flat=True)
+    )
+    if dupes_f:
+        qs = qs.filter(phone_norm__in=dupe_phones)
     qs = qs.distinct()
 
     # Stats
@@ -139,6 +157,9 @@ def patient_list(request):
     debtors_count = len(debt_map)
     debtors_total = sum(debt_map.values()) if debt_map else Decimal(0)
 
+    with_pin_count = Patient.objects.exclude(pin="").count()
+    without_pin_count = all_count - with_pin_count
+
     from apps.users.models import Branch, clinic_doctors
     from apps.tenancy import get_current_clinic
     branches = Branch.objects.all()
@@ -154,7 +175,7 @@ def patient_list(request):
         "tag": tag_id, "blood": blood, "debt": debt, "insurance": insurance,
         "allergy": allergy_f, "birth_from": birth_from, "birth_to": birth_to,
         "age_min": age_min, "age_max": age_max, "bmonth": bmonth,
-        "reg_from": reg_from, "reg_to": reg_to,
+        "reg_from": reg_from, "reg_to": reg_to, "pin": pin_f, "dupes": dupes_f,
     }
     adv_count = sum(1 for v in f.values() if v)
 
@@ -182,7 +203,124 @@ def patient_list(request):
         "today_month": today.month,
         "debtors_count": debtors_count,
         "debtors_total": abs(debtors_total),
+        "with_pin_count": with_pin_count,
+        "without_pin_count": without_pin_count,
+        "dupe_phones": dupe_phones,
     })
+
+
+@login_required
+def patient_merge_search(request, pk):
+    """AJAX: найти возможных «оригиналов» этого пациента среди остальных — по
+    нормализованному телефону или по ФИО. Используется кнопкой «Есть в базе»
+    на пациентах без ИИН (обычно созданных автоматически с сайта)."""
+    from django.http import JsonResponse
+    from .models import normalize_phone
+    patient = get_object_or_404(Patient, pk=pk)
+    pnorm = normalize_phone(patient.phone)
+    qs = Patient.objects.exclude(pk=patient.pk)
+    if pnorm:
+        cand = list(qs.filter(phone_norm=pnorm))
+    else:
+        cand = []
+    if not cand and patient.last_name.strip():
+        cand = list(qs.filter(
+            last_name__iexact=patient.last_name.strip(),
+            first_name__iexact=patient.first_name.strip(),
+        ))
+    rows = [{
+        "id": c.pk, "number": c.display_number, "name": c.full_name,
+        "phone": c.phone, "birth_date": c.birth_date.strftime("%d.%m.%Y") if c.birth_date else "",
+        "treatments": Treatment.all_objects.filter(patient=c, is_deleted=False).count(),
+    } for c in cand]
+    return JsonResponse({"ok": True, "candidates": rows})
+
+
+@login_required
+@require_POST
+def patient_merge_confirm(request, pk):
+    """Объединить двух пациентов — переносит ВСЕ связанные записи (приёмы, платежи,
+    записи, файлы и т.д.) и мягко удаляет один из них.
+
+    Направление объединения НЕ зависит от того, на какой из двух карточек была
+    нажата кнопка «Есть в базе»: всегда остаётся более СТАРАЯ карточка (раньше
+    созданная — обычно с уже накопленной историей/долгом), а более новая
+    переносится в неё и удаляется. Иначе персонал мог случайно удалить как раз
+    ту карточку, где уже была реальная история, оставив пустую.
+    """
+    a = get_object_or_404(Patient, pk=pk)
+    b = get_object_or_404(Patient, pk=request.POST.get("target"))
+    if a.pk == b.pk:
+        messages.error(request, _("Нельзя объединить пациента с самим собой"))
+        return redirect("patient_detail", pk=a.pk)
+    # Кто старше — по дате создания, а при совпадении (частый случай в тестах/быстрых
+    # массовых импортах, где created_at совпадает до секунды) — по pk как тайбрейкеру.
+    target, source = (a, b) if (a.created_at, a.pk) <= (b.created_at, b.pk) else (b, a)
+    merge_patients(source, target, request.user)
+    messages.success(request, _(
+        "Пациент №%(s)s объединён с №%(t)s — вся история (приёмы, платежи, записи) перенесена."
+    ) % {"s": source.display_number, "t": target.display_number})
+    return redirect("patient_detail", pk=target.pk)
+
+
+@login_required
+@require_POST
+def patient_mark_not_duplicate(request, pk):
+    """Подтвердить, что пациент с этим номером телефона — НЕ дубль (например,
+    номер общий у родственников). Запоминаем номер, чтобы предупреждение
+    «Есть в базе» и бейдж в сайдбаре больше не показывались для него."""
+    patient = get_object_or_404(Patient, pk=pk)
+    from .models import normalize_phone
+    pnorm = normalize_phone(patient.phone)
+    if pnorm:
+        SharedPhoneNumber.objects.get_or_create(phone_norm=pnorm, defaults={"noted_by": request.user})
+        messages.success(request, _("Отмечено: этот номер телефона общий для разных пациентов — предупреждение больше не будет показываться."))
+    referer = request.META.get("HTTP_REFERER")
+    if referer:
+        return redirect(referer)
+    return redirect("patient_detail", pk=patient.pk)
+
+
+def merge_patients(source, target, user=None):
+    """Перенести ВСЕ связанные записи source → target и мягко удалить source.
+    Затрагивает: приёмы, ЭМК, планы лечения, зубную карту, платежи, авансы,
+    записи на приём, назначенные лекарства, WhatsApp-переписку, заказы/гарантии
+    техникам, теги. Всё в одной транзакции — либо переносится целиком, либо
+    ничего (при ошибке)."""
+    from django.db import transaction
+    from apps.treatments.models import Treatment
+    from apps.treatments.models_emr import MedicalRecord
+    from apps.treatments.models_plan import TreatmentPlan
+    from apps.treatments.models_teeth import ToothCondition
+    from apps.finance.models import Payment
+    from apps.finance.models import PatientAdvance
+    from apps.appointments.models import Appointment
+    from apps.medicines.models import PatientMedicine
+    from apps.notifications.models import WaMessage
+    from apps.technicians.models import TechnicianTask, TechnicianWarrantyCase
+
+    with transaction.atomic():
+        Treatment.all_objects.filter(patient=source).update(patient=target)
+        MedicalRecord.objects.filter(patient=source).update(patient=target)
+        TreatmentPlan.objects.filter(patient=source).update(patient=target)
+        ToothCondition.objects.filter(patient=source).update(patient=target)
+        Payment.all_clinics.filter(patient=source).update(patient=target)
+        PatientAdvance.objects.filter(patient=source).update(patient=target)
+        Appointment.all_objects.filter(patient=source).update(patient=target)
+        PatientMedicine.objects.filter(patient=source).update(patient=target)
+        WaMessage.all_clinics.filter(patient=source).update(patient=target)
+        TechnicianTask.all_clinics.filter(patient=source).update(patient=target)
+        TechnicianWarrantyCase.all_clinics.filter(patient=source).update(patient=target)
+        for tag in source.tags.all():
+            target.tags.add(tag)
+        if not target.pin and source.pin:
+            target.pin = source.pin
+        if not target.address and source.address:
+            target.address = source.address
+        target.save()
+        source.soft_delete(user)
+        target.recalc_balance()
+    return target
 
 
 @login_required

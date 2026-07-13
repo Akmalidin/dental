@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
 from apps.tenancy import ClinicSoftDeleteModel, ClinicScopedModel
@@ -83,7 +84,13 @@ class Patient(ClinicSoftDeleteModel):
     birth_date = models.DateField(null=True, blank=True, verbose_name="Дата рождения")
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, verbose_name="Пол")
     phone = models.CharField(max_length=30, verbose_name="Телефон")
+    phone_norm = models.CharField(max_length=15, db_index=True, editable=False, default="")
     phone2 = models.CharField(max_length=30, blank=True, verbose_name="Доп. телефон")
+    pin = models.CharField(
+        max_length=14, blank=True, db_index=True, verbose_name="ИИН",
+        validators=[RegexValidator(r"^\d{14}$", "ИИН должен содержать ровно 14 цифр")],
+        help_text="Персональный идентификационный номер (Кыргызстан), 14 цифр",
+    )
     address = models.CharField(max_length=500, blank=True, verbose_name="Адрес")
     source = models.ForeignKey(
         LeadSource,
@@ -147,6 +154,7 @@ class Patient(ClinicSoftDeleteModel):
         return f"{self.last_name} {self.first_name}"
 
     def save(self, *args, **kwargs):
+        self.phone_norm = normalize_phone(self.phone)
         # Назначаем порядковый номер в пределах клиники при первом сохранении.
         # _ClinicSaveMixin.save (через super) проставит clinic; нам он нужен заранее,
         # поэтому повторяем его логику здесь для расчёта номера.
@@ -267,6 +275,25 @@ class Patient(ClinicSoftDeleteModel):
         Patient.all_objects.filter(pk=self.pk).update(balance=balance)
         self.balance = balance
         return balance
+
+
+class SharedPhoneNumber(models.Model):
+    """Подтверждённое исключение для проверки дублей: «да, это разные пациенты,
+    просто у них один номер телефона» (например, супруги/родственники используют
+    один телефон). После подтверждения предупреждение «Есть в базе» для этого
+    номера больше не показывается."""
+    phone_norm = models.CharField(max_length=15, unique=True, db_index=True)
+    noted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Общий номер телефона (не дубль)"
+        verbose_name_plural = "Общие номера телефонов (не дубли)"
+
+    def __str__(self):
+        return self.phone_norm
 
 
 class PatientVisit(ClinicScopedModel):

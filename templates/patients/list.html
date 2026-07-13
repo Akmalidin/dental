@@ -6,7 +6,7 @@
   .fl-lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#94a3b8);margin-bottom:4px}
   #pf .grid select,#pf .grid input{font-size:13px}
 </style>
-<div class="space-y-5">
+<div class="space-y-5" x-data="mergeCheck()">
 
   <!-- Stat cards -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -26,6 +26,16 @@
       <div class="stat-icon ic-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg></div>
       <div><p class="stat-label">С долгами</p><p class="stat-value">{{ debtors_count }}</p>{% if debtors_total %}<p class="text-xs text-red-500 font-semibold">{{ debtors_total|floatformat:0 }} сом</p>{% endif %}</div>
     </a>
+  </div>
+
+  <!-- Вкладки: ИИН -->
+  <div class="pill-tabs">
+    <a href="/patients/" class="pill-tab {% if not f.pin and not f.dupes %}active{% endif %}">Все ({{ all_count }})</a>
+    <a href="/patients/?pin=yes" class="pill-tab {% if f.pin == 'yes' %}active{% endif %}">С ИИН ({{ with_pin_count }})</a>
+    <a href="/patients/?pin=no" class="pill-tab {% if f.pin == 'no' %}active{% endif %}">Без ИИН ({{ without_pin_count }})</a>
+    {% if dupe_patients_count %}
+    <a href="/patients/?dupes=1" class="pill-tab {% if f.dupes %}active{% endif %}" style="color:#F59E0B">⚠ Возможные дубли ({{ dupe_patients_count }})</a>
+    {% endif %}
   </div>
 
   <!-- Table -->
@@ -106,6 +116,11 @@
                 <option value="yes" {% if f.allergy == "yes" %}selected{% endif %}>Есть</option>
                 <option value="no" {% if f.allergy == "no" %}selected{% endif %}>Нет</option>
               </select></div>
+            <div><label class="fl-lbl">Дублированные пациенты</label>
+              <select name="dupes" onchange="document.getElementById('pf').submit()" class="w-full">
+                <option value="">Все</option>
+                <option value="1" {% if f.dupes %}selected{% endif %}>Только дубли (по телефону)</option>
+              </select></div>
             <div><label class="fl-lbl">День рождения (месяц)</label>
               <select name="bmonth" onchange="document.getElementById('pf').submit()" class="w-full">
                 <option value="">Любой месяц</option>
@@ -180,6 +195,12 @@
               <a href="/patients/{{ patient.pk }}/edit/" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z"/></svg></a>
               <a href="/treatments/create/?patient={{ patient.pk }}" class="row-act" style="background:var(--green-bg);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></a>
               <a href="/patients/{{ patient.pk }}/delete/" class="row-act ra-del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg></a>
+              {% if patient.phone_norm in dupe_phones %}
+              <button type="button" @click="check({{ patient.pk }}, '{{ patient.full_name|escapejs }}')"
+                      class="btn btn-ghost btn-sm" style="white-space:nowrap;color:#F59E0B" title="У этого номера телефона есть ещё одна карточка — проверить и объединить">
+                ⚠ Есть в базе
+              </button>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -198,5 +219,72 @@
       </div>
     </div>
   </div>
+
+  <!-- ─── Модалка «Есть в базе» — проверка на дубль + объединение ────────── -->
+  <template x-teleport="body">
+  <div x-show="open" x-cloak class="modal-overlay" @click.self="open=false">
+    <div class="modal-box max-w-lg">
+      <div class="flex items-center justify-between px-6 py-4 border-b" style="border-color:var(--border)">
+        <h3 class="font-bold" style="color:var(--text)">Проверка дубликата — <span x-text="name"></span></h3>
+        <button @click="open=false" class="text-2xl leading-none" style="color:var(--text-faint)">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <p x-show="loading" class="text-sm muted">Ищем совпадения по телефону/ФИО…</p>
+        <template x-if="!loading && candidates.length === 0">
+          <div class="text-center py-6">
+            <p class="text-sm muted mb-4">Совпадений не найдено — похоже, это действительно новый пациент.</p>
+            <a :href="'/patients/'+checkedId+'/edit/'" class="btn btn-primary btn-sm">Редактировать карточку</a>
+          </div>
+        </template>
+        <template x-for="c in candidates" :key="c.id">
+          <div class="rounded-xl p-4 flex items-center justify-between gap-3" style="background:var(--surface-2)">
+            <div>
+              <p class="font-semibold" style="color:var(--text)">№<span x-text="c.number"></span> · <span x-text="c.name"></span></p>
+              <p class="text-xs muted" x-text="c.phone + (c.birth_date ? ' · ' + c.birth_date : '') + ' · приёмов: ' + c.treatments"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap"
+                      @click="dismissNotDuplicate(c)">Это другой пациент</button>
+              <button type="button" class="btn btn-success btn-sm" style="white-space:nowrap"
+                      @click="confirmMerge(c)">Это тот же пациент →</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+  </template>
+
+  <form :action="'/patients/'+checkedId+'/merge/confirm/'" method="post" x-ref="mergeForm" style="display:none">
+    {% csrf_token %}
+    <input type="hidden" name="target" :value="targetId">
+  </form>
+
+  <form :action="'/patients/'+checkedId+'/mark-not-duplicate/'" method="post" x-ref="notDupeForm" style="display:none">
+    {% csrf_token %}
+  </form>
+
 </div>
+<script>
+function mergeCheck(){
+  return {
+    open:false, loading:false, candidates:[], checkedId:null, targetId:null, name:'',
+    check(pk, name){
+      this.checkedId=pk; this.name=name; this.open=true; this.loading=true; this.candidates=[];
+      fetch('/patients/'+pk+'/merge/search/').then(r=>r.json()).then(d=>{
+        this.candidates = d.candidates || []; this.loading=false;
+      }).catch(()=>{ this.loading=false; });
+    },
+    confirmMerge(c){
+      if(!confirm('Объединить «'+this.name+'» с «'+c.name+'» (№'+c.number+')? Вся история (приёмы, платежи, записи) объединится на более СТАРОЙ из двух карточек — она и останется, вторая будет удалена. Действие необратимо.')) return;
+      this.targetId = c.id;
+      this.$nextTick(() => this.$refs.mergeForm.submit());
+    },
+    dismissNotDuplicate(c){
+      if(!confirm('Подтвердить, что «'+this.name+'» и «'+c.name+'» — разные пациенты, просто с общим номером телефона (например, родственники)? Предупреждение «Есть в базе» для этого номера больше не будет показываться.')) return;
+      this.$nextTick(() => this.$refs.notDupeForm.submit());
+    },
+  };
+}
+</script>
 {% endblock %}
