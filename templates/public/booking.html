@@ -4,6 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Запись на приём — {{ clinic.name }}</title>
+  <meta name="description" content="Онлайн-запись на приём в клинику {{ clinic.name }}.">
+  <link rel="canonical" href="{{ request.build_absolute_uri }}">
+  {% if site.logo %}
+  <link rel="icon" href="{{ site.logo.url }}">
+  <link rel="apple-touch-icon" href="{{ site.logo.url }}">
+  {% else %}
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="Запись на приём — {{ clinic.name }}">
+  <meta property="og:description" content="Онлайн-запись на приём в клинику {{ clinic.name }}.">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>

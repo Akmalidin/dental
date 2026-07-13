@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ doctor.name }} — {{ clinic.name }}</title>
   <meta name="description" content="{{ doctor.specialty|default:'Врач' }} клиники {{ clinic.name }}. {{ doctor.bio|truncatechars:120 }}">
+  <link rel="canonical" href="{{ request.build_absolute_uri }}">
+  {% if site.logo %}
+  <link rel="icon" href="{{ site.logo.url }}">
+  <link rel="apple-touch-icon" href="{{ site.logo.url }}">
+  {% else %}
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  {% endif %}
+  <meta property="og:type" content="profile">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="{{ doctor.name }} — {{ clinic.name }}">
+  <meta property="og:description" content="{{ doctor.specialty|default:'Врач' }} клиники {{ clinic.name }}. {{ doctor.bio|truncatechars:120 }}">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>

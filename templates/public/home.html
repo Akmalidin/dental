@@ -5,10 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ site.seo_title|default:clinic.name }}</title>
   <meta name="description" content="{{ site.seo_description|default:site.tagline }}">
+  <link rel="canonical" href="{{ request.build_absolute_uri }}">
+  {% if site.logo %}
+  <link rel="icon" href="{{ site.logo.url }}">
+  <link rel="apple-touch-icon" href="{{ site.logo.url }}">
+  {% else %}
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  {% endif %}
+  <meta property="og:type" content="business.business">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="{{ site.seo_title|default:clinic.name }}">
+  <meta property="og:description" content="{{ site.seo_description|default:site.tagline }}">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
+  {% if site.cover %}<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ site.cover.url }}">
+  {% elif site.logo %}<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ site.logo.url }}">{% endif %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   {% if map_points %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">{% endif %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Dentist",
+    "name": "{{ clinic.name|escapejs }}",
+    "url": "{{ request.build_absolute_uri|escapejs }}",
+    {% if site.logo %}"image": "{{ request.scheme }}://{{ request.get_host }}{{ site.logo.url|escapejs }}",{% endif %}
+    "telephone": "{{ site.phone|default:branches.0.phone|escapejs }}",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "{{ site.address|default:branches.0.address|escapejs }}"
+    }{% if branches.0.latitude %},
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": {{ branches.0.latitude }},
+      "longitude": {{ branches.0.longitude }}
+    }{% endif %}{% if site.hours or branches.0.hours %},
+    "openingHours": "{{ site.hours|default:branches.0.hours|escapejs }}"{% endif %}
+  }
+  </script>
   <style>
     :root{
       --accent: {{ site.theme_color|default:"#2563EB" }};
