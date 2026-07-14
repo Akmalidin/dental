@@ -767,7 +767,7 @@ def logout_view(request):
 
 @login_required
 def dashboard_view(request):
-    from datetime import date
+    from datetime import date, timedelta
     from django.db.models import Sum, Count
     from decimal import Decimal
     user = request.user
@@ -804,7 +804,7 @@ def dashboard_view(request):
         })
         template = "dashboard/doctor.html"
 
-    elif user.is_admin or user.is_superadmin:
+    elif user.is_superadmin or user.is_admin_main:
         import json as _json
         from datetime import datetime
         from apps.appointments.models import Appointment
@@ -851,6 +851,42 @@ def dashboard_view(request):
             "chart_cancels": cancel_per_month,
         })
         template = "dashboard/admin.html"
+
+    elif user.is_admin:
+        from apps.appointments.models import Appointment
+        from apps.tasks.models import Task
+        from apps.treatments.models import Treatment
+        today = date.today()
+        today_appts = Appointment.objects.filter(start_at__date=today).select_related(
+            "patient", "doctor", "service"
+        ).order_by("start_at")
+
+        treatments_in_progress = list(
+            Treatment.objects.filter(status="in_progress")
+            .select_related("patient", "doctor")
+            .prefetch_related("cures__service")
+            .order_by("-updated_at")[:8]
+        )
+        for t in treatments_in_progress:
+            first_cure = t.cures.first()
+            t.service_label = first_cure.service.name if first_cure else "—"
+            plan = t.patient.treatment_plans.filter(status="in_progress").order_by("-created_at").first()
+            total_items = plan.items.count() if plan else 0
+            t.stage_label = "%s из %s" % (plan.items.filter(status="done").count(), total_items) if total_items else "—"
+
+        context.update({
+            "patients_today": today_appts.exclude(patient__isnull=True).values("patient").distinct().count(),
+            "scheduled_today": today_appts.filter(status__in=["scheduled", "confirmed"]).count(),
+            "completed_today": today_appts.filter(status="completed").count(),
+            "cancelled_today": today_appts.filter(status="cancelled").count(),
+            "today_schedule": today_appts[:8],
+            "ops_tasks": Task.objects.filter(status__in=["pending", "in_progress"]).order_by("-priority", "due_date")[:5],
+            "last_done_task": Task.objects.filter(
+                status="done", updated_at__date__gte=today - timedelta(days=2)
+            ).order_by("-updated_at").first(),
+            "treatments_in_progress": treatments_in_progress,
+        })
+        template = "dashboard/admin_ops.html"
 
     else:
         template = "dashboard/default.html"

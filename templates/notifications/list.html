@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block page_title %}Уведомления{% endblock %}
 {% block content %}
-<div class="max-w-2xl space-y-2">
+<div class="space-y-5">
   <!-- Включить уведомления устройства -->
   <div id="notif-enable" class="hidden items-center justify-between gap-3 rounded-xl px-3 py-2" style="background:#FEF3C7;border:1px solid #FCD34D">
     <div class="flex items-center gap-2 min-w-0">
@@ -26,79 +26,111 @@
     })();
   </script>
 
-<div x-data="notifModal()">
-  <div class="flex items-center justify-between">
-    <h2 class="text-slate-700 text-sm">Ваши уведомления</h2>
-    <a href="/notifications/read-all/" class="btn-ghost text-xs py-1.5">Отметить все прочитанными</a>
+  <div x-data="notifModal()">
+    <!-- Заголовок -->
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <h2 class="text-xl font-extrabold flex items-center gap-2" style="color:var(--text)">
+          Уведомления
+          {% if counts.unread %}<span class="badge badge-red">{{ counts.unread }}</span>{% endif %}
+        </h2>
+        <p class="muted text-sm">Записи, оплаты, WhatsApp и системные события</p>
+      </div>
+      <a href="/notifications/read-all/" class="btn btn-ghost btn-sm">Отметить всё прочитанным</a>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="pill-tabs mt-3">
+      <a href="?type=all" class="pill-tab {% if filt == 'all' %}active{% endif %}">Все {{ counts.all }}</a>
+      <a href="?type=unread" class="pill-tab {% if filt == 'unread' %}active{% endif %}">Непрочитанные {{ counts.unread }}</a>
+      <a href="?type=appointment" class="pill-tab {% if filt == 'appointment' %}active{% endif %}">Записи {{ counts.appointment }}</a>
+      <a href="?type=payment" class="pill-tab {% if filt == 'payment' %}active{% endif %}">Оплаты {{ counts.payment }}</a>
+      <a href="?type=wa" class="pill-tab {% if filt == 'wa' %}active{% endif %}">WhatsApp {{ counts.wa }}</a>
+    </div>
+
+    <!-- Список, сгруппированный по датам -->
+    <div class="space-y-4 mt-4">
+      {% for label, items in groups %}
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wide muted mb-2" style="letter-spacing:.08em">{{ label }}</p>
+        <div class="card overflow-hidden">
+          {% for n in items %}
+          <div id="notif-card-{{ n.pk }}"
+               @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', from:'{% if n.actor %}{{ n.actor.name|escapejs }}{% endif %}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
+               class="flex items-start gap-3 px-5 py-3.5 cursor-pointer transition hover:bg-slate-50{% if not forloop.last %} border-b{% endif %}"
+               style="border-color:var(--border-2);{% if not n.is_read %}background:var(--primary-light){% endif %}">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0
+                        {% if n.type == 'appointment' or n.type == 'reminder' %}ic-blue
+                        {% elif n.type == 'payment' %}ic-green
+                        {% elif n.type == 'wa' %}ic-green
+                        {% elif n.type == 'task' %}ic-orange
+                        {% else %}ic-purple{% endif %}">
+              {% if n.type == 'appointment' or n.type == 'reminder' %}📅{% elif n.type == 'payment' %}💰{% elif n.type == 'wa' %}💬{% elif n.type == 'task' %}✅{% else %}🔔{% endif %}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between gap-3">
+                <p class="text-sm font-semibold" style="color:var(--text)">{{ n.title }}</p>
+                <p class="text-xs muted shrink-0">{{ n.created_at|date:"H:i" }}</p>
+              </div>
+              {% if n.body %}<p class="text-sm muted mt-0.5">{{ n.body }}</p>{% endif %}
+            </div>
+            {% if not n.is_read %}<span class="w-2 h-2 rounded-full shrink-0 mt-2" style="background:var(--primary)"></span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% empty %}
+      <div class="card p-14 text-center">
+        <div class="text-4xl mb-2">🔔</div>
+        <p class="muted font-medium">Нет уведомлений</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Модал деталей уведомления -->
+    <div x-show="cur" x-cloak class="modal-overlay" @click.self="cur=null">
+      <div class="modal-box" style="max-width:480px" x-show="cur">
+        <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+          <h3 class="font-bold flex items-center gap-2" style="color:var(--text)">
+            <span x-text="icon"></span> <span x-text="typeLabel"></span>
+          </h3>
+          <button @click="cur=null" class="text-2xl muted">&times;</button>
+        </div>
+        <div class="p-6 space-y-2">
+          <p class="font-bold text-lg" style="color:var(--text)" x-text="cur && cur.title"></p>
+          <p class="text-sm muted whitespace-pre-line" x-text="cur && cur.body" x-show="cur && cur.body"></p>
+          <p class="text-xs faint"><span x-text="cur && cur.date"></span><template x-if="cur && cur.from"><span> · от <span x-text="cur.from"></span></span></template></p>
+        </div>
+        <div class="px-6 py-4 flex gap-3" style="border-top:1px solid var(--border)">
+          <a x-show="cur && cur.link" :href="cur && cur.link" class="btn btn-primary flex-1 justify-center" x-text="actionLabel"></a>
+          <button @click="cur=null" class="btn btn-ghost">Закрыть</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="card overflow-hidden mt-2">
-  {% for n in notifications %}
-  <div id="notif-card-{{ n.pk }}" @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', from:'{% if n.actor %}{{ n.actor.name|escapejs }}{% endif %}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
-       class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition hover:bg-slate-50 {% if not n.is_read %}bg-indigo-50/40{% endif %}" style="border-bottom:1px solid var(--border-2)">
-    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm shrink-0
-                {% if n.type == 'appointment' %}bg-gradient-to-br from-blue-500 to-indigo-600
-                {% elif n.type == 'payment' %}bg-gradient-to-br from-emerald-500 to-green-600
-                {% elif n.type == 'wa' %}bg-gradient-to-br from-green-400 to-green-600
-                {% elif n.type == 'task' %}bg-gradient-to-br from-amber-400 to-orange-500
-                {% else %}bg-gradient-to-br from-slate-400 to-slate-500{% endif %}">
-      {% if n.type == 'appointment' %}📅{% elif n.type == 'payment' %}💰{% elif n.type == 'wa' %}💬{% elif n.type == 'task' %}✅{% else %}🔔{% endif %}
-    </div>
-    <div class="flex-1 min-w-0">
-      <p class="text-sm {% if n.is_read %}text-slate-500{% else %}font-semibold text-slate-800{% endif %} truncate">{{ n.title }}{% if n.body %} <span class="text-slate-400 font-normal">— {{ n.body }}</span>{% endif %}</p>
-      <p class="text-[11px] text-slate-400">{{ n.created_at|date:"d.m H:i" }}{% if n.actor %} · {{ n.actor.name }}{% endif %}</p>
-    </div>
-    {% if not n.is_read %}<span class="notif-dot w-2 h-2 bg-indigo-500 rounded-full shrink-0"></span>{% endif %}
-  </div>
-  {% empty %}
-  <div class="p-14 text-center">
-    <div class="text-4xl mb-2">🔔</div>
-    <p class="text-slate-500 font-medium">Нет уведомлений</p>
-  </div>
-  {% endfor %}
-  </div>
-
-  <!-- Модал деталей уведомления -->
-  <div x-show="cur" x-cloak class="modal-overlay" @click.self="cur=null">
-    <div class="modal-box" style="max-width:480px" x-show="cur">
-      <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
-        <h3 class="font-bold flex items-center gap-2" style="color:var(--text)">
-          <span x-text="icon"></span> <span x-text="typeLabel"></span>
-        </h3>
-        <button @click="cur=null" class="text-2xl muted">&times;</button>
-      </div>
-      <div class="p-6 space-y-2">
-        <p class="font-bold text-lg" style="color:var(--text)" x-text="cur && cur.title"></p>
-        <p class="text-sm muted whitespace-pre-line" x-text="cur && cur.body" x-show="cur && cur.body"></p>
-        <p class="text-xs faint"><span x-text="cur && cur.date"></span><template x-if="cur && cur.from"><span> · от <span x-text="cur.from"></span></span></template></p>
-      </div>
-      <div class="px-6 py-4 flex gap-3" style="border-top:1px solid var(--border)">
-        <a x-show="cur && cur.link" :href="cur && cur.link" class="btn btn-primary flex-1 justify-center" x-text="actionLabel"></a>
-        <button @click="cur=null" class="btn btn-ghost">Закрыть</button>
-      </div>
-    </div>
-  </div>
+  <script>
+  function notifModal() {
+    const ICONS = { appointment:'📅', payment:'💰', wa:'💬', task:'✅', system:'🔔', reminder:'⏰' };
+    const LABELS = { appointment:'Запись на приём', payment:'Платёж', wa:'WhatsApp', task:'Задача', system:'Системное', reminder:'Напоминание' };
+    const ACTIONS = { appointment:'Открыть записи →', payment:'Открыть финансы →', wa:'Открыть чат →', task:'Перейти к задачам →', reminder:'Открыть записи →' };
+    const DEFAULT_LINKS = { appointment:'/appointments/', reminder:'/appointments/', payment:'/finance/payments/', wa:'/notifications/wa-inbox/', task:'/tasks/' };
+    return {
+      cur: null,
+      get icon() { return this.cur ? (ICONS[this.cur.type] || '🔔') : ''; },
+      get typeLabel() { return this.cur ? (LABELS[this.cur.type] || 'Уведомление') : ''; },
+      get actionLabel() { return this.cur ? (ACTIONS[this.cur.type] || 'Перейти →') : ''; },
+      open(n) {
+        n.link = n.link || DEFAULT_LINKS[n.type] || '';
+        this.cur = n;
+        if (!n.read) {
+          fetch('/notifications/' + n.id + '/read/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(()=>{});
+          const card = document.getElementById('notif-card-' + n.id);
+          if (card) { card.style.background = ''; const d=card.querySelector('.w-2.h-2.rounded-full'); if(d)d.remove(); }
+        }
+      },
+    };
+  }
+  </script>
 </div>
-
-<script>
-function notifModal() {
-  const ICONS = { appointment:'📅', payment:'💰', wa:'💬', task:'✅', system:'🔔', reminder:'⏰' };
-  const LABELS = { appointment:'Запись на приём', payment:'Платёж', wa:'WhatsApp', task:'Задача', system:'Системное', reminder:'Напоминание' };
-  const ACTIONS = { appointment:'Открыть записи →', payment:'Открыть финансы →', wa:'Открыть чат →', task:'Перейти к задачам →' };
-  return {
-    cur: null,
-    get icon() { return this.cur ? (ICONS[this.cur.type] || '🔔') : ''; },
-    get typeLabel() { return this.cur ? (LABELS[this.cur.type] || 'Уведомление') : ''; },
-    get actionLabel() { return this.cur ? (ACTIONS[this.cur.type] || 'Перейти →') : ''; },
-    open(n) {
-      this.cur = n;
-      if (!n.read) {
-        fetch('/notifications/' + n.id + '/read/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(()=>{});
-        const card = document.getElementById('notif-card-' + n.id);
-        if (card) { card.classList.remove('border-l-4','border-indigo-500'); const d=card.querySelector('.notif-dot'); if(d)d.remove(); }
-      }
-    },
-  };
-}
-</script>
 {% endblock %}

@@ -2,186 +2,191 @@
 {% block page_title %}{% if object %}Редактировать пациента{% else %}Новый пациент{% endif %}{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto">
-  <div class="card overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
-      <h2 class="font-bold text-white text-lg">{% if object %}{{ object.full_name }}{% else %}Новый пациент{% endif %}</h2>
-      <p class="text-indigo-200 text-sm mt-0.5">Заполните данные пациента</p>
+<div class="max-w-3xl mx-auto" x-data="patientWizard({% if form.last_name.errors or form.first_name.errors or form.middle_name.errors or form.birth_date.errors or form.gender.errors %}1{% elif form.phone.errors or form.phone2.errors or form.pin.errors or form.address.errors %}2{% elif form.branch.errors or form.source.errors or form.primary_doctor.errors %}3{% elif form.insurance.errors or form.insurance_policy.errors or form.insurance_valid_until.errors %}4{% elif form.blood_group.errors or form.allergy.errors or form.notes.errors %}5{% else %}1{% endif %})">
+
+  <div>
+    <h2 class="text-xl font-extrabold" style="color:var(--text)">{% if object %}{{ object.full_name }}{% else %}Новый пациент{% endif %}</h2>
+    <p class="muted text-sm">Заполните хотя бы «Личные» и «Контакты» — остальное можно пропустить и добавить позже.</p>
+  </div>
+
+  <!-- Вкладки -->
+  <div class="flex items-center gap-1 mt-4 p-1 rounded-2xl overflow-x-auto" style="background:var(--surface-2)">
+    <template x-for="t in tabs" :key="t.n">
+      <button type="button" @click="tab = t.n"
+              class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 transition-colors"
+              :style="tab === t.n ? 'background:var(--primary);color:#fff' : 'color:var(--text-soft)'">
+        <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+              :style="tab === t.n ? 'background:rgba(255,255,255,.25);color:#fff' : 'background:var(--surface);color:var(--text-soft)'"
+              x-text="t.n"></span>
+        <span x-text="t.label"></span>
+      </button>
+    </template>
+  </div>
+
+  <form method="post" class="mt-4 space-y-4">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+      {% for field in form %}{% for e in field.errors %}<p>• {{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+      {% for e in form.non_field_errors %}<p>• {{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Предупреждение: номер в общем чёрном списке -->
+    <div id="bl-warn" class="hidden rounded-xl px-4 py-3 text-sm font-semibold flex items-start gap-2" style="background:#1f2937;color:#fff">
+      <span>⛔</span><span id="bl-warn-text"></span>
     </div>
 
-    <form method="post" class="p-6 space-y-5">
-      {% csrf_token %}
-
-      {% if form.errors %}
-      <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
-        {% for field in form %}{% for e in field.errors %}<p>• {{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
-        {% for e in form.non_field_errors %}<p>• {{ e }}</p>{% endfor %}
+    <!-- 1. Личные -->
+    <div class="card card-pad space-y-4" x-show="tab === 1" x-cloak>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Персональные данные <span class="text-xs font-normal muted">обязательно</span></h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Фамилия *</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<p class="text-red-500 text-xs mt-1">{{ form.last_name.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Имя *</label>
+          {{ form.first_name }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Отчество</label>
+          {{ form.middle_name }}
+        </div>
       </div>
-      {% endif %}
-
-      <!-- Предупреждение: номер в общем чёрном списке -->
-      <div id="bl-warn" class="hidden rounded-xl px-4 py-3 text-sm font-semibold flex items-start gap-2" style="background:#1f2937;color:#fff">
-        <span>⛔</span><span id="bl-warn-text"></span>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Дата рождения</label>
+          {{ form.birth_date }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Пол</label>
+          {{ form.gender }}
+        </div>
       </div>
+    </div>
 
-      <!-- Name row -->
+    <!-- 2. Контакты -->
+    <div class="card card-pad space-y-4" x-show="tab === 2" x-cloak>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Контакты <span class="text-xs font-normal muted">обязательно</span></h3>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Телефон *</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<p class="text-red-500 text-xs mt-1">{{ form.phone.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Доп. телефон</label>
+          {{ form.phone2 }}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">ИИН <span class="normal-case" style="color:var(--text-faint)">(необязательно, 14 цифр)</span></label>
+          {{ form.pin }}
+          {% if form.pin.errors %}<p class="text-red-500 text-xs mt-1">{{ form.pin.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Адрес</label>
+          {{ form.address }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Клиника -->
+    <div class="card card-pad space-y-4" x-show="tab === 3" x-cloak>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Клиника <span class="text-xs font-normal muted">обязательно</span></h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Филиал *</label>
+          {{ form.branch }}
+          {% if form.branch.errors %}<p class="text-red-500 text-xs mt-1">{{ form.branch.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Источник</label>
+          {{ form.source }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Лечащий врач</label>
+          {{ form.primary_doctor }}
+        </div>
+      </div>
       <div>
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-          Персональные данные
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Фамилия *</label>
-            {{ form.last_name }}
-            {% if form.last_name.errors %}<p class="text-red-500 text-xs mt-1">{{ form.last_name.errors|join:", " }}</p>{% endif %}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Имя *</label>
-            {{ form.first_name }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Отчество</label>
-            {{ form.middle_name }}
-          </div>
+        <label class="block text-xs font-semibold muted mb-1.5 uppercase">Теги</label>
+        <div class="flex flex-wrap gap-2 tags-group">{{ form.tags }}</div>
+      </div>
+    </div>
+
+    <!-- 4. ДМС -->
+    <div class="card card-pad space-y-4" x-show="tab === 4" x-cloak>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Страхование (ДМС) <span class="text-xs font-normal muted">необязательно</span></h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Страховая компания</label>
+          {{ form.insurance }}
         </div>
-        <div class="grid grid-cols-2 gap-4 mt-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Дата рождения</label>
-            {{ form.birth_date }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пол</label>
-            {{ form.gender }}
-          </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Номер полиса</label>
+          {{ form.insurance_policy }}
+        </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Действует до</label>
+          {{ form.insurance_valid_until }}
         </div>
       </div>
+    </div>
 
-      <hr class="border-slate-100">
-
-      <!-- Contact -->
-      <div>
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-          Контакты
-        </h3>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Телефон *</label>
-            {{ form.phone }}
-            {% if form.phone.errors %}<p class="text-red-500 text-xs mt-1">{{ form.phone.errors|join:", " }}</p>{% endif %}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Доп. телефон</label>
-            {{ form.phone2 }}
-          </div>
+    <!-- 5. Медкарта -->
+    <div class="card card-pad space-y-4" x-show="tab === 5" x-cloak>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Медкарта <span class="text-xs font-normal muted">необязательно</span></h3>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Группа крови</label>
+          {{ form.blood_group }}
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">ИИН <span class="normal-case text-slate-400">(необязательно, 14 цифр)</span></label>
-            {{ form.pin }}
-            {% if form.pin.errors %}<p class="text-red-500 text-xs mt-1">{{ form.pin.errors|join:", " }}</p>{% endif %}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Адрес</label>
-            {{ form.address }}
-          </div>
+        <div>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">⚠️ Аллергии</label>
+          {{ form.allergy }}
         </div>
       </div>
-
-      <hr class="border-slate-100">
-
-      <!-- Clinic info -->
       <div>
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-          Клиника
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиал *</label>
-            {{ form.branch }}
-            {% if form.branch.errors %}<p class="text-red-500 text-xs mt-1">{{ form.branch.errors|join:", " }}</p>{% endif %}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Источник</label>
-            {{ form.source }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Лечащий врач</label>
-            {{ form.primary_doctor }}
-          </div>
-        </div>
-        <div class="mt-4">
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Теги</label>
-          <div class="flex flex-wrap gap-2 tags-group">{{ form.tags }}</div>
-        </div>
-      </div>
-
-      <hr class="border-slate-100">
-
-      <!-- Insurance / DMS -->
-      <div>
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-          Страхование (ДМС)
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Страховая компания</label>
-            {{ form.insurance }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Номер полиса</label>
-            {{ form.insurance_policy }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Действует до</label>
-            {{ form.insurance_valid_until }}
-          </div>
-        </div>
-      </div>
-
-      <hr class="border-slate-100">
-
-      <!-- Медкарта -->
-      <div>
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">5</span>
-          Медкарта
-        </h3>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Группа крови</label>
-            {{ form.blood_group }}
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">⚠️ Аллергии</label>
-            {{ form.allergy }}
-          </div>
-        </div>
-      </div>
-
-      <hr class="border-slate-100">
-
-      <div>
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Заметки</label>
+        <label class="block text-xs font-semibold muted mb-1.5 uppercase">Заметки</label>
         {{ form.notes }}
       </div>
+    </div>
 
-      <div class="flex gap-3 pt-2">
-        <button type="submit" class="btn-primary">
+    <!-- Навигация по вкладкам -->
+    <div class="flex items-center justify-between pt-2">
+      <p class="text-xs muted">Вкладка <span x-text="tab"></span> из <span x-text="tabs.length"></span></p>
+      <div class="flex gap-2 items-center">
+        <a href="{% if object %}/patients/{{ object.pk }}/{% else %}/patients/{% endif %}" class="btn btn-ghost btn-sm">Отмена</a>
+        <button type="button" class="btn btn-ghost btn-sm" x-show="tab > 1" @click="tab--">← Назад</button>
+        <button type="button" class="btn btn-primary btn-sm" x-show="tab < tabs.length" @click="tab++">Далее →</button>
+        <button type="submit" class="btn btn-primary btn-sm" x-show="tab === tabs.length">
           {% if object %}Сохранить изменения{% else %}Добавить пациента{% endif %}
         </button>
-        <a href="{% if object %}/patients/{{ object.pk }}/{% else %}/patients/{% endif %}" class="btn-ghost">Отмена</a>
         {% if object %}
-        <a href="/patients/{{ object.pk }}/delete/" class="btn-ghost text-red-500 ml-auto">Удалить</a>
+        <a href="/patients/{{ object.pk }}/delete/" class="btn btn-ghost btn-sm" style="color:var(--red)">Удалить</a>
         {% endif %}
       </div>
-    </form>
-  </div>
+    </div>
+  </form>
 </div>
 <script>
+function patientWizard(initial) {
+  return {
+    tab: initial || 1,
+    tabs: [
+      { n: 1, label: 'Личные' },
+      { n: 2, label: 'Контакты' },
+      { n: 3, label: 'Клиника' },
+      { n: 4, label: 'ДМС' },
+      { n: 5, label: 'Медкарта' },
+    ],
+  };
+}
 (function(){
   var inp = document.querySelector('input[name="phone"]');
   var warn = document.getElementById('bl-warn'), txt = document.getElementById('bl-warn-text');

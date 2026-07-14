@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpResponse
@@ -23,8 +24,46 @@ def _user_notifications(request):
 
 @login_required
 def notification_list(request):
-    notifications = _user_notifications(request)
-    return render(request, "notifications/list.html", {"notifications": notifications})
+    from django.utils import timezone
+    base = _user_notifications(request)
+    counts = {
+        "all": base.count(),
+        "unread": base.filter(is_read=False).count(),
+        "appointment": base.filter(type__in=["appointment", "reminder"]).count(),
+        "payment": base.filter(type="payment").count(),
+        "wa": base.filter(type="wa").count(),
+    }
+    filt = request.GET.get("type", "all")
+    qs = base
+    if filt == "unread":
+        qs = qs.filter(is_read=False)
+    elif filt == "appointment":
+        qs = qs.filter(type__in=["appointment", "reminder"])
+    elif filt == "payment":
+        qs = qs.filter(type="payment")
+    elif filt == "wa":
+        qs = qs.filter(type="wa")
+
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+    groups = []
+    cur_label, cur_items = None, None
+    for n in qs.select_related("actor"):
+        d = timezone.localtime(n.created_at).date()
+        if d == today:
+            label = "Сегодня"
+        elif d == yesterday:
+            label = "Вчера"
+        else:
+            label = "Ранее"
+        if label != cur_label:
+            cur_label, cur_items = label, []
+            groups.append((label, cur_items))
+        cur_items.append(n)
+
+    return render(request, "notifications/list.html", {
+        "groups": groups, "counts": counts, "filt": filt,
+    })
 
 
 @csrf_exempt
