@@ -776,35 +776,11 @@ def dashboard_view(request):
     clinic_tz = getattr(_clinic, "timezone", "") or "Asia/Bishkek"
     context = {"user": user, "clinic_tz": clinic_tz}
 
-    if user.is_doctor:
-        from apps.appointments.models import Appointment
-        from apps.patients.models import Patient
-        from apps.tasks.models import Task
-        today = date.today()
-        my_tasks = Task.objects.filter(
-            assigned_to=user, status__in=["pending", "in_progress"]
-        ).order_by("-priority", "due_date")
-        my_debtors = Patient.objects.filter(
-            treatments__doctor=user, balance__lt=0
-        ).distinct().order_by("balance")[:5]
-        context.update({
-            "my_appointments_today": Appointment.objects.filter(doctor=user, start_at__date=today).count(),
-            "upcoming_appointments": Appointment.objects.filter(
-                doctor=user, start_at__date__gte=today,
-                status__in=["scheduled", "confirmed"]
-            ).select_related("patient", "service").order_by("start_at")[:8],
-            "my_patients_count": Patient.objects.filter(
-                treatments__doctor=user
-            ).distinct().count(),
-            "my_tasks_count": my_tasks.count(),
-            "my_tasks": my_tasks[:5],
-            "my_debtors": my_debtors,
-            "followups_count": 0,
-            "today": today,
-        })
-        template = "dashboard/doctor.html"
-
-    elif user.is_superadmin or user.is_admin_main:
+    # Приоритет ролей: у пользователя может быть несколько ролей одновременно
+    # (например, Директор, который также записан как врач) — в этом случае
+    # должен показываться дашборд более высокой (управленческой) роли, а не
+    # автоматически дашборд врача.
+    if user.is_superadmin or user.is_admin_main:
         import json as _json
         from datetime import datetime
         from apps.appointments.models import Appointment
@@ -887,6 +863,34 @@ def dashboard_view(request):
             "treatments_in_progress": treatments_in_progress,
         })
         template = "dashboard/admin_ops.html"
+
+    elif user.is_doctor:
+        from apps.appointments.models import Appointment
+        from apps.patients.models import Patient
+        from apps.tasks.models import Task
+        today = date.today()
+        my_tasks = Task.objects.filter(
+            assigned_to=user, status__in=["pending", "in_progress"]
+        ).order_by("-priority", "due_date")
+        my_debtors = Patient.objects.filter(
+            treatments__doctor=user, balance__lt=0
+        ).distinct().order_by("balance")[:5]
+        context.update({
+            "my_appointments_today": Appointment.objects.filter(doctor=user, start_at__date=today).count(),
+            "upcoming_appointments": Appointment.objects.filter(
+                doctor=user, start_at__date__gte=today,
+                status__in=["scheduled", "confirmed"]
+            ).select_related("patient", "service").order_by("start_at")[:8],
+            "my_patients_count": Patient.objects.filter(
+                treatments__doctor=user
+            ).distinct().count(),
+            "my_tasks_count": my_tasks.count(),
+            "my_tasks": my_tasks[:5],
+            "my_debtors": my_debtors,
+            "followups_count": 0,
+            "today": today,
+        })
+        template = "dashboard/doctor.html"
 
     else:
         template = "dashboard/default.html"

@@ -51,11 +51,13 @@
     <!-- Список, сгруппированный по датам -->
     <div class="space-y-4 mt-4">
       {% for label, items in groups %}
-      <div>
+      {% with total=items|length %}
+      <div{% if label != "Сегодня" and total > 3 %} x-data="{ expanded: false }"{% endif %}>
         <p class="text-xs font-bold uppercase tracking-wide muted mb-2" style="letter-spacing:.08em">{{ label }}</p>
         <div class="card overflow-hidden">
           {% for n in items %}
           <div id="notif-card-{{ n.pk }}"
+               {% if label != "Сегодня" and total > 3 %}x-show="expanded || {{ forloop.counter }} <= 3"{% endif %}
                @click="open({id:{{ n.pk }}, title:'{{ n.title|escapejs }}', body:'{{ n.body|escapejs }}', date:'{{ n.created_at|date:"d.m.Y H:i" }}', type:'{{ n.type }}', link:'{{ n.link|escapejs }}', from:'{% if n.actor %}{{ n.actor.name|escapejs }}{% endif %}', read:{% if n.is_read %}true{% else %}false{% endif %}})"
                class="flex items-start gap-3 px-5 py-3.5 cursor-pointer transition hover:bg-slate-50{% if not forloop.last %} border-b{% endif %}"
                style="border-color:var(--border-2);{% if not n.is_read %}background:var(--primary-light){% endif %}">
@@ -78,7 +80,14 @@
           </div>
           {% endfor %}
         </div>
+        {% if label != "Сегодня" and total > 3 %}
+        <button type="button" @click="expanded = !expanded" class="text-xs font-semibold mt-2" style="color:var(--primary)">
+          <span x-show="!expanded" x-cloak>Показать ещё {{ total|add:"-3" }} →</span>
+          <span x-show="expanded" x-cloak>Свернуть ↑</span>
+        </button>
+        {% endif %}
       </div>
+      {% endwith %}
       {% empty %}
       <div class="card p-14 text-center">
         <div class="text-4xl mb-2">🔔</div>
