@@ -262,6 +262,13 @@
         <span id="sync-label" class="hidden sm:inline">Синхронизация</span>
       </button>
       <span class="text-xs font-bold px-2 py-1 rounded hidden sm:inline" style="background:#FEF3C7;color:#B45309">ОФФЛАЙН</span>
+      {% if offline_lan_url %}
+      <button type="button" onclick="navigator.clipboard.writeText('{{ offline_lan_url }}'); if(window.toast) toast('Адрес скопирован: {{ offline_lan_url }}');"
+              class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+              style="border:1px solid #F59E0B;color:#B45309" title="Адрес для ДРУГИХ компьютеров в сети клиники — открыть в их браузере (нажмите, чтобы скопировать)">
+        📶 Для других компьютеров: {{ offline_lan_url }}
+      </button>
+      {% endif %}
       <script>
         async function runSync() {
           const btn = document.getElementById('sync-btn'), lbl = document.getElementById('sync-label');
@@ -269,11 +276,23 @@
           try {
             const r = await fetch('/sync/run/');
             const d = await r.json();
-            if (d.ok) { lbl.textContent = '✓ Готово'; if (window.toast) toast(`Отправлено ${d.pushed}, получено ${d.pulled}`); setTimeout(()=>location.reload(), 1200); }
+            if (d.ok) {
+              lbl.textContent = '✓ Готово';
+              let msg = `Отправлено ${d.pushed}, получено ${d.pulled}`;
+              if (d.conflicts) msg += `. ⚠ Конфликтов: ${d.conflicts} (разрешить в облаке в разделе «Конфликты синхронизации»)`;
+              if (window.toast) toast(msg, d.conflicts ? 'error' : 'success');
+              setTimeout(()=>location.reload(), d.conflicts ? 3000 : 1200);
+            }
             else { lbl.textContent = 'Ошибка'; if (window.toast) toast(d.error || 'Нет связи с облаком', 'error'); btn.disabled = false; setTimeout(()=>lbl.textContent='Синхронизация', 2500); }
           } catch (e) { lbl.textContent = 'Нет интернета'; btn.disabled = false; setTimeout(()=>lbl.textContent='Синхронизация', 2500); }
         }
       </script>
+      {% endif %}
+
+      {% if sync_conflicts_count %}
+      <a href="/sync/conflicts/" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold" style="border:1px solid #EF4444;color:#DC2626" title="Записи, изменённые одновременно локально (офлайн) и в облаке — нужно выбрать версию вручную">
+        ⚠ Конфликты синхронизации: {{ sync_conflicts_count }}
+      </a>
       {% endif %}
 
       <!-- Clinic switcher (superadmin) -->

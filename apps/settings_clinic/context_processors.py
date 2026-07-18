@@ -1,8 +1,26 @@
+def _lan_ip():
+    """Локальный IP этого компьютера в сети клиники — чтобы показать персоналу,
+    по какому адресу заходить с ДРУГИХ компьютеров (оффлайн-режим, один
+    компьютер работает как локальный сервер). Никуда реально не подключается,
+    только определяет исходящий сетевой интерфейс."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
 def clinic_settings(request):
     """Inject clinic settings and unread notification count into every template."""
     from django.conf import settings as dj_settings
+    offline_mode = getattr(dj_settings, "OFFLINE_MODE", False)
     ctx = {"clinic_settings": None, "unread_notifications_count": 0, "enabled_modules": [],
-           "offline_mode": getattr(dj_settings, "OFFLINE_MODE", False),
+           "offline_mode": offline_mode,
+           "offline_lan_url": f"http://{_lan_ip()}:8765/" if offline_mode else "",
            "vapid_public_key": getattr(dj_settings, "VAPID_PUBLIC_KEY", ""),
            "asset_v": getattr(dj_settings, "ASSET_VERSION", "1"),
            # Рабочее окно клиники (для ограничения выбора времени везде)
@@ -70,6 +88,18 @@ def clinic_settings(request):
                            .exclude(phone_norm__in=confirmed)
                            .values("phone_norm").annotate(c=Count("id")).filter(c__gt=1))
             ctx["dupe_patients_count"] = sum(g["c"] for g in dupe_groups)
+        except Exception:
+            pass
+
+        # Неразрешённые конфликты офлайн-синхронизации — только админам/директору,
+        # чтобы не потерялись правки, сделанные одновременно локально и в облаке.
+        try:
+            if getattr(request.user, "is_admin", False) or getattr(request.user, "is_superadmin", False):
+                from apps.sync.models import SyncConflict
+                sc = SyncConflict.objects.filter(resolved=False)
+                if cur is not None:
+                    sc = sc.filter(clinic=cur)
+                ctx["sync_conflicts_count"] = sc.count()
         except Exception:
             pass
 

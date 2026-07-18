@@ -30,9 +30,9 @@ def _run_server():
     try:
         from waitress import serve
         from config.wsgi import application
-        serve(application, host="127.0.0.1", port=8765)
+        serve(application, host="0.0.0.0", port=8765)
     except Exception:
-        call_command("runserver", "127.0.0.1:8765", "--noreload")
+        call_command("runserver", "0.0.0.0:8765", "--noreload")
 
 
 if __name__ == "__main__":

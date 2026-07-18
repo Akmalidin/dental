@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block page_title %}Конфликты синхронизации{% endblock %}
+{% block content %}
+<div class="space-y-5">
+  <div>
+    <h2 class="text-xl font-extrabold" style="color:var(--text)">Конфликты синхронизации</h2>
+    <p class="muted text-sm">Эти записи были изменены одновременно и локально (офлайн), и в облаке —
+      система не выбирает сторону автоматически, чтобы не потерять чьи-то правки. Выберите версию вручную.
+      Сейчас рабочей остаётся облачная версия каждой из этих записей.</p>
+  </div>
+
+  {% if not conflicts %}
+  <div class="card p-14 text-center">
+    <div class="text-4xl mb-2">✅</div>
+    <p class="muted font-medium">Нет неразрешённых конфликтов</p>
+  </div>
+  {% endif %}
+
+  {% for c in conflicts %}
+  <div class="card card-pad space-y-3">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <p class="font-bold" style="color:var(--text)">{{ c.model_label }} · {{ c.object_repr|default:c.object_pk }}</p>
+        <p class="text-xs muted">ID записи: {{ c.object_pk }} · обнаружено {{ c.created_at|date:"d.m.Y H:i" }}</p>
+      </div>
+      <div class="flex gap-4 text-xs muted">
+        <span>Локально изменено: {{ c.local_updated_at|date:"d.m.Y H:i" }}</span>
+        <span>В облаке изменено: {{ c.cloud_updated_at|date:"d.m.Y H:i" }}</span>
+      </div>
+    </div>
+
+    {% with diffs=c.diff_fields %}
+    {% if diffs %}
+    <table class="tbl">
+      <thead><tr><th>Поле</th><th>Локальная версия (офлайн)</th><th>Облачная версия (сейчас)</th></tr></thead>
+      <tbody>
+        {% for d in diffs %}
+        <tr>
+          <td class="font-semibold">{{ d.field }}</td>
+          <td>{{ d.local|default:"—" }}</td>
+          <td>{{ d.cloud|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm muted">Различий в полях не найдено (возможно, конфликт по связанной записи).</p>
+    {% endif %}
+    {% endwith %}
+
+    <form method="post" action="/sync/conflicts/{{ c.pk }}/resolve/" class="flex gap-3 pt-1">
+      {% csrf_token %}
+      <button type="submit" name="action" value="cloud" class="btn btn-ghost btn-sm">Оставить облачную версию</button>
+      <button type="submit" name="action" value="local"
+              onclick="return confirm('Применить локальную (офлайн) версию? Текущие данные в облаке будут перезаписаны.')"
+              class="btn btn-primary btn-sm">Применить локальную версию</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

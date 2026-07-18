@@ -43,13 +43,17 @@ class Command(BaseCommand):
         with transaction.atomic():
             counts = import_blocks(blocks)
 
-        # запомнить параметры облака для кнопки «Синхронизация» (локальный файл)
+        # запомнить параметры облака для кнопки «Синхронизация» (локальный файл).
+        # last_synced_at — момент, на который локальная копия ТОЧНО совпадает с
+        # облаком (это время экспорта на сервере) — точка отсчёта для обнаружения
+        # конфликтов при последующих push.
         try:
             import json
             cfg = settings.BASE_DIR / "offline_cloud.json"
             cfg.write_text(json.dumps({
                 "url": url, "login": o["login"], "password": o["password"],
                 "clinic": data["clinic"]["name"],
+                "last_synced_at": data.get("exported_at", ""),
             }), encoding="utf-8")
         except Exception:
             pass

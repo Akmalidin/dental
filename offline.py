@@ -4,6 +4,13 @@
 
   python offline.py setup   — первичная загрузка данных клиники
   python offline.py start   — запуск локального сервера + браузер
+
+Сервер слушает на 0.0.0.0:8765 — значит, доступен не только с этого
+компьютера, но и с любого другого компьютера/ноутбука в той же Wi-Fi/LAN
+сети клиники (просто открыть в браузере http://<IP этого компьютера>:8765/,
+адрес показывается и в консоли, и прямо в приложении). Так несколько
+компьютеров клиники работают с ОДНОЙ локальной базой, а не расходятся
+каждый со своей копией.
 """
 import os
 import sys
@@ -14,6 +21,21 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 def _django():
     import django
     django.setup()
+
+
+def _lan_ip():
+    """Локальный IP этого компьютера в сети клиники (для подсказки другим
+    компьютерам — реально никуда не подключается, просто определяет
+    исходящий сетевой интерфейс)."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 def setup():
@@ -51,14 +73,21 @@ def start():
         pass
     import threading
     import webbrowser
+    ip = _lan_ip()
     threading.Timer(3.0, lambda: webbrowser.open("http://127.0.0.1:8765/")).start()
-    print("SADAF запущен: http://127.0.0.1:8765  (не закрывайте это окно)")
+    print("=" * 60)
+    print("  SADAF (оффлайн-режим) запущен — не закрывайте это окно")
+    print("=" * 60)
+    print(f"  Этот компьютер:        http://127.0.0.1:8765/")
+    print(f"  Другие компьютеры сети: http://{ip}:8765/")
+    print("  (на других компьютерах просто открыть этот адрес в браузере)")
+    print("=" * 60)
     try:
         from waitress import serve
         from config.wsgi import application
-        serve(application, host="127.0.0.1", port=8765)
+        serve(application, host="0.0.0.0", port=8765)
     except Exception:
-        call_command("runserver", "127.0.0.1:8765", "--noreload")
+        call_command("runserver", "0.0.0.0:8765", "--noreload")
 
 
 if __name__ == "__main__":
