@@ -12,6 +12,7 @@ urlpatterns = [
     path("stop-impersonate/", views.staff_stop_impersonate, name="staff_stop_impersonate"),
     path("audit/", views.audit_center, name="audit_center"),
     path("audit/revert/<str:model>/<int:hid>/", views.audit_revert, name="audit_revert"),
+    path("audit/delete/<str:model>/<int:hid>/", views.audit_delete_history, name="audit_delete_history"),
     path("branches/", views.branch_list, name="branch_list"),
     path("branches/create/", views.branch_create, name="branch_create"),
     path("branches/<int:pk>/edit/", views.branch_edit, name="branch_edit"),

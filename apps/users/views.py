@@ -1482,37 +1482,61 @@ def schedule_edit(request, pk):
 
 
 # ─── АУДИТ-ЦЕНТР (только для владельца/суперадмина) ─────────────────────────
+
+# Поля, которые не несут смысла в диффе (служебные/технические) — не показываем.
+_AUDIT_DIFF_SKIP_FIELDS = {"updated_at", "id"}
+
+
+def _ru_plural(n, one, few, many):
+    """Русское склонение по числу: 1 машина / 2 машины / 5 машин."""
+    n10, n100 = n % 10, n % 100
+    if n10 == 1 and n100 != 11:
+        return one
+    if 2 <= n10 <= 4 and not (12 <= n100 <= 14):
+        return few
+    return many
+
+
 @login_required
 def audit_center(request):
-    """Журнал изменений (история правок) + откат отдельных записей. Только суперадмин."""
+    """Журнал изменений (история правок), сгруппированный по объекту, + откат
+    отдельных версий. Только суперадмин."""
     if not request.user.is_superadmin:
         messages.error(request, _("Доступ только для владельца системы"))
         return redirect("/")
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
+    from .models import AuditRevert
 
-    rows = []
     HP = Patient.history.model
     HT = Treatment.history.model
     type_label = {"+": "Создание", "~": "Изменение", "-": "Удаление"}
-    for h in HP.objects.select_related("history_user").order_by("-history_date")[:150]:
-        rows.append({
-            "model": "patient", "model_label": "Пациент", "obj_id": h.id,
-            "title": f"{h.last_name} {h.first_name}".strip() or f"#{h.id}",
-            "type": type_label.get(h.history_type, h.history_type),
-            "raw_type": h.history_type,
-            "user": h.history_user.name if h.history_user else "—",
-            "date": h.history_date, "hid": h.history_id,
-        })
-    for h in HT.objects.select_related("history_user").order_by("-history_date")[:150]:
-        rows.append({
-            "model": "treatment", "model_label": "Приём", "obj_id": h.id,
-            "title": f"Приём #{h.id}",
-            "type": type_label.get(h.history_type, h.history_type),
-            "raw_type": h.history_type,
-            "user": h.history_user.name if h.history_user else "—",
-            "date": h.history_date, "hid": h.history_id,
-        })
+
+    def build_rows(qs, model_key, model_label, title_fn):
+        out = []
+        for h in qs.select_related("history_user").order_by("-history_date")[:150]:
+            prev = h.prev_record
+            diff = []
+            if prev:
+                delta = h.diff_against(prev)
+                diff = [
+                    {"field": c.field, "old": c.old, "new": c.new}
+                    for c in delta.changes if c.field not in _AUDIT_DIFF_SKIP_FIELDS
+                ]
+            out.append({
+                "model": model_key, "model_label": model_label, "obj_id": h.id,
+                "title": title_fn(h),
+                "type": type_label.get(h.history_type, h.history_type),
+                "raw_type": h.history_type,
+                "user": h.history_user.name if h.history_user else "—",
+                "date": h.history_date, "hid": h.history_id,
+                "diff": diff,
+            })
+        return out
+
+    rows = build_rows(HP.objects.all(), "patient", "Пациент",
+                       lambda h: f"{h.last_name} {h.first_name}".strip() or f"#{h.id}")
+    rows += build_rows(HT.objects.all(), "treatment", "Приём", lambda h: f"Приём #{h.id}")
     rows.sort(key=lambda r: r["date"], reverse=True)
     recent_rows = rows[:5]
 
@@ -1526,6 +1550,38 @@ def audit_center(request):
     if action_filter:
         rows = [r for r in rows if r["raw_type"] == action_filter]
     rows = rows[:200]
+
+    # Записи, оказавшиеся в «устаревшей ветке» после явного отката — были
+    # сделаны ПОСЛЕ версии, к которой откатили, но ДО момента самого отката.
+    # Больше не описывают текущее состояние записи — показываем отдельно.
+    superseded_keys = set()
+    for rv in AuditRevert.objects.all():
+        for r in rows:
+            if (r["model"] == rv.model_label and r["obj_id"] == rv.object_id
+                    and rv.reverted_to_date < r["date"] < rv.performed_at):
+                superseded_keys.add((r["model"], r["hid"]))
+    for r in rows:
+        r["superseded"] = (r["model"], r["hid"]) in superseded_keys
+
+    live_rows = [r for r in rows if not r["superseded"]]
+    superseded_rows = [r for r in rows if r["superseded"]]
+
+    # Группировка «текущей» истории по объекту — для аккордиона.
+    groups_by_key = {}
+    group_order = []
+    for r in live_rows:
+        key = (r["model"], r["obj_id"])
+        if key not in groups_by_key:
+            groups_by_key[key] = {
+                "model": r["model"], "model_label": r["model_label"],
+                "obj_id": r["obj_id"], "title": r["title"], "items": [],
+            }
+            group_order.append(key)
+        groups_by_key[key]["items"].append(r)
+    grouped_rows = [groups_by_key[k] for k in group_order]
+    for g in grouped_rows:
+        n = len(g["items"])
+        g["count_label"] = f"{n} {_ru_plural(n, 'изменение', 'изменения', 'изменений')}"
 
     # Корзина (удалённые записи) — кратко
     deleted = []
@@ -1544,7 +1600,8 @@ def audit_center(request):
     staff_names = clinic_staff(get_current_clinic()).values_list("name", flat=True).distinct()
 
     return render(request, "users/audit.html", {
-        "rows": rows, "deleted": deleted[:60], "recent_rows": recent_rows,
+        "grouped_rows": grouped_rows, "superseded_rows": superseded_rows,
+        "deleted": deleted[:60], "recent_rows": recent_rows,
         "staff_names": staff_names,
         "date_filter": date_filter, "user_filter": user_filter, "action_filter": action_filter,
     })
@@ -1553,12 +1610,16 @@ def audit_center(request):
 @login_required
 @require_POST
 def audit_revert(request, model, hid):
-    """Откатить запись к выбранной версии истории (по history_id)."""
+    """Откатить запись к выбранной версии истории (по history_id). Записи,
+    сделанные после этой версии, но до самого отката, помечаются как
+    устаревшая ветка (см. audit_center) — их можно посмотреть и удалить
+    отдельно, не трогая текущую (восстановленную) версию записи."""
     if not request.user.is_superadmin:
         messages.error(request, _("Доступ только для владельца системы"))
         return redirect("/")
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
+    from .models import AuditRevert
     Model = {"patient": Patient, "treatment": Treatment}.get(model)
     if not Model:
         return redirect("audit_center")
@@ -1568,5 +1629,26 @@ def audit_revert(request, model, hid):
         return redirect("audit_center")
     inst = h.instance  # объект в состоянии этой версии
     inst.save()
+    AuditRevert.objects.create(
+        model_label=model, object_id=inst.pk,
+        reverted_to_hid=h.history_id, reverted_to_date=h.history_date,
+        performed_by=request.user,
+    )
     messages.success(request, _("Запись восстановлена к версии от %(d)s") % {"d": h.history_date.strftime("%d.%m.%Y %H:%M")})
+    return redirect("audit_center")
+
+
+@login_required
+@require_POST
+def audit_delete_history(request, model, hid):
+    """Удалить одну устаревшую запись истории (из «ветки после отката»)."""
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступ только для владельца системы"))
+        return redirect("/")
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    Model = {"patient": Patient, "treatment": Treatment}.get(model)
+    if Model:
+        Model.history.filter(history_id=hid).delete()
+        messages.success(request, _("Запись истории удалена"))
     return redirect("audit_center")

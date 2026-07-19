@@ -293,6 +293,33 @@ class UserActivity(models.Model):
         return f"{self.user} — {self.action} — {self.created_at:%d.%m.%Y %H:%M}"
 
 
+class AuditRevert(models.Model):
+    """Лог явных откатов в Аудит-центре.
+
+    Нужен, чтобы отличать «текущую линию» истории объекта от «устаревшей
+    ветки» — записей, которые были сделаны ПОСЛЕ версии, к которой откатили,
+    но ДО момента самого отката (they got superseded and no longer describe
+    what happened to the live record). Персонал может посмотреть эту ветку
+    отдельно и удалить её, если она больше не нужна."""
+
+    model_label = models.CharField(max_length=20, verbose_name="Модель")
+    object_id = models.PositiveIntegerField(verbose_name="ID записи")
+    reverted_to_hid = models.PositiveIntegerField(verbose_name="ID версии, к которой откатили")
+    reverted_to_date = models.DateTimeField(verbose_name="Дата версии, к которой откатили")
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    performed_at = models.DateTimeField(auto_now_add=True, verbose_name="Когда откатили")
+
+    class Meta:
+        verbose_name = "Откат в аудите"
+        verbose_name_plural = "Откаты в аудите"
+        ordering = ["-performed_at"]
+
+    def __str__(self):
+        return f"{self.model_label} #{self.object_id} → версия от {self.reverted_to_date:%d.%m.%Y %H:%M}"
+
+
 class ClinicSite(models.Model):
     """Публичный сайт клиники (поддомен). Доступ включает суперадмин, правит суперадмин/Директор."""
     clinic = models.OneToOneField(

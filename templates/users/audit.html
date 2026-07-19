@@ -41,39 +41,99 @@
 
   <div class="pill-tabs">
     <button @click="tab='changes'" :class="tab==='changes'?'pill-tab active':'pill-tab'">История изменений</button>
+    <button @click="tab='superseded'" :class="tab==='superseded'?'pill-tab active':'pill-tab'">Устаревшие после отката{% if superseded_rows %} ({{ superseded_rows|length }}){% endif %}</button>
     <button @click="tab='deleted'" :class="tab==='deleted'?'pill-tab active':'pill-tab'">Удалённые ({{ deleted|length }})</button>
   </div>
 
-  <!-- История изменений -->
-  <div x-show="tab==='changes'" class="card overflow-hidden">
-    <table class="tbl">
-      <thead><tr><th>Когда</th><th>Объект</th><th>Действие</th><th>Кто</th><th class="text-right pr-5">Откат</th></tr></thead>
-      <tbody>
-        {% for r in rows %}
-        <tr>
-          <td class="text-xs muted">{{ r.date|date:"d.m.Y H:i:s" }}</td>
-          <td>
-            <span class="text-xs muted">{{ r.model_label }}</span><br>
-            <a href="/{% if r.model == 'patient' %}patients{% else %}treatments{% endif %}/{{ r.obj_id }}/" class="font-semibold hover:underline" style="color:var(--primary)">{{ r.title }}</a>
-          </td>
-          <td>
-            <span class="badge {% if r.raw_type == '+' %}badge-green{% elif r.raw_type == '-' %}badge-red{% else %}badge-blue{% endif %}">{{ r.type }}</span>
-          </td>
-          <td class="text-sm">{{ r.user }}</td>
-          <td class="text-right pr-5">
+  <!-- История изменений — сгруппировано по объекту, аккордион -->
+  <div x-show="tab==='changes'" class="space-y-2">
+    {% for g in grouped_rows %}
+    <div class="card overflow-hidden" x-data="{open: false}">
+      <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-5 py-3.5 text-left">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-xs muted shrink-0">{{ g.model_label }}</span>
+          <a href="/{% if g.model == 'patient' %}patients{% else %}treatments{% endif %}/{{ g.obj_id }}/"
+             class="font-semibold hover:underline truncate" style="color:var(--primary)"
+             @click.stop>{{ g.title }}</a>
+          <span class="badge badge-gray shrink-0">{{ g.count_label }}</span>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <span class="text-xs muted">{{ g.items.0.date|date:"d.m.Y H:i" }}</span>
+          <svg class="w-4 h-4 transition-transform" :style="open ? 'transform:rotate(180deg)' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </button>
+      <div x-show="open" x-cloak style="border-top:1px solid var(--border-2)">
+        {% for r in g.items %}
+        <div class="px-5 py-3{% if not forloop.last %} border-b{% endif %}" style="border-color:var(--border-2)">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <span class="badge {% if r.raw_type == '+' %}badge-green{% elif r.raw_type == '-' %}badge-red{% else %}badge-blue{% endif %}">{{ r.type }}</span>
+              <span class="text-xs muted">{{ r.date|date:"d.m.Y H:i:s" }} · {{ r.user }}</span>
+            </div>
             {% if r.raw_type != '-' %}
-            <form method="post" action="/users/audit/revert/{{ r.model }}/{{ r.hid }}/" onsubmit="return confirm('Откатить «{{ r.title|escapejs }}» к этой версии ({{ r.date|date:'d.m.Y H:i' }})?')">
+            <form method="post" action="/users/audit/revert/{{ r.model }}/{{ r.hid }}/" onsubmit="return confirm('Откатить «{{ r.title|escapejs }}» к этой версии ({{ r.date|date:'d.m.Y H:i' }})? Более поздние изменения этого объекта переместятся во вкладку «Устаревшие после отката».')">
               {% csrf_token %}
-              <button class="btn btn-ghost btn-sm" title="Восстановить эту версию">↩ Откатить</button>
+              <button class="btn btn-ghost btn-sm" title="Восстановить эту версию">↩ Откатить к этой версии</button>
             </form>
-            {% else %}<span class="muted text-xs">в корзине</span>{% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-center py-10 muted">Записей истории нет</td></tr>
+            {% endif %}
+          </div>
+          {% if r.diff %}
+          <table class="tbl mt-2">
+            <thead><tr><th>Поле</th><th>Было</th><th>Стало</th></tr></thead>
+            <tbody>
+              {% for d in r.diff %}
+              <tr><td class="font-semibold">{{ d.field }}</td><td class="text-xs">{{ d.old|default:"—" }}</td><td class="text-xs">{{ d.new|default:"—" }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% elif r.raw_type == '+' %}
+          <p class="text-xs muted mt-1">Запись создана</p>
+          {% else %}
+          <p class="text-xs muted mt-1">Нет отслеживаемых изменений полей</p>
+          {% endif %}
+        </div>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+    </div>
+    {% empty %}
+    <div class="card p-10 text-center muted">Записей истории нет</div>
+    {% endfor %}
+  </div>
+
+  <!-- Устаревшие после отката -->
+  <div x-show="tab==='superseded'" x-cloak class="space-y-2">
+    {% if superseded_rows %}
+    <div class="rounded-xl px-4 py-3 text-sm" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e">
+      ⚠ Эти изменения были сделаны ПОСЛЕ версии, к которой позже откатили — они больше не описывают текущее
+      состояние записи. Можно посмотреть, что там было, и удалить, если не нужны.
+    </div>
+    {% endif %}
+    <div class="card overflow-hidden">
+      <table class="tbl">
+        <thead><tr><th>Когда</th><th>Объект</th><th>Действие</th><th>Кто</th><th class="text-right pr-5">Удалить</th></tr></thead>
+        <tbody>
+          {% for r in superseded_rows %}
+          <tr>
+            <td class="text-xs muted">{{ r.date|date:"d.m.Y H:i:s" }}</td>
+            <td>
+              <span class="text-xs muted">{{ r.model_label }}</span><br>
+              <span class="font-semibold">{{ r.title }}</span>
+            </td>
+            <td><span class="badge {% if r.raw_type == '+' %}badge-green{% elif r.raw_type == '-' %}badge-red{% else %}badge-blue{% endif %}">{{ r.type }}</span></td>
+            <td class="text-sm">{{ r.user }}</td>
+            <td class="text-right pr-5">
+              <form method="post" action="/users/audit/delete/{{ r.model }}/{{ r.hid }}/" onsubmit="return confirm('Удалить эту устаревшую запись истории? Действие необратимо.')">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)">🗑 Удалить</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center py-10 muted">Устаревших записей нет</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Удалённые -->
