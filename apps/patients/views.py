@@ -139,6 +139,14 @@ def patient_list(request):
         qs = qs.filter(phone_norm__in=dupe_phones)
     qs = qs.distinct()
 
+    # Пагинация — список рос (200+ пациентов), рендерить всех разом не годится.
+    from django.core.paginator import Paginator
+    paginator = Paginator(qs, 25)
+    page_obj = paginator.get_page(G.get("page"))
+    qd = request.GET.copy()
+    qd.pop("page", None)
+    page_qs = qd.urlencode()
+
     # Stats
     all_count = Patient.objects.count()
     new_count = Patient.objects.filter(created_at__date__gte=week_ago).count()
@@ -180,7 +188,9 @@ def patient_list(request):
     adv_count = sum(1 for v in f.values() if v)
 
     return render(request, "patients/list.html", {
-        "patients": qs,
+        "patients": page_obj,
+        "page_obj": page_obj,
+        "page_qs": page_qs,
         "q": q,
         "sources": LeadSource.objects.filter(is_active=True),
         "branches": branches,
@@ -196,7 +206,7 @@ def patient_list(request):
         ],
         "f": f,
         "adv_count": adv_count,
-        "result_count": qs.count(),
+        "result_count": paginator.count,
         "all_count": all_count,
         "new_count": new_count,
         "birthday_count": birthday_count,

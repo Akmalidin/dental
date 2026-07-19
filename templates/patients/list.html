@@ -159,7 +159,7 @@
       <tbody>
         {% for patient in patients %}
         <tr class="cursor-pointer" onclick="window.location='/patients/{{ patient.pk }}/'">
-          <td class="font-semibold" style="color:var(--primary)">{{ forloop.counter }}</td>
+          <td class="font-semibold" style="color:var(--primary)">{{ page_obj.start_index|add:forloop.counter0 }}</td>
           <td>
             <div class="flex items-center gap-3">
               <div class="avatar w-9 h-9 text-xs">{{ patient.first_name|first|upper }}</div>
@@ -210,13 +210,32 @@
       </tbody>
     </table>
 
-    <div class="flex items-center justify-between px-5 py-3.5">
-      <span class="text-xs muted">{{ patients|length }} из {{ all_count }}{% if debtors_total %} · <span class="text-red-500 font-semibold">Долг: {{ debtors_total|floatformat:0 }} сом</span>{% endif %}</span>
+    <div class="flex items-center justify-between px-5 py-3.5 flex-wrap gap-2">
+      <span class="text-xs muted">
+        {% if result_count %}Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ result_count }}{% else %}0 из {{ all_count }}{% endif %}
+        {% if debtors_total %} · <span class="text-red-500 font-semibold">Долг: {{ debtors_total|floatformat:0 }} сом</span>{% endif %}
+      </span>
+      {% if page_obj.paginator.num_pages > 1 %}
       <div class="flex gap-1.5 text-xs">
-        <button class="btn btn-ghost btn-sm">← Назад</button>
-        <button class="btn btn-primary btn-sm">1</button>
-        <button class="btn btn-ghost btn-sm">Вперёд →</button>
+        {% if page_obj.has_previous %}
+        <a href="?{{ page_qs }}&page={{ page_obj.previous_page_number }}" class="btn btn-ghost btn-sm">← Назад</a>
+        {% else %}
+        <button class="btn btn-ghost btn-sm" disabled style="opacity:.4;cursor:default">← Назад</button>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+          {% if num == page_obj.number %}
+          <button class="btn btn-primary btn-sm">{{ num }}</button>
+          {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+          <a href="?{{ page_qs }}&page={{ num }}" class="btn btn-ghost btn-sm">{{ num }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <a href="?{{ page_qs }}&page={{ page_obj.next_page_number }}" class="btn btn-ghost btn-sm">Вперёд →</a>
+        {% else %}
+        <button class="btn btn-ghost btn-sm" disabled style="opacity:.4;cursor:default">Вперёд →</button>
+        {% endif %}
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -286,5 +305,17 @@ function mergeCheck(){
     },
   };
 }
+
+// Автопоиск: отправляем форму через паузу после набора текста, чтобы не
+// заставлять нажимать Enter/иконку лупы, но и не дёргать сервер на каждую букву.
+(function(){
+  var inp = document.querySelector('input[name="q"]');
+  if (!inp) return;
+  var t = null;
+  inp.addEventListener('input', function(){
+    clearTimeout(t);
+    t = setTimeout(function(){ document.getElementById('pf').submit(); }, 600);
+  });
+})();
 </script>
 {% endblock %}

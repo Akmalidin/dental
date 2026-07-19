@@ -23,11 +23,13 @@ EXPORT_PLAN = [
     ("users", "Role", "all"),                       # роли общие
     ("users", "Branch", "direct"),
     ("users", "User", "direct"),
+    ("appointments", "Cabinet", ("via", "branch__clinic")),
     ("patients", "LeadSource", "all"),
     ("patients", "Tag", "all"),
     ("patients", "InsuranceCompany", "all"),
     ("services", "ServiceCategory", "direct"),
     ("services", "Service", "direct"),
+    ("technicians", "Technician", "direct"),
     ("warehouse", "Supplier", "direct"),
     ("warehouse", "ProductCategory", "direct"),
     ("warehouse", "Product", "direct"),
@@ -37,15 +39,21 @@ EXPORT_PLAN = [
     ("medicines", "Medicine", "direct"),
     ("patients", "Patient", "direct"),
     ("treatments", "MedicalRecordTemplate", "direct"),
+    ("treatments", "ToothStatus", "all"),
+    ("treatments", "ToothCondition", ("via", "patient__clinic")),
     ("treatments", "Treatment", "direct"),
     ("treatments", "TreatmentCure", ("via", "treatment__clinic")),
+    ("technicians", "TechnicianTask", "direct"),
     ("treatments", "MedicalRecord", ("via", "treatment__clinic")),
     ("treatments", "TreatmentPlan", ("via", "patient__clinic")),
+    ("treatments", "TreatmentPlanStage", ("via", "plan__patient__clinic")),
     ("treatments", "TreatmentPlanItem", ("via", "plan__patient__clinic")),
     ("appointments", "Appointment", "direct"),
     ("finance", "Payment", "direct"),
     ("finance", "Expense", "direct"),
+    ("finance", "PatientAdvance", ("via", "patient__clinic")),
     ("medicines", "PatientMedicine", ("via", "patient__clinic")),
+    ("technicians", "TechnicianWarrantyCase", "direct"),
 ]
 
 
@@ -112,11 +120,14 @@ def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=Fals
     Конфликтные записи НЕ применяются автоматически — они возвращаются
     списком (см. sync_push), а текущая (облачная) версия остаётся как есть.
     """
+    from django.db import transaction
+
     counts = {}
     skipped = {}
+    errors_by_model = {}
     conflicts = []
     for block in blocks:
-        n = sk = 0
+        n = sk = err = 0
         model_label = block["model"]
         try:
             app_label, model_name = model_label.split(".")
@@ -153,13 +164,66 @@ def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=Fals
                 sk += 1
                 continue  # в облаке версия свежее — не затираем
 
-            for d in serializers.deserialize("python", [raw]):
-                d.save()
-            n += 1
+            # На бэкендах с немедленной проверкой внешних ключей (PostgreSQL —
+            # так работает облако) savepoint на объект ловит нарушение сразу
+            # и пропускает именно эту запись. На SQLite (локальная копия)
+            # проверка отложена до конца транзакции — там подчищаем через
+            # _heal_dangling_fks() ниже, savepoint здесь безвреден, но сам
+            # по себе нарушение не поймает.
+            try:
+                with transaction.atomic():
+                    for d in serializers.deserialize("python", [raw]):
+                        d.save()
+                n += 1
+            except Exception:
+                err += 1
+                continue
         counts[model_label] = n
         if sk:
             skipped[model_label] = sk
+        if err:
+            errors_by_model[model_label] = err
+
+    # SQLite откладывает проверку внешних ключей до конца транзакции (нельзя
+    # поймать нарушение через try/except на отдельном объекте — сохранение
+    # «проходит», а падает только итоговый commit). Поэтому здесь, ДО commit,
+    # ищем реальные нарушения и точечно лечим именно их — обнуляем нерабочую
+    # ссылку (если поле необязательное) или удаляем именно эту связь (если
+    # обязательное, например M2M) — а не роняем всю синхронизацию сотен
+    # объектов из-за одной «осиротевшей» ссылки где-то в старых данных.
+    for table, n_healed in _heal_dangling_fks().items():
+        errors_by_model[table] = errors_by_model.get(table, 0) + n_healed
+    errors = errors_by_model
 
     if collect_conflicts:
-        return {"applied": counts, "skipped": skipped, "conflicts": conflicts}
-    return counts if not prefer_newer else {"applied": counts, "skipped": skipped}
+        return {"applied": counts, "skipped": skipped, "conflicts": conflicts, "errors": errors}
+    if prefer_newer:
+        return {"applied": counts, "skipped": skipped, "errors": errors}
+    return counts
+
+
+def _heal_dangling_fks():
+    """См. import_blocks: точечно устраняет нарушения внешних ключей,
+    оставшиеся в текущей (незакоммиченной) транзакции SQLite, чтобы не
+    ронять всю синхронизацию из-за единичных «осиротевших» ссылок."""
+    from django.db import connection
+    errors = {}
+    if connection.vendor != "sqlite":
+        return errors
+    with connection.cursor() as cur:
+        cur.execute("PRAGMA foreign_key_check")
+        violations = cur.fetchall()
+        for table, rowid, ref_table, fkid in violations:
+            cur.execute(f"PRAGMA foreign_key_list({table})")
+            fk_list = cur.fetchall()
+            if fkid >= len(fk_list):
+                continue
+            fk_column = fk_list[fkid][3]  # 'from' — имя колонки с внешним ключом
+            try:
+                cur.execute(f'UPDATE "{table}" SET "{fk_column}" = NULL WHERE rowid = %s', [rowid])
+            except Exception:
+                # поле обязательное (NOT NULL, например M2M-таблица связи) —
+                # удаляем именно эту повреждённую строку/связь целиком
+                cur.execute(f'DELETE FROM "{table}" WHERE rowid = %s', [rowid])
+            errors[table] = errors.get(table, 0) + 1
+    return errors

@@ -280,8 +280,10 @@
               lbl.textContent = '✓ Готово';
               let msg = `Отправлено ${d.pushed}, получено ${d.pulled}`;
               if (d.conflicts) msg += `. ⚠ Конфликтов: ${d.conflicts} (разрешить в облаке в разделе «Конфликты синхронизации»)`;
-              if (window.toast) toast(msg, d.conflicts ? 'error' : 'success');
-              setTimeout(()=>location.reload(), d.conflicts ? 3000 : 1200);
+              if (d.errors) msg += `. Пропущено записей с ошибками: ${d.errors}`;
+              const warn = d.conflicts || d.errors;
+              if (window.toast) toast(msg, warn ? 'error' : 'success');
+              setTimeout(()=>location.reload(), warn ? 3000 : 1200);
             }
             else { lbl.textContent = 'Ошибка'; if (window.toast) toast(d.error || 'Нет связи с облаком', 'error'); btn.disabled = false; setTimeout(()=>lbl.textContent='Синхронизация', 2500); }
           } catch (e) { lbl.textContent = 'Нет интернета'; btn.disabled = false; setTimeout(()=>lbl.textContent='Синхронизация', 2500); }

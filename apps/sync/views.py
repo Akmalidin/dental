@@ -68,11 +68,12 @@ def sync_run(request):
 
         # 1) push локальных данных вверх
         clinic = Clinic.objects.first()
-        pushed = conflicts = 0
+        pushed = conflicts = push_errors = 0
         if clinic:
             res = cli.post_json("/sync/push/", {"blocks": export_clinic(clinic), "since": since})
             pushed = sum(res.get("applied", {}).values()) if res.get("ok") else 0
             conflicts = res.get("conflicts", 0) if res.get("ok") else 0
+            push_errors = res.get("errors", 0) if res.get("ok") else 0
 
         # 2) pull свежих данных вниз (в т.ч. то, что не применилось из-за конфликта —
         # у нас останется актуальная облачная версия локально)
@@ -89,7 +90,9 @@ def sync_run(request):
         cfg["last_synced_at"] = sync_started_at
         cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
 
-        return JsonResponse({"ok": True, "pushed": pushed, "pulled": pulled, "conflicts": conflicts})
+        return JsonResponse({
+            "ok": True, "pushed": pushed, "pulled": pulled, "conflicts": conflicts, "errors": push_errors,
+        })
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
@@ -126,6 +129,7 @@ def sync_push(request):
             return JsonResponse({
                 "ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {}),
                 "conflicts": len(res.get("conflicts", [])),
+                "errors": sum(res.get("errors", {}).values()),
             })
 
         # Нет отметки последней синхронизации (старый локальный клиент или
@@ -133,6 +137,7 @@ def sync_push(request):
         res = import_blocks(payload.get("blocks", []), prefer_newer=True)
         return JsonResponse({
             "ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {}), "conflicts": 0,
+            "errors": sum(res.get("errors", {}).values()),
         })
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
