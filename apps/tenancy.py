@@ -164,10 +164,13 @@ class PublicSiteMiddleware:
             set_current_clinic(clinic)
             return None  # continue
         # Публичного сайта нет (клинике он не нужен) или клиника не найдена —
-        # ведём на CRM, а не показываем «Сайт недоступен» посетителю.
+        # ведём на CRM, а не показываем «Сайт недоступен» посетителю. Передаём
+        # ?clinic=<slug>, чтобы страница входа показала лого/название именно
+        # этой клиники (см. login_view), а не общий дефолт.
         app_host = getattr(dj, "APP_HOST", "") or "app.sadaf.kg"
         scheme = "https" if request.is_secure() else "http"
-        return HttpResponseRedirect(f"{scheme}://{app_host}/")
+        login_qs = f"?clinic={clinic.slug}" if clinic else ""
+        return HttpResponseRedirect(f"{scheme}://{app_host}/login/{login_qs}")
 
     def __call__(self, request):
         from django.conf import settings as dj
