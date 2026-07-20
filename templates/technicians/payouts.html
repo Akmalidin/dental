@@ -20,9 +20,9 @@
           <td class="font-semibold"><a href="/technicians/{{ r.tech.pk }}/" class="hover:underline" style="color:var(--primary)">{{ r.tech.name }}</a></td>
           <td class="muted text-sm">{{ r.tech.lab_name|default:"—" }}</td>
           <td class="text-center">{{ r.count }}</td>
-          <td class="text-right font-bold text-red-600">{{ r.sum|floatformat:0 }} сом</td>
+          <td class="text-right font-bold text-red-600">{{ r.sum|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td class="text-right pr-5">
-            <form method="post" action="/technicians/{{ r.tech.pk }}/pay/" onsubmit="return confirm('Выплатить {{ r.sum|floatformat:0 }} сом технику {{ r.tech.name|escapejs }}? Будет создан расход.')">
+            <form method="post" action="/technicians/{{ r.tech.pk }}/pay/" onsubmit="return confirm('Выплатить {{ r.sum|floatformat:0 }} {{ clinic_settings.currency_label }} технику {{ r.tech.name|escapejs }}? Будет создан расход.')">
               {% csrf_token %}
               <button class="btn btn-primary btn-sm">Выплатить</button>
             </form>

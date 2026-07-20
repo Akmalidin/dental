@@ -14,7 +14,7 @@
         <td><a href="/patients/{{ p.pk }}/" class="font-semibold text-slate-800 hover:text-indigo-600">{{ p.full_name }}</a></td>
         <td class="text-slate-600">{{ p.phone }}</td>
         <td class="text-slate-500 text-xs">{{ p.branch.name }}</td>
-        <td class="font-black text-red-600 text-lg">{{ p.balance|floatformat:0 }} сом</td>
+        <td class="font-black text-red-600 text-lg">{{ p.balance|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
         <td><a href="/finance/payments/create/?patient={{ p.pk }}" class="badge badge-green hover:bg-emerald-100">Принять платёж</a></td>
       </tr>
       {% empty %}

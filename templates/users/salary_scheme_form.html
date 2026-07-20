@@ -20,7 +20,7 @@
       </div>
 
       <div x-show="type==='fixed' || type==='combined'">
-        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Фиксированная ставка (сом/мес)</label>
+        <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Фиксированная ставка ({{ clinic_settings.currency_label }}/мес)</label>
         <input type="number" name="fixed_amount" value="{{ scheme.fixed_amount|floatformat:0 }}" step="1" min="0">
       </div>
 

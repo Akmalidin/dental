@@ -25,7 +25,7 @@
           <td class="font-semibold cursor-pointer" @click="open=!open">{{ e.phone }}</td>
           <td>{{ e.name|default:"—" }}</td>
           <td class="muted">{{ e.reason|default:"—" }}</td>
-          <td class="text-right font-bold {% if e.total_debt > 0 %}text-red-600{% else %}text-emerald-600{% endif %}">{{ e.total_debt|floatformat:0 }} сом</td>
+          <td class="text-right font-bold {% if e.total_debt > 0 %}text-red-600{% else %}text-emerald-600{% endif %}">{{ e.total_debt|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td class="muted text-xs">{{ e.clinic.name|default:"—" }}<br>{{ e.added_by.name|default:"—" }} · {{ e.created_at|date:"d.m.Y" }}</td>
           <td class="text-right pr-5">
             {% if e.can_remove %}
@@ -74,8 +74,8 @@
                     <td class="px-3 py-2 font-semibold">{{ c.clinic }}</td>
                     <td class="px-3 py-2">{{ c.name }}</td>
                     <td class="px-3 py-2 text-center muted">{{ c.treatments }}</td>
-                    <td class="px-3 py-2 text-right">{{ c.billed|floatformat:0 }} сом</td>
-                    <td class="px-3 py-2 text-right font-bold {% if c.debt > 0 %}text-red-600{% else %}muted{% endif %}">{{ c.debt|floatformat:0 }} сом</td>
+                    <td class="px-3 py-2 text-right">{{ c.billed|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
+                    <td class="px-3 py-2 text-right font-bold {% if c.debt > 0 %}text-red-600{% else %}muted{% endif %}">{{ c.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
                   </tr>
                   {% empty %}
                   <tr><td colspan="5" class="px-3 py-3 text-center muted">Нет данных о пациенте в клиниках (только номер в списке)</td></tr>

@@ -24,7 +24,7 @@
     </a>
     <a href="/patients/?debt=yes" class="stat hover:ring-2 hover:ring-red-200 transition" title="Показать пациентов с долгом">
       <div class="stat-icon ic-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg></div>
-      <div><p class="stat-label">С долгами</p><p class="stat-value">{{ debtors_count }}</p>{% if debtors_total %}<p class="text-xs text-red-500 font-semibold">{{ debtors_total|floatformat:0 }} сом</p>{% endif %}</div>
+      <div><p class="stat-label">С долгами</p><p class="stat-value">{{ debtors_count }}</p>{% if debtors_total %}<p class="text-xs text-red-500 font-semibold">{{ debtors_total|floatformat:0 }} {{ clinic_settings.currency_label }}</p>{% endif %}</div>
     </a>
   </div>
 
@@ -185,8 +185,8 @@
             {% endwith %}
           </td>
           <td>
-            {% if patient.balance < 0 %}<span class="font-bold text-red-500">{{ patient.balance|floatformat:0|slice:"1:" }} сом</span>
-            {% elif patient.balance > 0 %}<span class="font-bold text-green-500">+{{ patient.balance|floatformat:0 }} сом</span>
+            {% if patient.balance < 0 %}<span class="font-bold text-red-500">{{ patient.balance|floatformat:0|slice:"1:" }} {{ clinic_settings.currency_label }}</span>
+            {% elif patient.balance > 0 %}<span class="font-bold text-green-500">+{{ patient.balance|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
             {% else %}<span class="muted text-sm">Нет долга</span>{% endif %}
           </td>
           <td onclick="event.stopPropagation()">
@@ -213,7 +213,7 @@
     <div class="flex items-center justify-between px-5 py-3.5 flex-wrap gap-2">
       <span class="text-xs muted">
         {% if result_count %}Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ result_count }}{% else %}0 из {{ all_count }}{% endif %}
-        {% if debtors_total %} · <span class="text-red-500 font-semibold">Долг: {{ debtors_total|floatformat:0 }} сом</span>{% endif %}
+        {% if debtors_total %} · <span class="text-red-500 font-semibold">Долг: {{ debtors_total|floatformat:0 }} {{ clinic_settings.currency_label }}</span>{% endif %}
       </span>
       {% if page_obj.paginator.num_pages > 1 %}
       <div class="flex gap-1.5 text-xs">

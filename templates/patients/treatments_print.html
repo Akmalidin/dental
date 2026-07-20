@@ -46,8 +46,8 @@
         <td>{{ c.service.name }}</td>
         <td>{{ c.tooth_number|default:"—" }}</td>
         <td>{{ c.quantity }}</td>
-        <td>{{ c.price|floatformat:0 }} сом</td>
-        <td>{{ c.subtotal|floatformat:0 }} сом</td>
+        <td>{{ c.price|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
+        <td>{{ c.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
       </tr>
       {% empty %}
       <tr><td colspan="5" style="text-align:center;color:#7A8580">Услуги не указаны</td></tr>
@@ -56,10 +56,10 @@
   </table>
 
   <div class="totals">
-    <div>Сумма: <b>{{ t.total_amount|floatformat:0 }} сом</b></div>
-    {% if t.discount %}<div>Скидка: <b>−{{ t.discount|floatformat:0 }} сом</b></div>{% endif %}
-    <div>Оплачено: <b>{{ t.paid_amount|floatformat:0 }} сом</b></div>
-    {% if t.debt > 0 %}<div class="debt">Долг: <b>{{ t.debt|floatformat:0 }} сом</b></div>{% endif %}
+    <div>Сумма: <b>{{ t.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</b></div>
+    {% if t.discount %}<div>Скидка: <b>−{{ t.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</b></div>{% endif %}
+    <div>Оплачено: <b>{{ t.paid_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</b></div>
+    {% if t.debt > 0 %}<div class="debt">Долг: <b>{{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</b></div>{% endif %}
   </div>
 </div>
 {% empty %}

@@ -59,7 +59,7 @@
           <div class="avatar w-9 h-9 text-xs">{{ p.patient.first_name|first|upper }}</div>
           <p class="flex-1 text-sm font-semibold truncate" style="color:var(--text)">{{ p.patient.full_name|truncatechars:18 }}</p>
           <p class="text-sm font-bold {% if p.type == 'income' %}text-green-500{% else %}text-red-500{% endif %}">
-            {% if p.type == 'income' %}+{% else %}−{% endif %}{{ p.amount|floatformat:0 }} сом
+            {% if p.type == 'income' %}+{% else %}−{% endif %}{{ p.amount|floatformat:0 }} {{ clinic_settings.currency_label }}
           </p>
         </div>
         {% empty %}
@@ -88,7 +88,7 @@
           </td>
           <td class="muted">{{ t.doctor.name }}</td>
           <td class="muted">{{ t.created_at|date:"d.m.Y H:i" }}</td>
-          <td class="font-bold">{{ t.total_amount|floatformat:0 }} сом</td>
+          <td class="font-bold">{{ t.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td><span class="badge {% if t.status == 'in_progress' %}badge-blue{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span></td>
         </tr>
         {% empty %}

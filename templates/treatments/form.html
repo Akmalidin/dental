@@ -29,7 +29,7 @@
         <a href="/patients/{{ patient.pk }}/" class="font-bold" style="color:var(--text)">{{ patient.full_name }}</a>
         <p class="text-xs muted">{{ patient.phone }}{% if patient.birth_date %} · {{ patient.birth_date|date:"d.m.Y" }}{% endif %}</p>
       </div>
-      {% with debt=patient.debt %}{% if debt > 0 %}<span class="badge badge-red ml-2">долг {{ debt|floatformat:0 }} сом</span>{% endif %}{% endwith %}
+      {% with debt=patient.debt %}{% if debt > 0 %}<span class="badge badge-red ml-2">долг {{ debt|floatformat:0 }} {{ clinic_settings.currency_label }}</span>{% endif %}{% endwith %}
       <a href="/patients/{{ patient.pk }}/" class="btn btn-ghost btn-sm ml-auto">Карта пациента →</a>
     </div>
     {% endif %}
@@ -110,7 +110,7 @@
             <td class="px-4 py-2"><input type="text" name="{{ cure_form.tooth_number.html_name }}" value="{{ cure_form.tooth_number.value|default:'' }}" placeholder="клик → выбор" class="cure-tooth text-center" readonly onclick="setActiveRow(this.closest('tr'))" style="cursor:pointer"></td>
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.quantity.html_name }}" value="{{ cure_form.quantity.value|default:'' }}" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
             <td class="px-4 py-2"><input type="number" name="{{ cure_form.price.html_name }}" value="{{ cure_form.price.value|default:'' }}" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
-            <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
+            <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 {{ clinic_settings.currency_label }}</td>
             <td class="px-2 text-center whitespace-nowrap">
               <button type="button" onclick="splitRowByTeeth(this)" title="Разбить: отдельная запись на каждый зуб" class="text-sm muted hover:text-indigo-500 mr-1">⫶⫶</button>
               <button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button>
@@ -121,7 +121,7 @@
         <tfoot>
           <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
             <td colspan="4" class="px-4 py-3 text-right font-bold muted">Итого:</td>
-            <td class="px-4 py-3 font-extrabold" style="color:var(--primary)" id="grand-total">0 сом</td>
+            <td class="px-4 py-3 font-extrabold" style="color:var(--primary)" id="grand-total">0 {{ clinic_settings.currency_label }}</td>
             <td></td>
           </tr>
         </tfoot>
@@ -152,7 +152,7 @@
     <td class="px-4 py-2"><input type="text" placeholder="клик → выбор" class="cure-tooth text-center" readonly onclick="setActiveRow(this.closest('tr'))" style="cursor:pointer"></td>
     <td class="px-4 py-2"><input type="number" value="1" min="1" class="cure-qty text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
     <td class="px-4 py-2"><input type="number" value="" step="1" min="0" placeholder="0" class="cure-price text-center" oninput="updateRowTotal(this.closest('tr'))"></td>
-    <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 сом</td>
+    <td class="px-4 py-2 font-semibold cure-total whitespace-nowrap" style="color:var(--text)">0 {{ clinic_settings.currency_label }}</td>
     <td class="px-2 text-center whitespace-nowrap">
       <button type="button" onclick="splitRowByTeeth(this)" title="Разбить: отдельная запись на каждый зуб" class="text-sm muted hover:text-indigo-500 mr-1">⫶⫶</button>
       <button type="button" onclick="removeCureRow(this)" class="text-xl leading-none font-bold muted hover:text-red-500">&times;</button>
@@ -186,7 +186,7 @@ function buildOptionsHTML() {
   let html = '<option value="">— Выберите услугу —</option>';
   for (const [cat, list] of Object.entries(groups)) {
     html += `<optgroup label="${cat}">`;
-    list.forEach(s => { html += `<option value="${s.id}" data-price="${s.price}">${s.name} — ${Math.round(s.price).toLocaleString('ru-RU')} сом</option>`; });
+    list.forEach(s => { html += `<option value="${s.id}" data-price="${s.price}">${s.name} — ${Math.round(s.price).toLocaleString('ru-RU')} {{ clinic_settings.currency_label }}</option>`; });
     html += '</optgroup>';
   }
   return html;
@@ -218,7 +218,7 @@ function onServiceChange(sel) {
 function updateRowTotal(row) {
   const qty = parseFloat(row.querySelector('.cure-qty')?.value) || 1;
   const price = parseFloat(row.querySelector('.cure-price')?.value) || 0;
-  const t = row.querySelector('.cure-total'); if (t) t.textContent = Math.round(qty*price).toLocaleString('ru-RU') + ' сом';
+  const t = row.querySelector('.cure-total'); if (t) t.textContent = Math.round(qty*price).toLocaleString('ru-RU') + ' {{ clinic_settings.currency_label }}';
   updateGrandTotal();
 }
 function updateGrandTotal() {
@@ -228,7 +228,7 @@ function updateGrandTotal() {
     const cb = row.querySelector('.cure-delete-cb'); if (cb && cb.checked) return;
     total += (parseFloat(row.querySelector('.cure-qty')?.value)||1) * (parseFloat(row.querySelector('.cure-price')?.value)||0);
   });
-  const el = document.getElementById('grand-total'); if (el) el.textContent = Math.round(total).toLocaleString('ru-RU') + ' сом';
+  const el = document.getElementById('grand-total'); if (el) el.textContent = Math.round(total).toLocaleString('ru-RU') + ' {{ clinic_settings.currency_label }}';
 }
 
 function addCureRow() {

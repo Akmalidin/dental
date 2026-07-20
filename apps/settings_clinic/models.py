@@ -109,6 +109,17 @@ class ClinicSettings(models.Model):
     def __str__(self):
         return f"Настройки: {self.name}"
 
+    # Код валюты (ISO) → как это слово пишется по-русски рядом с суммой.
+    CURRENCY_LABELS = {
+        "KGS": "сом", "UZS": "сум", "KZT": "₸", "RUB": "₽",
+        "USD": "$", "EUR": "€", "TJS": "сомони",
+    }
+
+    @property
+    def currency_label(self):
+        code = (self.currency or "").upper().strip()
+        return self.CURRENCY_LABELS.get(code, code or "сом")
+
     @property
     def receipt_display_name(self):
         return self.receipt_clinic_name or self.name

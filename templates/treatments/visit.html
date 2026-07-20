@@ -44,7 +44,7 @@
         <span>{% if patient.age %}{{ patient.age }} л{% else %}—{% endif %}</span>
         {% if patient.debt > 0 %}
         <span class="pb-sep">|</span>
-        <span class="font-bold text-red-600">Долг: {{ patient.debt|floatformat:0 }} сом</span>
+        <span class="font-bold text-red-600">Долг: {{ patient.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
         {% endif %}
         {% if patient.allergy %}
         <span class="allergy-badge">⚠️ Аллергия: {{ patient.allergy }}</span>
@@ -329,8 +329,8 @@
       <tbody><tr x-show="plan.length===0"><td colspan="7" class="text-center muted py-4">Добавьте услуги в план</td></tr></tbody>
     </table>
     <div class="flex items-center justify-end gap-6 text-sm">
-      <span class="muted">Весь план: <b style="color:var(--text)" x-text="fmt(planTotal())"></b> сом</span>
-      <span>Сегодня (✓): <b class="text-emerald-600" x-text="fmt(doneTotal())"></b> сом</span>
+      <span class="muted">Весь план: <b style="color:var(--text)" x-text="fmt(planTotal())"></b> {{ clinic_settings.currency_label }}</span>
+      <span>Сегодня (✓): <b class="text-emerald-600" x-text="fmt(doneTotal())"></b> {{ clinic_settings.currency_label }}</span>
     </div>
     <div class="flex justify-between"><button @click="go(4)" class="btn btn-ghost">← Назад</button><button @click="go(6)" class="btn btn-primary">Далее →</button></div>
   </div>
@@ -341,8 +341,8 @@
     <div class="rounded-xl p-4 text-sm space-y-1" style="background:var(--surface-2)">
       <p><b>Жалобы:</b> <span x-text="complaintsSummary() || '—'"></span></p>
       <p><b>Диагноз:</b> <span x-text="(diagnosis||'—') + (icd ? ' ('+icd+')' : '')"></span></p>
-      <p><b>Выполнено сегодня:</b> <span class="text-emerald-600 font-bold" x-text="fmt(doneTotal())+' сом'"></span></p>
-      <p x-show="planTotal()>doneTotal()"><b>В план (на будущее):</b> <span x-text="fmt(planTotal()-doneTotal())+' сом'"></span></p>
+      <p><b>Выполнено сегодня:</b> <span class="text-emerald-600 font-bold" x-text="fmt(doneTotal())+' {{ clinic_settings.currency_label }}'"></span></p>
+      <p x-show="planTotal()>doneTotal()"><b>В план (на будущее):</b> <span x-text="fmt(planTotal()-doneTotal())+' {{ clinic_settings.currency_label }}'"></span></p>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
       <div><label class="fld">Следующий визит — дата</label><input type="date" x-model="next.date"></div>
@@ -517,7 +517,7 @@ function visitWizard(){
     // ── План ──
     initSvcSelect(){
       const self=this;
-      const opts=this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' сом'}));
+      const opts=this.SERVICES.map(s=>({value:String(s.id),text:s.name+' · '+Math.round(s.price)+' {{ clinic_settings.currency_label }}'}));
       if(window.TomSelect && this.$refs.svcSel && !this.$refs.svcSel.tomselect && !this.svcTS){
         this.svcTS=new TomSelect(this.$refs.svcSel,{
           options:opts, placeholder:'Выберите услугу…',

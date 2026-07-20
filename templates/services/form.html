@@ -39,8 +39,8 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div><label class="fld">Цена для пациента (сом) *</label>{{ form.price }}</div>
-      <div><label class="fld">Цена по ДМС (сом)</label>{{ form.dms_price }}</div>
+      <div><label class="fld">Цена для пациента ({{ clinic_settings.currency_label }}) *</label>{{ form.price }}</div>
+      <div><label class="fld">Цена по ДМС ({{ clinic_settings.currency_label }})</label>{{ form.dms_price }}</div>
       <div><label class="fld">Длительность (мин)</label>{{ form.duration }}</div>
     </div>
 

@@ -52,26 +52,26 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
       <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--surface-2)">
         <p class="text-xs muted font-semibold uppercase mb-1">Сумма</p>
-        <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.display_total|floatformat:0 }} <span class="text-sm muted">сом</span></p>
+        <p class="text-xl font-extrabold" style="color:var(--text)">{{ treatment.display_total|floatformat:0 }} <span class="text-sm muted">{{ clinic_settings.currency_label }}</span></p>
       </div>
       <div @click="showDiscount=true" class="rounded-2xl px-4 py-3 text-center cursor-pointer hover:ring-2 transition" style="background:var(--orange-bg);--tw-ring-color:rgba(251,146,60,.4)" title="Нажмите чтобы изменить скидку">
         <p class="text-xs font-semibold uppercase mb-1" style="color:var(--orange)">Скидка ✏️</p>
-        <p class="text-xl font-extrabold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} <span class="text-sm">сом</span></p>
+        <p class="text-xl font-extrabold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
       </div>
       <div class="rounded-2xl px-4 py-3 text-center" style="background:var(--green-bg)">
         <p class="text-xs font-semibold uppercase mb-1" style="color:var(--green)">Оплачено</p>
-        <p class="text-xl font-extrabold" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} <span class="text-sm">сом</span></p>
+        <p class="text-xl font-extrabold" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
       </div>
       <div class="rounded-2xl px-4 py-3 text-center" style="background:{% if treatment.debt > 0 %}var(--red-bg){% else %}var(--surface-2){% endif %}">
         <p class="text-xs font-semibold uppercase mb-1" style="color:{% if treatment.debt > 0 %}var(--red){% else %}var(--text-soft){% endif %}">Долг</p>
-        <p class="text-xl font-extrabold" style="color:{% if treatment.debt > 0 %}var(--red){% else %}var(--text-faint){% endif %}">{{ treatment.debt|floatformat:0 }} <span class="text-sm">сом</span></p>
+        <p class="text-xl font-extrabold" style="color:{% if treatment.debt > 0 %}var(--red){% else %}var(--text-faint){% endif %}">{{ treatment.debt|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
       </div>
     </div>
 
     {% if treatment.debt > 0 %}
     <div class="mt-4"><button @click="showPay=true" class="btn btn-success btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
-      Принять оплату {{ treatment.debt|floatformat:0 }} сом
+      Принять оплату {{ treatment.debt|floatformat:0 }} {{ clinic_settings.currency_label }}
     </button></div>
     {% endif %}
   </div>
@@ -97,8 +97,8 @@
             <td class="font-semibold">{{ cure.service.name }}</td>
             <td class="muted text-center">{{ cure.tooth_number|default:"—" }}</td>
             <td class="muted text-center">{{ cure.quantity }}</td>
-            <td class="muted">{{ cure.price|floatformat:0 }} сом</td>
-            <td class="font-bold">{{ cure.subtotal|floatformat:0 }} сом</td>
+            <td class="muted">{{ cure.price|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
+            <td class="font-bold">{{ cure.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
             <td class="muted text-xs">{{ cure.doctor.name }}</td>
           </tr>
           {% empty %}<tr><td colspan="6" class="text-center py-10 muted">Нет процедур</td></tr>{% endfor %}
@@ -132,7 +132,7 @@
         <table class="tbl">
           <tbody>
             {% for item in plan.items.all %}
-            <tr><td class="font-semibold {% if item.status == 'done' %}line-through muted{% endif %}">{{ item.service.name }}</td><td class="muted">{{ item.tooth_number|default:"—" }}</td><td class="font-bold">{{ item.subtotal|floatformat:0 }} сом</td><td>{% if item.status == 'done' %}<span class="badge badge-green">Выполнен</span>{% else %}<span class="badge badge-gray">Ожидает</span>{% endif %}</td></tr>
+            <tr><td class="font-semibold {% if item.status == 'done' %}line-through muted{% endif %}">{{ item.service.name }}</td><td class="muted">{{ item.tooth_number|default:"—" }}</td><td class="font-bold">{{ item.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td><td>{% if item.status == 'done' %}<span class="badge badge-green">Выполнен</span>{% else %}<span class="badge badge-gray">Ожидает</span>{% endif %}</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -257,7 +257,7 @@
                 <td class="py-1.5 font-semibold" x-text="it.name"></td>
                 <td class="py-1.5" style="width:90px"><input type="text" x-model="it.tooth" placeholder="зуб" class="text-center"></td>
                 <td class="py-1.5" style="width:70px"><input type="number" x-model.number="it.qty" min="1" class="text-center"></td>
-                <td class="py-1.5 text-right pr-2 font-bold" x-text="Math.round(it.price*it.qty)+' сом'"></td>
+                <td class="py-1.5 text-right pr-2 font-bold" x-text="Math.round(it.price*it.qty)+' {{ clinic_settings.currency_label }}'"></td>
                 <td class="py-1.5 text-center" style="width:30px"><button type="button" @click="items.splice(idx,1)" class="text-red-500">&times;</button></td>
               </tr>
             </template>
@@ -290,7 +290,7 @@
         </div>
       </div>
       <div class="px-6 py-4 flex justify-between items-center shrink-0" style="border-top:1px solid var(--border)">
-        <span class="font-bold" style="color:var(--text)">Итого: <span x-text="total()"></span> сом</span>
+        <span class="font-bold" style="color:var(--text)">Итого: <span x-text="total()"></span> {{ clinic_settings.currency_label }}</span>
         <div class="flex gap-3">
           <button type="button" @click="showPlan=false" class="btn btn-ghost">Отмена</button>
           <button type="button" @click="save()" :disabled="saving || !items.length" class="btn btn-primary px-6" :class="(!items.length||saving)?'opacity-50':''">Сохранить план</button>
@@ -350,8 +350,8 @@
         <input type="hidden" name="treatment" value="{{ treatment.pk }}">
         <input type="hidden" name="channel" value="doctor">
         <div class="grid grid-cols-2 gap-4">
-          <div><label class="fld">Сумма (сом)</label><input type="number" name="amount" value="{{ treatment.debt|floatformat:0 }}" required></div>
-          <div><label class="fld">Скидка (сом)</label><input type="number" name="discount" value="{{ treatment.discount|floatformat:0|default:'' }}" min="0" placeholder="0"></div>
+          <div><label class="fld">Сумма ({{ clinic_settings.currency_label }})</label><input type="number" name="amount" value="{{ treatment.debt|floatformat:0 }}" required></div>
+          <div><label class="fld">Скидка ({{ clinic_settings.currency_label }})</label><input type="number" name="discount" value="{{ treatment.discount|floatformat:0|default:'' }}" min="0" placeholder="0"></div>
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div><label class="fld">Метод</label><select name="method" class="no-tom"><option value="cash">Наличные</option><option value="card">Карта</option><option value="transfer">Перевод</option></select></div>
@@ -373,11 +373,11 @@
       <form method="post" action="/treatments/{{ treatment.pk }}/set-discount/" class="px-6 py-5 space-y-4">
         {% csrf_token %}
         <div class="rounded-xl px-4 py-3 text-sm" style="background:var(--surface-2)">
-          <div class="flex justify-between"><span class="muted">Сумма услуг:</span><span class="font-bold" style="color:var(--text)">{{ treatment.total_amount|floatformat:0 }} сом</span></div>
-          <div class="flex justify-between mt-1"><span class="muted">Текущая скидка:</span><span class="font-semibold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} сом</span></div>
+          <div class="flex justify-between"><span class="muted">Сумма услуг:</span><span class="font-bold" style="color:var(--text)">{{ treatment.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+          <div class="flex justify-between mt-1"><span class="muted">Текущая скидка:</span><span class="font-semibold" style="color:var(--orange)">{{ treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
         </div>
         <div>
-          <label class="fld">Скидка (сом)</label>
+          <label class="fld">Скидка ({{ clinic_settings.currency_label }})</label>
           <input type="number" name="discount" min="0" step="0.01"
                  value="{{ treatment.discount|floatformat:2 }}"
                  placeholder="0.00" class="w-full text-lg font-bold" autofocus>

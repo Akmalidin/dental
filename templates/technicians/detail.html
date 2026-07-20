@@ -13,7 +13,7 @@
     <div class="card card-pad"><p class="stat-label">Специализация</p><p class="font-bold">{{ tech.get_specialization_display|default:"—" }}</p></div>
     <div class="card card-pad"><p class="stat-label">Лаборатория</p><p class="font-bold">{{ tech.lab_name|default:"—" }}</p><p class="text-xs muted">{{ tech.lab_contact }}</p></div>
     <div class="card card-pad"><p class="stat-label">Телефон</p><p class="font-bold">{{ tech.phone|default:"—" }}</p></div>
-    <div class="card card-pad"><p class="stat-label">К выплате</p><p class="font-bold {% if payable_sum %}text-red-600{% endif %}">{{ payable_sum|floatformat:0 }} сом</p><p class="text-xs muted">{{ payable_count }} заказ(ов)</p></div>
+    <div class="card card-pad"><p class="stat-label">К выплате</p><p class="font-bold {% if payable_sum %}text-red-600{% endif %}">{{ payable_sum|floatformat:0 }} {{ clinic_settings.currency_label }}</p><p class="text-xs muted">{{ payable_count }} заказ(ов)</p></div>
   </div>
 
   <div class="pill-tabs">
@@ -34,7 +34,7 @@
           <td>{{ t.service.name }}{% if t.tooth_number %} · зуб {{ t.tooth_number }}{% endif %}</td>
           <td><span class="badge {% if t.status == 'installed' %}badge-green{% elif t.status == 'cancelled' %}badge-gray{% elif t.status == 'ready' %}badge-blue{% else %}badge-orange{% endif %}">{{ t.get_status_display }}</span></td>
           <td class="text-xs muted">{{ t.warranty_until|date:"d.m.Y"|default:"—" }}</td>
-          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} сом {% if t.paid %}<span class="badge badge-green" style="font-size:10px">оплачен</span>{% endif %}</td>
+          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} {{ clinic_settings.currency_label }} {% if t.paid %}<span class="badge badge-green" style="font-size:10px">оплачен</span>{% endif %}</td>
         </tr>
         {% empty %}
         <tr><td colspan="6" class="text-center py-10 muted">Заказов нет</td></tr>
@@ -50,7 +50,7 @@
       <tbody>
         {% for a in agreements %}
         <tr>
-          <td>{{ a.service.name }}</td><td class="font-semibold">{{ a.price|floatformat:0 }} сом</td>
+          <td>{{ a.service.name }}</td><td class="font-semibold">{{ a.price|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td class="text-right">
             <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="del_price"><input type="hidden" name="id" value="{{ a.pk }}">
               <button class="text-red-400 hover:text-red-600">✕</button></form>

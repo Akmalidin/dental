@@ -16,11 +16,11 @@
     </div>
     <div class="card-gradient stat-amber p-5 rounded-2xl">
       <p class="text-amber-100 text-xs font-semibold uppercase tracking-wide mb-2">Итого к выплате</p>
-      <p class="text-3xl font-black text-white">{{ total_salary|floatformat:0 }} <span class="text-sm">сом</span></p>
+      <p class="text-3xl font-black text-white">{{ total_salary|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
     </div>
     <div class="card-gradient stat-sky p-5 rounded-2xl">
       <p class="text-sky-100 text-xs font-semibold uppercase tracking-wide mb-2">Общая выручка</p>
-      <p class="text-3xl font-black text-white">{{ total_revenue|floatformat:0 }} <span class="text-sm">сом</span></p>
+      <p class="text-3xl font-black text-white">{{ total_revenue|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
     </div>
   </div>
 
@@ -65,7 +65,7 @@
           <td class="text-slate-600">{{ row.avg_check|floatformat:0 }}</td>
           <td class="text-slate-600">{{ row.revenue|floatformat:0 }}</td>
           <td class="text-emerald-600">{{ row.paid|floatformat:0 }}</td>
-          <td class="font-black text-indigo-600">{{ row.salary|floatformat:0 }} сом</td>
+          <td class="font-black text-indigo-600">{{ row.salary|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td>
             <div class="flex justify-end pr-3">
               <a href="/users/salary/{{ row.doctor.pk }}/scheme/" class="btn-ghost text-xs py-1">Настроить</a>
@@ -81,7 +81,7 @@
           <td colspan="6" class="px-5 py-3 text-right font-bold text-slate-600">Итого:</td>
           <td class="px-5 py-3 font-bold text-slate-700">{{ total_revenue|floatformat:0 }}</td>
           <td class="px-5 py-3 font-bold text-emerald-600">{{ total_paid|floatformat:0 }}</td>
-          <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ total_salary|floatformat:0 }} сом</td>
+          <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ total_salary|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
         </tr>
       </tfoot>
     </table>

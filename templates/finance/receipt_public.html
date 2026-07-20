@@ -56,10 +56,10 @@
 
   <div class="amt">
     {% if payment %}
-    <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} сом</div>
+    <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} {{ clinic_settings.currency_label }}</div>
     <div class="l">{{ payment.get_type_display }} · Чек №{{ payment.pk }}</div>
     {% else %}
-    <div class="n">{{ treatment.display_total|floatformat:0 }} сом</div>
+    <div class="n">{{ treatment.display_total|floatformat:0 }} {{ clinic_settings.currency_label }}</div>
     <div class="l">Приём №{{ treatment.pk }} · {{ treatment.created_at|date:"d.m.Y" }}</div>
     {% endif %}
   </div>
@@ -109,9 +109,9 @@
       </tbody>
     </table>
     {% if treatment %}
-    <div class="tot"><span>Итого по приёму</span><span>{{ treatment.total_amount|floatformat:0 }} сом</span></div>
-    {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} сом</span></div>{% endif %}
-    <div class="row"><span class="k">Оплачено по приёму</span><span class="v" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} сом</span></div>
+    <div class="tot"><span>Итого по приёму</span><span>{{ treatment.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+    {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>{% endif %}
+    <div class="row"><span class="k">Оплачено по приёму</span><span class="v" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
     {% endif %}
   </div>
   {% endif %}

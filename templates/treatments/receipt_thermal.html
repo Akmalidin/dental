@@ -48,21 +48,21 @@
   <table>
     {% for c in treatment.cures.all %}
     <tr>
-      <td>{{ c.service.name }}{% if c.tooth_number %} (зуб {{ c.tooth_number }}){% endif %}<br><span style="color:#888">×{{ c.quantity }} · {{ c.price|floatformat:0 }} сом</span>
+      <td>{{ c.service.name }}{% if c.tooth_number %} (зуб {{ c.tooth_number }}){% endif %}<br><span style="color:#888">×{{ c.quantity }} · {{ c.price|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
         {% if c.technician %}<br><span style="color:#555">Изготовил: {{ c.technician.name }}{% if c.technician.lab_name %} ({{ c.technician.lab_name }}){% endif %}{% if c.lab_order %}{% if c.lab_order.material %} · {{ c.lab_order.material }}{% endif %}{% if c.lab_order.vita_color %} · {{ c.lab_order.vita_color }}{% endif %}{% endif %}</span>{% endif %}
         {% if c.warranty_until %}<br><span style="color:#555">🛡 Гарантия до {{ c.warranty_until|date:"d.m.Y" }}</span>{% endif %}
       </td>
-      <td class="r">{{ c.subtotal|floatformat:0 }} сом</td>
+      <td class="r">{{ c.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="2" style="color:#888">Нет услуг</td></tr>
     {% endfor %}
   </table>
   <hr>
-  <div class="tot"><span>Итого</span><span>{{ treatment.display_total|floatformat:0 }} сом</span></div>
-  {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} сом</span></div>{% endif %}
-  <div class="row"><span class="k">Оплачено</span><span class="v" style="color:#16a34a">{{ treatment.paid_amount|floatformat:0 }} сом</span></div>
-  {% if treatment.debt > 0 %}<div class="row"><span class="k">Долг</span><span class="v" style="color:#dc2626">{{ treatment.debt|floatformat:0 }} сом</span></div>{% endif %}
+  <div class="tot"><span>Итого</span><span>{{ treatment.display_total|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+  {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>{% endif %}
+  <div class="row"><span class="k">Оплачено</span><span class="v" style="color:#16a34a">{{ treatment.paid_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+  {% if treatment.debt > 0 %}<div class="row"><span class="k">Долг</span><span class="v" style="color:#dc2626">{{ treatment.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>{% endif %}
 
   {% if qr_svg %}
   <hr>

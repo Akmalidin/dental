@@ -98,7 +98,7 @@
           <div class="flex items-center gap-3 px-5 py-2.5{% if not forloop.last %} border-b{% endif %}" style="border-color:var(--border-2)">
             <div class="avatar w-9 h-9 text-xs">{{ p.first_name|first|upper }}</div>
             <a href="/patients/{{ p.pk }}/" class="flex-1 text-sm font-semibold truncate" style="color:var(--text)">{{ p.full_name|truncatechars:18 }}</a>
-            <p class="text-sm font-bold text-red-500">{{ p.balance|floatformat:0 }} сом</p>
+            <p class="text-sm font-bold text-red-500">{{ p.balance|floatformat:0 }} {{ clinic_settings.currency_label }}</p>
           </div>
           {% empty %}
           <p class="px-5 py-8 text-center muted text-sm">Должников нет 🎉</p>

@@ -39,7 +39,7 @@
         <span class="muted">Визит: {% if stage.visit %}#{{ stage.visit.pk }}{% else %}не назначен{% endif %}</span>
       </div>
       <div class="flex items-center gap-3">
-        <span class="font-bold" style="color:var(--text)">{{ stage.total|floatformat:0 }} сом</span>
+        <span class="font-bold" style="color:var(--text)">{{ stage.total|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
         <div class="relative" x-data="{o:false}" @click.outside="o=false">
           <button @click="o=!o" class="row-act ra-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
           <div x-show="o" x-cloak class="dropdown right-0 top-full mt-1 w-52">
@@ -61,7 +61,7 @@
           <td class="text-center muted">{{ item.quantity }}</td>
           <td class="muted">{{ item.price|floatformat:0 }}</td>
           <td class="muted">{{ item.discount|floatformat:0 }}%</td>
-          <td class="font-bold">{{ item.subtotal|floatformat:0 }} сом</td>
+          <td class="font-bold">{{ item.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td>
             <div class="flex items-center justify-end gap-1.5 pr-3">
               <button @click="openMove({{ item.pk }})" class="row-act ra-view" title="Переместить/дублировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"/></svg></button>
@@ -86,7 +86,7 @@
   {% if plan.stages.all %}
   <div class="card card-pad flex items-center justify-between">
     <span class="font-bold muted uppercase text-sm">Итого по плану</span>
-    <span class="text-2xl font-extrabold" style="color:var(--primary)">{{ plan.total_price|floatformat:0 }} сом</span>
+    <span class="text-2xl font-extrabold" style="color:var(--primary)">{{ plan.total_price|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
   </div>
   {% endif %}
 
@@ -134,7 +134,7 @@
           <select name="visit" x-model="edit.visit" class="no-tom">
             <option value="">— не назначен —</option>
             {% for t in patient_treatments %}
-            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · {{ t.total_amount|floatformat:0 }} сом</option>
+            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · {{ t.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
             {% endfor %}
           </select>
           <p class="text-xs muted mt-1">Свяжите этап с конкретным приёмом пациента.</p>
@@ -191,7 +191,7 @@ function planEditor() {
       this.$nextTick(() => {
         if (!this.svcTS && window.TomSelect) {
           this.svcTS = new TomSelect(this.$refs.svcSel, {
-            options: this.SERVICES.map(s => ({ value:String(s.id), text: s.name + ' · ' + Math.round(s.price) + ' сом' })),
+            options: this.SERVICES.map(s => ({ value:String(s.id), text: s.name + ' · ' + Math.round(s.price) + ' {{ clinic_settings.currency_label }}' })),
             placeholder:'Выберите услугу...',
             onChange: (v) => { const s = this.SERVICES.find(x=>String(x.id)===String(v)); if (s) this.add.price = Math.round(s.price); this.add.service = v; },
           });
@@ -200,7 +200,7 @@ function planEditor() {
     },
     addTotal() {
       const g = (this.add.price||0) * (this.add.qty||1);
-      return Math.round(g - g*(this.add.discount||0)/100).toLocaleString('ru-RU') + ' сом';
+      return Math.round(g - g*(this.add.discount||0)/100).toLocaleString('ru-RU') + ' {{ clinic_settings.currency_label }}';
     },
     async saveAdd() {
       if (!this.add.service) { toast('Выберите услугу','error'); return; }

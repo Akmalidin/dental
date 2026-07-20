@@ -56,7 +56,7 @@
         <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Расходы по категориям</h3></div>
         <table class="tbl"><tbody>
           {% for e in expense_by_cat %}
-          <tr><td class="font-semibold">{{ e.category__name|default:"Без категории" }}</td><td class="text-right pr-5 font-bold text-red-500">{{ e.s|floatformat:0 }} сом</td></tr>
+          <tr><td class="font-semibold">{{ e.category__name|default:"Без категории" }}</td><td class="text-right pr-5 font-bold text-red-500">{{ e.s|floatformat:0 }} {{ clinic_settings.currency_label }}</td></tr>
           {% empty %}<tr><td class="muted py-6 text-center">Нет расходов</td></tr>{% endfor %}
         </tbody></table>
       </div>
@@ -64,7 +64,7 @@
         <div class="px-5 py-4"><h3 class="font-bold" style="color:var(--text)">Топ должников</h3></div>
         <table class="tbl"><tbody>
           {% for d in top_debtors %}
-          <tr><td><a href="/patients/{{ d.patient.pk }}/" class="font-semibold hover:text-indigo-600">{{ d.patient.full_name }}</a></td><td class="text-right pr-5 font-bold text-red-500">{{ d.debt|floatformat:0 }} сом</td></tr>
+          <tr><td><a href="/patients/{{ d.patient.pk }}/" class="font-semibold hover:text-indigo-600">{{ d.patient.full_name }}</a></td><td class="text-right pr-5 font-bold text-red-500">{{ d.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</td></tr>
           {% empty %}<tr><td class="muted py-6 text-center">Долгов нет 🎉</td></tr>{% endfor %}
         </tbody></table>
       </div>
@@ -96,7 +96,7 @@
           <thead><tr><th>Врач</th><th>Приёмов</th><th>Выручка</th></tr></thead>
           <tbody>
             {% for d in doctors %}
-            <tr><td class="font-semibold">{{ d.name }}</td><td style="color:var(--primary)" class="font-bold">{{ d.treatments_count|default:0 }}</td><td class="text-green-500 font-bold">{{ d.total_revenue|default:0|floatformat:0 }} сом</td></tr>
+            <tr><td class="font-semibold">{{ d.name }}</td><td style="color:var(--primary)" class="font-bold">{{ d.treatments_count|default:0 }}</td><td class="text-green-500 font-bold">{{ d.total_revenue|default:0|floatformat:0 }} {{ clinic_settings.currency_label }}</td></tr>
             {% empty %}<tr><td colspan="3" class="text-center py-8 muted">Нет данных</td></tr>{% endfor %}
           </tbody>
         </table>
@@ -107,7 +107,7 @@
           <thead><tr><th>Услуга</th><th>Кол.</th><th>Выручка</th></tr></thead>
           <tbody>
             {% for s in service_revenue %}
-            <tr><td class="font-semibold">{{ s.service__name }}</td><td class="muted">{{ s.cnt }}</td><td class="text-green-500 font-bold">{{ s.revenue|floatformat:0 }} сом</td></tr>
+            <tr><td class="font-semibold">{{ s.service__name }}</td><td class="muted">{{ s.cnt }}</td><td class="text-green-500 font-bold">{{ s.revenue|floatformat:0 }} {{ clinic_settings.currency_label }}</td></tr>
             {% empty %}<tr><td colspan="3" class="text-center py-8 muted">Нет данных</td></tr>{% endfor %}
           </tbody>
         </table>

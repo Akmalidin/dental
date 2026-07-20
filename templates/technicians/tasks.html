@@ -67,7 +67,7 @@
             </form>
             {% if t.paid %}<span class="badge badge-green ml-1" style="font-size:10px">оплачен</span>{% endif %}
           </td>
-          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} сом</td>
+          <td class="text-right pr-5 font-bold">{{ t.amount|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
         </tr>
         {% empty %}
         <tr><td colspan="8" class="text-center py-12 muted">Заказов нет. Они создаются автоматически при завершении приёма с лабораторной услугой.</td></tr>

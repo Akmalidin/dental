@@ -54,34 +54,34 @@
       </td>
       <td>{{ cure.tooth_number|default:"—" }}</td>
       <td>{{ cure.quantity }}</td>
-      <td>{{ cure.price }} сом</td>
-      <td>{{ cure.subtotal }} сом</td>
+      <td>{{ cure.price }} {{ clinic_settings.currency_label }}</td>
+      <td>{{ cure.subtotal }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% endfor %}
   </tbody>
   <tfoot>
     <tr class="total">
       <td colspan="5" style="text-align: right;">Итого:</td>
-      <td>{{ treatment.total_amount }} сом</td>
+      <td>{{ treatment.total_amount }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% if treatment.discount %}
     <tr class="total">
       <td colspan="5" style="text-align: right;">Скидка:</td>
-      <td>-{{ treatment.discount }} сом</td>
+      <td>-{{ treatment.discount }} {{ clinic_settings.currency_label }}</td>
     </tr>
     <tr class="total">
       <td colspan="5" style="text-align: right;">К оплате:</td>
-      <td>{{ treatment.final_amount }} сом</td>
+      <td>{{ treatment.final_amount }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% endif %}
     <tr>
       <td colspan="5" style="text-align: right;">Оплачено:</td>
-      <td>{{ treatment.paid_amount }} сом</td>
+      <td>{{ treatment.paid_amount }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% if treatment.debt %}
     <tr style="color: red;">
       <td colspan="5" style="text-align: right;">Долг:</td>
-      <td>{{ treatment.debt }} сом</td>
+      <td>{{ treatment.debt }} {{ clinic_settings.currency_label }}</td>
     </tr>
     {% endif %}
   </tfoot>

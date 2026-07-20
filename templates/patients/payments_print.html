@@ -32,7 +32,7 @@
     <tr>
       <td>{{ pay.created_at|date:"d.m.Y H:i" }}</td>
       <td class="amt {% if pay.type == 'income' %}income{% else %}refund{% endif %}">
-        {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} сом
+        {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} {{ clinic_settings.currency_label }}
       </td>
       <td>{{ pay.get_method_display }}</td>
       <td>{{ pay.get_type_display }}</td>

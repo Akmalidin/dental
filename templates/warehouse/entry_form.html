@@ -40,7 +40,7 @@
         <tfoot>
           <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
             <td colspan="3" class="px-4 py-3 text-right font-bold muted">Итого приход:</td>
-            <td class="px-4 py-3 font-extrabold" style="color:var(--green)" id="entry-total">0 сом</td>
+            <td class="px-4 py-3 font-extrabold" style="color:var(--green)" id="entry-total">0 {{ clinic_settings.currency_label }}</td>
             <td></td>
           </tr>
         </tfoot>
@@ -66,7 +66,7 @@
     </td>
     <td class="px-3 py-2"><input type="number" name="quantity" step="0.001" min="0" placeholder="0" class="ent-qty text-center" oninput="entryRecalc()"></td>
     <td class="px-3 py-2"><input type="number" name="price" step="1" min="0" placeholder="0" class="ent-price text-center" oninput="entryRecalc()"></td>
-    <td class="px-3 py-2 font-semibold ent-sum whitespace-nowrap" style="color:var(--text)">0 сом</td>
+    <td class="px-3 py-2 font-semibold ent-sum whitespace-nowrap" style="color:var(--text)">0 {{ clinic_settings.currency_label }}</td>
     <td class="px-2 text-center"><button type="button" onclick="this.closest('tr').remove(); entryRecalc()" class="text-xl muted hover:text-red-500">&times;</button></td>
   </tr>
 </template>
@@ -87,10 +87,10 @@ function entryRecalc() {
   document.querySelectorAll('#entry-tbody .entry-row').forEach(tr => {
     const q = parseFloat(tr.querySelector('.ent-qty')?.value)||0;
     const p = parseFloat(tr.querySelector('.ent-price')?.value)||0;
-    const s = tr.querySelector('.ent-sum'); if (s) s.textContent = Math.round(q*p).toLocaleString('ru-RU')+' сом';
+    const s = tr.querySelector('.ent-sum'); if (s) s.textContent = Math.round(q*p).toLocaleString('ru-RU')+' {{ clinic_settings.currency_label }}';
     t += q*p;
   });
-  const el = document.getElementById('entry-total'); if (el) el.textContent = Math.round(t).toLocaleString('ru-RU')+' сом';
+  const el = document.getElementById('entry-total'); if (el) el.textContent = Math.round(t).toLocaleString('ru-RU')+' {{ clinic_settings.currency_label }}';
 }
 (function init(){ addEntryRow(); })();
 </script>

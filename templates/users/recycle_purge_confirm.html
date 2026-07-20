@@ -24,7 +24,7 @@
         {% endfor %}
       </ul>
       {% if debt and debt > 0 %}
-      <p class="text-sm font-bold text-red-700 mt-3 pt-3" style="border-top:1px solid #FECACA">⚠ У пациента есть задолженность: {{ debt|floatformat:0 }} сом — она тоже будет удалена.</p>
+      <p class="text-sm font-bold text-red-700 mt-3 pt-3" style="border-top:1px solid #FECACA">⚠ У пациента есть задолженность: {{ debt|floatformat:0 }} {{ clinic_settings.currency_label }} — она тоже будет удалена.</p>
       {% endif %}
     </div>
     {% else %}

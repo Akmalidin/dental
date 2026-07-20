@@ -14,7 +14,7 @@
         <tr>
           <td><span class="badge badge-yellow">{{ e.category.name }}</span></td>
           <td class="text-slate-700">{{ e.description|truncatechars:60 }}</td>
-          <td class="font-bold text-red-600">{{ e.amount|floatformat:0 }} сом</td>
+          <td class="font-bold text-red-600">{{ e.amount|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td class="text-slate-500 text-xs">{{ e.branch.name }}</td>
           <td class="text-slate-400 text-xs">{{ e.date|date:"d.m.Y" }}</td>
         </tr>

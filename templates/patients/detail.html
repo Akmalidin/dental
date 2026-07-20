@@ -70,7 +70,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <div x-data="{debtOpen:false}" class="px-4 pb-3">
         <div @click="debtOpen=true" class="rounded-xl px-4 py-3 text-center cursor-pointer hover:ring-2 hover:ring-red-200 transition" style="background:#FEF2F2">
           <p class="text-[10px] font-bold tracking-widest uppercase mb-0.5" style="color:#F87171">ДОЛГ</p>
-          <p class="text-2xl font-black" style="color:#DC2626">{{ debt|floatformat:0 }} <span class="text-sm font-normal">сом</span></p>
+          <p class="text-2xl font-black" style="color:#DC2626">{{ debt|floatformat:0 }} <span class="text-sm font-normal">{{ clinic_settings.currency_label }}</span></p>
           <p class="text-[11px] mt-0.5" style="color:#F87171">детали долга →</p>
         </div>
         <template x-teleport="body">
@@ -90,7 +90,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
                     <td class="muted text-xs">{{ t.created_at|date:"d.m.Y" }}</td>
                     <td class="text-right">{{ t.total_amount|floatformat:0 }}</td>
                     <td class="text-right text-emerald-600">{{ t.paid_amount|floatformat:0 }}</td>
-                    <td class="text-right pr-5 font-bold text-red-500">{{ t.debt|floatformat:0 }} сом</td>
+                    <td class="text-right pr-5 font-bold text-red-500">{{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
                   </tr>
                   {% endif %}{% empty %}
                   <tr><td colspan="5" class="text-center py-8 muted">Долгов нет</td></tr>
@@ -99,7 +99,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
                 <tfoot>
                   <tr style="border-top:2px solid var(--border);background:var(--surface-2)">
                     <td colspan="4" class="px-4 py-3 text-right font-bold muted">Общий долг:</td>
-                    <td class="px-4 py-3 text-right pr-5 font-extrabold text-red-600">{{ patient.debt|floatformat:0 }} сом</td>
+                    <td class="px-4 py-3 text-right pr-5 font-extrabold text-red-600">{{ patient.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -116,7 +116,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <div class="px-4 pb-3">
         <div class="rounded-xl px-4 py-3 text-center" style="background:#ECFDF5">
           <p class="text-[10px] font-bold tracking-widest uppercase mb-0.5" style="color:#34D399">БАЛАНС</p>
-          <p class="text-2xl font-black" style="color:#059669">+{{ patient.balance|floatformat:0 }} <span class="text-sm font-normal">сом</span></p>
+          <p class="text-2xl font-black" style="color:#059669">+{{ patient.balance|floatformat:0 }} <span class="text-sm font-normal">{{ clinic_settings.currency_label }}</span></p>
         </div>
       </div>
       {% endif %}
@@ -307,7 +307,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           </span>
           <div class="ml-auto flex items-center gap-3">
             <div class="text-right leading-tight">
-              <span class="font-bold text-sm" style="color:var(--text)">{{ t.display_total|floatformat:0 }} сом</span>
+              <span class="font-bold text-sm" style="color:var(--text)">{{ t.display_total|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
               {% if t.debt > 0 %}<p class="text-[11px] font-semibold text-red-500">долг {{ t.debt|floatformat:0 }}</p>{% endif %}
             </div>
             <a href="/treatments/{{ t.pk }}/receipt/" target="_blank" class="row-act ra-view" title="Чек">
@@ -343,7 +343,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           </div>
           {% if cure.tooth_number %}<span class="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0" style="background:var(--primary-light);color:var(--primary)">🦷 {{ cure.tooth_number }}</span>{% endif %}
           <span class="muted text-xs w-8 text-center shrink-0">×{{ cure.quantity }}</span>
-          <span class="font-bold w-24 text-right shrink-0" style="color:var(--text)">{{ cure.subtotal|floatformat:0 }} сом</span>
+          <span class="font-bold w-24 text-right shrink-0" style="color:var(--text)">{{ cure.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
         </div>
         {% empty %}
         <div class="px-4 py-3 muted text-sm">Нет процедур в этом приёме</div>
@@ -540,7 +540,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
               <td class="font-semibold text-slate-800 {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.service.name }}</td>
               <td class="text-slate-500">{{ item.tooth_number|default:"—" }}</td>
               <td class="text-slate-600">{{ item.quantity }}</td>
-              <td class="font-bold text-slate-800">{{ item.subtotal|floatformat:0 }} сом</td>
+              <td class="font-bold text-slate-800">{{ item.subtotal|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
               <td class="text-slate-500 text-xs">{{ item.doctor.name|default:"—" }}</td>
             </tr>
             {% empty %}
@@ -550,7 +550,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <tfoot>
             <tr class="bg-slate-50 border-t-2 border-slate-200">
               <td colspan="4" class="px-5 py-3 text-right font-bold text-slate-600">Итого по плану:</td>
-              <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ plan.total_price|floatformat:0 }} сом</td>
+              <td colspan="2" class="px-5 py-3 font-black text-indigo-600">{{ plan.total_price|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
             </tr>
           </tfoot>
         </table>
@@ -583,7 +583,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
             <td>
               <button type="button" @click="openAlloc({{ pay.pk }})" title="Показать, на какой приём распределён"
                       class="font-bold hover:underline {% if pay.type == 'income' %}text-emerald-600{% else %}text-red-600{% endif %}">
-                {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} сом
+                {% if pay.type == 'income' %}+{% else %}−{% endif %}{{ pay.amount|floatformat:0 }} {{ clinic_settings.currency_label }}
               </button>
             </td>
             <td>{{ pay.get_method_display }}</td>
@@ -734,7 +734,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <button @click="alloc.open=false" class="text-2xl text-slate-400">&times;</button>
     </div>
     <div class="p-6 space-y-3">
-      <p class="text-sm text-slate-500" x-show="!alloc.loading">Платёж <b x-text="Math.round(alloc.amount).toLocaleString('ru-RU')"></b> сом · <span x-text="alloc.patient"></span></p>
+      <p class="text-sm text-slate-500" x-show="!alloc.loading">Платёж <b x-text="Math.round(alloc.amount).toLocaleString('ru-RU')"></b> {{ clinic_settings.currency_label }} · <span x-text="alloc.patient"></span></p>
       <p x-show="alloc.loading" class="text-sm text-slate-400">Загрузка…</p>
       <table class="tbl" x-show="!alloc.loading">
         <thead><tr><th>Приём</th><th>Услуги</th><th class="text-right">Сумма</th></tr></thead>
@@ -743,7 +743,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
             <tr>
               <td><a :href="'/treatments/'+r.treatment+'/'" class="font-semibold" style="color:var(--primary)" x-text="'#'+r.treatment+' · '+r.date"></a></td>
               <td class="text-xs text-slate-500" x-text="r.services"></td>
-              <td class="text-right font-bold" x-text="Math.round(r.amount).toLocaleString('ru-RU')+' сом'"></td>
+              <td class="text-right font-bold" x-text="Math.round(r.amount).toLocaleString('ru-RU')+' {{ clinic_settings.currency_label }}'"></td>
             </tr>
           </template>
           <tr x-show="alloc.rows.length===0"><td colspan="3" class="text-center text-slate-400 py-3">Платёж не распределён (аванс)</td></tr>
@@ -769,17 +769,17 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         <select name="treatment" class="no-tom w-full">
           <option value="">— авто (по долгу) —</option>
           {% for t in treatments %}{% if t.status != 'cancelled' and t.status != 'draft' %}
-          <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} сом</option>
+          <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
           {% endif %}{% endfor %}
         </select>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Сумма (сом) *</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Сумма ({{ clinic_settings.currency_label }}) *</label>
           <input type="number" name="amount" required placeholder="0.00" step="0.01">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Скидка на приём (сом)</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Скидка на приём ({{ clinic_settings.currency_label }})</label>
           <input type="number" name="discount" placeholder="0" step="0.01">
         </div>
       </div>
@@ -830,13 +830,13 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
       <p class="text-slate-500 text-sm mb-1 text-center">Пациент: <span class="font-semibold">{{ patient.full_name }}</span></p>
       {% with debt=patient.debt %}
       {% if debt > 0 %}
-      <p class="text-red-600 font-bold text-center mb-3">Долг: {{ debt|floatformat:0 }} сом</p>
+      <p class="text-red-600 font-bold text-center mb-3">Долг: {{ debt|floatformat:0 }} {{ clinic_settings.currency_label }}</p>
       {% endif %}
       {% endwith %}
       <form method="post" action="/finance/payments/send-to-cashier/{{ patient.pk }}/" class="space-y-3">
         {% csrf_token %}
         <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма (сом)</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Сумма ({{ clinic_settings.currency_label }})</label>
           <input type="number" name="amount" step="0.01" placeholder="оставьте пустым — спишется по долгу">
         </div>
         <div>
@@ -844,7 +844,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <select name="treatment" class="no-tom w-full">
             <option value="">— авто (по долгу) —</option>
             {% for t in treatments %}{% if t.status != 'cancelled' and t.status != 'draft' %}
-            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} сом</option>
+            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
             {% endif %}{% endfor %}
           </select>
         </div>
@@ -902,7 +902,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
                             x-text="getSvcQty(svc.id)"></span>
                     </div>
                     <p class="text-xs font-bold text-emerald-600 mt-1.5">
-                      <span x-text="Math.round(svc.price).toLocaleString('ru-RU')"></span> сом
+                      <span x-text="Math.round(svc.price).toLocaleString('ru-RU')"></span> {{ clinic_settings.currency_label }}
                     </p>
                   </div>
                 </template>
@@ -953,7 +953,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
                   <button @click="changeSvcQty(item.id,1)" class="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 font-bold">+</button>
                 </div>
                 <span class="text-xs font-bold text-emerald-600">
-                  <span x-text="Math.round(item.price*item.qty).toLocaleString('ru-RU')"></span> сом
+                  <span x-text="Math.round(item.price*item.qty).toLocaleString('ru-RU')"></span> {{ clinic_settings.currency_label }}
                 </span>
               </div>
             </div>
@@ -963,7 +963,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <div class="flex items-center justify-between">
             <p class="text-sm font-bold text-slate-700">Итого:</p>
             <p class="font-black text-emerald-600">
-              <span x-text="Math.round(svcTotal()).toLocaleString('ru-RU')"></span> сом
+              <span x-text="Math.round(svcTotal()).toLocaleString('ru-RU')"></span> {{ clinic_settings.currency_label }}
             </p>
           </div>
           <div x-show="teeth.length>0">

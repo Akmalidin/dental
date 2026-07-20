@@ -72,7 +72,7 @@
           <tr>
             <td class="font-semibold text-slate-800">{{ e.product.name }}</td>
             <td class="text-emerald-600 font-bold">+{{ e.quantity }} {{ e.product.unit }}</td>
-            <td class="text-slate-600">{{ e.price }} сом</td>
+            <td class="text-slate-600">{{ e.price }} {{ clinic_settings.currency_label }}</td>
             <td class="text-slate-500 text-xs">{{ e.supplier.name }}</td>
             <td class="text-slate-400 text-xs">{{ e.date|date:"d.m.Y" }}</td>
           </tr>

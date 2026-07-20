@@ -41,7 +41,7 @@
     </a>
     <div class="stat">
       <div class="stat-icon ic-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg></div>
-      <div><p class="stat-label">Сбор админ. ({{ primary_fee }}с × первичные)</p><p class="stat-value">{{ primary_fee_total|floatformat:0 }} <span class="text-sm">сом</span></p></div>
+      <div><p class="stat-label">Сбор админ. ({{ primary_fee }}с × первичные)</p><p class="stat-value">{{ primary_fee_total|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p></div>
     </div>
   </div>
 

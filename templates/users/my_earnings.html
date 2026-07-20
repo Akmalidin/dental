@@ -7,7 +7,7 @@
     <h2 class="font-bold text-lg" style="color:var(--text)">{{ doctor.name }}</h2>
     <p class="muted text-sm">
       Схема оплаты:
-      {% if scheme %}<b>{{ scheme.get_scheme_type_display }}</b>{% if scheme.percent %} · {{ scheme.percent }}%{% endif %}{% if scheme.fixed_amount %} · ставка {{ scheme.fixed_amount|floatformat:0 }} сом{% endif %}
+      {% if scheme %}<b>{{ scheme.get_scheme_type_display }}</b>{% if scheme.percent %} · {{ scheme.percent }}%{% endif %}{% if scheme.fixed_amount %} · ставка {{ scheme.fixed_amount|floatformat:0 }} {{ clinic_settings.currency_label }}{% endif %}
       {% else %}<span class="text-amber-500">не задана (обратитесь к администратору)</span>{% endif %}
     </p>
   </div>
@@ -17,15 +17,15 @@
     <div class="card card-pad">
       <p class="text-xs font-bold faint uppercase tracking-wider">{{ c.label }}</p>
       {% if c.salary is not None %}
-      <p class="text-2xl font-black mt-1" style="color:var(--primary)">{{ c.salary|floatformat:0 }} <span class="text-sm">сом</span></p>
+      <p class="text-2xl font-black mt-1" style="color:var(--primary)">{{ c.salary|floatformat:0 }} <span class="text-sm">{{ clinic_settings.currency_label }}</span></p>
       <p class="text-xs muted mt-0.5">заработано</p>
       {% else %}
       <p class="text-lg font-bold mt-1 text-amber-500">схема не задана</p>
       {% endif %}
       <div class="mt-3 pt-3 space-y-1 text-xs" style="border-top:1px solid var(--border)">
         <div class="flex justify-between"><span class="muted">Приёмов</span><span class="font-bold">{{ c.count }}</span></div>
-        <div class="flex justify-between"><span class="muted">Выручка</span><span class="font-bold">{{ c.revenue|floatformat:0 }} сом</span></div>
-        <div class="flex justify-between"><span class="muted">Оплачено</span><span class="font-bold text-emerald-600">{{ c.paid|floatformat:0 }} сом</span></div>
+        <div class="flex justify-between"><span class="muted">Выручка</span><span class="font-bold">{{ c.revenue|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+        <div class="flex justify-between"><span class="muted">Оплачено</span><span class="font-bold text-emerald-600">{{ c.paid|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
       </div>
     </div>
     {% endfor %}
