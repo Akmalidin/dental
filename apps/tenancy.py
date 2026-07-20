@@ -153,7 +153,8 @@ class PublicSiteMiddleware:
 
     def _route_to_public(self, request, slug):
         from apps.users.models import Clinic, ClinicSite
-        from django.http import HttpResponse
+        from django.http import HttpResponseRedirect
+        from django.conf import settings as dj
         clinic = Clinic.objects.filter(slug=slug).first()
         site = ClinicSite.objects.filter(clinic=clinic).first() if clinic else None
         if clinic and site and site.enabled and site.published:
@@ -162,12 +163,11 @@ class PublicSiteMiddleware:
             request.urlconf = "config.urls_site"
             set_current_clinic(clinic)
             return None  # continue
-        return HttpResponse(
-            "<!doctype html><meta charset=utf-8><title>Сайт недоступен</title>"
-            "<div style='font-family:sans-serif;text-align:center;padding:80px'>"
-            "<h1>Сайт недоступен</h1><p>Публичный сайт этой клиники не активирован.</p></div>",
-            status=404, content_type="text/html; charset=utf-8",
-        )
+        # Публичного сайта нет (клинике он не нужен) или клиника не найдена —
+        # ведём на CRM, а не показываем «Сайт недоступен» посетителю.
+        app_host = getattr(dj, "APP_HOST", "") or "app.sadaf.kg"
+        scheme = "https" if request.is_secure() else "http"
+        return HttpResponseRedirect(f"{scheme}://{app_host}/")
 
     def __call__(self, request):
         from django.conf import settings as dj

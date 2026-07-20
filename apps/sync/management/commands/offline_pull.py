@@ -49,7 +49,7 @@ class Command(BaseCommand):
         # конфликтов при последующих push.
         try:
             import json
-            cfg = settings.BASE_DIR / "offline_cloud.json"
+            cfg = getattr(settings, "DATA_DIR", settings.BASE_DIR) / "offline_cloud.json"
             cfg.write_text(json.dumps({
                 "url": url, "login": o["login"], "password": o["password"],
                 "clinic": data["clinic"]["name"],

@@ -19,6 +19,7 @@ coverage.xml
 .eggs/
 dist/
 build/
+*.spec
 *.egg
 .installed.cfg
 lib/

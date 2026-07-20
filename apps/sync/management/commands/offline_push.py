@@ -32,7 +32,7 @@ class Command(BaseCommand):
         blocks = export_clinic(clinic)
         total = sum(b["count"] for b in blocks)
 
-        cfg_path = settings.BASE_DIR / "offline_cloud.json"
+        cfg_path = getattr(settings, "DATA_DIR", settings.BASE_DIR) / "offline_cloud.json"
         cfg = {}
         if cfg_path.exists():
             try:

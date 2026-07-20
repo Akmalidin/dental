@@ -9,16 +9,31 @@
 """
 from .development import *  # noqa
 import os
+import sys
 
 OFFLINE_MODE = True
+
+# Собранный .exe (PyInstaller --onefile) распаковывает все файлы во ВРЕМЕННУЮ
+# папку при каждом запуске (BASE_DIR внутри неё) — если положить туда базу,
+# все локальные данные будут стираться при каждом перезапуске программы!
+# Поэтому база и файл настроек синхронизации хранятся рядом с самим .exe
+# (постоянное место), а не в BASE_DIR.
+if getattr(sys, "frozen", False):
+    DATA_DIR = Path(sys.executable).resolve().parent
+else:
+    DATA_DIR = BASE_DIR
 
 # Отдельная локальная база (копия данных клиники)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "offline.sqlite3",
+        "NAME": DATA_DIR / "offline.sqlite3",
     }
 }
+
+# Загруженные файлы (фото, документы) — туда же, рядом с .exe, а не во
+# временную папку распаковки (иначе тоже терялись бы при перезапуске).
+MEDIA_ROOT = DATA_DIR / "media"
 
 # Адрес облака для синхронизации
 CLOUD_URL = os.environ.get("CLOUD_URL", "https://sadaf.denta.tw1.ru")

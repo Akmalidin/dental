@@ -47,7 +47,7 @@ def sync_run(request):
     from django.conf import settings
     if not getattr(settings, "OFFLINE_MODE", False):
         return JsonResponse({"ok": False, "error": "Доступно только в оффлайн-режиме"}, status=400)
-    cfg_path = settings.BASE_DIR / "offline_cloud.json"
+    cfg_path = getattr(settings, "DATA_DIR", settings.BASE_DIR) / "offline_cloud.json"
     if not cfg_path.exists():
         return JsonResponse({"ok": False, "error": "Сначала выполните первичную настройку (offline_setup)"}, status=400)
     try:
