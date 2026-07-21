@@ -8,13 +8,38 @@
 Безопасно-выключено: если токен не задан или клиника отключила Telegram —
 просто логирует и возвращает False, ничего не падает.
 """
+import http.client
 import json
 import logging
+import socket
+import ssl
 import urllib.request
 import urllib.error
 from django.conf import settings
 
 log = logging.getLogger("apps")
+
+
+class _HTTPSConnectionIPv6(http.client.HTTPSConnection):
+    """На проде IPv4-маршрут до api.telegram.org не работает (таймаут), а IPv6 —
+    работает мгновенно. Обычный urlopen тратит весь timeout на мёртвый IPv4 до того,
+    как попробовать IPv6, поэтому соединяемся сразу по AAAA-адресу."""
+
+    def connect(self):
+        addrinfo = socket.getaddrinfo(self.host, self.port, socket.AF_INET6, socket.SOCK_STREAM)
+        sock = socket.socket(addrinfo[0][0], socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        sock.connect(addrinfo[0][4])
+        context = self._context or ssl.create_default_context()
+        self.sock = context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _HTTPSHandlerIPv6(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_HTTPSConnectionIPv6, req)
+
+
+_opener_ipv6 = urllib.request.build_opener(_HTTPSHandlerIPv6)
 
 
 def _tg_config():
@@ -58,15 +83,26 @@ def _call(method, payload, token=None):
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        # Сначала пробуем напрямую по IPv6 (см. _HTTPSConnectionIPv6) — быстро
+        # отваливается, если IPv6 недоступен вовсе, и тогда падаем в обычный urlopen.
+        with _opener_ipv6.open(req, timeout=15) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         body = e.read()[:400]
         log.warning("Telegram API %s не удался (%s): %s", method, e.code, body)
         return {"ok": False, "error": body}
     except Exception as e:  # noqa: BLE001
-        log.warning("Telegram API %s ошибка: %s", method, e)
-        return {"ok": False, "error": str(e)}
+        log.info("Telegram API %s: IPv6 не сработал (%s), пробуем обычным способом", method, e)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e2:
+            body = e2.read()[:400]
+            log.warning("Telegram API %s не удался (%s): %s", method, e2.code, body)
+            return {"ok": False, "error": body}
+        except Exception as e2:  # noqa: BLE001
+            log.warning("Telegram API %s ошибка: %s", method, e2)
+            return {"ok": False, "error": str(e2)}
 
 
 def _inline_keyboard(buttons):
