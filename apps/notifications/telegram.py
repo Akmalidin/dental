@@ -199,3 +199,28 @@ def tg_get_me(token):
 
 def tg_delete_webhook(token):
     return _call("deleteWebhook", {}, token=token)
+
+
+def tg_download_file(file_id, token):
+    """Скачать файл (голосовое/фото/...) по file_id. Возвращает (bytes, file_name) или (None, "").
+
+    Ссылки Telegram на файлы недолговечны (~час), поэтому сразу скачиваем содержимое —
+    хранить у себя нужно сам файл, а не временный URL."""
+    res = _call("getFile", {"file_id": file_id}, token=token)
+    if not res.get("ok"):
+        return None, ""
+    file_path = (res.get("result") or {}).get("file_path", "")
+    if not file_path:
+        return None, ""
+    url = "https://api.telegram.org/file/bot%s/%s" % (token, file_path)
+    req = urllib.request.Request(url)
+    try:
+        try:
+            with _opener_ipv6.open(req, timeout=20) as r:
+                return r.read(), file_path.rsplit("/", 1)[-1]
+        except Exception:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.read(), file_path.rsplit("/", 1)[-1]
+    except Exception as e:  # noqa: BLE001
+        log.warning("Telegram скачивание файла ошибка: %s", e)
+        return None, ""

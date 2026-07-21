@@ -45,7 +45,16 @@ class WaMessage(ClinicScopedModel):
     channel = models.CharField(max_length=3, choices=[(CH_WA, "WhatsApp"), (CH_TG, "Telegram")],
                                default=CH_WA, db_index=True, verbose_name="Канал")
     phone = models.CharField(max_length=30, blank=True)
-    body = models.TextField()
+    body = models.TextField(blank=True)
+    # Ссылки на файлы от Green-API/Telegram недолговечны (у Telegram — около часа),
+    # поэтому голосовые/медиа скачиваем и храним у себя (см. wa_webhook/tg_webhook).
+    MEDIA_VOICE, MEDIA_AUDIO, MEDIA_IMAGE, MEDIA_VIDEO, MEDIA_DOCUMENT = (
+        "voice", "audio", "image", "video", "document")
+    media_file = models.FileField(upload_to="chat_media/%Y/%m/", blank=True, null=True, verbose_name="Медиафайл")
+    media_type = models.CharField(max_length=10, blank=True, verbose_name="Тип медиа", choices=[
+        (MEDIA_VOICE, "Голосовое"), (MEDIA_AUDIO, "Аудио"), (MEDIA_IMAGE, "Фото"),
+        (MEDIA_VIDEO, "Видео"), (MEDIA_DOCUMENT, "Документ"),
+    ])
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="+")
     ok = models.BooleanField(default=True)

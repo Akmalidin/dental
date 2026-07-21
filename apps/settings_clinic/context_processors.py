@@ -79,6 +79,14 @@ def clinic_settings(request):
         except Exception:
             pass
 
+        # Мастер-переключатель суперадмина (тарифный доступ) — если канал не входит
+        # в тариф клиники, пункт меню вообще не показываем (не просто выключен).
+        try:
+            ctx["wa_master_on"] = bool(cur is None or getattr(cur, "wa_master_enabled", True))
+            ctx["tg_master_on"] = bool(cur is None or getattr(cur, "telegram_master_enabled", True))
+        except Exception:
+            pass
+
         # Возможные дубли пациентов (по совпадающему номеру телефона) — бейдж
         # в сайдбаре у «Пациенты», чтобы персонал не держал это в голове сам.
         try:

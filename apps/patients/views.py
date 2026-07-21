@@ -542,7 +542,8 @@ def patient_wa_messages(request, pk):
     except (TypeError, ValueError):
         after = 0
     qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
-    msgs = [{"id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok,
+    msgs = [{"id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok, "channel": m.channel,
+             "media_url": (m.media_file.url if m.media_file else ""), "media_type": m.media_type,
              "by": m.sent_by.name if m.sent_by else "",
              "time": timezone.localtime(m.created_at).strftime("%d.%m %H:%M")} for m in qs]
     return JsonResponse({"messages": msgs})

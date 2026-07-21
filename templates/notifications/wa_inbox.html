@@ -23,7 +23,7 @@
       <div class="flex-1 min-w-0">
         <p class="font-semibold" style="color:var(--text)">{{ r.patient.full_name }}
           {% if r.unread %}<span class="badge badge-green ml-1">{{ r.unread }}</span>{% endif %}</p>
-        <p class="text-sm muted truncate">{% if r.last.direction == 'out' %}Вы: {% endif %}{{ r.last.body }}</p>
+        <p class="text-sm muted truncate">{% if r.last.direction == 'out' %}Вы: {% endif %}{% if r.last.body %}{{ r.last.body }}{% elif r.last.media_type == 'voice' %}🎤 Голосовое сообщение{% elif r.last.media_type == 'image' %}🖼 Фото{% elif r.last.media_type %}📎 Файл{% endif %}</p>
       </div>
       <div class="text-xs muted shrink-0">{{ r.last.created_at|date:"d.m H:i" }}</div>
     </a>

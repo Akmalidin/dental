@@ -157,6 +157,22 @@ def wa_notify(phone, text, template_setting=None, params=None):
     return wa_send_text(phone, text)
 
 
+def wa_download_media(url):
+    """Скачать входящее медиа (голосовое и т.п.) по downloadUrl из вебхука Green-API.
+    Возвращает (bytes, file_name) или (None, "")."""
+    if not url:
+        return None, ""
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = r.read()
+        name = url.split("?")[0].rsplit("/", 1)[-1] or "file"
+        return data, name
+    except Exception as e:  # noqa: BLE001
+        log.warning("WhatsApp(Green-API) скачивание медиа ошибка: %s", e)
+        return None, ""
+
+
 DEFAULT_TEMPLATES = [
     ("Подтверждение записи", "confirm",
      "✅ *{клиника}*\n\n"

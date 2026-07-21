@@ -246,6 +246,22 @@ def wa_webhook(request):
             text = (md.get("textMessageData") or {}).get("textMessage", "")
         elif tm in ("extendedTextMessage", "quotedMessage"):
             text = (md.get("extendedTextMessageData") or {}).get("text", "")
+        # ── Голосовое/аудио/фото/видео/документ — скачиваем и храним у себя ──
+        media_file, media_type, snippet_media = None, "", ""
+        MEDIA_TYPE_MAP = {"audioMessage": "audio", "imageMessage": "image",
+                          "videoMessage": "video", "documentMessage": "document"}
+        if tm in MEDIA_TYPE_MAP:
+            fmd = md.get("fileMessageData") or {}
+            text = fmd.get("caption") or ""
+            is_voice = tm == "audioMessage" and "ogg" in (fmd.get("mimeType") or "").lower()
+            from .whatsapp import wa_download_media
+            data_bytes, fname = wa_download_media(fmd.get("downloadUrl"))
+            if data_bytes:
+                from django.core.files.base import ContentFile
+                media_file = ContentFile(data_bytes, name=fname or "file")
+                media_type = "voice" if is_voice else MEDIA_TYPE_MAP[tm]
+                snippet_media = {"voice": "🎤 Голосовое сообщение", "audio": "🎵 Аудио", "image": "🖼 Фото",
+                                 "video": "🎬 Видео", "document": "📎 Документ"}[media_type]
         sender = data.get("senderData") or {}
         chat_id = sender.get("chatId", "") or ""
         # Группа: автоматически регистрируем (для выбора Директором), уведомления по умолчанию выкл.
@@ -279,7 +295,7 @@ def wa_webhook(request):
                 pass
             return JsonResponse({"ok": True})
         phone = chat_id.split("@")[0]
-        if text and phone:
+        if (text or media_file) and phone:
             import re
             from apps.patients.models import Patient
             from apps.notifications.models import WaMessage
@@ -289,9 +305,12 @@ def wa_webhook(request):
             with unscoped():
                 patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
                            .order_by("-id").first() if tail else None)
-                m = WaMessage(patient=patient, direction="in", phone=phone, body=text, read=False)
+                m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
+                              media_type=media_type, read=False)
                 if patient is not None:
                     m.clinic = patient.clinic
+                if media_file is not None:
+                    m.media_file = media_file
                 m.save()
             # уведомление персоналу клиники о входящем сообщении
             if patient is not None:
@@ -305,7 +324,8 @@ def wa_webhook(request):
                         | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
                     if patient.primary_doctor_id:
                         recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
-                    snippet = (text[:80] + "…") if len(text) > 80 else text
+                    disp = text or snippet_media
+                    snippet = (disp[:80] + "…") if len(disp) > 80 else disp
                     link = "/patients/%s/notify/" % patient.pk
                     from django.utils import timezone as _tz
                     for u in recipients.distinct():
@@ -585,14 +605,30 @@ def tg_webhook(request, clinic_slug):
             tg_send_text(chat_id, "Не нашли карточку с таким номером в базе клиники. Обратитесь на ресепшене.")
         return JsonResponse({"ok": True})
 
-    # ── Обычное входящее сообщение — логируем для инбокса + уведомляем персонал ──
-    if text:
+    # ── Голосовое/аудио — скачиваем и сохраняем у себя (ссылки Telegram недолговечны) ──
+    media_file, media_type, snippet = None, "", text
+    voice, audio = msg.get("voice"), msg.get("audio")
+    if voice or audio:
+        from .telegram import tg_download_file
+        from django.core.files.base import ContentFile
+        obj = voice or audio
+        data, fname = tg_download_file(obj.get("file_id"), token)
+        if data:
+            media_file = ContentFile(data, name=fname or "voice.ogg")
+            media_type = "voice" if voice else "audio"
+            snippet = "🎤 Голосовое сообщение" if voice else "🎵 Аудио"
+
+    # ── Обычное входящее сообщение (текст и/или медиа) — логируем + уведомляем персонал ──
+    if text or media_file:
         from apps.patients.models import Patient
         from .models import WaMessage
         patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
-        m = WaMessage(patient=patient, direction="in", channel="tg", phone=str(chat_id), body=text, read=False)
+        m = WaMessage(patient=patient, direction="in", channel="tg", phone=str(chat_id),
+                      body=text, media_type=media_type, read=False)
         if patient is not None:
             m.clinic = patient.clinic
+        if media_file is not None:
+            m.media_file = media_file
         m.save()
         if patient is not None:
             try:
@@ -603,7 +639,7 @@ def tg_webhook(request, clinic_slug):
                     | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
                 if patient.primary_doctor_id:
                     recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
-                snippet = (text[:80] + "…") if len(text) > 80 else text
+                disp = (snippet[:80] + "…") if len(snippet) > 80 else snippet
                 link = "/patients/%s/notify/" % patient.pk
                 from django.utils import timezone as _tz
                 for u in recipients.distinct():
@@ -611,9 +647,9 @@ def tg_webhook(request, clinic_slug):
                         user=u, link=link, type="wa", is_read=False).first()
                     if existing:
                         Notification.objects.filter(pk=existing.pk).update(
-                            body="✈️ Telegram — %s: %s" % (patient.full_name, snippet), created_at=_tz.now())
+                            body="✈️ Telegram — %s: %s" % (patient.full_name, disp), created_at=_tz.now())
                     else:
-                        Notification.send(u, "✈️ Telegram", "%s: %s" % (patient.full_name, snippet),
+                        Notification.send(u, "✈️ Telegram", "%s: %s" % (patient.full_name, disp),
                                           type="wa", link=link)
             except Exception:
                 pass

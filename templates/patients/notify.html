@@ -37,7 +37,18 @@
       {% for m in wa_history %}
       <div style="align-self:{% if m.direction == 'out' %}flex-end{% else %}flex-start{% endif %};max-width:78%">
         <div style="padding:8px 12px;border-radius:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;
-                    {% if m.direction == 'out' %}background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px{% else %}background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px{% endif %}">{{ m.body }}</div>
+                    {% if m.direction == 'out' %}background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px{% else %}background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px{% endif %}">
+          {% if m.media_file %}
+            {% if m.media_type == 'voice' or m.media_type == 'audio' %}
+              <audio controls preload="none" style="max-width:240px;height:36px" src="{{ m.media_file.url }}"></audio>
+            {% elif m.media_type == 'image' %}
+              <a href="{{ m.media_file.url }}" target="_blank"><img src="{{ m.media_file.url }}" style="max-width:220px;border-radius:10px;display:block"></a>
+            {% else %}
+              <a href="{{ m.media_file.url }}" target="_blank">📎 Файл</a>
+            {% endif %}
+            {% if m.body %}<div style="margin-top:4px">{{ m.body }}</div>{% endif %}
+          {% else %}{{ m.body }}{% endif %}
+        </div>
         <div class="text-xs muted" style="text-align:{% if m.direction == 'out' %}right{% else %}left{% endif %};margin-top:2px">
           {% if m.channel == 'tg' %}✈️{% else %}💬{% endif %}
           {% if m.direction == 'out' %}{% if m.ok %}✓{% else %}✕{% endif %} {% if m.sent_by %}{{ m.sent_by.name }} · {% endif %}{% endif %}{{ m.created_at|date:"d.m H:i" }}
@@ -82,7 +93,25 @@
     wrap.style.cssText = 'align-self:'+(m.dir==='out'?'flex-end':'flex-start')+';max-width:78%';
     var b = document.createElement('div');
     b.style.cssText = 'padding:8px 12px;border-radius:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;'+(m.dir==='out'?'background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px':'background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px');
-    b.textContent = m.body;
+    if(m.media_url){
+      if(m.media_type==='voice' || m.media_type==='audio'){
+        var au = document.createElement('audio');
+        au.controls = true; au.preload = 'none'; au.src = m.media_url;
+        au.style.cssText = 'max-width:240px;height:36px';
+        b.appendChild(au);
+      } else if(m.media_type==='image'){
+        var img = document.createElement('img');
+        img.src = m.media_url; img.style.cssText = 'max-width:220px;border-radius:10px;display:block';
+        var a = document.createElement('a'); a.href = m.media_url; a.target = '_blank'; a.appendChild(img);
+        b.appendChild(a);
+      } else {
+        var fa = document.createElement('a'); fa.href = m.media_url; fa.target = '_blank'; fa.textContent = '📎 Файл';
+        b.appendChild(fa);
+      }
+      if(m.body){ var cap = document.createElement('div'); cap.style.marginTop = '4px'; cap.textContent = m.body; b.appendChild(cap); }
+    } else {
+      b.textContent = m.body;
+    }
     var meta = document.createElement('div');
     meta.className = 'text-xs muted';
     meta.style.cssText = 'text-align:'+(m.dir==='out'?'right':'left')+';margin-top:2px';
