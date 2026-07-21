@@ -714,15 +714,19 @@ def tg_inbox(request):
         return redirect("/")
     from .models import WaMessage
     from apps.tenancy import get_current_clinic
-    base = WaMessage.all_clinics.filter(channel="tg").exclude(patient__isnull=True)
+    # В отличие от WhatsApp, пациенту не обязательно быть в базе, чтобы написать
+    # боту (это публичный бот в Telegram) — поэтому не скрываем непривязанные чаты,
+    # иначе бейдж «N новых» показывает число, а список остаётся пустым.
+    base = WaMessage.all_clinics.filter(channel="tg")
     clinic = get_current_clinic()
     if clinic is not None:
         base = base.filter(clinic=clinic)
     convos = {}
     for m in base.select_related("patient").order_by("-id")[:2000]:
-        c = convos.get(m.patient_id)
+        key = m.patient_id if m.patient_id else ("chat:%s" % m.phone)
+        c = convos.get(key)
         if c is None:
-            c = convos[m.patient_id] = {"patient": m.patient, "last": m, "unread": 0}
+            c = convos[key] = {"patient": m.patient, "chat_id": m.phone, "last": m, "unread": 0}
         if m.direction == "in" and not m.read:
             c["unread"] += 1
     rows = sorted(convos.values(), key=lambda c: c["last"].created_at, reverse=True)

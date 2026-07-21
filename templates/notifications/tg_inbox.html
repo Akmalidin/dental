@@ -16,6 +16,7 @@
   <div class="card overflow-hidden">
     <div style="max-height:70vh;overflow-y:auto">
     {% for r in rows %}
+    {% if r.patient %}
     <a href="/patients/{{ r.patient.pk }}/notify/?channel=tg" class="flex items-center gap-3 px-5 py-3 transition"
        style="border-bottom:1px solid var(--border-2);text-decoration:none"
        x-show="q==='' || '{{ r.patient.full_name|escapejs }} {{ r.patient.phone|escapejs }}'.toLowerCase().includes(q.toLowerCase())">
@@ -27,6 +28,19 @@
       </div>
       <div class="text-xs muted shrink-0">{{ r.last.created_at|date:"d.m H:i" }}</div>
     </a>
+    {% else %}
+    <div class="flex items-center gap-3 px-5 py-3" style="border-bottom:1px solid var(--border-2)"
+         x-show="q==='' || 'без карточки'.includes(q.toLowerCase())">
+      <div class="avatar w-10 h-10">❓</div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold" style="color:var(--text)">Без карточки пациента
+          {% if r.unread %}<span class="badge badge-orange ml-1">{{ r.unread }}</span>{% endif %}</p>
+        <p class="text-sm muted truncate">{% if r.last.direction == 'out' %}Вы: {% endif %}{{ r.last.body }}</p>
+        <p class="text-xs muted">Написал боту, но номер не найден в базе — заведите карточку пациента с этим телефоном.</p>
+      </div>
+      <div class="text-xs muted shrink-0">{{ r.last.created_at|date:"d.m H:i" }}</div>
+    </div>
+    {% endif %}
     {% empty %}
     <p class="px-5 py-12 text-center muted">Пока нет переписок. Появятся, когда пациент напишет боту или вы отправите сообщение.</p>
     {% endfor %}
