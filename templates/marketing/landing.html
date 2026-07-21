@@ -1,0 +1,135 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stom.asia — CRM для стоматологий</title>
+<meta name="description" content="CRM для стоматологий: расписание, карточки пациентов, финансы, склад, WhatsApp и Telegram — в одной системе.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap&subset=cyrillic" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'marketing/landing.css' %}">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="#" class="nav-brand"><span class="dot"></span>stom.asia</a>
+  <div class="nav-links">
+    <a href="#modules">Продукт</a>
+    <a href="#why">Почему мы</a>
+    <a href="#contact">Контакты</a>
+  </div>
+  <div class="nav-right">
+    <form class="clinic-login" data-clinic-login="stom.asia">
+      <input type="text" placeholder="ваша-клиника" aria-label="Название клиники">
+      <span>.stom.asia</span>
+      <button type="submit" title="Войти">→</button>
+    </form>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-arch" aria-hidden="true">
+    <svg viewBox="0 -60 800 260" xmlns="http://www.w3.org/2000/svg">
+      <path class="arch-path" d="M40 180 Q400 -40 760 180"></path>
+      <g class="tooth-dots"></g>
+    </svg>
+  </div>
+  <div class="eyebrow">CRM для стоматологий</div>
+  <h1 class="headline">Помнит каждый приём.<br>И каждый зуб.</h1>
+  <p class="sub">Расписание, карточки пациентов, финансы и склад — в одной системе. WhatsApp и Telegram сами напоминают пациентам о визите и присылают кнопки подтверждения записи.</p>
+  <div class="hero-ctas">
+    <a href="#contact" class="btn btn-primary">Оставить заявку</a>
+    <a href="#modules" class="btn btn-ghost">Что внутри</a>
+  </div>
+  <div class="chips">
+    <span class="chip"><b>WhatsApp и Telegram</b> — напоминания и кнопки</span>
+    <span class="chip"><b>Офлайн-режим</b> — работает без интернета</span>
+    <span class="chip"><b>Аудит-центр</b> — история всех изменений</span>
+    <span class="chip"><b>Мультифилиальность</b> — одна база на все точки</span>
+  </div>
+</header>
+
+<section id="modules">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow" style="justify-content:center">Состав системы</div>
+      <h2>Восемь модулей вместо восьми программ</h2>
+      <p>Каждый раздел пронумерован так же, как зуб в карте пациента — по международной системе FDI. Условность, но узнаваемая для любого в клинике.</p>
+    </div>
+    <div class="modules-grid">
+      <article class="tooth-card"><div class="fdi">11</div><h3>Расписание и записи</h3><p>Календарь приёмов, статусы, напоминания — из одного экрана, без пересечений по кабинетам.</p></article>
+      <article class="tooth-card"><div class="fdi">21</div><h3>Карточки пациентов</h3><p>История лечений, баланс, документы, поиск по ИИН — без бумажных карт и потерь.</p></article>
+      <article class="tooth-card"><div class="fdi">31</div><h3>Финансы и склад</h3><p>Оплаты, расходы, остатки материалов — касса и склад сходятся сами по себе.</p></article>
+      <article class="tooth-card"><div class="fdi">41</div><h3>Аудит-центр</h3><p>Кто и что изменил в карточке пациента — видно в любой момент, с историей по полям.</p></article>
+      <article class="tooth-card"><div class="fdi">18</div><h3>WhatsApp и Telegram</h3><p>Напоминания о приёме и кнопки подтверждения/отмены прямо в чате пациента.</p></article>
+      <article class="tooth-card"><div class="fdi">28</div><h3>Офлайн-режим</h3><p>Компьютеры клиники работают без интернета, синхронизация — как только связь появится.</p></article>
+      <article class="tooth-card"><div class="fdi">38</div><h3>Сотрудники и зарплата</h3><p>Роли, права доступа, расчёт зарплаты по приёмам и загрузке врача.</p></article>
+      <article class="tooth-card"><div class="fdi">48</div><h3>Аналитика</h3><p>Выручка, загрузка врачей, должники — в реальном времени, без сведения таблиц вручную.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow" style="justify-content:center">Что меняется</div>
+      <h2>Первая неделя после подключения</h2>
+    </div>
+    <div class="compare">
+      <div class="compare-col old">
+        <span class="tag mono">Было</span>
+        <ul>
+          <li>Бумажный журнал записи, который теряется или дублируется</li>
+          <li>Каждому пациенту звонят вручную, чтобы напомнить о приёме</li>
+          <li>Касса и склад материалов — в отдельных тетрадях и таблицах</li>
+          <li>Никто не может сказать, кто и когда менял карточку пациента</li>
+        </ul>
+      </div>
+      <div class="compare-col new">
+        <span class="tag mono">Стало</span>
+        <ul>
+          <li>Расписание в CRM видят все сотрудники, записи не пересекаются</li>
+          <li>WhatsApp и Telegram сами напоминают о приёме и о задолженности</li>
+          <li>Финансы и склад — в одной системе, отчёт за секунду</li>
+          <li>Полная история изменений по каждому пациенту — аудит-центр</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap">
+    <div class="contact-box">
+      <div>
+        <h2>Подключим клинику за 1 день</h2>
+        <p class="sub">Перенесём базу пациентов, настроим расписание и WhatsApp/Telegram. Первая консультация — бесплатно.</p>
+      </div>
+      <form class="lead-form" method="post" action="{% url 'marketing_lead' %}">
+        {% csrf_token %}
+        {% if messages %}
+          {% for m in messages %}
+          <div class="form-msg {% if m.tags == 'error' %}error{% else %}success{% endif %}">{{ m }}</div>
+          {% endfor %}
+        {% endif %}
+        <input type="text" name="clinic_name" placeholder="Название клиники" required>
+        <input type="tel" name="phone" placeholder="Телефон / WhatsApp" required>
+        <input type="text" name="city" placeholder="Город (необязательно)">
+        <button type="submit" class="btn btn-primary">Оставить заявку</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-row">
+    <a href="#" class="nav-brand"><span class="dot"></span>stom.asia</a>
+    <span class="mono">CRM для стоматологий · {% now "Y" %}</span>
+  </div>
+</footer>
+
+<script src="{% static 'marketing/landing.js' %}"></script>
+</body>
+</html>

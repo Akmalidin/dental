@@ -196,6 +196,34 @@ class PublicSiteMiddleware:
         return self.get_response(request)
 
 
+class StomAsiaRoutingMiddleware:
+    """Новый бренд/домен stom.asia (параллельно с sadaf.kg, см. PublicSiteMiddleware):
+
+    - апекс/www.stom.asia → лендинг о продукте (отдельный urlconf, без CRM-урлов)
+    - <slug>.stom.asia → CRM этой клиники ОТКРЫВАЕТСЯ НАПРЯМУЮ (без редиректа на
+      общий app-хост, в отличие от *.sadaf.kg) — только помечаем клинику по хосту
+      для страницы входа (см. login_view), сам urlconf/маршруты не меняются.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings as dj
+        crm_base = (getattr(dj, "CRM_BASE_DOMAIN", "") or "").lower()
+        if not crm_base:
+            return self.get_response(request)
+        host = request.get_host().split(":")[0].lower()
+        if host in (crm_base, "www." + crm_base):
+            request.urlconf = "config.urls_marketing"
+            return self.get_response(request)
+        if host.endswith("." + crm_base):
+            slug = host[: -(len(crm_base) + 1)]
+            if slug and slug not in ("www", "app"):
+                from apps.users.models import Clinic
+                request.host_clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
+        return self.get_response(request)
+
+
 class SectionAccessMiddleware:
     """Персональные доступы: блокирует заход в раздел, если он не разрешён пользователю.
 

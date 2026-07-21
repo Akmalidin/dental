@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.settings_clinic",
     "apps.sync",
+    "apps.marketing",
 
     # Tenants app — только модели центральной БД (Tenant, Subscription)
     "apps.tenants",
@@ -69,6 +70,7 @@ MIDDLEWARE = [
     "apps.tenancy.ImpersonationMiddleware",
     "apps.tenancy.CurrentClinicMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
+    "apps.tenancy.StomAsiaRoutingMiddleware",
     "apps.tenancy.PublicSiteMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "apps.tenancy.SectionAccessMiddleware",
@@ -207,6 +209,11 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
 # ─── Публичные сайты клиник (поддомены) ──────────────────────────────────────
 APP_HOST = "app.denta.tw1.ru"           # хост CRM-системы
 PUBLIC_BASE_DOMAIN = "denta.tw1.ru"     # <slug>.denta.tw1.ru → публичный сайт клиники
+
+# ─── Бренд stom.asia (см. apps/tenancy.py StomAsiaRoutingMiddleware) ─────────
+# <slug>.CRM_BASE_DOMAIN → CRM клиники напрямую; апекс/www → лендинг о продукте.
+# Пусто по умолчанию (только на server.py, где реально настроен домен).
+CRM_BASE_DOMAIN = ""
 
 SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""

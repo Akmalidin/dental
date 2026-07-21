@@ -1,0 +1,157 @@
+/* stom.asia — лендинг. Токены: тёмный light-box рентген-кабинета + одонтограмма. */
+:root {
+  --bg: #0b0f14;
+  --panel: #121922;
+  --panel-2: #17202b;
+  --film: #eaf5ff;
+  --text: #c9d4e0;
+  --muted: #7c8a9b;
+  --accent: #3fd0c9;
+  --accent-soft: rgba(63, 208, 201, .14);
+  --accent-2: #ffb74a;
+  --border: rgba(234, 245, 255, .09);
+  --border-strong: rgba(63, 208, 201, .4);
+  --radius-tooth: 22px 22px 10px 10px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+
+img, svg { max-width: 100%; display: block; }
+a { color: inherit; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+h1, h2, h3 { font-family: "Manrope", "Inter", sans-serif; color: var(--film); margin: 0; letter-spacing: -.01em; }
+
+/* ── nav ─────────────────────────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px;
+  background: rgba(11, 15, 20, .82);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-brand { display: flex; align-items: center; gap: 8px; font-family: "JetBrains Mono", monospace; font-weight: 500; color: var(--film); font-size: 15px; text-decoration: none; }
+.nav-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px 2px var(--accent-soft); }
+.nav-links { display: flex; gap: 28px; font-size: 14.5px; }
+.nav-links a { text-decoration: none; color: var(--muted); transition: color .15s; }
+.nav-links a:hover { color: var(--text); }
+.nav-right { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 860px) { .nav-links { display: none; } }
+
+.clinic-login { display: flex; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.clinic-login input { background: transparent; border: 0; outline: 0; color: var(--film); font: 13.5px/1 "JetBrains Mono", monospace; padding: 9px 6px 9px 12px; width: 118px; }
+.clinic-login input::placeholder { color: var(--muted); }
+.clinic-login span { color: var(--muted); font: 13px "JetBrains Mono", monospace; padding-right: 4px; }
+.clinic-login button { background: var(--accent); border: 0; color: #06201d; font-weight: 700; padding: 10px 14px; cursor: pointer; font-size: 14px; transition: filter .15s; }
+.clinic-login button:hover { filter: brightness(1.08); }
+
+/* ── hero ────────────────────────────────────────────────────────────── */
+.hero { position: relative; padding: 96px 28px 64px; overflow: hidden; text-align: center; }
+.hero-glow {
+  position: absolute; inset: -20% -10% auto; height: 640px;
+  background: radial-gradient(ellipse 60% 50% at 50% 30%, rgba(63,208,201,.16), transparent 70%);
+  pointer-events: none;
+}
+.hero-arch { position: relative; max-width: 720px; margin: 0 auto 8px; opacity: 0; transition: opacity .6s ease; }
+.hero-arch.ready { opacity: 1; }
+.hero-arch svg { width: 100%; height: auto; }
+.hero-arch .arch-path { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .55; stroke-dasharray: 900; stroke-dashoffset: 900; }
+.hero-arch.ready .arch-path { animation: trace 1.4s cubic-bezier(.65,0,.35,1) forwards; }
+.hero-arch .tooth-dot { fill: var(--film); opacity: 0; transform-origin: center; }
+.hero-arch.ready .tooth-dot { animation: toothin .5s ease forwards; }
+@keyframes trace { to { stroke-dashoffset: 0; } }
+@keyframes toothin { from { opacity: 0; transform: scale(.3); } to { opacity: .85; transform: scale(1); } }
+
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px/1 "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; }
+.eyebrow::before { content: ""; width: 16px; height: 1px; background: var(--accent); }
+h1.headline { font-size: clamp(36px, 5.6vw, 64px); font-weight: 800; line-height: 1.06; max-width: 900px; margin: 0 auto; }
+.sub { max-width: 620px; margin: 22px auto 0; font-size: 17.5px; color: var(--text); }
+.hero-ctas { display: flex; gap: 14px; justify-content: center; margin-top: 34px; flex-wrap: wrap; }
+
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 24px; border-radius: 11px; font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid transparent; transition: transform .15s, filter .15s, background .15s; }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); color: #06201d; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--film); border-color: var(--border); }
+.btn-ghost:hover { border-color: var(--border-strong); }
+
+.chips { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 46px; }
+.chip { font: 12.5px "JetBrains Mono", monospace; color: var(--muted); border: 1px solid var(--border); padding: 7px 13px; border-radius: 100px; }
+.chip b { color: var(--film); font-weight: 500; }
+
+/* ── sections generic ───────────────────────────────────────────────── */
+section { padding: 88px 0; }
+.section-head { max-width: 640px; margin: 0 auto 48px; text-align: center; }
+.section-head h2 { font-size: clamp(26px, 3.4vw, 38px); font-weight: 800; }
+.section-head p { color: var(--muted); margin-top: 12px; font-size: 15.5px; }
+
+/* ── modules (odontogram grid) ──────────────────────────────────────── */
+.modules-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 920px) { .modules-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px) { .modules-grid { grid-template-columns: 1fr; } }
+.tooth-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-tooth);
+  padding: 22px 20px; opacity: 0; transform: translateY(14px);
+  transition: opacity .5s ease, transform .5s ease, border-color .2s, background .2s;
+}
+.tooth-card.in { opacity: 1; transform: translateY(0); }
+.tooth-card:hover { border-color: var(--border-strong); background: var(--panel-2); }
+.tooth-card .fdi { font: 600 13px "JetBrains Mono", monospace; color: var(--accent); }
+.tooth-card h3 { font-size: 16.5px; margin: 10px 0 8px; color: var(--film); }
+.tooth-card p { margin: 0; font-size: 13.8px; color: var(--muted); line-height: 1.5; }
+
+/* ── было / стало ────────────────────────────────────────────────────── */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+.compare-col { border: 1px solid var(--border); border-radius: 16px; padding: 28px 26px; }
+.compare-col.old { background: transparent; }
+.compare-col.new { background: linear-gradient(180deg, var(--accent-soft), transparent 60%); border-color: var(--border-strong); }
+.compare-col .tag { font: 600 11.5px "JetBrains Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+.compare-col.old .tag { color: var(--muted); }
+.compare-col.new .tag { color: var(--accent); }
+.compare-col ul { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.compare-col li { font-size: 15px; padding-left: 22px; position: relative; color: var(--text); }
+.compare-col.old li { color: var(--muted); }
+.compare-col li::before { position: absolute; left: 0; top: 1px; font: 13px "JetBrains Mono", monospace; }
+.compare-col.old li::before { content: "×"; color: #4a5568; }
+.compare-col.new li::before { content: "✓"; color: var(--accent); }
+
+/* ── contact / CTA ───────────────────────────────────────────────────── */
+.contact-box { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; padding: 52px; display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: center; }
+@media (max-width: 820px) { .contact-box { grid-template-columns: 1fr; padding: 34px 26px; } }
+.contact-box h2 { font-size: clamp(24px, 3vw, 32px); }
+.contact-box .sub { margin: 14px 0 0; text-align: left; max-width: none; color: var(--muted); font-size: 15px; }
+.lead-form { display: flex; flex-direction: column; gap: 12px; }
+.lead-form input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--film);
+  padding: 13px 14px; font: 14.5px "Inter", sans-serif; outline: 0; transition: border-color .15s;
+}
+.lead-form input::placeholder { color: var(--muted); }
+.lead-form input:focus { border-color: var(--border-strong); }
+.lead-form button { margin-top: 4px; }
+.form-msg { font-size: 13.5px; padding: 10px 14px; border-radius: 8px; margin-bottom: 4px; }
+.form-msg.success { background: rgba(63,208,201,.14); color: var(--accent); }
+.form-msg.error { background: rgba(255,183,74,.14); color: var(--accent-2); }
+
+/* ── footer ──────────────────────────────────────────────────────────── */
+footer { border-top: 1px solid var(--border); padding: 40px 0; }
+.footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.footer-row .mono { color: var(--muted); font-size: 13px; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

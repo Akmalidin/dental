@@ -768,10 +768,15 @@ def login_view(request):
 
     # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники
     # на странице входа ещё до аутентификации (до логина текущая клиника неизвестна).
+    # На stom.asia то же самое определяется по поддомену (<slug>.stom.asia) —
+    # см. StomAsiaRoutingMiddleware, ?clinic= там не нужен.
     from apps.tenancy import set_current_clinic, clear_current_clinic
     from apps.users.models import Clinic
     clinic_slug = (request.POST.get("clinic") or request.GET.get("clinic") or "").strip()
     clinic = Clinic.objects.filter(slug=clinic_slug, is_active=True).first() if clinic_slug else None
+    if clinic is None and getattr(request, "host_clinic", None):
+        clinic = request.host_clinic
+        clinic_slug = clinic.slug
     try:
         if clinic:
             set_current_clinic(clinic)
