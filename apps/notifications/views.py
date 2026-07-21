@@ -510,3 +510,275 @@ def wa_connect(request):
         "qr_type": qr_type,
         "qr_b64": qr_msg if qr_type == "qrCode" else "",
     })
+
+
+# ─── Telegram ────────────────────────────────────────────────────────────
+
+def _tg_staff_ok(user):
+    return user.is_superadmin or user.is_admin
+
+
+@csrf_exempt
+def tg_webhook(request, clinic_slug):
+    """Webhook Telegram Bot API — свой URL на каждую клинику (её слаг зашит в
+    адрес, который был передан в setWebhook при подключении бота)."""
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    from apps.users.models import Clinic
+    from apps.tenancy import set_current_clinic
+    clinic = Clinic.objects.filter(slug=clinic_slug, is_active=True).first()
+    if clinic is None:
+        return HttpResponse(status=404)
+    set_current_clinic(clinic)
+
+    try:
+        update = json.loads(request.body or b"{}")
+    except Exception:
+        return HttpResponse(status=400)
+
+    from apps.settings_clinic.models import ClinicSettings
+    from .telegram import (
+        tg_send_text, tg_send_contact_request, tg_edit_message, tg_answer_callback,
+    )
+    cs = ClinicSettings.get()
+    token = (cs.telegram_bot_token or "").strip()
+    if not token:
+        return JsonResponse({"ok": True})
+
+    # ── Нажатие инлайн-кнопки (подтверждение/отмена записи и т.п.) ──
+    cq = update.get("callback_query")
+    if cq:
+        _handle_tg_callback(cq, token)
+        return JsonResponse({"ok": True})
+
+    msg = update.get("message")
+    if not msg:
+        return JsonResponse({"ok": True})
+
+    chat_id = msg.get("chat", {}).get("id")
+    text = (msg.get("text") or "").strip()
+    contact = msg.get("contact")
+
+    # ── /start — приветствие + запрос номера для привязки к карточке пациента ──
+    if text.startswith("/start"):
+        tg_send_contact_request(
+            chat_id,
+            "👋 Здравствуйте! Это бот клиники «%s».\n\n"
+            "Чтобы получать напоминания о приёмах и другие уведомления, "
+            "поделитесь, пожалуйста, номером телефона (кнопка ниже)." % clinic.name,
+            token=token,
+        )
+        return JsonResponse({"ok": True})
+
+    # ── Поделился номером — привязываем chat_id к карточке пациента ──
+    if contact:
+        from apps.patients.models import Patient, normalize_phone
+        phone = contact.get("phone_number") or ""
+        pnorm = normalize_phone(phone)
+        patient = Patient.objects.filter(phone_norm=pnorm).first() if pnorm else None
+        if patient is not None:
+            patient.telegram_chat_id = chat_id
+            patient.save(update_fields=["telegram_chat_id"])
+            name = (patient.first_name or "").strip() or "!"
+            tg_send_text(chat_id, "✅ Готово, %s Теперь буду присылать сюда напоминания о приёмах." % name)
+        else:
+            tg_send_text(chat_id, "Не нашли карточку с таким номером в базе клиники. Обратитесь на ресепшене.")
+        return JsonResponse({"ok": True})
+
+    # ── Обычное входящее сообщение — логируем для инбокса + уведомляем персонал ──
+    if text:
+        from apps.patients.models import Patient
+        from .models import WaMessage
+        patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
+        m = WaMessage(patient=patient, direction="in", channel="tg", phone=str(chat_id), body=text, read=False)
+        if patient is not None:
+            m.clinic = patient.clinic
+        m.save()
+        if patient is not None:
+            try:
+                from apps.users.models import User as U, Role
+                from django.db.models import Q
+                recipients = U.objects.filter(clinic=patient.clinic, is_active=True).filter(
+                    Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
+                    | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
+                if patient.primary_doctor_id:
+                    recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
+                snippet = (text[:80] + "…") if len(text) > 80 else text
+                link = "/patients/%s/notify/" % patient.pk
+                from django.utils import timezone as _tz
+                for u in recipients.distinct():
+                    existing = Notification.objects.filter(
+                        user=u, link=link, type="wa", is_read=False).first()
+                    if existing:
+                        Notification.objects.filter(pk=existing.pk).update(
+                            body="✈️ Telegram — %s: %s" % (patient.full_name, snippet), created_at=_tz.now())
+                    else:
+                        Notification.send(u, "✈️ Telegram", "%s: %s" % (patient.full_name, snippet),
+                                          type="wa", link=link)
+            except Exception:
+                pass
+    return JsonResponse({"ok": True})
+
+
+def _handle_tg_callback(cq, token):
+    """Обработка нажатия инлайн-кнопки: сейчас — подтверждение/отмена записи
+    пациентом прямо из Telegram (см. notify_appointment_created)."""
+    from .telegram import tg_edit_message, tg_answer_callback
+    data = cq.get("data", "") or ""
+    msg = cq.get("message") or {}
+    chat_id = msg.get("chat", {}).get("id")
+    message_id = msg.get("message_id")
+    cq_id = cq.get("id")
+
+    if ":" not in data:
+        tg_answer_callback(cq_id, token=token)
+        return
+    action, _, appt_id = data.partition(":")
+    try:
+        from apps.appointments.models import Appointment
+        appt = Appointment.objects.filter(pk=int(appt_id)).first()
+    except (ValueError, TypeError):
+        appt = None
+    if appt is None:
+        tg_answer_callback(cq_id, "Запись не найдена", token=token)
+        return
+
+    if action == "appt_confirm":
+        if appt.status in ("scheduled",):
+            appt.status = "confirmed"
+            appt.save(update_fields=["status"])
+        tg_edit_message(chat_id, message_id,
+                        "✅ <b>Запись подтверждена</b>\nЖдём вас %s в %s" % (
+                            appt.start_at.strftime("%d.%m.%Y"), appt.start_at.strftime("%H:%M")),
+                        token=token)
+        tg_answer_callback(cq_id, "Запись подтверждена ✅", token=token)
+    elif action == "appt_cancel":
+        if appt.status not in ("completed", "cancelled"):
+            appt.status = "cancelled"
+            appt.save(update_fields=["status"])
+        tg_edit_message(chat_id, message_id, "❌ <b>Запись отменена</b>", token=token)
+        tg_answer_callback(cq_id, "Запись отменена", token=token)
+    else:
+        tg_answer_callback(cq_id, token=token)
+
+
+@login_required
+def tg_connect(request):
+    """Подключение Telegram-бота клиники: токен (создаётся у @BotFather) + webhook.
+    Только Директор/Администратор."""
+    from django.contrib import messages
+    if not _tg_staff_ok(request.user):
+        return redirect("/")
+    from apps.settings_clinic.models import ClinicSettings
+    from apps.tenancy import get_current_clinic
+    from .telegram import tg_set_webhook, tg_get_me, tg_get_webhook_info
+    cs = ClinicSettings.get()
+    clinic = get_current_clinic()
+
+    if request.method == "POST":
+        cs.telegram_enabled = bool(request.POST.get("telegram_enabled"))
+        cs.telegram_bot_token = (request.POST.get("telegram_bot_token") or "").strip()
+        cs.save(update_fields=["telegram_enabled", "telegram_bot_token"])
+        if cs.telegram_bot_token and clinic is not None:
+            me = tg_get_me(cs.telegram_bot_token)
+            if me.get("ok"):
+                cs.telegram_bot_username = me["result"].get("username", "")
+                cs.save(update_fields=["telegram_bot_username"])
+                webhook_url = request.build_absolute_uri(
+                    "/notifications/tg-webhook/%s/" % clinic.slug)
+                res = tg_set_webhook(cs.telegram_bot_token, webhook_url)
+                if res.get("ok"):
+                    messages.success(request, "Бот подключён: @%s" % cs.telegram_bot_username)
+                else:
+                    messages.warning(request, "Токен сохранён, но не удалось настроить webhook: %s" % res.get("description", ""))
+            else:
+                messages.error(request, "Не удалось проверить токен — убедитесь, что он верный (от @BotFather)")
+        else:
+            messages.success(request, "Настройки Telegram сохранены")
+        return redirect("tg_connect")
+
+    webhook_info = {}
+    if cs.telegram_bot_token:
+        webhook_info = tg_get_webhook_info(cs.telegram_bot_token).get("result", {})
+    return render(request, "notifications/tg_connect.html", {
+        "cs": cs,
+        "webhook_info": webhook_info,
+        "bot_link": ("https://t.me/%s" % cs.telegram_bot_username) if cs.telegram_bot_username else "",
+    })
+
+
+@login_required
+def tg_inbox(request):
+    """Инбокс Telegram-чатов: последние переписки с пациентами (тот же UI, что WhatsApp)."""
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from .models import WaMessage
+    from apps.tenancy import get_current_clinic
+    base = WaMessage.all_clinics.filter(channel="tg").exclude(patient__isnull=True)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        base = base.filter(clinic=clinic)
+    convos = {}
+    for m in base.select_related("patient").order_by("-id")[:2000]:
+        c = convos.get(m.patient_id)
+        if c is None:
+            c = convos[m.patient_id] = {"patient": m.patient, "last": m, "unread": 0}
+        if m.direction == "in" and not m.read:
+            c["unread"] += 1
+    rows = sorted(convos.values(), key=lambda c: c["last"].created_at, reverse=True)
+    return render(request, "notifications/tg_inbox.html", {
+        "rows": rows, "total_unread": sum(c["unread"] for c in rows),
+    })
+
+
+@login_required
+def tg_broadcast(request):
+    """Массовая Telegram-рассылка по аудитории (все / должники / с приёмами) —
+    только пациентам, у кого уже привязан telegram_chat_id."""
+    from django.contrib import messages
+    if not _tg_staff_ok(request.user):
+        return redirect("/")
+    from .models import MessageTemplate, WaMessage
+    from .telegram import tg_send_text, tg_enabled
+    from .whatsapp import render_message
+    from apps.appointments.models import Appointment
+    from django.utils import timezone
+
+    if request.method == "POST":
+        audience = request.POST.get("audience", "all")
+        tpl_id = request.POST.get("template")
+        text = (request.POST.get("text") or "").strip()
+        if tpl_id and not text:
+            t = MessageTemplate.objects.filter(pk=tpl_id).first()
+            text = t.body if t else ""
+        if not text:
+            messages.error(request, "Выберите шаблон или введите текст")
+            return redirect("tg_broadcast")
+        if not tg_enabled():
+            messages.error(request, "Telegram не настроен")
+            return redirect("tg_broadcast")
+        sent = failed = 0
+        qs = _broadcast_patients(audience).exclude(telegram_chat_id__isnull=True)
+        for p in list(qs.select_related()[:500]):
+            appt = (Appointment.objects.filter(patient=p, start_at__gte=timezone.now())
+                    .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
+            msg = render_message(text, patient=p, appt=appt)
+            ok = tg_send_text(p.telegram_chat_id, msg)
+            WaMessage.objects.create(patient=p, direction="out", channel="tg", phone=str(p.telegram_chat_id),
+                                     body=msg, sent_by=request.user, ok=ok)
+            sent += 1 if ok else 0
+            failed += 0 if ok else 1
+        messages.success(request, "Рассылка завершена. Отправлено: %s, ошибок: %s" % (sent, failed))
+        return redirect("tg_broadcast")
+
+    from apps.settings_clinic.models import ClinicSettings
+    linked_count = _broadcast_patients("all").exclude(telegram_chat_id__isnull=True).count()
+    return render(request, "notifications/tg_broadcast.html", {
+        "templates": MessageTemplate.objects.filter(is_active=True),
+        "tg_enabled": tg_enabled(),
+        "count_all": _broadcast_patients("all").count(),
+        "count_debtors": _broadcast_patients("debtors").count(),
+        "count_upcoming": _broadcast_patients("upcoming").count(),
+        "linked_count": linked_count,
+        "cs": ClinicSettings.get(),
+    })

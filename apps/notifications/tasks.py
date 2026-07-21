@@ -20,8 +20,16 @@ def send_appointment_reminders():
     ).select_related("patient", "doctor")
 
     for appt in appointments:
-        if appt.patient and appt.patient.telegram_id_via_user():
-            pass  # TODO: link patient to telegram
+        if appt.patient and appt.patient.telegram_chat_id:
+            from apps.tenancy import set_current_clinic
+            from apps.notifications.telegram import tg_send_text
+            set_current_clinic(appt.patient.clinic)
+            tg_text = (
+                f"🔔 <b>Напоминание о записи</b>\n"
+                f"Время: {appt.start_at:%H:%M}\n"
+                f"Услуга: {appt.service.name if appt.service else '—'}"
+            )
+            tg_send_text(appt.patient.telegram_chat_id, tg_text)
 
         if appt.doctor.telegram_id:
             text = (
@@ -35,27 +43,35 @@ def send_appointment_reminders():
 
 @shared_task(name="apps.notifications.tasks.send_daily_admin_report")
 def send_daily_admin_report():
-    """Daily summary sent to admins at 20:00."""
+    """Daily summary sent to each clinic's own admins at 20:00 (per-clinic, own currency)."""
     from datetime import date
     from django.db.models import Sum
     from decimal import Decimal
     from apps.finance.models import Payment, Expense
     from apps.appointments.models import Appointment
+    from apps.settings_clinic.models import ClinicSettings
+    from apps.users.models import Clinic
+    from apps.tenancy import set_current_clinic
     from .utils import notify_admins
 
     today = date.today()
-    income = Payment.objects.filter(created_at__date=today, type="income").aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    refunds = Payment.objects.filter(created_at__date=today, type="refund").aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    expenses = Expense.objects.filter(date=today).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    appointments_count = Appointment.objects.filter(start_at__date=today).count()
-    completed = Appointment.objects.filter(start_at__date=today, status="completed").count()
+    for clinic in Clinic.objects.filter(is_active=True):
+        set_current_clinic(clinic)
+        cs = ClinicSettings.objects.filter(clinic=clinic).first()
+        currency = cs.currency_label if cs else "сом"
 
-    text = (
-        f"📊 <b>Отчёт за {today:%d.%m.%Y}</b>\n\n"
-        f"💰 Выручка: {income} сом\n"
-        f"↩️ Возвраты: {refunds} сом\n"
-        f"🧾 Расходы: {expenses} сом\n"
-        f"📈 Чистая прибыль: {income - refunds - expenses} сом\n\n"
-        f"🗓 Записей: {appointments_count} (завершено: {completed})"
-    )
-    notify_admins(text)
+        income = Payment.objects.filter(created_at__date=today, type="income").aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        refunds = Payment.objects.filter(created_at__date=today, type="refund").aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        expenses = Expense.objects.filter(date=today).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        appointments_count = Appointment.objects.filter(start_at__date=today).count()
+        completed = Appointment.objects.filter(start_at__date=today, status="completed").count()
+
+        text = (
+            f"📊 <b>Отчёт за {today:%d.%m.%Y}</b> — {clinic.name}\n\n"
+            f"💰 Выручка: {income} {currency}\n"
+            f"↩️ Возвраты: {refunds} {currency}\n"
+            f"🧾 Расходы: {expenses} {currency}\n"
+            f"📈 Чистая прибыль: {income - refunds - expenses} {currency}\n\n"
+            f"🗓 Записей: {appointments_count} (завершено: {completed})"
+        )
+        notify_admins(text, clinic=clinic)

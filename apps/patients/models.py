@@ -86,6 +86,10 @@ class Patient(ClinicSoftDeleteModel):
     phone = models.CharField(max_length=30, verbose_name="Телефон")
     phone_norm = models.CharField(max_length=15, db_index=True, editable=False, default="")
     phone2 = models.CharField(max_length=30, blank=True, verbose_name="Доп. телефон")
+    telegram_chat_id = models.BigIntegerField(
+        null=True, blank=True, db_index=True, verbose_name="Telegram chat_id",
+        help_text="Заполняется автоматически, когда пациент нажимает Start у бота клиники и делится номером",
+    )
     pin = models.CharField(
         max_length=14, blank=True, db_index=True, verbose_name="ИИН",
         validators=[RegexValidator(r"^\d{14}$", "ИИН должен содержать ровно 14 цифр")],

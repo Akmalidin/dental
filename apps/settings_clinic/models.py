@@ -23,6 +23,8 @@ class ClinicSettings(models.Model):
     language = models.CharField(max_length=5, default="ru", verbose_name="Язык")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
+    telegram_enabled = models.BooleanField(default=True, verbose_name="Telegram включён для клиники")
+    telegram_bot_username = models.CharField(max_length=100, blank=True, verbose_name="Имя бота (@username)")
     # WhatsApp подключение (своё на каждую клинику, Green-API)
     wa_enabled = models.BooleanField(default=True, verbose_name="WhatsApp включён для клиники")
     wa_id_instance = models.CharField(max_length=50, blank=True, verbose_name="Green-API ID инстанса")

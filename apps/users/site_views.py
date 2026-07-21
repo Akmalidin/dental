@@ -263,6 +263,17 @@ def public_book_submit(request):
             "👨‍⚕️ Врач: _%s_\n\n"
             "Мы свяжемся с вами для подтверждения. Спасибо, что выбрали нас! 💙"
             % (clinic.name, patient.first_name or patient.full_name, d_str, slot, doc_name))
+        if patient.telegram_chat_id:
+            from apps.notifications.telegram import tg_send_text
+            tg_send_text(patient.telegram_chat_id,
+                "🦷 <b>%s</b>\n\n"
+                "Здравствуйте, %s! 👋\n"
+                "Ваша заявка на приём принята ✅\n\n"
+                "📅 Дата: %s\n"
+                "🕐 Время: %s\n"
+                "👨‍⚕️ Врач: %s\n\n"
+                "Мы свяжемся с вами для подтверждения. Спасибо, что выбрали нас! 💙"
+                % (clinic.name, patient.first_name or patient.full_name, d_str, slot, doc_name))
         if doc and doc.phone:
             link = "https://%s/appointments/?focus=%s" % (
                 getattr(dj_settings, "APP_HOST", "app.denta.tw1.ru"), appt.pk)

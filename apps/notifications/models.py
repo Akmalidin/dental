@@ -31,14 +31,19 @@ class MessageTemplate(ClinicScopedModel):
 
 
 class WaMessage(ClinicScopedModel):
-    """История WhatsApp-переписки с пациентом (лог исходящих + входящие для чата)."""
+    """История переписки с пациентом — WhatsApp и Telegram (лог исходящих +
+    входящие для чата). channel различает канал; для Telegram в поле phone
+    хранится chat_id (в виде строки), т.к. отдельного канала со своим номером нет."""
     DIR_OUT, DIR_IN = "out", "in"
+    CH_WA, CH_TG = "wa", "tg"
     patient = models.ForeignKey(
         "patients.Patient", on_delete=models.CASCADE, related_name="wa_messages",
         null=True, blank=True, verbose_name="Пациент",
     )
     direction = models.CharField(max_length=3, choices=[(DIR_OUT, "Исходящее"), (DIR_IN, "Входящее")],
                                  default=DIR_OUT)
+    channel = models.CharField(max_length=3, choices=[(CH_WA, "WhatsApp"), (CH_TG, "Telegram")],
+                               default=CH_WA, db_index=True, verbose_name="Канал")
     phone = models.CharField(max_length=30, blank=True)
     body = models.TextField()
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,

@@ -49,6 +49,32 @@
     </div>
   </div>
 
+  <!-- Каналы связи (мастер-переключатели суперадмина, по тарифу) -->
+  {% if user.is_superadmin %}
+  <div class="card card-pad">
+    <h3 class="font-bold" style="color:var(--text)">📡 Каналы связи (по тарифу)</h3>
+    <p class="muted text-sm mt-0.5 mb-3">Разрешить ли клинике WhatsApp/Telegram вообще — независимо от того, что настроено у самой клиники.</p>
+    <div class="flex flex-wrap gap-3">
+      <div class="flex items-center gap-2 px-3 py-2 rounded-xl" style="border:1px solid var(--border)">
+        <span style="color:var(--text)">WhatsApp</span>
+        <span class="badge {% if clinic.wa_master_enabled %}badge-green{% else %}badge-gray{% endif %}">{% if clinic.wa_master_enabled %}разрешён{% else %}запрещён{% endif %}</span>
+        <form method="post" action="/users/clinic/{{ clinic.pk }}/channel-toggle/wa/">
+          {% csrf_token %}
+          <button class="btn btn-ghost btn-sm">{% if clinic.wa_master_enabled %}Запретить{% else %}Разрешить{% endif %}</button>
+        </form>
+      </div>
+      <div class="flex items-center gap-2 px-3 py-2 rounded-xl" style="border:1px solid var(--border)">
+        <span style="color:var(--text)">Telegram</span>
+        <span class="badge {% if clinic.telegram_master_enabled %}badge-green{% else %}badge-gray{% endif %}">{% if clinic.telegram_master_enabled %}разрешён{% else %}запрещён{% endif %}</span>
+        <form method="post" action="/users/clinic/{{ clinic.pk }}/channel-toggle/tg/">
+          {% csrf_token %}
+          <button class="btn btn-ghost btn-sm">{% if clinic.telegram_master_enabled %}Запретить{% else %}Разрешить{% endif %}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Персонал -->
   <div class="card overflow-hidden">
     <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">

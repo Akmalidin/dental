@@ -94,6 +94,17 @@ def notify_appointment_created(appt, created_by=None):
                          "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
                          "Ждём вас! Если планы изменятся — пожалуйста, сообщите нам."
                          % (clinic_name, pname, date_s, time_s, doctor_name))
+            if appt.patient.telegram_chat_id:
+                from apps.notifications.telegram import tg_send_text
+                tg_send_text(
+                    appt.patient.telegram_chat_id,
+                    "✅ <b>%s</b>\n\nЗдравствуйте, <b>%s</b>!\n"
+                    "Вы записаны на приём.\n\n"
+                    "📅 Дата: <b>%s</b>\n🕐 Время: <b>%s</b>\n👨‍⚕️ Врач: %s"
+                    % (clinic_name, pname, date_s, time_s, doctor_name),
+                    buttons=[[("✅ Подтвердить", "appt_confirm:%s" % appt.pk),
+                              ("❌ Отменить", "appt_cancel:%s" % appt.pk)]],
+                )
         # врачу (если запись создал не сам врач)
         if (appt.doctor_id and getattr(appt.doctor, "phone", "")
                 and getattr(created_by, "pk", None) != appt.doctor_id):
@@ -135,6 +146,16 @@ def notify_appointment_cancelled(appt):
                          "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
                          "Чтобы записаться повторно — позвоните нам или оставьте заявку на сайте."
                          % (clinic_name, pname, date_s, time_s, doctor_name))
+            if appt.patient.telegram_chat_id:
+                from apps.notifications.telegram import tg_send_text
+                tg_send_text(
+                    appt.patient.telegram_chat_id,
+                    "❌ <b>%s</b>\n\nЗдравствуйте, <b>%s</b>!\n"
+                    "Ваша запись <b>отменена</b>.\n\n"
+                    "📅 Дата: <b>%s</b>\n🕐 Время: <b>%s</b>\n👨‍⚕️ Врач: %s\n\n"
+                    "Чтобы записаться повторно — позвоните нам или оставьте заявку на сайте."
+                    % (clinic_name, pname, date_s, time_s, doctor_name),
+                )
         # врачу
         if appt.doctor_id and getattr(appt.doctor, "phone", ""):
             wa_send_text(appt.doctor.phone,

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block page_title %}Подключение Telegram{% endblock %}
+{% block content %}
+<div class="w-full max-w-lg space-y-4">
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <h2 class="text-xl font-bold" style="color:var(--text)">✈️ Подключение Telegram</h2>
+    <div class="flex gap-2">
+      <a href="/notifications/tg-inbox/" class="btn btn-ghost btn-sm">Чаты</a>
+      <a href="/notifications/tg-connect/" class="btn btn-ghost btn-sm">↻ Обновить</a>
+    </div>
+  </div>
+
+  <div class="rounded-xl px-4 py-3 text-sm" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af">
+    ℹ️ Как получить токен: в Telegram напишите <b>@BotFather</b> → <code>/newbot</code> → следуйте инструкциям →
+    скопируйте выданный токен сюда.
+  </div>
+
+  <form method="post" class="card card-pad space-y-4">
+    {% csrf_token %}
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-bold" style="color:var(--text)">Telegram-бот этой клиники</p>
+        <p class="text-xs muted">Свой бот на каждую клинику (создаётся через @BotFather).</p>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="telegram_enabled" {% if cs.telegram_enabled %}checked{% endif %}>
+        <span class="text-sm font-semibold" style="color:var(--text)">Включён</span>
+      </label>
+    </div>
+    <div>
+      <label class="fld">Bot Token (от @BotFather)</label>
+      <input type="text" name="telegram_bot_token" value="{{ cs.telegram_bot_token }}" placeholder="123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+    </div>
+    <div class="flex items-center justify-end">
+      <button type="submit" class="btn btn-primary btn-sm">Сохранить и подключить</button>
+    </div>
+  </form>
+
+  {% if not cs.telegram_enabled %}
+  <div class="badge-gray px-4 py-3 rounded-xl text-sm">
+    Telegram выключен для этой клиники. Включите переключатель выше, чтобы отправлять уведомления.
+  </div>
+  {% elif not cs.telegram_bot_token %}
+  <div class="badge-orange px-4 py-3 rounded-xl text-sm">
+    Токен бота не задан. Вставьте токен от @BotFather выше и сохраните.
+  </div>
+  {% elif bot_link %}
+  <div class="card card-pad text-center">
+    <div class="text-5xl mb-2">✅</div>
+    <p class="font-bold text-lg" style="color:var(--text)">Бот подключён: @{{ cs.telegram_bot_username }}</p>
+    <p class="muted text-sm mt-1">
+      Ссылка для пациентов: <a href="{{ bot_link }}" target="_blank" style="color:var(--primary)">{{ bot_link }}</a><br>
+      Дайте её пациенту (или QR) — после нажатия «Start» и обмена номером бот сам привяжется к его карточке.
+    </p>
+    {% if webhook_info.last_error_message %}
+    <div class="badge-orange px-4 py-3 rounded-xl text-sm mt-3 text-left">
+      ⚠ Последняя ошибка webhook: {{ webhook_info.last_error_message }}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="badge-orange px-4 py-3 rounded-xl text-sm">
+    Не удалось проверить токен — убедитесь, что он верный, и нажмите «Сохранить и подключить» ещё раз.
+  </div>
+  {% endif %}
+
+  <p class="text-xs muted">Подключать бота может только администратор/директор клиники.</p>
+</div>
+{% endblock %}

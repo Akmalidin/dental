@@ -225,42 +225,55 @@ def treatment_delete(request, pk):
 @login_required
 @require_POST
 def treatment_notify_wa(request, pk):
-    """Отправить пациенту в WhatsApp состав приёма: услуги, сумма, оплачено, долг."""
+    """Отправить пациенту состав приёма (WhatsApp или Telegram): услуги, сумма, оплачено, долг."""
     treatment = _get_own_treatment_or_404(pk, Treatment.all_objects.select_related("patient"))
     patient = treatment.patient
     from apps.notifications.whatsapp import wa_send_text, wa_enabled
+    from apps.notifications.telegram import tg_send_text, tg_enabled
     from apps.notifications.models import WaMessage
     from apps.settings_clinic.models import ClinicSettings
-    if not patient or not patient.phone:
-        messages.error(request, _("У пациента нет телефона"))
-        return redirect("patient_detail", pk=patient.pk if patient else None)
-    if not wa_enabled():
-        messages.error(request, _("WhatsApp не настроен"))
+    if not patient:
+        messages.error(request, _("Пациент не найден"))
+        return redirect("patient_list")
+
+    use_wa = bool(patient.phone) and wa_enabled()
+    use_tg = bool(patient.telegram_chat_id) and tg_enabled()
+    if not use_wa and not use_tg:
+        messages.error(request, _("У пациента нет телефона/Telegram, либо каналы не настроены"))
         return redirect("patient_detail", pk=patient.pk)
 
     cs = ClinicSettings.get()
     clinic_name = (cs.name if cs and cs.name else "Клиника")
+    cur = (cs.currency_label if cs else "сом")
     lines = [f"*{clinic_name}*", f"Здравствуйте, {patient.first_name}!",
              f"Приём №{treatment.pk} от {treatment.created_at:%d.%m.%Y}:"]
     for c in treatment.cures.select_related("service").all():
-        lines.append(f"• {c.service.name} x{c.quantity} — {c.subtotal:.0f} сом")
-    lines.append(f"Итого: {treatment.display_total:.0f} сом")
+        lines.append(f"• {c.service.name} x{c.quantity} — {c.subtotal:.0f} {cur}")
+    lines.append(f"Итого: {treatment.display_total:.0f} {cur}")
     if treatment.discount:
-        lines.append(f"Скидка: {treatment.discount:.0f} сом")
-    lines.append(f"Оплачено: {treatment.paid_amount:.0f} сом")
+        lines.append(f"Скидка: {treatment.discount:.0f} {cur}")
+    lines.append(f"Оплачено: {treatment.paid_amount:.0f} {cur}")
     if treatment.debt > 0:
-        lines.append(f"Долг: {treatment.debt:.0f} сом")
+        lines.append(f"Долг: {treatment.debt:.0f} {cur}")
     else:
         lines.append("Оплачено полностью. Спасибо!")
     text = "\n".join(lines)
 
-    ok = wa_send_text(patient.phone, text)
-    WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
-                             body=text, sent_by=request.user, ok=ok)
-    if ok:
-        messages.success(request, _("Сообщение по приёму отправлено в WhatsApp"))
+    sent_ok = False
+    if use_wa:
+        ok = wa_send_text(patient.phone, text)
+        WaMessage.objects.create(patient=patient, direction="out", channel="wa", phone=patient.phone,
+                                 body=text, sent_by=request.user, ok=ok)
+        sent_ok = sent_ok or ok
+    if use_tg:
+        ok = tg_send_text(patient.telegram_chat_id, text)
+        WaMessage.objects.create(patient=patient, direction="out", channel="tg",
+                                 phone=str(patient.telegram_chat_id), body=text, sent_by=request.user, ok=ok)
+        sent_ok = sent_ok or ok
+    if sent_ok:
+        messages.success(request, _("Сообщение по приёму отправлено"))
     else:
-        messages.error(request, _("Не удалось отправить (проверьте номер/инстанс WhatsApp)"))
+        messages.error(request, _("Не удалось отправить (проверьте настройки WhatsApp/Telegram)"))
     return redirect("patient_detail", pk=patient.pk)
 
 

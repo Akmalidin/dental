@@ -20,12 +20,21 @@ def _wa_config():
 
     Приоритет — настройки клиники (ClinicSettings: свой инстанс/токен/номер).
     Если клиника свои ключи не задала — глобальные из .env (для совместимости),
-    но переключатель клиники (wa_enabled) всё равно учитывается.
+    но переключатель клиники (wa_enabled) и мастер-переключатель суперадмина
+    (Clinic.wa_master_enabled) всё равно учитываются.
     """
     g_id = getattr(settings, "GREENAPI_ID_INSTANCE", "") or ""
     g_token = getattr(settings, "GREENAPI_TOKEN", "") or ""
     g_url = getattr(settings, "GREENAPI_API_URL", "") or ""
     g_enabled = bool(getattr(settings, "GREENAPI_ENABLED", False))
+    master_enabled = True
+    try:
+        from apps.tenancy import get_current_clinic
+        clinic = get_current_clinic()
+        if clinic is not None:
+            master_enabled = bool(getattr(clinic, "wa_master_enabled", True))
+    except Exception:
+        pass
     cs = None
     try:
         from apps.settings_clinic.models import ClinicSettings
@@ -33,7 +42,7 @@ def _wa_config():
     except Exception:
         cs = None
     if cs is not None:
-        c_enabled = bool(getattr(cs, "wa_enabled", True))
+        c_enabled = bool(getattr(cs, "wa_enabled", True)) and master_enabled
         cid = (getattr(cs, "wa_id_instance", "") or "").strip()
         ctok = (getattr(cs, "wa_token", "") or "").strip()
         curl = (getattr(cs, "wa_api_url", "") or "").strip()
@@ -41,7 +50,7 @@ def _wa_config():
             return (c_enabled, cid, ctok, curl or g_url)
         # своих ключей нет → глобальные, но уважаем выключатель клиники
         return (c_enabled and g_enabled, g_id, g_token, g_url)
-    return (g_enabled, g_id, g_token, g_url)
+    return (g_enabled and master_enabled, g_id, g_token, g_url)
 
 
 def wa_enabled():

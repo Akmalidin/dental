@@ -40,6 +40,11 @@ class Clinic(models.Model):
         verbose_name="Часовой пояс (город/страна)",
         help_text="Время записей и расписания показывается в этом поясе на всех устройствах.",
     )
+    # Мастер-переключатели уровня суперадмина (по тарифу/лицензии) — независимо
+    # от собственных настроек WhatsApp/Telegram самой клиники (ClinicSettings):
+    # чтобы реально отправлять сообщения, нужно, чтобы ОБА переключателя были включены.
+    wa_master_enabled = models.BooleanField(default=True, verbose_name="WhatsApp разрешён клинике")
+    telegram_master_enabled = models.BooleanField(default=True, verbose_name="Telegram разрешён клинике")
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property

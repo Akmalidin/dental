@@ -467,22 +467,38 @@ def patient_detail(request, pk):
 
 @login_required
 def patient_notify(request, pk):
-    """Отдельная страница: отправить пациенту WhatsApp-сообщение."""
+    """Отдельная страница: отправить пациенту сообщение (WhatsApp или Telegram)."""
     patient = get_object_or_404(Patient, pk=pk)
     from apps.notifications.whatsapp import wa_send_text, wa_enabled, render_message
+    from apps.notifications.telegram import tg_send_text, tg_enabled
     from apps.notifications.models import MessageTemplate, WaMessage
 
     if request.method == "POST":
         text = (request.POST.get("text") or "").strip()
+        channel = request.POST.get("channel") or "wa"
         if not text:
             messages.error(request, _("Введите текст сообщения"))
+        elif channel == "tg":
+            if not patient.telegram_chat_id:
+                messages.error(request, _("Пациент ещё не привязал Telegram (не нажимал Start у бота)"))
+            elif not tg_enabled():
+                messages.error(request, _("Telegram не настроен"))
+            else:
+                ok = tg_send_text(patient.telegram_chat_id, text)
+                WaMessage.objects.create(patient=patient, direction="out", channel="tg",
+                                         phone=str(patient.telegram_chat_id),
+                                         body=text, sent_by=request.user, ok=ok)
+                if ok:
+                    messages.success(request, _("Сообщение отправлено в Telegram"))
+                    return redirect("patient_notify", pk=pk)
+                messages.error(request, _("Не удалось отправить в Telegram"))
         elif not patient.phone:
             messages.error(request, _("У пациента нет телефона"))
         elif not wa_enabled():
             messages.error(request, _("WhatsApp не настроен"))
         else:
             ok = wa_send_text(patient.phone, text)
-            WaMessage.objects.create(patient=patient, direction="out", phone=patient.phone,
+            WaMessage.objects.create(patient=patient, direction="out", channel="wa", phone=patient.phone,
                                      body=text, sent_by=request.user, ok=ok)
             if ok:
                 messages.success(request, _("Сообщение отправлено"))
@@ -504,8 +520,11 @@ def patient_notify(request, pk):
             for t in MessageTemplate.objects.filter(is_active=True)]
     WaMessage.all_clinics.filter(patient=patient, direction="in", read=False).update(read=True)
     history = list(WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300])
+    default_channel = request.GET.get("channel") or ("tg" if (patient.telegram_chat_id and not patient.phone) else "wa")
     return render(request, "patients/notify.html", {
         "patient": patient, "wa_templates": tpls, "wa_enabled": wa_enabled(),
+        "tg_enabled": tg_enabled(), "has_telegram": bool(patient.telegram_chat_id),
+        "default_channel": default_channel,
         "wa_history": history, "last_id": history[-1].id if history else 0,
     })
 

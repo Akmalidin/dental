@@ -1,4 +1,4 @@
-"""Авто-напоминания WhatsApp: за день до приёма, за час, должникам (по расписанию).
+"""Авто-напоминания WhatsApp/Telegram: за день до приёма, за час, должникам (по расписанию).
 
 Запускать через cron каждые ~15 минут:
     */15 * * * * cd /var/www/sadaf && DJANGO_SETTINGS_MODULE=config.settings.server venv/bin/python manage.py wa_reminders
@@ -10,7 +10,7 @@ from django.db.models import Q
 
 
 class Command(BaseCommand):
-    help = "WhatsApp авто-напоминания: за день, за час, должникам"
+    help = "WhatsApp/Telegram авто-напоминания: за день, за час, должникам"
 
     def add_arguments(self, parser):
         parser.add_argument("--dry", action="store_true", help="не отправлять, только показать")
@@ -18,6 +18,7 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         dry = opts.get("dry")
         from apps.notifications.whatsapp import wa_enabled, wa_send_text, render_message
+        from apps.notifications.telegram import tg_enabled, tg_send_text
         from apps.notifications.models import MessageTemplate, WaMessage
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
@@ -34,8 +35,9 @@ class Command(BaseCommand):
             cs = ClinicSettings.objects.filter(clinic=clinic).first()
             if cs is None:
                 continue
-            # WhatsApp проверяем для КАЖДОЙ клиники отдельно (свой инстанс/выключатель)
-            if not wa_enabled():
+            # Хотя бы один канал должен быть включён для клиники — иначе пропускаем.
+            wa_on, tg_on = wa_enabled(), tg_enabled()
+            if not (wa_on or tg_on):
                 continue
 
             def tpl(kind):
@@ -43,16 +45,27 @@ class Command(BaseCommand):
                 return t.body if t else None
 
             def send(patient, appt, body):
-                if not (patient and patient.phone and body):
+                if not patient or not body:
                     return False
-                if dry:
-                    self.stdout.write("  [DRY] -> %s (%s)" % (patient.full_name, patient.phone))
-                    return True
+                sent_any = False
                 msg = render_message(body, patient=patient, appt=appt)
-                ok = wa_send_text(patient.phone, msg)
-                WaMessage.objects.create(patient=patient, direction="out",
-                                         phone=patient.phone, body=msg, ok=ok)
-                return True
+                if wa_on and patient.phone:
+                    if dry:
+                        self.stdout.write("  [DRY][WA] -> %s (%s)" % (patient.full_name, patient.phone))
+                    else:
+                        ok = wa_send_text(patient.phone, msg)
+                        WaMessage.objects.create(patient=patient, direction="out", channel="wa",
+                                                 phone=patient.phone, body=msg, ok=ok)
+                    sent_any = True
+                if tg_on and patient.telegram_chat_id:
+                    if dry:
+                        self.stdout.write("  [DRY][TG] -> %s (%s)" % (patient.full_name, patient.telegram_chat_id))
+                    else:
+                        ok = tg_send_text(patient.telegram_chat_id, msg)
+                        WaMessage.objects.create(patient=patient, direction="out", channel="tg",
+                                                 phone=str(patient.telegram_chat_id), body=msg, ok=ok)
+                    sent_any = True
+                return sent_any
 
             # — за час —
             if cs.wa_remind_hour:
@@ -90,7 +103,7 @@ class Command(BaseCommand):
                 body = tpl("debt")
                 if body:
                     cutoff = now - timedelta(days=cs.wa_remind_debt_days)
-                    debtors = (Patient.objects.filter(balance__lt=0).exclude(phone="")
+                    debtors = (Patient.objects.filter(balance__lt=0)
                                .filter(Q(last_debt_reminder__isnull=True)
                                        | Q(last_debt_reminder__lte=cutoff)))
                     for p in debtors[:300]:

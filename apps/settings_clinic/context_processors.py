@@ -67,14 +67,15 @@ def clinic_settings(request):
         except Exception:
             pass
 
-        # Непрочитанные WhatsApp-входящие (для бейджа в сайдбаре, только админам)
+        # Непрочитанные WhatsApp/Telegram-входящие (для бейджей в сайдбаре, только админам)
         try:
             if getattr(request.user, "is_admin", False) or getattr(request.user, "is_superadmin", False):
                 from apps.notifications.models import WaMessage
-                wq = WaMessage.all_clinics.filter(direction="in", read=False)
+                base_unread = WaMessage.all_clinics.filter(direction="in", read=False)
                 if cur is not None:
-                    wq = wq.filter(clinic=cur)
-                ctx["wa_unread"] = wq.count()
+                    base_unread = base_unread.filter(clinic=cur)
+                ctx["wa_unread"] = base_unread.filter(channel="wa").count()
+                ctx["tg_unread"] = base_unread.filter(channel="tg").count()
         except Exception:
             pass
 

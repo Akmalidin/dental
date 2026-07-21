@@ -430,6 +430,28 @@ def toggle_clinic_site(request, clinic_id):
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
 
+@login_required
+@require_POST
+def toggle_clinic_channel(request, clinic_id, channel):
+    """Включить/выключить WhatsApp или Telegram для клиники — мастер-переключатель,
+    доступен только суперадмину (по тарифу/лицензии), независимо от того, что
+    настроено у самой клиники в ClinicSettings."""
+    from apps.users.models import Clinic
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    field = {"wa": "wa_master_enabled", "tg": "telegram_master_enabled"}.get(channel)
+    if not field:
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    setattr(clinic, field, not getattr(clinic, field))
+    clinic.save(update_fields=[field])
+    label = "WhatsApp" if channel == "wa" else "Telegram"
+    state = "включён" if getattr(clinic, field) else "выключен"
+    messages.success(request, _("%(label)s для клиники %(state)s") % {"label": label, "state": state})
+    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+
+
 def _can_edit_site(user, clinic):
     """Редактировать сайт: суперадмин (любую) или Директор своей клиники."""
     return user.is_superadmin or (user.is_admin_main and user.clinic_id == clinic.pk)

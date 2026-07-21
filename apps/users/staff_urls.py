@@ -30,6 +30,7 @@ urlpatterns = [
     path("set-clinic/", views.set_active_clinic, name="set_active_clinic"),
     path("clinic/<int:clinic_id>/overview/", views.clinic_overview, name="clinic_overview"),
     path("clinic/<int:clinic_id>/site-toggle/", views.toggle_clinic_site, name="toggle_clinic_site"),
+    path("clinic/<int:clinic_id>/channel-toggle/<str:channel>/", views.toggle_clinic_channel, name="toggle_clinic_channel"),
     path("clinic/<int:clinic_id>/site/", views.clinic_site_edit, name="clinic_site_edit"),
     path("clinic/<int:clinic_id>/site/doctors/", views.clinic_site_doctors, name="clinic_site_doctors"),
     path("<int:pk>/access/", views.save_user_access, name="save_user_access"),

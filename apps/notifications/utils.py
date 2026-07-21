@@ -17,14 +17,20 @@ def send_telegram(chat_id: int, text: str) -> bool:
         return False
 
 
-def notify_admins(text: str):
-    """Send a notification to all admin/superadmin users who have telegram_id."""
+def notify_admins(text: str, clinic=None):
+    """Send a notification to admin/superadmin users who have telegram_id.
+
+    Pass `clinic` to restrict to that clinic's own admins (avoids leaking one
+    clinic's financial data to another clinic's staff).
+    """
     from django.contrib.auth import get_user_model
     User = get_user_model()
-    admins = User.objects.filter(
+    qs = User.objects.filter(
         role__name__in=["superadmin", "admin_main", "admin"],
         telegram_id__isnull=False,
         is_active=True,
-    ).values_list("telegram_id", flat=True)
-    for chat_id in admins:
+    )
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    for chat_id in qs.values_list("telegram_id", flat=True):
         send_telegram(chat_id, text)

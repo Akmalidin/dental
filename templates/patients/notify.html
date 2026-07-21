@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block page_title %}Чат — {{ patient.full_name }}{% endblock %}
 {% block content %}
-<div class="w-full max-w-2xl space-y-4">
+<div class="w-full max-w-2xl space-y-4" x-data="{channel: '{{ default_channel }}'}">
 
   <div class="flex items-center justify-between flex-wrap gap-2">
     <div>
-      <h2 class="text-xl font-bold" style="color:var(--text)">💬 WhatsApp-чат</h2>
+      <h2 class="text-xl font-bold" style="color:var(--text)">💬 Чат с пациентом</h2>
       <p class="muted text-sm">{{ patient.full_name }} · {{ patient.phone|default:"нет телефона" }}</p>
     </div>
     <div class="flex gap-2">
@@ -14,10 +14,24 @@
     </div>
   </div>
 
-  {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
-  {% if not patient.phone %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">У пациента не указан телефон.</div>{% endif %}
+  <!-- Переключатель канала -->
+  <div class="pill-tabs">
+    <button type="button" @click="channel='wa'" :class="channel==='wa' ? 'pill-tab active' : 'pill-tab'">💬 WhatsApp</button>
+    <button type="button" @click="channel='tg'" :class="channel==='tg' ? 'pill-tab active' : 'pill-tab'">
+      ✈️ Telegram {% if not has_telegram %}<span class="text-xs muted">(не привязан)</span>{% endif %}
+    </button>
+  </div>
 
-  <!-- Лента переписки -->
+  <div x-show="channel==='wa'">
+    {% if not wa_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">WhatsApp не настроен — обратитесь к администратору.</div>{% endif %}
+    {% if not patient.phone %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">У пациента не указан телефон.</div>{% endif %}
+  </div>
+  <div x-show="channel==='tg'" x-cloak>
+    {% if not tg_enabled %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">Telegram не настроен — обратитесь к администратору.</div>{% endif %}
+    {% if not has_telegram %}<div class="badge-orange px-4 py-3 rounded-xl text-sm">Пациент ещё не привязал Telegram — он должен сам нажать «Start» у бота клиники и поделиться номером.</div>{% endif %}
+  </div>
+
+  <!-- Лента переписки (обе истории вместе, с пометкой канала) -->
   <div class="card" style="padding:16px">
     <div id="waThread" style="max-height:48vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
       {% for m in wa_history %}
@@ -25,6 +39,7 @@
         <div style="padding:8px 12px;border-radius:14px;font-size:14px;white-space:pre-wrap;word-break:break-word;
                     {% if m.direction == 'out' %}background:#DCF8C6;color:#0b1b33;border-bottom-right-radius:4px{% else %}background:var(--surface-2);color:var(--text);border-bottom-left-radius:4px{% endif %}">{{ m.body }}</div>
         <div class="text-xs muted" style="text-align:{% if m.direction == 'out' %}right{% else %}left{% endif %};margin-top:2px">
+          {% if m.channel == 'tg' %}✈️{% else %}💬{% endif %}
           {% if m.direction == 'out' %}{% if m.ok %}✓{% else %}✕{% endif %} {% if m.sent_by %}{{ m.sent_by.name }} · {% endif %}{% endif %}{{ m.created_at|date:"d.m H:i" }}
         </div>
       </div>
@@ -37,6 +52,7 @@
   <!-- Отправка -->
   <form method="post" class="card card-pad space-y-3">
     {% csrf_token %}
+    <input type="hidden" name="channel" :value="channel">
     <div>
       <div class="flex flex-wrap gap-2">
         {% for t in wa_templates %}
@@ -49,8 +65,9 @@
     </div>
     <textarea id="notifyText" name="text" rows="3" placeholder="Сообщение... (*жирный*, _курсив_)"></textarea>
     <div class="flex justify-end">
-      <button type="submit" class="btn text-white" style="background:#25D366"
-              {% if not patient.phone or not wa_enabled %}disabled{% endif %}>✓ Отправить</button>
+      <button type="submit" class="btn text-white"
+              :style="channel==='tg' ? 'background:#229ED9' : 'background:#25D366'"
+              :disabled="channel==='wa' ? {% if not patient.phone or not wa_enabled %}true{% else %}false{% endif %} : {% if not has_telegram or not tg_enabled %}true{% else %}false{% endif %}">✓ Отправить</button>
     </div>
   </form>
 </div>
@@ -69,7 +86,7 @@
     var meta = document.createElement('div');
     meta.className = 'text-xs muted';
     meta.style.cssText = 'text-align:'+(m.dir==='out'?'right':'left')+';margin-top:2px';
-    meta.textContent = (m.dir==='out'?(m.ok?'✓ ':'✕ ')+(m.by?m.by+' · ':''):'')+m.time;
+    meta.textContent = (m.channel==='tg'?'✈️ ':'💬 ')+(m.dir==='out'?(m.ok?'✓ ':'✕ ')+(m.by?m.by+' · ':''):'')+m.time;
     wrap.appendChild(b); wrap.appendChild(meta); thread.appendChild(wrap);
   }
   async function poll(){
