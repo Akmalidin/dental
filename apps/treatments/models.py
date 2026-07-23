@@ -106,6 +106,26 @@ class Treatment(ClinicSoftDeleteModel):
             return Decimal(0)
         return max(Decimal(0), self.total_amount - self.discount)
 
+    def build_report_text(self, clinic_name="Клиника", currency="сом", greet=True):
+        """Текстовый отчёт по приёму (услуги, сумма, оплачено, долг) — общий для
+        ручной отправки в WhatsApp/Telegram и для самообслуживания в боте.
+        Без разметки (*bold*/HTML), т.к. её синтаксис у WhatsApp и Telegram разный."""
+        lines = [clinic_name]
+        if greet:
+            lines.append("Здравствуйте, %s!" % (self.patient.first_name or self.patient.full_name))
+        lines.append("Приём №%s от %s:" % (self.pk, self.created_at.strftime("%d.%m.%Y")))
+        for c in self.cures.select_related("service").all():
+            lines.append("• %s x%s — %.0f %s" % (c.service.name, c.quantity, c.subtotal, currency))
+        lines.append("Итого: %.0f %s" % (self.display_total, currency))
+        if self.discount:
+            lines.append("Скидка: %.0f %s" % (self.discount, currency))
+        lines.append("Оплачено: %.0f %s" % (self.paid_amount, currency))
+        if self.debt > 0:
+            lines.append("Долг: %.0f %s" % (self.debt, currency))
+        else:
+            lines.append("Оплачено полностью. Спасибо!")
+        return "\n".join(lines)
+
     def recalculate_total(self):
         total = sum(cure.price * cure.quantity for cure in self.cures.all())
         self.total_amount = total

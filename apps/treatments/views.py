@@ -245,19 +245,7 @@ def treatment_notify_wa(request, pk):
     cs = ClinicSettings.get()
     clinic_name = (cs.name if cs and cs.name else "Клиника")
     cur = (cs.currency_label if cs else "сом")
-    lines = [f"*{clinic_name}*", f"Здравствуйте, {patient.first_name}!",
-             f"Приём №{treatment.pk} от {treatment.created_at:%d.%m.%Y}:"]
-    for c in treatment.cures.select_related("service").all():
-        lines.append(f"• {c.service.name} x{c.quantity} — {c.subtotal:.0f} {cur}")
-    lines.append(f"Итого: {treatment.display_total:.0f} {cur}")
-    if treatment.discount:
-        lines.append(f"Скидка: {treatment.discount:.0f} {cur}")
-    lines.append(f"Оплачено: {treatment.paid_amount:.0f} {cur}")
-    if treatment.debt > 0:
-        lines.append(f"Долг: {treatment.debt:.0f} {cur}")
-    else:
-        lines.append("Оплачено полностью. Спасибо!")
-    text = "\n".join(lines)
+    text = treatment.build_report_text(clinic_name, cur)
 
     sent_ok = False
     if use_wa:

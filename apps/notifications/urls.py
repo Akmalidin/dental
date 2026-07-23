@@ -18,6 +18,7 @@ urlpatterns = [
     path("wa-connect/", views.wa_connect, name="wa_connect"),
     path("tg-webhook/<slug:clinic_slug>/", views.tg_webhook, name="tg_webhook"),
     path("tg-inbox/", views.tg_inbox, name="tg_inbox"),
+    path("tg-link/<int:chat_id>/", views.tg_link_chat, name="tg_link_chat"),
     path("tg-broadcast/", views.tg_broadcast, name="tg_broadcast"),
     path("tg-connect/", views.tg_connect, name="tg_connect"),
 ]

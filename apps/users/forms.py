@@ -50,11 +50,18 @@ class UserForm(forms.ModelForm):
         choices=[(k, lbl) for k, lbl, _url in SECTIONS if k != "dashboard"],
         widget=forms.CheckboxSelectMultiple(),
     )
+    doctor_types = forms.MultipleChoiceField(
+        label=_("Тип врача"), required=False,
+        choices=User.DOCTOR_TYPE_CHOICES,
+        widget=forms.CheckboxSelectMultiple(),
+        help_text=_("Для фильтра по специализации при записи на приём"),
+    )
 
     class Meta:
         model = User
         fields = ["login", "name", "email", "phone", "role", "roles", "branches",
-                  "can_view_all_appointments", "is_active", "avatar"]
+                  "can_view_all_appointments", "is_active", "avatar",
+                  "specialty", "doctor_types"]
         widgets = {
             "branches": forms.CheckboxSelectMultiple(),
             "roles": forms.CheckboxSelectMultiple(),

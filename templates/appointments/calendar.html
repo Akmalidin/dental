@@ -6,6 +6,7 @@
 {{ patients_json|json_script:"cal-patients" }}
 {{ services_json|json_script:"cal-services" }}
 {{ schedules_json|json_script:"cal-schedules" }}
+{{ doctors_json|json_script:"cal-doctors" }}
 <script>const WORK_START="{{ work_start }}", WORK_END="{{ work_end }}";</script>
 <style>
   #calendar { min-height: 600px; }
@@ -54,6 +55,10 @@
     </div>
 
     <div class="flex items-center gap-2 ml-auto flex-wrap">
+      <select id="doctorTypeFilter" class="w-full sm:w-40 no-tom" @change="filterDoctorSelect(doctorFilterTS, $event.target.value)">
+        <option value="">Все типы</option>
+        {% for value, label in doctor_type_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
       <select id="doctorFilter" class="w-full sm:w-48 no-tom" data-default="{{ default_doctor }}">
         <option value="">Все врачи</option>
         {% for doc in doctors %}<option value="{{ doc.pk }}" {% if default_doctor and doc.pk == default_doctor %}selected{% endif %}>{{ doc.name }}</option>{% endfor %}
@@ -228,6 +233,10 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="fld">Врач *</label>
+            <select class="no-tom mb-1.5" x-ref="doctorTypeSel" @change="filterDoctorSelect(doctorTS, $event.target.value)">
+              <option value="">Все типы</option>
+              {% for value, label in doctor_type_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
             <select class="no-tom" x-ref="doctorSel">
               {% for doc in doctors %}<option value="{{ doc.pk }}">{{ doc.name }}</option>{% endfor %}
             </select>
@@ -273,6 +282,18 @@
 
 {% block extra_js %}
 <script>
+function filterDoctorSelect(ts, typeValue) {
+  if (!ts) return;
+  const all = JSON.parse(document.getElementById('cal-doctors').textContent);
+  const list = typeValue ? all.filter(d => (d.types || []).includes(typeValue)) : all;
+  const current = ts.getValue();
+  ts.clear(true);
+  ts.clearOptions();
+  list.forEach(d => ts.addOption({ value: String(d.id), text: d.name }));
+  ts.refreshOptions(false);
+  if (list.some(d => String(d.id) === String(current))) ts.setValue(current, true);
+}
+
 function calendarPage() {
   return {
     cal: null, view: 'timeGridWeek', title: '',
@@ -280,6 +301,7 @@ function calendarPage() {
     patients: JSON.parse(document.getElementById('cal-patients').textContent),
     services: JSON.parse(document.getElementById('cal-services').textContent),
     schedules: JSON.parse(document.getElementById('cal-schedules').textContent),
+    doctors: JSON.parse(document.getElementById('cal-doctors').textContent),
     bk: { patient:'', doctor:'{{ doctors.first.pk }}', service:'', date:'', dateLabel:'', timeFrom:'09:00', timeTo:'09:30', status:'scheduled', notes:'', fromSlot:false },
     patientTS: null, doctorTS: null, serviceTS: null,
     bkBlacklisted(){ const p = this.patients.find(x=>String(x.id)===String(this.bk.patient)); return (p && p.bl) ? p : null; },

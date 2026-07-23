@@ -150,6 +150,25 @@ def tg_send_text(chat_id, text, buttons=None):
     return bool(tg_send_chat(chat_id, text, buttons=buttons))
 
 
+# ── Личное меню пациента (после привязки номера) ──
+BTN_MY_DEBT = "💰 Мои долги"
+BTN_MY_VISITS = "🗓 Мои приёмы"
+MENU_KEYBOARD = {
+    "keyboard": [[{"text": BTN_MY_DEBT}, {"text": BTN_MY_VISITS}]],
+    "resize_keyboard": True,
+}
+
+
+def tg_send_menu(chat_id, text, token=None):
+    """Отправить текст с постоянной клавиатурой «Мои долги / Мои приёмы»."""
+    if not token and not tg_enabled():
+        return False
+    if not chat_id:
+        return False
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "reply_markup": MENU_KEYBOARD}
+    return _call("sendMessage", payload, token=token).get("ok", False)
+
+
 def tg_edit_message(chat_id, message_id, text, buttons=None, token=None):
     """Отредактировать уже отправленное сообщение (например, после нажатия
     кнопки «Подтвердить» — убрать кнопки и показать «✅ Подтверждено»)."""

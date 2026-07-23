@@ -22,6 +22,19 @@
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Основная роль</label>{{ form.role }}</div>
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Пароль {% if object %}(оставьте пустым){% endif %}</label>{{ form.password }}</div>
         <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Доп. роли (можно несколько)</label><div class="flex flex-wrap gap-3">{{ form.roles }}</div></div>
+        <div class="col-span-2">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Тип врача <span class="text-slate-400 normal-case">(для фильтра при записи на приём)</span></label>
+          <div class="flex flex-wrap gap-3">
+            {% for value, label in form.doctor_types.field.choices %}
+            <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <input type="checkbox" name="doctor_types" value="{{ value }}"
+                     {% if value in form.doctor_types.value %}checked{% endif %}>
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Специализация (для публичного сайта)</label>{{ form.specialty }}</div>
         <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Филиалы</label>{{ form.branches }}</div>
         <div><label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase">Аватар</label>{{ form.avatar }}</div>
         <div class="col-span-2 flex flex-col gap-2 pt-1">

@@ -177,6 +177,19 @@ class User(AbstractUser):
         null=True, blank=True, default=None, verbose_name="Разрешённые разделы",
         help_text="Пусто (null) = все разделы по роли. Список ключей = только эти разделы.",
     )
+    # ── Тип врача (для фильтра при записи на приём — в отличие от specialty
+    #    ниже, это не свободный текст, а фиксированный список, по нему можно
+    #    фильтровать/группировать). Один врач может иметь несколько типов.
+    DOCTOR_TYPE_CHOICES = [
+        ("terapevt", "Терапевт"),
+        ("ortoped", "Ортопед"),
+        ("ortodont", "Ортодонт"),
+        ("hirurg_implantolog", "Хирург-имплантолог"),
+    ]
+    doctor_types = models.JSONField(
+        default=list, blank=True, verbose_name="Тип врача",
+        help_text="Для фильтра по специализации при записи на приём",
+    )
     # ── Публичный профиль врача (для сайта клиники) ──
     specialty = models.CharField(max_length=150, blank=True, verbose_name="Специализация")
     bio = models.TextField(blank=True, verbose_name="Биография")
@@ -221,6 +234,11 @@ class User(AbstractUser):
     @property
     def is_doctor(self):
         return Role.DOCTOR in self.all_role_names
+
+    @property
+    def doctor_types_display(self):
+        labels = dict(self.DOCTOR_TYPE_CHOICES)
+        return ", ".join(labels.get(t, t) for t in (self.doctor_types or []))
 
     @property
     def is_admin(self):

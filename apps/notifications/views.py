@@ -538,6 +538,27 @@ def _tg_staff_ok(user):
     return user.is_superadmin or user.is_admin
 
 
+def _tg_link_by_phone(chat_id, phone_raw, token):
+    """Привязать chat_id к карточке пациента по номеру (из shared-контакта или
+    напечатанного текста). При успехе шлёт подтверждение + меню самообслуживания."""
+    from apps.patients.models import Patient, normalize_phone
+    from .telegram import tg_send_menu
+    pnorm = normalize_phone(phone_raw)
+    patient = Patient.objects.filter(phone_norm=pnorm).first() if pnorm else None
+    if patient is None:
+        return None
+    patient.telegram_chat_id = chat_id
+    patient.save(update_fields=["telegram_chat_id"])
+    name = (patient.first_name or "").strip() or "!"
+    tg_send_menu(
+        chat_id,
+        "✅ Готово, %s Теперь буду присылать сюда напоминания о приёмах.\n\n"
+        "Ниже — меню: можно посмотреть долг и историю приёмов." % name,
+        token=token,
+    )
+    return patient
+
+
 @csrf_exempt
 def tg_webhook(request, clinic_slug):
     """Webhook Telegram Bot API — свой URL на каждую клинику (её слаг зашит в
@@ -559,6 +580,7 @@ def tg_webhook(request, clinic_slug):
     from apps.settings_clinic.models import ClinicSettings
     from .telegram import (
         tg_send_text, tg_send_contact_request, tg_edit_message, tg_answer_callback,
+        tg_send_menu, BTN_MY_DEBT, BTN_MY_VISITS,
     )
     cs = ClinicSettings.get()
     token = (cs.telegram_bot_token or "").strip()
@@ -592,18 +614,48 @@ def tg_webhook(request, clinic_slug):
 
     # ── Поделился номером — привязываем chat_id к карточке пациента ──
     if contact:
-        from apps.patients.models import Patient, normalize_phone
-        phone = contact.get("phone_number") or ""
-        pnorm = normalize_phone(phone)
-        patient = Patient.objects.filter(phone_norm=pnorm).first() if pnorm else None
-        if patient is not None:
-            patient.telegram_chat_id = chat_id
-            patient.save(update_fields=["telegram_chat_id"])
-            name = (patient.first_name or "").strip() or "!"
-            tg_send_text(chat_id, "✅ Готово, %s Теперь буду присылать сюда напоминания о приёмах." % name)
-        else:
+        patient = _tg_link_by_phone(chat_id, contact.get("phone_number") or "", token)
+        if patient is None:
             tg_send_text(chat_id, "Не нашли карточку с таким номером в базе клиники. Обратитесь на ресепшене.")
         return JsonResponse({"ok": True})
+
+    # ── Меню самообслуживания (после привязки номера) ──
+    if text in (BTN_MY_DEBT, BTN_MY_VISITS):
+        from apps.patients.models import Patient
+        patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
+        if patient is None:
+            tg_send_text(chat_id, "Сначала поделитесь номером телефона — нажмите /start")
+            return JsonResponse({"ok": True})
+        if text == BTN_MY_DEBT:
+            cur = cs.currency_label if cs else "сом"
+            if patient.debt > 0:
+                tg_send_text(chat_id, "💰 Ваш долг: <b>%.0f %s</b>" % (patient.debt, cur))
+            else:
+                tg_send_text(chat_id, "💰 У вас нет задолженности. Спасибо!")
+        else:
+            from apps.treatments.models import Treatment
+            treatments = list(Treatment.objects.filter(patient=patient)
+                              .exclude(status=Treatment.STATUS_DRAFT).order_by("-created_at")[:10])
+            if not treatments:
+                tg_send_text(chat_id, "🗓 Приёмов пока не найдено.")
+            else:
+                buttons = [[("%s — %s" % (t.created_at.strftime("%d.%m.%Y"), t.get_status_display()),
+                            "my_treatment:%s" % t.pk)] for t in treatments]
+                tg_send_text(chat_id, "🗓 Ваши приёмы (последние %s) — выберите, чтобы посмотреть детали:"
+                             % len(treatments), buttons=buttons)
+        return JsonResponse({"ok": True})
+
+    # ── Номер телефона напечатан текстом (не через кнопку «Поделиться») —
+    # пробуем привязать так же, если ещё не привязаны ──
+    if text and not text.startswith("/"):
+        from apps.patients.models import Patient
+        import re as _re
+        digits = _re.sub(r"\D", "", text)
+        already_linked = Patient.objects.filter(telegram_chat_id=chat_id).exists()
+        if not already_linked and 9 <= len(digits) <= 15:
+            patient = _tg_link_by_phone(chat_id, text, token)
+            if patient is not None:
+                return JsonResponse({"ok": True})
 
     # ── Голосовое/аудио — скачиваем и сохраняем у себя (ссылки Telegram недолговечны) ──
     media_file, media_type, snippet = None, "", text
@@ -669,7 +721,30 @@ def _handle_tg_callback(cq, token):
     if ":" not in data:
         tg_answer_callback(cq_id, token=token)
         return
-    action, _, appt_id = data.partition(":")
+    action, _, obj_id = data.partition(":")
+
+    if action == "my_treatment":
+        from apps.patients.models import Patient
+        from apps.treatments.models import Treatment
+        from apps.settings_clinic.models import ClinicSettings
+        try:
+            treatment = Treatment.objects.select_related("patient").filter(pk=int(obj_id)).first()
+        except (ValueError, TypeError):
+            treatment = None
+        # проверяем, что этот приём принадлежит именно пациенту из этого чата
+        # (чтобы по чужому callback_data нельзя было подсмотреть чей-то приём)
+        if treatment is None or treatment.patient.telegram_chat_id != chat_id:
+            tg_answer_callback(cq_id, "Приём не найден", token=token)
+            return
+        cs = ClinicSettings.get()
+        clinic_name = (cs.name if cs and cs.name else "Клиника")
+        cur = (cs.currency_label if cs else "сом")
+        tg_edit_message(chat_id, message_id, treatment.build_report_text(clinic_name, cur, greet=False),
+                        token=token)
+        tg_answer_callback(cq_id, token=token)
+        return
+
+    appt_id = obj_id
     try:
         from apps.appointments.models import Appointment
         appt = Appointment.objects.filter(pk=int(appt_id)).first()
@@ -768,6 +843,35 @@ def tg_inbox(request):
     rows = sorted(convos.values(), key=lambda c: c["last"].created_at, reverse=True)
     return render(request, "notifications/tg_inbox.html", {
         "rows": rows, "total_unread": sum(c["unread"] for c in rows),
+    })
+
+
+@login_required
+def tg_link_chat(request, chat_id):
+    """Написали боту, но номер не совпал с базой (например, ввели его текстом,
+    а не через кнопку «Поделиться контактом») — привязать чат к существующему
+    пациенту или создать нового прямо из инбокса."""
+    if not _wa_staff_ok(request.user):
+        return redirect("/")
+    from django.contrib import messages
+    from django.db.models import Q
+    from django.shortcuts import get_object_or_404
+    from apps.patients.models import Patient
+    from .models import WaMessage
+
+    if request.method == "POST":
+        patient = get_object_or_404(Patient, pk=request.POST.get("patient_id"))
+        patient.telegram_chat_id = chat_id
+        patient.save(update_fields=["telegram_chat_id"])
+        messages.success(request, "Чат привязан к пациенту «%s»" % patient.full_name)
+        return redirect("/patients/%s/notify/?channel=tg" % patient.pk)
+
+    q = (request.GET.get("q") or "").strip()
+    results = (Patient.objects.filter(Q(first_name__icontains=q) | Q(last_name__icontains=q)
+                                      | Q(phone__icontains=q))[:20] if q else [])
+    last = WaMessage.all_clinics.filter(channel="tg", phone=str(chat_id)).order_by("-id").first()
+    return render(request, "notifications/tg_link.html", {
+        "chat_id": chat_id, "q": q, "results": results, "last": last,
     })
 
 

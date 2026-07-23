@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block page_title %}Привязать Telegram-чат{% endblock %}
+{% block content %}
+<div class="w-full max-w-xl space-y-4">
+  <div>
+    <h2 class="text-xl font-bold" style="color:var(--text)">✈️ Привязать чат к пациенту</h2>
+    {% if last %}<p class="muted text-sm mt-1">Последнее сообщение: «{{ last.body|default:"(медиа)"|truncatechars:120 }}»</p>{% endif %}
+  </div>
+
+  <div class="card card-pad">
+    <form method="get" class="flex gap-2">
+      <input type="text" name="q" value="{{ q }}" placeholder="Имя или телефон пациента..." class="flex-1">
+      <button type="submit" class="btn btn-primary btn-sm">Найти</button>
+    </form>
+  </div>
+
+  {% if q %}
+  <div class="card overflow-hidden">
+    {% for p in results %}
+    <form method="post" class="flex items-center justify-between gap-3 px-5 py-3" style="border-bottom:1px solid var(--border-2)">
+      {% csrf_token %}
+      <input type="hidden" name="patient_id" value="{{ p.pk }}">
+      <div>
+        <p class="font-semibold" style="color:var(--text)">{{ p.full_name }}</p>
+        <p class="text-sm muted">{{ p.phone|default:"без телефона" }}</p>
+      </div>
+      <button type="submit" class="btn btn-soft btn-sm">Привязать</button>
+    </form>
+    {% empty %}
+    <p class="px-5 py-8 text-center muted">Ничего не найдено.</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card card-pad">
+    <p class="text-sm muted mb-2">Пациента нет в базе? Заведите карточку с телефоном из переписки — и вернитесь на эту страницу привязать чат.</p>
+    <a href="/patients/create/" class="btn btn-ghost btn-sm">+ Новый пациент</a>
+    <a href="/notifications/tg-inbox/" class="btn btn-ghost btn-sm">← К списку чатов</a>
+  </div>
+</div>
+{% endblock %}

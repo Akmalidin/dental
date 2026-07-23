@@ -242,6 +242,14 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
               WhatsApp
             </a>
             {% endif %}
+            {% if patient.telegram_chat_id %}
+            <a href="/patients/{{ patient.pk }}/notify/?channel=tg"
+               class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors"
+               style="color:#229ED9;text-decoration:none">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+              Telegram
+            </a>
+            {% endif %}
             <div style="border-top:1px solid var(--border)" class="my-1"></div>
             <a href="/patients/{{ patient.pk }}/visits/"
                class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors"

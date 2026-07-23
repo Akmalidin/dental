@@ -202,11 +202,16 @@ def calendar_view(request):
     # нормализованные телефоны из общего чёрного списка — для пометки в выпадающем списке
     bl_norms = set(BlacklistEntry.objects.values_list("phone_norm", flat=True))
     services = Service.objects.filter(is_active=True).values("id", "name", "price", "duration")
+    from apps.users.models import User as _User
     return render(request, "appointments/calendar.html", {
         "doctors": doctors,
         "default_doctor": default_doctor,
         "branches": branches,
         "all_services": Service.objects.filter(is_active=True).order_by("name"),
+        "doctor_type_choices": _User.DOCTOR_TYPE_CHOICES,
+        "doctors_json": [
+            {"id": d.pk, "name": d.name, "types": d.doctor_types or []} for d in doctors
+        ],
         "patients_json": [
             {"id": p["id"], "name": f'{p["last_name"]} {p["first_name"]}', "phone": p["phone"],
              "bl": normalize_phone(p["phone"]) in bl_norms}
