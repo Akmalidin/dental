@@ -1031,7 +1031,7 @@ def staff_set_password(request, pk):
 @role_required("superadmin", "admin_main")
 def staff_create(request):
     from apps.tenancy import get_current_clinic
-    form = UserForm(request.POST or None, request.FILES or None)
+    form = UserForm(request.POST or None, request.FILES or None, request_user=request.user)
     if form.is_valid():
         new_user = form.save(commit=False)
         # привязать к текущей клинике (или к клинике создателя)
@@ -1055,13 +1055,8 @@ def staff_edit(request, pk):
     if _is_protected_target(user, request.user):
         messages.error(request, _("Доступ запрещён: нельзя редактировать суперпользователя"))
         return redirect("staff_list")
-    form = UserForm(request.POST or None, request.FILES or None, instance=user)
+    form = UserForm(request.POST or None, request.FILES or None, instance=user, request_user=request.user)
     if form.is_valid():
-        # запрет повышения роли до суперадмина не-суперпользователем
-        new_role = form.cleaned_data.get("role")
-        if (new_role and new_role.name == Role.SUPERADMIN) and not request.user.is_superadmin:
-            messages.error(request, _("Доступ запрещён: нельзя назначить роль суперадмина"))
-            return redirect("staff_list")
         form.save()
         _apply_access_from_form(request.user, user, form)
         messages.success(request, _("Данные обновлены"))

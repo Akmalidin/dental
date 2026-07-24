@@ -67,12 +67,16 @@ class UserForm(forms.ModelForm):
             "roles": forms.CheckboxSelectMultiple(),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["role"].label = "Основная роль"
         self.fields["role"].required = False
         self.fields["roles"].label = "Дополнительные роли (можно несколько)"
         self.fields["roles"].required = False
+        # Роль суперадмина назначает только сам суперадмин — остальным её не показываем и не даём выбрать.
+        if not (request_user and request_user.is_superadmin):
+            self.fields["role"].queryset = self.fields["role"].queryset.exclude(name=Role.SUPERADMIN)
+            self.fields["roles"].queryset = self.fields["roles"].queryset.exclude(name=Role.SUPERADMIN)
         self.fields["can_view_all_appointments"].label = "Видит записи всех врачей"
         self.fields["can_view_all_appointments"].required = False
         # Филиалы — только текущей клиники (queryset вычисляется в запросе, а не на импорте,
