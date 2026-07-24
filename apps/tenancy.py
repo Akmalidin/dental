@@ -95,11 +95,19 @@ class CurrentClinicMiddleware:
             user = getattr(request, "user", None)
             if user is not None and user.is_authenticated:
                 if getattr(user, "is_superadmin", False):
-                    # суперадмин: либо выбранная клиника, либо все (None = без фильтра)
-                    cid = request.session.get("active_clinic")
-                    if cid:
-                        from apps.users.models import Clinic
-                        set_current_clinic(Clinic.objects.filter(pk=cid).first())
+                    # Если зашли через поддомен клиники (<slug>.stom.asia) — это
+                    # и есть выбор клиники, приоритетнее старого переключателя
+                    # вверху (иначе клиника из сессии "перетягивает" все действия
+                    # суперадмина на себя, даже когда он физически на другом поддомене).
+                    host_clinic = getattr(request, "host_clinic", None)
+                    if host_clinic is not None:
+                        set_current_clinic(host_clinic)
+                    else:
+                        # суперадмин: либо выбранная клиника, либо все (None = без фильтра)
+                        cid = request.session.get("active_clinic")
+                        if cid:
+                            from apps.users.models import Clinic
+                            set_current_clinic(Clinic.objects.filter(pk=cid).first())
                 else:
                     set_current_clinic(getattr(user, "clinic", None))
         except Exception:
