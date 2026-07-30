@@ -17,6 +17,7 @@ const { locale } = useI18n()
 const options = [
   { code: 'ru', label: 'РУС' },
   { code: 'ky', label: 'КЫР' },
+  { code: 'uz', label: 'UZB' },
 ]
 
 function select(code) {

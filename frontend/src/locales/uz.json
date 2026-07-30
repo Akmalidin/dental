@@ -1,0 +1,76 @@
+{
+  "common": {
+    "currency": "so'm",
+    "loading": "Yuklanmoqda...",
+    "patient": "Bemor",
+    "doctor": "Shifokor",
+    "date": "Sana",
+    "amount": "Summa",
+    "status": "Holat",
+    "total": "Jami"
+  },
+  "nav": {
+    "appName": "AKM SOFT CLINIC",
+    "appSubtitle": "CRM tizimi",
+    "dashboard": "Bosh sahifa",
+    "patients": "Bemorlar",
+    "calendar": "Jadval",
+    "treatments": "Qabullar",
+    "finance": "Moliya",
+    "patientDetail": "Bemor kartasi",
+    "appointments": "Yozuvlar",
+    "administrator": "Administrator",
+    "logout": "Chiqish"
+  },
+  "dashboard": {
+    "statAppointmentsToday": "Bugungi qabullar",
+    "statNewPatients": "Yangi bemorlar",
+    "statIncomeToday": "Bugungi tushum",
+    "statDebtors": "Qarzdorlar",
+    "monthlySummary": "Oylik moliyaviy hisobot",
+    "income": "Tushum",
+    "expenses": "Xarajatlar",
+    "profit": "Foyda"
+  },
+  "patients": {
+    "searchPlaceholder": "Ism, telefon bo'yicha qidirish...",
+    "newPatient": "+ Yangi bemor",
+    "phone": "Telefon",
+    "balance": "Balans",
+    "yearsOld": "yosh",
+    "details": "Batafsil",
+    "notFound": "Bemorlar topilmadi",
+    "prev": "← Oldingi",
+    "next": "Keyingi →"
+  },
+  "appointments": {
+    "title": "Qabulga yozilish",
+    "newAppointment": "+ Yangi yozuv",
+    "dateTime": "Sana/vaqt",
+    "service": "Xizmat",
+    "calendarTitle": "Jadval",
+    "confirmEdit": "Ushbu yozuvni tahrirlaysizmi?",
+    "status": {
+      "scheduled": "Yozilgan",
+      "confirmed": "Tasdiqlangan",
+      "arrived": "Keldi",
+      "in_progress": "Qabul qilinmoqda",
+      "completed": "Yakunlandi",
+      "no_show": "Kelmadi",
+      "cancelled": "Bekor qilindi"
+    }
+  },
+  "treatments": {
+    "title": "Qabullar",
+    "newTreatment": "+ Yangi qabul",
+    "paid": "To'langan",
+    "debt": "Qarz"
+  },
+  "finance": {
+    "incomeMonth": "Tushum (oy)",
+    "expensesMonth": "Xarajatlar (oy)",
+    "profit": "Foyda",
+    "recentPayments": "So'nggi to'lovlar",
+    "method": "Usul"
+  }
+}

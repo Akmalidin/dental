@@ -1,9 +1,10 @@
 import { createI18n } from 'vue-i18n'
 import ru from './locales/ru.json'
 import ky from './locales/ky.json'
+import uz from './locales/uz.json'
 
 const STORAGE_KEY = 'akmsoft_locale'
-const SUPPORTED_LOCALES = ['ru', 'ky']
+const SUPPORTED_LOCALES = ['ru', 'ky', 'uz']
 
 function getInitialLocale() {
   const saved = localStorage.getItem(STORAGE_KEY)
@@ -14,7 +15,7 @@ const i18n = createI18n({
   legacy: false,
   locale: getInitialLocale(),
   fallbackLocale: 'ru',
-  messages: { ru, ky },
+  messages: { ru, ky, uz },
 })
 
 export function setLocale(locale) {
