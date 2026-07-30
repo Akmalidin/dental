@@ -506,10 +506,17 @@ def appointment_list(request):
 
 @login_required
 def appointment_create(request):
+    from apps.users.models import Branch
     # предзаполнение из посуточной сетки: ?date=&time=&doctor=
     initial = {
         "doctor": request.user if request.user.is_doctor else None,
         "created_by": request.user,
+        # филиал по умолчанию — активный/основной (та же логика, что и при
+        # сохранении ниже, но применена сразу при открытии формы, а не только
+        # если поле оставили пустым при сабмите — иначе на экране пусто).
+        "branch": (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                   or Branch.objects.filter(is_main=True).first()
+                   or request.user.branches.first() or Branch.objects.first()),
     }
     gd, gt, gdoc = request.GET.get("date"), request.GET.get("time"), request.GET.get("doctor")
     if gd and gt:
