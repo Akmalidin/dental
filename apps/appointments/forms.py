@@ -21,10 +21,21 @@ class AppointmentForm(forms.ModelForm):
         self.fields["status"].required = False   # по умолчанию «Записан»
         # врач — только доктора текущей клиники (а не все пользователи/создатель)
         from apps.users.models import clinic_doctors, Branch
+        from apps.patients.models import Patient
         from apps.tenancy import get_current_clinic
         clinic = get_current_clinic()
         self.fields["doctor"].queryset = clinic_doctors(clinic)
         self.fields["doctor"].label_from_instance = lambda u: u.name
+        # пациент — переприсваиваем ЗАНОВО на каждый запрос: Patient.objects уже
+        # сам фильтрует по текущей клинике (ClinicSoftDeleteManager), но ModelForm
+        # строит base_fields ОДИН РАЗ при импорте модуля, когда текущей клиники ещё
+        # нет (поэтому «замороженный» queryset без фильтра — утечка пациентов чужих
+        # клиник в выпадающий список). Без этой строки баг воспроизводится всегда.
+        patients = Patient.objects.all()
+        inst = self.instance
+        if inst and inst.pk and inst.patient_id:
+            patients = (patients | Patient.all_objects.filter(pk=inst.patient_id)).distinct()
+        self.fields["patient"].queryset = patients
         # филиал и кабинет — только текущей клиники (изоляция между клиниками)
         if clinic is not None:
             branches = Branch.objects.filter(clinic=clinic, is_active=True)

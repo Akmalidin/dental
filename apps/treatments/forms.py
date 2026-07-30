@@ -20,14 +20,23 @@ class TreatmentForm(forms.ModelForm):
         # Изоляция клиник: врач и филиал — только текущей клиники.
         from apps.tenancy import get_current_clinic
         from apps.users.models import clinic_doctors, Branch
+        from apps.patients.models import Patient
         clinic = get_current_clinic()
+        inst = self.instance
+        # Пациент — переприсваиваем ЗАНОВО на каждый запрос (см. apps/appointments/forms.py
+        # AppointmentForm для подробного объяснения: ModelForm строит base_fields один раз
+        # при импорте модуля, когда текущей клиники ещё нет — без переприсвоения здесь
+        # в списке пациентов утекают карточки чужих клиник).
+        patients = Patient.objects.all()
+        if inst and inst.pk and inst.patient_id:
+            patients = (patients | Patient.all_objects.filter(pk=inst.patient_id)).distinct()
+        self.fields["patient"].queryset = patients
         if clinic is not None:
             from apps.users.models import User as _U
             doctor_ids = set(clinic_doctors(clinic).values_list("pk", flat=True))
             branches = Branch.objects.filter(clinic=clinic, is_active=True)
             # Не ломаем редактирование уже существующего приёма: текущий врач/филиал
             # остаётся в списке, даже если он вне фильтра.
-            inst = self.instance
             if inst and inst.pk:
                 if inst.doctor_id:
                     doctor_ids.add(inst.doctor_id)
