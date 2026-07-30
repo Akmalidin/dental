@@ -196,3 +196,36 @@ class SharedPhoneNumberTestCase(TestCase):
         c.post(f"/patients/{self.p1.pk}/mark-not-duplicate/")
         c.post(f"/patients/{self.p2.pk}/mark-not-duplicate/")
         self.assertEqual(SharedPhoneNumber.objects.filter(phone_norm=self.p1.phone_norm).count(), 1)
+
+
+class PatientCreateQuickTestCase(TestCase):
+    """Компактное создание пациента из модалки бронирования (Task 1)."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name="Main", address="-", phone="0", is_main=True)
+        self.staff = User.objects.create(login="staff_quick", name="Сотрудник", email="staff_quick@test.local")
+        self.staff.branches.add(self.branch)
+        self.client = Client()
+        self.client.force_login(self.staff)
+
+    def test_creates_patient_with_minimal_fields(self):
+        resp = self.client.post("/patients/quick-create/", {
+            "first_name": "Азиз", "last_name": "Каримов", "phone": "0700123456",
+            "birth_date": "1990-05-01", "gender": "male",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        patient = Patient.objects.get(pk=data["id"])
+        self.assertEqual(patient.last_name, "Каримов")
+        self.assertEqual(patient.branch, self.branch)
+        self.assertEqual(patient.created_by, self.staff)
+
+    def test_requires_first_name_and_phone(self):
+        resp = self.client.post("/patients/quick-create/", {"first_name": "", "phone": ""})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_get_not_allowed(self):
+        resp = self.client.get("/patients/quick-create/")
+        self.assertEqual(resp.status_code, 405)

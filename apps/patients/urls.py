@@ -6,6 +6,7 @@ urlpatterns = [
     path("export/", views.patient_export, name="patient_export"),
     path("import/", views.patient_import, name="patient_import"),
     path("create/", views.patient_create, name="patient_create"),
+    path("quick-create/", views.patient_create_quick, name="patient_create_quick"),
     path("journal/", views.visits_journal, name="visits_journal"),
     path("journal/<int:pk>/dates/", views.visits_journal_patient, name="visits_journal_patient"),
     path("blacklist/", views.blacklist_view, name="blacklist"),

@@ -224,7 +224,10 @@
         <div x-show="bookError" class="badge-red px-4 py-2 rounded-xl text-sm" x-text="bookError"></div>
 
         <div>
-          <label class="fld">Пациент</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="fld mb-0">Пациент</label>
+            <button type="button" @click="openQuickPatient()" class="text-xs font-semibold" style="color:var(--primary)">+ Создать пациента</button>
+          </div>
           <select id="bk-patient" class="no-tom" x-ref="patientSel"></select>
           <div x-show="bkBlacklisted()" x-cloak class="mt-1.5 rounded-lg px-3 py-2 text-xs font-semibold flex items-start gap-1.5" style="background:#1f2937;color:#fff">
             <span>⛔</span><span>Пациент в общем чёрном списке. Запись не блокируется.</span>
@@ -277,6 +280,41 @@
       </div>
     </div>
   </div>
+
+  <!-- ── QUICK PATIENT CREATE (popup поверх модалки записи, не закрывает её) ── -->
+  <div x-show="qpOpen" x-cloak class="modal-overlay">
+    <div class="modal-box" style="max-width:420px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg" style="color:var(--text)">Создать пациента</h2>
+        <button @click="qpOpen=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div x-show="qpError" class="badge-red px-4 py-2 rounded-xl text-sm" x-text="qpError"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="fld">Фамилия *</label><input type="text" x-model="qp.last_name"></div>
+          <div><label class="fld">Имя *</label><input type="text" x-model="qp.first_name"></div>
+        </div>
+        <div><label class="fld">Телефон *</label><input type="tel" x-model="qp.phone" placeholder="0700 123 456"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="fld">Дата рождения</label><input type="date" x-model="qp.birth_date"></div>
+          <div>
+            <label class="fld">Пол</label>
+            <select x-model="qp.gender" class="no-tom">
+              <option value="">—</option>
+              <option value="male">Мужской</option>
+              <option value="female">Женский</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4" style="border-top:1px solid var(--border)">
+        <button @click="qpOpen=false" class="btn btn-ghost">Отмена</button>
+        <button @click="saveQuickPatient()" class="btn btn-primary" :disabled="qpSaving">
+          <span x-text="qpSaving ? 'Сохранение...' : 'Создать и выбрать'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -304,6 +342,8 @@ function calendarPage() {
     doctors: JSON.parse(document.getElementById('cal-doctors').textContent),
     bk: { patient:'', doctor:'{{ doctors.first.pk }}', service:'', date:'', dateLabel:'', timeFrom:'09:00', timeTo:'09:30', status:'scheduled', notes:'', fromSlot:false },
     patientTS: null, doctorTS: null, serviceTS: null,
+    qpOpen: false, qpSaving: false, qpError: '',
+    qp: { first_name:'', last_name:'', phone:'', birth_date:'', gender:'' },
     bkBlacklisted(){ const p = this.patients.find(x=>String(x.id)===String(this.bk.patient)); return (p && p.bl) ? p : null; },
     showView: false, av: {},
     nextDlg: { open:false, complete:false, date:'' },
@@ -560,6 +600,38 @@ function calendarPage() {
         else { this.bookError = data.error || 'Ошибка'; }
       } catch(e) { this.bookError = 'Ошибка сети'; }
       finally { this.bkSaving = false; }
+    },
+
+    openQuickPatient() {
+      this.qp = { first_name:'', last_name:'', phone:'', birth_date:'', gender:'' };
+      this.qpError = '';
+      this.qpOpen = true;
+    },
+
+    async saveQuickPatient() {
+      if (!this.qp.first_name || !this.qp.last_name || !this.qp.phone) {
+        this.qpError = 'Укажите фамилию, имя и телефон';
+        return;
+      }
+      this.qpSaving = true; this.qpError = '';
+      try {
+        const body = new URLSearchParams(this.qp);
+        const r = await fetch('/patients/quick-create/', {
+          method: 'POST', headers: { 'X-CSRFToken': getCsrf() }, body,
+        });
+        const data = await r.json();
+        if (!data.ok) { this.qpError = data.error || 'Ошибка'; return; }
+        // новый пациент — сразу в список и выбран в форме записи, сама форма записи не закрывается
+        this.patients.push({ id: data.id, name: data.name, phone: data.phone, bl: false });
+        if (this.patientTS) {
+          this.patientTS.addOption({ value: String(data.id), text: data.name + (data.phone ? ' · ' + data.phone : '') });
+          this.patientTS.setValue(String(data.id));
+        }
+        this.bk.patient = String(data.id);
+        toast('Пациент создан');
+        this.qpOpen = false;
+      } catch(e) { this.qpError = 'Ошибка сети'; }
+      finally { this.qpSaving = false; }
     },
   };
 }

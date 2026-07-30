@@ -363,6 +363,32 @@ def patient_create(request):
 
 
 @login_required
+@require_POST
+def patient_create_quick(request):
+    """AJAX: компактное создание пациента прямо из модалки «Новая запись»
+    (только ФИО/телефон/дата рождения/пол) — без ухода со страницы. Переиспользует
+    PatientForm (та же валидация/дедуп-поля, что и на полной форме), а не
+    дублирует её; филиал подставляется по умолчанию, как и в остальных
+    «быстрых» флоу (см. активный/основной филиал вызывающего)."""
+    from django.http import JsonResponse
+    from apps.users.models import Branch
+    branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+              or Branch.objects.filter(is_main=True).first()
+              or request.user.branches.first() or Branch.objects.first())
+    data = request.POST.copy()
+    data["branch"] = branch.pk if branch else ""
+    form = PatientForm(data)
+    if not form.is_valid():
+        first_field, first_errors = next(iter(form.errors.items()))
+        return JsonResponse({"error": first_errors[0]}, status=400)
+    patient = form.save(commit=False)
+    patient.created_by = request.user
+    patient.save()
+    form.save_m2m()
+    return JsonResponse({"ok": True, "id": patient.pk, "name": patient.full_name, "phone": patient.phone})
+
+
+@login_required
 def patient_detail(request, pk):
     patient = get_object_or_404(Patient.objects.prefetch_related("tags"), pk=pk)
     from django.db.models import Case, When, IntegerField, Value
