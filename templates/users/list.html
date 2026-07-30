@@ -29,7 +29,7 @@
     {% for u in users %}
     <div class="card p-5 flex items-center gap-4">
       <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0"
-           style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">
+           style="background:{% if u.color %}{{ u.color }}{% else %}linear-gradient(135deg,#6366F1,#8B5CF6){% endif %}">
         {{ u.name|first|upper }}
       </div>
       <div class="flex-1 min-w-0">

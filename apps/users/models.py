@@ -150,6 +150,11 @@ class User(AbstractUser):
         related_name="users", verbose_name="Клиника",
     )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True, verbose_name="Аватар")
+    color = models.CharField(
+        max_length=7, blank=True, verbose_name="Цвет",
+        help_text="Необязательно. Используется для аватара и различения врачей в расписании. "
+                  "Пусто — обычный фиолетовый градиент.",
+    )
     role = models.ForeignKey(
         Role,
         on_delete=models.SET_NULL,

@@ -60,11 +60,12 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ["login", "name", "email", "phone", "role", "roles", "branches",
-                  "can_view_all_appointments", "is_active", "avatar",
+                  "can_view_all_appointments", "is_active", "avatar", "color",
                   "specialty", "doctor_types"]
         widgets = {
             "branches": forms.CheckboxSelectMultiple(),
             "roles": forms.CheckboxSelectMultiple(),
+            "color": forms.TextInput(attrs={"type": "color"}),
         }
 
     def __init__(self, *args, request_user=None, **kwargs):

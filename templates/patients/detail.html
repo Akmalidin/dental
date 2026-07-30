@@ -14,7 +14,7 @@ const TOOTH_STATUSES = JSON.parse(document.getElementById('tooth-statuses-data')
 const TOOTH_CONDITIONS = JSON.parse(document.getElementById('tooth-conditions-data').textContent);
 const PATIENT_ID = {{ patient.pk }};
 const DEFAULT_BRANCH = "{% if request.user.branches.first %}{{ request.user.branches.first.pk }}{% endif %}";
-const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelled' %}{id:{{ t.pk }},label:"#{{ t.pk }} · {{ t.created_at|date:'d.m.Y' }} · {{ t.get_status_display|escapejs }}"}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}];
+const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelled' %}{id:{{ t.pk }},label:"#{{ t.display_number }} · {{ t.created_at|date:'d.m.Y' }} · {{ t.get_status_display|escapejs }}"}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}];
 </script>
 <style>
   @keyframes allergy-pulse-kf { 0%,100%{opacity:1} 50%{opacity:.55} }
@@ -86,7 +86,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
                 <tbody>
                   {% for t in treatments %}{% if t.debt > 0 %}
                   <tr class="cursor-pointer hover:bg-indigo-50/40" onclick="window.location='/treatments/{{ t.pk }}/'">
-                    <td class="font-bold">#{{ t.pk }} <span class="badge {% if t.status == 'cancelled' %}badge-gray{% elif t.status == 'completed' %}badge-blue{% else %}badge-orange{% endif %} ml-1">{{ t.get_status_display }}</span></td>
+                    <td class="font-bold">#{{ t.display_number }} <span class="badge {% if t.status == 'cancelled' %}badge-gray{% elif t.status == 'completed' %}badge-blue{% else %}badge-orange{% endif %} ml-1">{{ t.get_status_display }}</span></td>
                     <td class="muted text-xs">{{ t.created_at|date:"d.m.Y" }}</td>
                     <td class="text-right">{{ t.total_amount|floatformat:0 }}</td>
                     <td class="text-right text-emerald-600">{{ t.paid_amount|floatformat:0 }}</td>
@@ -307,11 +307,11 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         <!-- Header -->
         <div class="flex items-center gap-2.5 px-4 py-2.5" style="border-bottom:1px solid var(--border-2)">
           <input type="checkbox" @change="togglePrintSel({{ t.pk }})" class="shrink-0" title="Выбрать для печати">
-          <a href="/treatments/{{ t.pk }}/" class="font-black text-sm hover:underline" style="color:var(--primary)">#{{ t.pk }}</a>
+          <a href="/treatments/{{ t.pk }}/" class="font-black text-sm hover:underline" style="color:var(--primary)">#{{ t.display_number }}</a>
           <span class="badge {% if t.status == 'paid' %}badge-green{% elif t.status == 'completed' %}badge-blue{% elif t.status == 'in_progress' %}badge-orange{% elif t.status == 'cancelled' %}badge-gray{% elif t.status == 'draft' %}badge-gray{% else %}badge-orange{% endif %}">{% if t.status == 'draft' %}✏️ {% endif %}{{ t.get_status_display }}</span>
           <span class="text-xs muted hidden sm:inline">{{ t.created_at|date:"d.m.Y H:i" }}</span>
           <span class="text-xs muted hidden md:flex items-center gap-1.5">
-            <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
+            <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white" style="background:{% if t.doctor.color %}{{ t.doctor.color }}{% else %}linear-gradient(135deg,#6366F1,#8B5CF6){% endif %}">{{ t.doctor.name|first|upper }}</span>{{ t.doctor.name }}
           </span>
           <div class="ml-auto flex items-center gap-3">
             <div class="text-right leading-tight">
@@ -333,7 +333,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
             </form>
             {% endif %}
             {% if request.user.is_superuser or request.user.role.name == "admin_main" or request.user.role.name == "admin" %}
-            <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Удалить приём #{{ t.pk }} со всеми услугами? Действие необратимо.')">
+            <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Удалить приём #{{ t.display_number }} со всеми услугами? Действие необратимо.')">
               {% csrf_token %}
               <button class="row-act ra-del" title="Удалить приём">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
@@ -777,7 +777,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
         <select name="treatment" class="no-tom w-full">
           <option value="">— авто (по долгу) —</option>
           {% for t in treatments %}{% if t.status != 'cancelled' and t.status != 'draft' %}
-          <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
+          <option value="{{ t.pk }}">Приём #{{ t.display_number }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
           {% endif %}{% endfor %}
         </select>
       </div>
@@ -852,7 +852,7 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
           <select name="treatment" class="no-tom w-full">
             <option value="">— авто (по долгу) —</option>
             {% for t in treatments %}{% if t.status != 'cancelled' and t.status != 'draft' %}
-            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
+            <option value="{{ t.pk }}">Приём #{{ t.display_number }} · {{ t.created_at|date:"d.m.Y" }} · долг {{ t.debt|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
             {% endif %}{% endfor %}
           </select>
         </div>

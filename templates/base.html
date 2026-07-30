@@ -368,7 +368,7 @@
       <!-- User -->
       <div class="relative" x-data="{open:false}" @click.outside="open=false">
         <div class="user-chip" @click="open=!open">
-          {% if user.avatar %}<img src="{{ user.avatar.url }}">{% else %}<div class="avatar w-[38px] h-[38px] text-sm">{{ user.name|first|upper }}</div>{% endif %}
+          {% if user.avatar %}<img src="{{ user.avatar.url }}">{% else %}<div class="avatar w-[38px] h-[38px] text-sm"{% if user.color %} style="background:{{ user.color }}"{% endif %}>{{ user.name|first|upper }}</div>{% endif %}
           <div class="hidden md:block leading-tight pr-1">
             <p class="text-sm font-bold" style="color:var(--text)">{{ user.name|truncatechars:18 }}</p>
             <p class="text-xs muted">{{ user.role }}</p>

@@ -41,7 +41,7 @@
       <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border)">
         <!-- header -->
         <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2);position:sticky;top:0;z-index:2">
-          <span class="avatar w-6 h-6 text-[10px]">{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
+          <span class="avatar w-6 h-6 text-[10px]"{% if col.doctor.color %} style="background:{{ col.doctor.color }}"{% endif %}>{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
           <span class="text-sm font-semibold truncate flex-1" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
           {% if col.doctor %}<a href="/appointments/schedule/print/?date={{ day|date:'Y-m-d' }}&doctor={{ col.doctor.pk }}" target="_blank" title="Печать расписания врача" style="color:var(--text-faint);text-decoration:none" onclick="event.stopPropagation()">🖨</a>{% endif %}
         </div>
