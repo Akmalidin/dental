@@ -30,7 +30,7 @@
 
 {% for t in treatments %}
 <div class="visit">
-  <h2>Приём #{{ t.pk }} · {{ t.get_status_display }}</h2>
+  <h2>Приём #{{ t.display_number }} · {{ t.get_status_display }}</h2>
   <div class="meta">{{ t.created_at|date:"d.m.Y H:i" }} · врач {{ t.doctor.name|default:"—" }}{% if t.branch %} · {{ t.branch.name }}{% endif %}</div>
 
   <table class="teeth">

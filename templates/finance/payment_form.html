@@ -24,7 +24,7 @@
         <select name="treatment" id="pf-treatment" class="no-tom w-full">
           <option value="">—</option>
           {% for t in form.treatment.field.queryset %}
-          <option value="{{ t.pk }}" {% if form.treatment.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }}</option>
+          <option value="{{ t.pk }}" {% if form.treatment.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>Приём #{{ t.display_number }} · {{ t.created_at|date:"d.m.Y" }}</option>
           {% endfor %}
         </select>
       </div>

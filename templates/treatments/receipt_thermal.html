@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Чек приёма #{{ treatment.pk }}</title>
+<title>Чек приёма #{{ treatment.display_number }}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 13px; color: #222; margin: 0; padding: 24px; }
   .wrap { max-width: 360px; margin: 0 auto; }
@@ -39,7 +39,7 @@
     {% endif %}
   </div>
   <hr>
-  <p style="text-align:center;font-weight:700;margin:0">Чек приёма №{{ treatment.pk }}</p>
+  <p style="text-align:center;font-weight:700;margin:0">Чек приёма №{{ treatment.display_number }}</p>
   <hr>
   <div class="row"><span class="k">Пациент</span><span class="v">{{ treatment.patient.full_name }}</span></div>
   {% if treatment.doctor %}<div class="row"><span class="k">Врач</span><span class="v">{{ treatment.doctor.name }}</span></div>{% endif %}

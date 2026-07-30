@@ -134,7 +134,7 @@
           <select name="visit" x-model="edit.visit" class="no-tom">
             <option value="">— не назначен —</option>
             {% for t in patient_treatments %}
-            <option value="{{ t.pk }}">Приём #{{ t.pk }} · {{ t.created_at|date:"d.m.Y" }} · {{ t.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
+            <option value="{{ t.pk }}">Приём #{{ t.display_number }} · {{ t.created_at|date:"d.m.Y" }} · {{ t.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</option>
             {% endfor %}
           </select>
           <p class="text-xs muted mt-1">Свяжите этап с конкретным приёмом пациента.</p>

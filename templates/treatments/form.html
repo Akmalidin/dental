@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block page_title %}{% if object %}Редактировать приём #{{ object.pk }}{% else %}Новый приём{% endif %}{% endblock %}
+{% block page_title %}{% if object %}Редактировать приём #{{ object.display_number }}{% else %}Новый приём{% endif %}{% endblock %}
 
 {% block extra_head %}
 {{ services_json|json_script:"svc-data" }}

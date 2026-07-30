@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Чек #{{ treatment.pk }}</title>
+<title>Чек #{{ treatment.display_number }}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
   h1 { font-size: 18px; text-align: center; }
@@ -27,7 +27,7 @@
 </div>
 
 <hr>
-<p><strong>Чек №{{ treatment.pk }}</strong></p>
+<p><strong>Чек №{{ treatment.display_number }}</strong></p>
 <p>Дата: {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
 <p>Пациент: {{ treatment.patient.full_name }}</p>
 <p>Врач: {{ treatment.doctor.name }}</p>

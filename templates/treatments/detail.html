@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block page_title %}Приём #{{ treatment.pk }}{% endblock %}
+{% block page_title %}Приём #{{ treatment.display_number }}{% endblock %}
 
 {% block extra_head %}
 {{ treated_teeth_json|json_script:"treated-teeth" }}
@@ -16,7 +16,7 @@
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
         <div class="flex items-center gap-3 mb-2">
-          <h2 class="text-xl font-extrabold" style="color:var(--text)">Приём #{{ treatment.pk }}</h2>
+          <h2 class="text-xl font-extrabold" style="color:var(--text)">Приём #{{ treatment.display_number }}</h2>
           <span class="badge {% if treatment.status == 'paid' %}badge-green{% elif treatment.status == 'completed' %}badge-blue{% elif treatment.status == 'cancelled' %}badge-gray{% elif treatment.status == 'draft' %}badge-gray{% elif treatment.status == 'in_progress' %}badge-purple{% else %}badge-orange{% endif %}">{% if treatment.status == 'draft' %}✏️ {% endif %}{{ treatment.get_status_display }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm muted">
@@ -367,7 +367,7 @@
   <div x-show="showDiscount" x-cloak class="modal-overlay" @click.self="showDiscount=false">
     <div class="modal-box max-w-sm">
       <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
-        <h3 class="font-bold" style="color:var(--text)">Изменить скидку — Приём #{{ treatment.pk }}</h3>
+        <h3 class="font-bold" style="color:var(--text)">Изменить скидку — Приём #{{ treatment.display_number }}</h3>
         <button @click="showDiscount=false" class="text-2xl muted">&times;</button>
       </div>
       <form method="post" action="/treatments/{{ treatment.pk }}/set-discount/" class="px-6 py-5 space-y-4">

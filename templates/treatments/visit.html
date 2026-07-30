@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block page_title %}Приём №{{ treatment.pk }}{% endblock %}
+{% block page_title %}Приём №{{ treatment.display_number }}{% endblock %}
 
 {% block extra_head %}
 {{ services_json|json_script:"v-services" }}
@@ -52,7 +52,7 @@
       </div>
       <a href="/treatments/{{ treatment.pk }}/" class="btn btn-ghost btn-sm">Открыть карточку приёма →</a>
     </div>
-    <p class="text-xs muted mb-3">Приём №{{ treatment.pk }} · Врач: {{ treatment.doctor.name }} · {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
+    <p class="text-xs muted mb-3">Приём №{{ treatment.display_number }} · Врач: {{ treatment.doctor.name }} · {{ treatment.created_at|date:"d.m.Y H:i" }}</p>
     <div class="flex items-center gap-1 overflow-x-auto pb-1 flex-wrap">
       <template x-for="(s, i) in steps" :key="i">
         <div class="flex items-center shrink-0">

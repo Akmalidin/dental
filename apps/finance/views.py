@@ -101,7 +101,7 @@ def payment_list(request):
     for t in Treatment.objects.exclude(status="cancelled").select_related("patient")[:1000]:
         treatments_json.setdefault(str(t.patient_id), []).append({
             "id": t.pk,
-            "label": f"#{t.pk} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
+            "label": f"#{t.display_number} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
         })
     return render(request, "finance/payments.html", {
         "payments": payments, "form": form, "preselect": preselect,
@@ -317,7 +317,7 @@ def send_to_cashier(request, patient_id):
         from apps.treatments.models import Treatment as _T
         t = _T.objects.filter(pk=treatment_id, patient=patient).first()
         if t:
-            tr_part = _(" Из приёма №%(t)s.") % {"t": t.pk}
+            tr_part = _(" Из приёма №%(t)s.") % {"t": t.display_number}
             link += f"&treatment={treatment_id}"
     title = _("Принять оплату в кассе")
     body = _("Пациент %(p)s. К оплате: %(s)s сом (долг %(d)s).%(tr)s Направил: %(u)s. Примите оплату и выдайте чек.") % {
@@ -498,7 +498,7 @@ def _treatments_by_patient(verified_patient_id=None):
               .select_related("patient").prefetch_related("cures__service")[:2000])
     for t in qs:
         data.setdefault(str(t.patient_id), []).append({
-            "id": t.pk, "label": f"#{t.pk} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
+            "id": t.pk, "label": f"#{t.display_number} · {t.created_at:%d.%m.%Y} · долг {t.debt:.0f} сом",
             "services": [c.service.name for c in t.cures.all() if c.service_id],
             "total": float(t.total_amount or 0), "discount": float(t.discount or 0),
             "paid": float(t.paid_amount or 0), "debt": float(t.debt),

@@ -31,6 +31,12 @@ class Treatment(ClinicSoftDeleteModel):
     # Статусы, НЕ влияющие на баланс/долг пациента (черновик — услуги есть, но долг не считается)
     NON_BILLABLE_STATUSES = (STATUS_DRAFT, STATUS_CANCELLED)
 
+    # Порядковый номер приёма ВНУТРИ клиники (у каждой клиники нумерация с 1).
+    # Не путать с глобальным pk (id в БД) — тот сквозной по всем клиникам.
+    number = models.PositiveIntegerField(
+        null=True, blank=True, db_index=True, verbose_name="№ приёма",
+    )
+
     patient = models.ForeignKey(
         Patient, on_delete=models.PROTECT, related_name="treatments", verbose_name="Пациент"
     )
@@ -64,9 +70,23 @@ class Treatment(ClinicSoftDeleteModel):
         base_manager_name = "all_objects"
 
     def __str__(self):
-        return f"Приём #{self.pk} — {self.patient}"
+        return f"Приём #{self.display_number} — {self.patient}"
 
     def save(self, *args, **kwargs):
+        # Назначаем порядковый номер в пределах клиники при первом сохранении
+        # (см. Patient.save() — та же логика: clinic нужен заранее, до того как
+        # его проставит _ClinicSaveMixin.save через super()).
+        if self.number is None:
+            from apps.tenancy import get_current_clinic
+            from django.db.models import Max
+            if self.clinic_id is None:
+                cur = get_current_clinic()
+                if cur is not None:
+                    self.clinic = cur
+            if self.clinic_id is not None:
+                last = (Treatment.all_objects.filter(clinic_id=self.clinic_id)
+                        .aggregate(m=Max("number"))["m"] or 0)
+                self.number = last + 1
         super().save(*args, **kwargs)
         # Баланс пациента должен оставаться свежим при ЛЮБОМ сохранении приёма
         # (создание, правка суммы/скидки/статуса, soft-delete/восстановление через
@@ -74,6 +94,11 @@ class Treatment(ClinicSoftDeleteModel):
         # (recalculate_total(), правка скидки), из-за чего balance мог "протухать".
         if self.patient_id:
             self.patient.recalc_balance()
+
+    @property
+    def display_number(self):
+        """Номер для показа: порядковый в клинике, иначе глобальный id."""
+        return self.number or self.pk
 
     @property
     def is_cancelled(self):
@@ -113,7 +138,7 @@ class Treatment(ClinicSoftDeleteModel):
         lines = [clinic_name]
         if greet:
             lines.append("Здравствуйте, %s!" % (self.patient.first_name or self.patient.full_name))
-        lines.append("Приём №%s от %s:" % (self.pk, self.created_at.strftime("%d.%m.%Y")))
+        lines.append("Приём №%s от %s:" % (self.display_number, self.created_at.strftime("%d.%m.%Y")))
         for c in self.cures.select_related("service").all():
             lines.append("• %s x%s — %.0f %s" % (c.service.name, c.quantity, c.subtotal, currency))
         lines.append("Итого: %.0f %s" % (self.display_total, currency))

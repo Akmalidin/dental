@@ -448,7 +448,7 @@ def plan_item_toggle(request, pk):
         item.treatment = None
         fields.append("treatment")
     item.save(update_fields=fields)
-    tname = ("приём #%s" % item.treatment_id) if item.treatment_id else ""
+    tname = ("приём #%s" % item.treatment.display_number) if item.treatment_id else ""
     return JsonResponse({"ok": True, "status": item.status,
                          "treatment_id": item.treatment_id, "treatment_label": tname,
                          "completion": item.plan.completion_pct})

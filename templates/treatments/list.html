@@ -33,7 +33,7 @@
       <tbody>
         {% for t in treatments %}
         <tr>
-          <td class="text-slate-400">{{ t.pk }}</td>
+          <td class="text-slate-400">{{ t.display_number }}</td>
           <td><a href="/patients/{{ t.patient.pk }}/" class="font-semibold text-slate-800 hover:text-indigo-600">{{ t.patient.full_name }}</a></td>
           <td class="text-slate-600">{{ t.doctor.name }}</td>
           <td class="font-semibold text-slate-800">{{ t.display_total|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
@@ -50,7 +50,7 @@
               {% if clinic_settings.receipt_format != 'thermal' %}
               <a href="/treatments/{{ t.pk }}/receipt-print/" target="_blank" class="badge badge-gray hover:bg-slate-200" title="Чек A4 + QR">Чек A4</a>
               {% endif %}
-              <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Переместить приём #{{ t.pk }} в корзину?')" style="display:inline">
+              <form method="post" action="/treatments/{{ t.pk }}/delete/" onsubmit="return confirm('Переместить приём #{{ t.display_number }} в корзину?')" style="display:inline">
                 {% csrf_token %}
                 <button class="badge badge-red hover:bg-red-100" title="В корзину">🗑</button>
               </form>
