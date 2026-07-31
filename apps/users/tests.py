@@ -1,5 +1,5 @@
 from django.test import TestCase, Client
-from apps.users.models import User, Permission, PermissionCategory, Role, Clinic
+from apps.users.models import User, Permission, PermissionCategory, Role, Clinic, Branch
 from apps.users.forms import UserForm
 
 
@@ -151,3 +151,48 @@ class StaffManagePermissionTestCase(TestCase):
     def test_staff_create_blocked_without_permission(self):
         resp = self.client.get("/users/create/")
         self.assertEqual(resp.status_code, 403)
+
+
+class RoleCrudViewsTestCase(TestCase):
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника D", slug="clinic-d-crud")
+        self.branch = Branch.objects.create(name="B", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.staff_perm = Permission.objects.filter(code="staff.manage").first() or Permission.objects.create(
+            code="staff.manage", category="staff", label="Управление персоналом",
+        )
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="director_crud", name="Директор", email="dir@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_create_role_scoped_to_own_clinic(self):
+        resp = self.client.post("/users/roles/create/", {"name": "Кассир"}, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        role = Role.objects.get(name="Кассир", clinic=self.clinic)
+        self.assertFalse(role.is_system)
+
+    def test_role_list_excludes_other_clinics_custom_roles(self):
+        other_clinic = Clinic.objects.create(name="Клиника E", slug="clinic-e-crud")
+        Role.objects.create(name="Чужая роль", clinic=other_clinic)
+        resp = self.client.get("/users/roles/")
+        names = [r.name for r in resp.context["roles"]]
+        self.assertNotIn("Чужая роль", names)
+
+    def test_cannot_delete_system_role(self):
+        role = Role.objects.get(name="doctor", clinic__isnull=True)
+        resp = self.client.post(f"/users/roles/{role.pk}/delete/", follow=True)
+        self.assertTrue(Role.objects.filter(pk=role.pk).exists())
+
+    def test_duplicate_role_creates_independent_copy(self):
+        perm = Permission.objects.get(code="staff.manage")
+        original = Role.objects.create(name="Оригинал", clinic=self.clinic)
+        original.granular_permissions.add(perm)
+        resp = self.client.post(f"/users/roles/{original.pk}/duplicate/", follow=True)
+        self.assertEqual(resp.status_code, 200)
+        copy = Role.objects.filter(clinic=self.clinic).exclude(pk=original.pk).latest("id")
+        self.assertTrue(copy.has_perm("staff.manage"))
+        copy.granular_permissions.remove(perm)
+        self.assertTrue(original.has_perm("staff.manage"))  # оригинал не затронут

@@ -1,7 +1,13 @@
 from django.urls import path
 from . import views
+from . import roles_views
 
 urlpatterns = [
+    path("roles/", roles_views.role_list, name="role_list"),
+    path("roles/create/", roles_views.role_create, name="role_create"),
+    path("roles/<int:pk>/edit/", roles_views.role_edit, name="role_edit"),
+    path("roles/<int:pk>/duplicate/", roles_views.role_duplicate, name="role_duplicate"),
+    path("roles/<int:pk>/delete/", roles_views.role_delete, name="role_delete"),
     path("", views.staff_list, name="staff_list"),
     path("create/", views.staff_create, name="staff_create"),
     path("<int:pk>/edit/", views.staff_edit, name="staff_edit"),
