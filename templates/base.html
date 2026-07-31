@@ -160,6 +160,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
         <span class="nav-label">Сотрудники</span>
       </a>
+      <a href="/users/roles/" class="nav-item {% if 'role' in u %}active{% endif %}" data-mod="staff" style="padding-left:2.6rem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        <span class="nav-label">Роли</span>
+      </a>
       {% endif %}
       {% if user.is_superadmin %}
       <a href="/users/audit/" class="nav-item {% if 'audit' in u %}active{% endif %}" data-mod="audit">

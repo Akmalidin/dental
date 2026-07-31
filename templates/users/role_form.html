@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block page_title %}Права роли «{{ role.display_name }}»{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="roleEditor()">
+  <div class="card card-pad">
+    <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
+      {% if role.is_system %}
+      <h3 class="font-bold text-lg" style="color:var(--text)">{{ role.display_name }} <span class="badge badge-blue ml-1">Системная</span></h3>
+      {% else %}
+      <input type="text" form="role-form" name="name" value="{{ role.name }}" class="font-bold text-lg" style="max-width:320px">
+      {% endif %}
+      <a href="/users/roles/" class="btn btn-ghost btn-sm">← К списку ролей</a>
+    </div>
+
+    <form id="role-form" method="post" class="space-y-3">
+      {% csrf_token %}
+      {% if role.is_system %}<input type="hidden" name="name" value="{{ role.name }}">{% endif %}
+
+      {% for cat_value, cat_label, perms in categories %}
+      {% if perms %}
+      <div class="rounded-xl" style="border:1px solid var(--border)" x-data="{open:true}">
+        <button type="button" @click="open=!open" class="w-full flex items-center justify-between px-4 py-3">
+          <span class="font-semibold text-sm" style="color:var(--text)">{{ cat_label }}</span>
+          <span class="flex items-center gap-3">
+            <label class="text-xs flex items-center gap-1.5 font-normal" @click.stop>
+              <input type="checkbox" @change="toggleCategory('{{ cat_value }}', $event.target.checked)" :checked="allChecked('{{ cat_value }}')">
+              Выбрать всё
+            </label>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 style="transition:transform .2s" :style="open ? 'transform:rotate(180deg)' : ''"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </button>
+        <div x-show="open" x-cloak class="px-4 pb-3 space-y-1.5" data-category="{{ cat_value }}">
+          {% for perm in perms %}
+          <label class="flex items-start gap-2.5 text-sm py-1 cursor-pointer">
+            <input type="checkbox" form="role-form" name="permissions" value="{{ perm.code }}"
+                   {% if perm.code in granted %}checked{% endif %} class="mt-0.5">
+            <span>{{ perm.label }}{% if perm.help_text %}<span class="block text-xs text-slate-400">{{ perm.help_text }}</span>{% endif %}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function roleEditor() {
+  return {
+    allChecked(cat) {
+      const box = document.querySelector(`[data-category="${cat}"]`);
+      if (!box) return false;
+      const boxes = box.querySelectorAll('input[type=checkbox]');
+      return boxes.length > 0 && Array.from(boxes).every(b => b.checked);
+    },
+    toggleCategory(cat, value) {
+      const box = document.querySelector(`[data-category="${cat}"]`);
+      if (!box) return;
+      box.querySelectorAll('input[type=checkbox]').forEach(b => { b.checked = value; });
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block page_title %}Роли{% endblock %}
+{% block content %}
+<div class="space-y-4" x-data="{showCreate:false}">
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4">
+      <h2 class="text-slate-700 text-sm">Роли и права доступа</h2>
+      <button type="button" @click="showCreate=true" class="btn btn-primary">+ Новая роль</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Роль</th><th>Тип</th><th>Сотрудников</th><th class="text-right pr-5">Действия</th></tr></thead>
+      <tbody>
+        {% for role in roles %}
+        <tr>
+          <td class="font-semibold" style="color:var(--text)">{{ role.display_name }}</td>
+          <td>{% if role.is_system %}<span class="badge badge-blue">Системная</span>{% else %}<span class="badge badge-green">Своя</span>{% endif %}</td>
+          <td>{{ role.users.count }}</td>
+          <td class="text-right pr-3">
+            <div class="flex items-center justify-end gap-1.5">
+              <a href="/users/roles/{{ role.pk }}/edit/" class="btn btn-ghost btn-sm">{% if role.is_system %}Права{% else %}Изменить{% endif %}</a>
+              <form method="post" action="/users/roles/{{ role.pk }}/duplicate/" style="display:inline">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" title="Дублировать">⧉</button>
+              </form>
+              {% if not role.is_system %}
+              <form method="post" action="/users/roles/{{ role.pk }}/delete/" style="display:inline" onsubmit="return confirm('Удалить роль «{{ role.display_name }}»?')">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" title="Удалить">🗑</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center py-12 text-slate-400">Нет ролей</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div x-show="showCreate" x-cloak class="modal-overlay" @click.self="showCreate=false">
+    <div class="modal-box max-w-sm">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800">Новая роль</h3>
+        <button @click="showCreate=false" class="text-2xl text-slate-400">&times;</button>
+      </div>
+      <form method="post" action="/users/roles/create/" class="px-6 py-5 space-y-4">
+        {% csrf_token %}
+        <div><label class="fld">Название роли</label><input type="text" name="name" required placeholder="напр. Кассир"></div>
+        <div class="flex gap-3 pt-2">
+          <button type="submit" class="btn-primary flex-1 justify-center">Создать</button>
+          <button type="button" @click="showCreate=false" class="btn-ghost">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
