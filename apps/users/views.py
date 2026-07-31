@@ -389,7 +389,7 @@ def clinic_overview(request, clinic_id):
             "pk": s.pk,
             "name": s.name,
             "login": s.login,
-            "role": s.role.get_name_display() if s.role else "",
+            "role": s.role.display_name if s.role else "",
             "active": s.is_active,
             "full": s.full_access,
             "sections": all_keys if s.full_access else list(s.checked_sections),
@@ -1311,7 +1311,7 @@ def _salary_rows(date_from, date_to, completed_only=False):
         salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else Decimal(0)
         role_label = ""
         if getattr(doc, "role", None):
-            role_label = doc.role.get_name_display() if hasattr(doc.role, "get_name_display") else str(doc.role)
+            role_label = doc.role.display_name
         rows.append({
             "doctor": doc, "role_label": role_label, "scheme": scheme,
             "revenue": revenue, "paid": paid,

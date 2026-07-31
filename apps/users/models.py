@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser, Permission
+from django.contrib.auth.models import AbstractUser, Permission as DjangoPermission
 from django.db import models
 from apps.tenancy import ClinicScopedModel
 
@@ -83,6 +83,30 @@ class Branch(ClinicScopedModel):
         return self.name
 
 
+class PermissionCategory(models.TextChoices):
+    FINANCE = "finance", "Финансы"
+    PATIENTS = "patients", "Пациенты"
+    STAFF = "staff", "Персонал"
+    REPORTS = "reports", "Отчёты"
+
+
+class Permission(models.Model):
+    """Каталог доступных прав — заполняется data migration (Task 2), не через UI."""
+    code = models.CharField(max_length=64, unique=True, verbose_name="Код")
+    category = models.CharField(max_length=32, choices=PermissionCategory.choices, verbose_name="Категория")
+    label = models.CharField(max_length=255, verbose_name="Название")
+    help_text = models.CharField(max_length=255, blank=True, verbose_name="Подсказка")
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Право доступа"
+        verbose_name_plural = "Права доступа"
+        ordering = ["category", "sort_order", "label"]
+
+    def __str__(self):
+        return self.label
+
+
 class Role(models.Model):
     """Custom role with explicit permissions."""
 
@@ -100,9 +124,24 @@ class Role(models.Model):
         (NURSE, "Медсестра"),
     ]
 
-    name = models.CharField(max_length=50, choices=ROLE_CHOICES, unique=True, verbose_name="Роль")
+    name = models.CharField(max_length=50, verbose_name="Роль")
+    # None = системная роль (видна и доступна всем клиникам, создаётся только
+    # сидинг-миграцией). Заполнено = кастомная роль, созданная и видимая
+    # ТОЛЬКО этой клиникой — без этого поля роль одной клиники была бы видна
+    # и доступна для назначения во всех остальных клиниках SaaS.
+    clinic = models.ForeignKey(
+        "users.Clinic", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="custom_roles", verbose_name="Клиника",
+    )
+    is_system = models.BooleanField(default=False, verbose_name="Системная роль")
+    granular_permissions = models.ManyToManyField(
+        Permission, blank=True, related_name="roles", verbose_name="Права (новая система)",
+    )
+    # Старое поле — встроенный Django Permission, мёртвый код (нигде не проверяется
+    # за пределами этого файла), оставляем нетронутым по поведению, только меняем
+    # имя импортированного класса на DjangoPermission (см. правку импорта выше).
     permissions = models.ManyToManyField(
-        Permission,
+        DjangoPermission,
         blank=True,
         verbose_name="Права доступа",
     )
@@ -110,9 +149,26 @@ class Role(models.Model):
     class Meta:
         verbose_name = "Роль"
         verbose_name_plural = "Роли"
+        constraints = [
+            models.UniqueConstraint(fields=["clinic", "name"], name="unique_role_name_per_clinic"),
+        ]
 
     def __str__(self):
-        return self.get_name_display()
+        return self.display_name
+
+    @property
+    def display_name(self):
+        """Человекочитаемое имя роли: для системных ролей — русская подпись
+        из ROLE_CHOICES (name хранит код вида "admin_main"), для кастомных
+        ролей клиники — сам name (директор ввёл его сам, переводить нечего).
+        Замена removed choices=ROLE_CHOICES на поле name (Task 1 RBAC) —
+        раньше это делал автосгенерированный get_name_display()."""
+        if self.is_system:
+            return dict(self.ROLE_CHOICES).get(self.name, self.name)
+        return self.name
+
+    def has_perm(self, code: str) -> bool:
+        return self.granular_permissions.filter(code=code).exists()
 
 
 # ─── Разделы системы (для персональных доступов) ─────────────────────────────
