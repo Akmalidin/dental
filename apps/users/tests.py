@@ -23,8 +23,10 @@ class UserColorFieldTestCase(TestCase):
 
 class PermissionCatalogTestCase(TestCase):
     def test_permission_has_category_and_code(self):
+        # test.dummy_action — заведомо не пересекается с реальным каталогом
+        # прав (сидится data migration'ом Task 2, code там уникален)
         p = Permission.objects.create(
-            code="finance.accept_payments", category=PermissionCategory.FINANCE,
+            code="test.dummy_action", category=PermissionCategory.FINANCE,
             label="Приём оплат",
         )
         self.assertEqual(p.category, "finance")
@@ -53,11 +55,29 @@ class RoleClinicScopingTestCase(TestCase):
 
 class RoleHasPermTestCase(TestCase):
     def test_has_perm_true_when_granted(self):
-        perm = Permission.objects.create(code="finance.accept_payments", category="finance", label="X")
+        perm = Permission.objects.create(code="test.dummy_action2", category="finance", label="X")
         role = Role.objects.create(name="custom_cashier_test", is_system=True)
         role.granular_permissions.add(perm)
-        self.assertTrue(role.has_perm("finance.accept_payments"))
+        self.assertTrue(role.has_perm("test.dummy_action2"))
 
     def test_has_perm_false_when_not_granted(self):
         role = Role.objects.create(name="custom_empty_test", is_system=True)
         self.assertFalse(role.has_perm("finance.accept_payments"))
+
+
+class PermissionSeedTestCase(TestCase):
+    def test_catalog_seeded_with_nine_permissions(self):
+        self.assertEqual(Permission.objects.count(), 9)
+
+    def test_system_roles_marked_is_system(self):
+        for name in ["superadmin", "admin_main", "admin", "doctor", "nurse"]:
+            role = Role.objects.get(name=name, clinic__isnull=True)
+            self.assertTrue(role.is_system)
+
+    def test_admin_role_has_no_staff_manage_by_default(self):
+        role = Role.objects.get(name="admin", clinic__isnull=True)
+        self.assertFalse(role.has_perm("staff.manage"))
+
+    def test_admin_main_has_staff_manage_by_default(self):
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.assertTrue(role.has_perm("staff.manage"))
