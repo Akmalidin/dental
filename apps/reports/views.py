@@ -10,7 +10,7 @@ from apps.treatments.models import Treatment
 from apps.finance.models import Payment, Expense
 from apps.appointments.models import Appointment
 from apps.patients.models import Patient
-from apps.users.decorators import role_required
+from apps.users.decorators import role_required, require_permission
 
 
 @login_required
@@ -216,7 +216,7 @@ def report_treatments(request):
 
 
 @login_required
-@role_required("superadmin", "admin_main", "admin")
+@require_permission("reports.view_doctors")
 def report_doctors(request):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
@@ -236,7 +236,7 @@ def report_doctors(request):
 
 
 @login_required
-@role_required("superadmin", "admin_main", "admin")
+@require_permission("reports.view_finance")
 def report_finance(request):
     today = date.today()
     month_start = today.replace(day=1)
@@ -258,7 +258,7 @@ def report_finance(request):
 
 
 @login_required
-@role_required("superadmin", "admin_main", "admin")
+@require_permission("reports.export")
 def export_excel(request, report_type):
     """Export any report as Excel."""
     try:

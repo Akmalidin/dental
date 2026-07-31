@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 
 from .forms import LoginForm, UserForm, BranchForm
 from .models import User, Branch, Role
-from .decorators import role_required
+from .decorators import role_required, require_permission
 
 
 @login_required
@@ -1028,7 +1028,7 @@ def staff_set_password(request, pk):
 
 
 @login_required
-@role_required("superadmin", "admin_main")
+@require_permission("staff.manage")
 def staff_create(request):
     from apps.tenancy import get_current_clinic
     form = UserForm(request.POST or None, request.FILES or None, request_user=request.user)
@@ -1048,7 +1048,7 @@ def staff_create(request):
 
 
 @login_required
-@role_required("superadmin", "admin_main")
+@require_permission("staff.manage")
 def staff_edit(request, pk):
     user = get_object_or_404(User, pk=pk)
     # защита: суперпользователя редактирует только суперпользователь

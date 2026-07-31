@@ -1,5 +1,5 @@
-from django.test import TestCase
-from apps.users.models import User, Branch, Clinic
+from django.test import TestCase, Client
+from apps.users.models import User, Branch, Clinic, Role
 from apps.patients.models import Patient
 from apps.finance.forms import PaymentForm
 from apps.tenancy import set_current_clinic, clear_current_clinic
@@ -31,3 +31,23 @@ class PaymentFormClinicIsolationTestCase(TestCase):
         patient_ids = set(form.fields["patient"].queryset.values_list("pk", flat=True))
         self.assertIn(self.patient_a.pk, patient_ids)
         self.assertNotIn(self.patient_b.pk, patient_ids)
+
+
+class PaymentPermissionTestCase(TestCase):
+    def setUp(self):
+        self.branch = Branch.objects.create(name="PermBranch2", address="-", phone="0", is_main=True)
+        self.role = Role.objects.create(name="no_finance_role_test", is_system=True)
+        self.user = User.objects.create(login="no_finance_test", name="U", email="u@test.local", role=self.role)
+        self.patient = Patient.objects.create(first_name="X", last_name="Y", phone="998", branch=self.branch)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_payment_create_blocked_without_permission(self):
+        resp = self.client.post("/finance/payments/create/", {
+            "patient": self.patient.pk, "amount": "100", "method": "cash", "type": "income",
+        })
+        self.assertEqual(resp.status_code, 403)
+
+    def test_expense_create_blocked_without_permission(self):
+        resp = self.client.post("/finance/expenses/create/", {"amount": "50", "description": "x"})
+        self.assertEqual(resp.status_code, 403)

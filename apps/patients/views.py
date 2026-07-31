@@ -9,6 +9,7 @@ from .models import Patient, Tag, LeadSource, SharedPhoneNumber
 from .forms import PatientForm
 from apps.treatments.models import Treatment, TreatmentCure
 from apps.finance.models import Payment
+from apps.users.decorators import require_permission
 
 
 @login_required
@@ -576,6 +577,7 @@ def patient_wa_messages(request, pk):
 
 
 @login_required
+@require_permission("patients.export")
 def patient_export(request):
     from .excel_io import export_patients_xlsx
     return export_patients_xlsx()
@@ -1010,6 +1012,7 @@ def patient_edit(request, pk):
 
 
 @login_required
+@require_permission("patients.delete")
 def patient_delete(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     if request.method == "POST":

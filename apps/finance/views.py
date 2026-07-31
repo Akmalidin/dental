@@ -11,6 +11,7 @@ from decimal import Decimal
 from .models import Payment, Expense, ExpenseCategory, PatientAdvance
 from .forms import PaymentForm, ExpenseForm
 from apps.patients.models import Patient
+from apps.users.decorators import require_permission
 
 
 def _get_own_payment_or_404(pk, queryset=None):
@@ -396,11 +397,9 @@ def payment_allocations(request, pk):
 
 @login_required
 @require_POST
+@require_permission("finance.delete_payment")
 def payment_delete(request, pk):
-    """Удалить платёж. Разрешено только создателю системы (суперадмину)."""
-    if not getattr(request.user, "is_superadmin", False):
-        messages.error(request, _("Удалять платежи может только владелец (суперадмин)"))
-        return redirect("payment_list")
+    """Удалить платёж."""
     payment = get_object_or_404(Payment.all_clinics, pk=pk)
     patient = payment.patient
     affected = [a.treatment for a in payment.allocations.select_related("treatment").all()]
@@ -414,6 +413,7 @@ def payment_delete(request, pk):
 
 
 @login_required
+@require_permission("finance.accept_payments")
 def payment_create(request):
     from apps.treatments.models import Treatment
     patient_id = request.POST.get("patient") or request.GET.get("patient")
@@ -513,6 +513,7 @@ def expense_list(request):
 
 
 @login_required
+@require_permission("finance.manage_expenses")
 def expense_create(request):
     form = ExpenseForm(request.POST or None)
     if request.method == "POST" and form.is_valid():

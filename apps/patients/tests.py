@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.test import TestCase, Client
-from apps.users.models import User, Branch
+from apps.users.models import User, Branch, Permission, Role
 from apps.patients.models import Patient, normalize_phone, SharedPhoneNumber
 from apps.treatments.models import Treatment
 from apps.finance.models import Payment
@@ -229,3 +229,23 @@ class PatientCreateQuickTestCase(TestCase):
     def test_get_not_allowed(self):
         resp = self.client.get("/patients/quick-create/")
         self.assertEqual(resp.status_code, 405)
+
+
+class PatientDeletePermissionTestCase(TestCase):
+    def setUp(self):
+        self.branch = Branch.objects.create(name="PermBranch", address="-", phone="0", is_main=True)
+        self.perm = Permission.objects.filter(code="patients.delete").first() or Permission.objects.create(
+            code="patients.delete", category="patients", label="Удаление пациентов",
+        )
+        self.role_no_delete = Role.objects.create(name="no_delete_role_test", is_system=True)
+        self.nurse = User.objects.create(login="nurse_perm_test", name="Медсестра", email="np@test.local", role=self.role_no_delete)
+        self.nurse.branches.add(self.branch)
+        self.patient = Patient.objects.create(first_name="X", last_name="Y", phone="999", branch=self.branch)
+        self.client = Client()
+        self.client.force_login(self.nurse)
+
+    def test_delete_blocked_without_permission(self):
+        resp = self.client.post(f"/patients/{self.patient.pk}/delete/")
+        self.assertEqual(resp.status_code, 403)
+        self.patient.refresh_from_db()
+        self.assertFalse(self.patient.is_deleted)

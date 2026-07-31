@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, Client
 from apps.users.models import User, Permission, PermissionCategory, Role, Clinic
 from apps.users.forms import UserForm
 
@@ -139,3 +139,15 @@ class RequirePermissionDecoratorTestCase(TestCase):
         request.user = su
         response = view(request)
         self.assertEqual(response.status_code, 200)
+
+
+class StaffManagePermissionTestCase(TestCase):
+    def setUp(self):
+        self.role = Role.objects.create(name="no_staff_role_test", is_system=True)
+        self.user = User.objects.create(login="no_staff_test", name="U2", email="u2@test.local", role=self.role)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_staff_create_blocked_without_permission(self):
+        resp = self.client.get("/users/create/")
+        self.assertEqual(resp.status_code, 403)
