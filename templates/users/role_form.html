@@ -16,6 +16,11 @@
       {% csrf_token %}
       {% if role.is_system %}<input type="hidden" name="name" value="{{ role.name }}">{% endif %}
 
+      <label class="flex items-center gap-2.5 text-sm font-semibold py-1 cursor-pointer" style="color:var(--text)">
+        <input type="checkbox" @change="toggleAll($event.target.checked)" :checked="allCheckedGlobal()">
+        Все права
+      </label>
+
       {% for cat_value, cat_label, perms in categories %}
       {% if perms %}
       <div class="rounded-xl" style="border:1px solid var(--border)" x-data="{open:true}">
@@ -30,9 +35,9 @@
                  style="transition:transform .2s" :style="open ? 'transform:rotate(180deg)' : ''"><path d="M6 9l6 6 6-6"/></svg>
           </span>
         </button>
-        <div x-show="open" x-cloak class="px-4 pb-3 space-y-1.5" data-category="{{ cat_value }}">
+        <div x-show="open" x-cloak class="grid sm:grid-cols-2 gap-x-4 gap-y-1 px-4 pb-3" data-category="{{ cat_value }}">
           {% for perm in perms %}
-          <label class="flex items-start gap-2.5 text-sm py-1 cursor-pointer">
+          <label class="flex items-start gap-2.5 text-sm py-1 cursor-pointer" title="{{ perm.help_text }}">
             <input type="checkbox" form="role-form" name="permissions" value="{{ perm.code }}"
                    {% if perm.code in granted %}checked{% endif %} class="mt-0.5">
             <span>{{ perm.label }}{% if perm.help_text %}<span class="block text-xs text-slate-400">{{ perm.help_text }}</span>{% endif %}</span>
@@ -52,6 +57,9 @@
 <script>
 function roleEditor() {
   return {
+    allPermBoxes() {
+      return document.querySelectorAll('input[name="permissions"]');
+    },
     allChecked(cat) {
       const box = document.querySelector(`[data-category="${cat}"]`);
       if (!box) return false;
@@ -62,6 +70,13 @@ function roleEditor() {
       const box = document.querySelector(`[data-category="${cat}"]`);
       if (!box) return;
       box.querySelectorAll('input[type=checkbox]').forEach(b => { b.checked = value; });
+    },
+    allCheckedGlobal() {
+      const boxes = this.allPermBoxes();
+      return boxes.length > 0 && Array.from(boxes).every(b => b.checked);
+    },
+    toggleAll(value) {
+      this.allPermBoxes().forEach(b => { b.checked = value; });
     },
   };
 }

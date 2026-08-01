@@ -181,6 +181,23 @@ class RoleCrudViewsTestCase(TestCase):
         names = [r.name for r in resp.context["roles"]]
         self.assertNotIn("Чужая роль", names)
 
+    def test_role_list_excludes_platform_superadmin_role(self):
+        resp = self.client.get("/users/roles/")
+        names = [r.name for r in resp.context["roles"]]
+        self.assertNotIn(Role.SUPERADMIN, names)
+
+    def test_superadmin_role_not_editable_via_direct_url(self):
+        role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        resp = self.client.get(f"/users/roles/{role.pk}/edit/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_role_edit_page_renders_permission_grid(self):
+        role = Role.objects.create(name="Регистратор", clinic=self.clinic)
+        resp = self.client.get(f"/users/roles/{role.pk}/edit/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Все права")
+        self.assertContains(resp, self.staff_perm.label)
+
     def test_cannot_delete_system_role(self):
         role = Role.objects.get(name="doctor", clinic__isnull=True)
         resp = self.client.post(f"/users/roles/{role.pk}/delete/", follow=True)
@@ -196,3 +213,51 @@ class RoleCrudViewsTestCase(TestCase):
         self.assertTrue(copy.has_perm("staff.manage"))
         copy.granular_permissions.remove(perm)
         self.assertTrue(original.has_perm("staff.manage"))  # оригинал не затронут
+
+
+class StaffFormTabsTestCase(TestCase):
+    """Форма сотрудника разбита на вкладки (Основное / Роль и филиалы / Врач /
+    Доступ к разделам), чтобы не листать одну длинную страницу."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника F", slug="clinic-f-tabs")
+        Permission.objects.filter(code="staff.manage").first() or Permission.objects.create(
+            code="staff.manage", category="staff", label="Управление персоналом",
+        )
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="director_tabs", name="Директор", email="dirtabs@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_create_page_renders_all_tabs(self):
+        resp = self.client.get("/users/create/")
+        self.assertEqual(resp.status_code, 200)
+        for label in ["Основное", "Роль и филиалы", "Врач", "Доступ к разделам"]:
+            self.assertContains(resp, label)
+
+    def test_create_page_no_longer_lists_fields_in_single_scroll(self):
+        resp = self.client.get("/users/create/")
+        # Поля разнесены по вкладкам через x-show, а не в одном .grid без табов
+        self.assertContains(resp, 'x-show="tab==')
+
+    def test_can_still_create_staff_through_tabbed_form(self):
+        resp = self.client.post("/users/create/", {
+            "login": "new_staff_tabs", "name": "Новый Сотрудник", "email": "ns@test.local",
+            "password": "secret123", "full_access": "on",
+        }, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(User.objects.filter(login="new_staff_tabs").exists())
+
+    def test_staff_list_add_button_links_to_full_page(self):
+        resp = self.client.get("/users/")
+        self.assertContains(resp, 'href="/users/create/"')
+
+    def test_superadmin_role_not_offered_in_staff_form_even_to_superadmin_viewer(self):
+        self.director.is_superuser = True
+        self.director.save(update_fields=["is_superuser"])
+        resp = self.client.get("/users/create/")
+        superadmin_label = dict(Role.ROLE_CHOICES)[Role.SUPERADMIN]
+        self.assertNotContains(resp, superadmin_label)

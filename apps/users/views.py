@@ -954,10 +954,9 @@ def staff_list(request):
         users = users.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(login__icontains=query))
     users = users.distinct()
 
-    form = UserForm()
     can_impersonate = request.user.is_superadmin or request.user.is_admin_main
     return render(request, "users/list.html", {
-        "users": users, "form": form, "can_impersonate": can_impersonate,
+        "users": users, "can_impersonate": can_impersonate,
         "role_filter": role_filter, "query": query,
     })
 
@@ -1031,7 +1030,7 @@ def staff_set_password(request, pk):
 @require_permission("staff.manage")
 def staff_create(request):
     from apps.tenancy import get_current_clinic
-    form = UserForm(request.POST or None, request.FILES or None, request_user=request.user)
+    form = UserForm(request.POST or None, request.FILES or None)
     if form.is_valid():
         new_user = form.save(commit=False)
         # привязать к текущей клинике (или к клинике создателя)
@@ -1055,7 +1054,7 @@ def staff_edit(request, pk):
     if _is_protected_target(user, request.user):
         messages.error(request, _("Доступ запрещён: нельзя редактировать суперпользователя"))
         return redirect("staff_list")
-    form = UserForm(request.POST or None, request.FILES or None, instance=user, request_user=request.user)
+    form = UserForm(request.POST or None, request.FILES or None, instance=user)
     if form.is_valid():
         form.save()
         _apply_access_from_form(request.user, user, form)

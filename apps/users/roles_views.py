@@ -10,8 +10,12 @@ from .models import Role, Permission, PermissionCategory
 
 
 def roles_for_clinic(clinic):
-    """Роли, видимые клинике: системные (общие для всех) + свои кастомные."""
-    return Role.objects.filter(Q(clinic__isnull=True) | Q(clinic=clinic))
+    """Роли, видимые клинике: системные (общие для всех) + свои кастомные.
+
+    Суперадмин AKM SOFT — служебная роль платформы, не относится к персоналу
+    клиники и не должна быть видна/доступна для управления директору клиники.
+    """
+    return Role.objects.filter(Q(clinic__isnull=True) | Q(clinic=clinic)).exclude(name=Role.SUPERADMIN)
 
 
 @login_required
