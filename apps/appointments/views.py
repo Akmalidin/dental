@@ -276,6 +276,7 @@ def appointment_day_grid(request):
             "time": f"{local_start:%H:%M}–{local_end:%H:%M}",
             "patient": a.patient.full_name if a.patient else "—",
             "services": services, "status_display": a.get_status_display(),
+            "duration_min": dur, "movable": a.status not in ("completed", "cancelled"),
         }
         (by_doctor.get(a.doctor_id, unassigned)).append(block)
 
@@ -287,6 +288,13 @@ def appointment_day_grid(request):
     all_tops = [b["top"] for col in columns for b in col["blocks"]]
     scroll_to = max(0, (min(all_tops) - 30)) if all_tops else (9 - DAY_START) * 60
 
+    # Данные для модалки записи (клик по пустой ячейке) — тот же контракт,
+    # что и у /calendar/ (appointment_create_quick), чтобы не дублировать бэкенд-логику.
+    from apps.patients.models import Patient
+    from apps.services.models import Service
+    patients = Patient.objects.order_by("last_name").values("id", "first_name", "last_name", "phone")
+    services = Service.objects.filter(is_active=True).order_by("name").values("id", "name", "price", "duration")
+
     return render(request, "appointments/day_grid.html", {
         "day": day,
         "prev_day": (day - timedelta(days=1)).isoformat(),
@@ -297,6 +305,14 @@ def appointment_day_grid(request):
         "columns": columns,
         "day_start": DAY_START,
         "scroll_to": int(scroll_to),
+        "patients_json": [
+            {"id": p["id"], "name": f'{p["last_name"]} {p["first_name"]}', "phone": p["phone"]}
+            for p in patients
+        ],
+        "services_json": [
+            {"id": s["id"], "name": s["name"], "price": float(s["price"]), "duration": s["duration"]}
+            for s in services
+        ],
     })
 
 
@@ -581,8 +597,11 @@ def appointment_edit(request, pk):
 @login_required
 @require_POST
 def appointment_move(request, pk):
-    """AJAX: drag/resize an appointment on the calendar (update start/end)."""
+    """AJAX: drag/resize an appointment on the calendar (update start/end).
+    Опционально принимает doctor_id — перенос записи в колонку другого врача
+    (день/расписание по врачам), не только смена времени у того же врача."""
     from django.utils import timezone as _tz
+    User = request.user.__class__
     appt = get_object_or_404(Appointment, pk=pk)
     try:
         data = json.loads(request.body)
@@ -592,17 +611,25 @@ def appointment_move(request, pk):
             start = _tz.make_aware(start)
         if _tz.is_naive(end):
             end = _tz.make_aware(end)
+        doctor = appt.doctor
+        doctor_id = data.get("doctor_id")
+        if doctor_id and str(doctor_id) != str(appt.doctor_id):
+            doctor = get_object_or_404(User, pk=doctor_id)
         overlap = Appointment.objects.filter(
-            doctor=appt.doctor, start_at__lt=end, end_at__gt=start,
+            doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).exists()
         if overlap:
             return JsonResponse({"error": "Пересечение с другой записью этого врача"}, status=400)
-        sched_err = schedule_violation(appt.doctor, start, end)
+        sched_err = schedule_violation(doctor, start, end)
         if sched_err:
             return JsonResponse({"error": sched_err}, status=400)
         appt.start_at = start
         appt.end_at = end
-        appt.save(update_fields=["start_at", "end_at"])
+        update_fields = ["start_at", "end_at"]
+        if doctor.pk != appt.doctor_id:
+            appt.doctor = doctor
+            update_fields.append("doctor")
+        appt.save(update_fields=update_fields)
         gcal_push(appt)
         return JsonResponse({"ok": True})
     except Exception as e:

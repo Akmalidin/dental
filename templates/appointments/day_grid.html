@@ -2,7 +2,7 @@
 {% block page_title %}Расписание по врачам{% endblock %}
 
 {% block content %}
-<div class="space-y-4">
+<div class="space-y-4" x-data="dayGridPage()">
   <!-- Toolbar -->
   <div class="card card-pad flex flex-wrap items-center gap-3">
     <div class="flex items-center gap-2">
@@ -22,10 +22,11 @@
       <a href="/calendar/" class="btn btn-ghost btn-sm">📅 Календарь</a>
     </div>
   </div>
+  <div class="text-xs muted">Колонки врачей можно перетаскивать за заголовок, чтобы изменить порядок. Записи — перетаскивать между временем/врачами (кроме завершённых и отменённых). Клик по пустому месту — новая запись.</div>
 
   <!-- Grid -->
   <div class="card" id="dgScroll" style="overflow:auto;max-height:72vh">
-    <div style="display:flex;min-width:max-content">
+    <div style="display:flex;min-width:max-content" id="dgColumns">
       <!-- time axis -->
       <div style="width:56px;flex-shrink:0;position:relative;border-right:1px solid var(--border)">
         <div style="height:42px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:3;background:var(--surface)"></div>
@@ -38,20 +39,23 @@
 
       <!-- doctor columns -->
       {% for col in columns %}
-      <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border)">
+      <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border)" class="dg-col" data-doctor-id="{{ col.doctor.pk|default:'' }}">
         <!-- header -->
-        <div style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2);position:sticky;top:0;z-index:2">
+        <div class="dg-col-head" draggable="{% if col.doctor %}true{% else %}false{% endif %}"
+             style="height:42px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-2);position:sticky;top:0;z-index:2;{% if col.doctor %}cursor:grab;{% endif %}">
           <span class="avatar w-6 h-6 text-[10px]"{% if col.doctor.color %} style="background:{{ col.doctor.color }}"{% endif %}>{% if col.doctor %}{{ col.doctor.name|first|upper }}{% else %}?{% endif %}</span>
           <span class="text-sm font-semibold truncate flex-1" style="color:var(--text)">{% if col.doctor %}{{ col.doctor.name }}{% else %}Без врача{% endif %}</span>
           {% if col.doctor %}<a href="/appointments/schedule/print/?date={{ day|date:'Y-m-d' }}&doctor={{ col.doctor.pk }}" target="_blank" title="Печать расписания врача" style="color:var(--text-faint);text-decoration:none" onclick="event.stopPropagation()">🖨</a>{% endif %}
         </div>
         <!-- column body -->
-        <div style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border) 59px,var(--border) 60px)"
-             {% if col.doctor %}onclick="bookAt(event, {{ col.doctor.pk }})"{% endif %} title="Клик — записать">
+        <div class="dg-col-body" style="position:relative;height:{{ grid_height }}px;background:repeating-linear-gradient(to bottom,transparent,transparent 59px,var(--border) 59px,var(--border) 60px)"
+             {% if col.doctor %}data-doctor-id="{{ col.doctor.pk }}" data-doctor-name="{{ col.doctor.name }}" onclick="dgEmptyClick(event, this)"{% endif %} title="Клик — записать">
           {% for b in col.blocks %}
-          <div onclick="event.stopPropagation(); location.href='/appointments/?focus={{ b.id }}'"
+          <div class="dg-appt {% if b.movable %}dg-movable{% endif %}" data-appt-id="{{ b.id }}" data-duration="{{ b.duration_min }}"
+               onclick="dgApptClick(event, {{ b.id }})"
+               {% if b.movable %}onmousedown="dgStartDrag(event, this)"{% endif %}
                style="position:absolute;left:4px;right:4px;top:{{ b.top }}px;height:{{ b.height }}px;
-                      background:{{ b.color }};border-radius:8px;padding:4px 7px;overflow:hidden;cursor:pointer;
+                      background:{{ b.color }};border-radius:8px;padding:4px 7px;overflow:hidden;cursor:{% if b.movable %}grab{% else %}pointer{% endif %};
                       color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);{% if b.cancelled %}opacity:.5;{% endif %}">
             <p style="font-size:11px;font-weight:700;line-height:1.1">{{ b.time }}</p>
             <p style="font-size:12px;font-weight:600;line-height:1.2;margin-top:1px">{{ b.patient }}</p>
@@ -65,23 +69,233 @@
       {% endfor %}
     </div>
   </div>
+
+  <!-- Booking modal -->
+  <div x-show="showBooking" x-cloak class="modal-overlay" @click.self="showBooking=false">
+    <div class="modal-box" style="max-width:480px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg" style="color:var(--text)">Новая запись</h2>
+        <button @click="showBooking=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div x-show="bookError" x-cloak class="badge-red px-4 py-2 rounded-xl text-sm" x-text="bookError"></div>
+        <div>
+          <label class="fld">Пациент</label>
+          <select id="dg-patient" class="no-tom" x-ref="patientSel"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="fld">Врач</label><input type="text" readonly :value="bk.doctorName" style="background:var(--surface-2)"></div>
+          <div><label class="fld">Время *</label><input type="time" x-model="bk.time" step="900"></div>
+        </div>
+        <div><label class="fld">Услуги (можно несколько)</label><select class="no-tom" x-ref="serviceSel" multiple></select></div>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4" style="border-top:1px solid var(--border)">
+        <button @click="showBooking=false" class="btn btn-ghost btn-sm">Отмена</button>
+        <button @click="submitBooking()" class="btn btn-primary btn-sm">Записать</button>
+      </div>
+    </div>
+  </div>
 </div>
 
+{{ patients_json|json_script:"dg-patients" }}
+{{ services_json|json_script:"dg-services" }}
+
 <script>
-// авто-скролл к первой записи дня
-(function(){ const el = document.getElementById('dgScroll'); if (el) el.scrollTop = {{ scroll_to }}; })();
 const DAY_START = {{ day_start }};
 const DAY = '{{ day|date:"Y-m-d" }}';
-function bookAt(e, doctorId) {
-  const colBody = e.currentTarget;
-  const rect = colBody.getBoundingClientRect();
-  const minutes = Math.max(0, Math.round((e.clientY - rect.top)));   // 1px = 1min
-  let h = DAY_START + Math.floor(minutes / 60);
-  let m = minutes % 60;
-  m = Math.round(m / 15) * 15; if (m === 60) { h++; m = 0; }          // привязка к 15 мин
-  const hh = String(h).padStart(2,'0'), mm = String(m).padStart(2,'0');
-  // открыть форму создания записи с предзаполнением
-  location.href = `/appointments/create/?date=${DAY}&time=${hh}:${mm}&doctor=${doctorId}`;
+
+function dayGridPage(){
+  return {
+    showBooking: false,
+    bookError: '',
+    bk: { doctorId: null, doctorName: '', time: '09:00' },
+    patientTS: null, serviceTS: null,
+
+    init(){
+      if (window.TomSelect) {
+        const patients = JSON.parse(document.getElementById('dg-patients').textContent);
+        this.patientTS = new TomSelect(this.$refs.patientSel, {
+          options: patients.map(p => ({ value: String(p.id), text: p.name + (p.phone ? ' · ' + p.phone : '') })),
+          create: false, maxItems: 1,
+        });
+        const services = JSON.parse(document.getElementById('dg-services').textContent);
+        this.serviceTS = new TomSelect(this.$refs.serviceSel, {
+          options: services.map(s => ({ value: String(s.id), text: s.name + ' — ' + Math.round(s.price) + ' сом' })),
+          create: false, maxItems: null,
+        });
+      }
+    },
+
+    openBooking(doctorId, doctorName, time){
+      this.bk = { doctorId, doctorName, time };
+      this.bookError = '';
+      if (this.patientTS) this.patientTS.clear();
+      if (this.serviceTS) this.serviceTS.clear();
+      this.showBooking = true;
+    },
+
+    async submitBooking(){
+      this.bookError = '';
+      const patientId = this.patientTS ? this.patientTS.getValue() : '';
+      const serviceIds = this.serviceTS ? this.serviceTS.getValue() : [];
+      if (!this.bk.time){ this.bookError = 'Укажите время'; return; }
+      const startAt = DAY + 'T' + this.bk.time + ':00';
+      const res = await api('/appointments/create-quick/', 'POST', {
+        doctor_id: this.bk.doctorId, start_at: startAt,
+        patient_id: patientId || null, service_ids: serviceIds,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        this.showBooking = false;
+        if (window.toast) toast('Запись создана', 'success');
+        location.reload();
+      } else {
+        this.bookError = data.error || 'Не удалось создать запись';
+      }
+    },
+  };
 }
+
+function dgEmptyClick(e, colBody){
+  if (e.target.closest('.dg-appt')) return; // клик по самой записи обрабатывает dgApptClick
+  const rect = colBody.getBoundingClientRect();
+  const minutes = Math.max(0, Math.round(e.clientY - rect.top));
+  let h = DAY_START + Math.floor(minutes / 60);
+  let m = Math.round((minutes % 60) / 15) * 15;
+  if (m === 60) { h++; m = 0; }
+  const time = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  const root = document.querySelector('[x-data]');
+  if (root && window.Alpine) Alpine.$data(root).openBooking(colBody.dataset.doctorId, colBody.dataset.doctorName, time);
+}
+function dgApptClick(e, apptId){
+  e.stopPropagation();
+  if (dgDragMoved) { dgDragMoved = false; return; } // не открывать переход после перетаскивания
+  location.href = '/appointments/?focus=' + apptId;
+}
+
+/* ---- перетаскивание записи между временем/врачами ---- */
+let dgDragMoved = false;
+function dgStartDrag(e, el){
+  if (e.button !== 0) return;
+  const apptId = el.dataset.apptId;
+  const durationMin = Number(el.dataset.duration) || 30;
+  const startX = e.clientX, startY = e.clientY;
+  let dragging = false, offsetX = 0, offsetY = 0;
+  const origParent = el.parentElement;
+  const origNext = el.nextSibling;
+  const origStyle = el.getAttribute('style');
+
+  function onMove(ev){
+    if (!dragging){
+      if (Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) return;
+      dragging = true; dgDragMoved = true;
+      const rect = el.getBoundingClientRect();
+      offsetX = startX - rect.left;
+      offsetY = startY - rect.top;
+      el.style.position = 'fixed';
+      el.style.left = rect.left + 'px';
+      el.style.top = rect.top + 'px';
+      el.style.width = rect.width + 'px';
+      el.style.zIndex = 1000;
+      el.style.pointerEvents = 'none';
+      el.style.opacity = '.85';
+      document.body.appendChild(el);
+    }
+    el.style.left = (ev.clientX - offsetX) + 'px';
+    el.style.top = (ev.clientY - offsetY) + 'px';
+    document.querySelectorAll('.dg-col-body').forEach(c => c.classList.remove('dg-drop-target'));
+    el.style.display = 'none';
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    el.style.display = '';
+    const col = under ? under.closest('.dg-col-body') : null;
+    if (col) col.classList.add('dg-drop-target');
+  }
+
+  async function onUp(ev){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.querySelectorAll('.dg-col-body').forEach(c => c.classList.remove('dg-drop-target'));
+    if (!dragging) return;
+    el.style.display = 'none';
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    el.style.display = '';
+    const col = under ? under.closest('.dg-col-body') : null;
+    // вернуть на место визуально — при успехе просто перезагрузим страницу свежими данными
+    el.setAttribute('style', origStyle);
+    if (origNext) origParent.insertBefore(el, origNext); else origParent.appendChild(el);
+    if (!col) return;
+    const rect = col.getBoundingClientRect();
+    const minutes = Math.max(0, Math.round(ev.clientY - rect.top));
+    let h = DAY_START + Math.floor(minutes / 60);
+    let m = Math.round((minutes % 60) / 15) * 15;
+    if (m === 60) { h++; m = 0; }
+    const startAt = `${DAY}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`;
+    const startDt = new Date(startAt);
+    const endDt = new Date(startDt.getTime() + durationMin * 60000);
+    const pad = n => String(n).padStart(2,'0');
+    const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+    const res = await api(`/appointments/${apptId}/move/`, 'POST', {
+      start: iso(startDt), end: iso(endDt), doctor_id: col.dataset.doctorId,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      if (window.toast) toast('Запись перенесена', 'success');
+      location.reload();
+    } else {
+      if (window.toast) toast(data.error || 'Не удалось перенести запись', 'error');
+    }
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+/* ---- порядок колонок врачей: перетаскивание заголовка + сохранение в localStorage ---- */
+(function dgColumnReorder(){
+  const KEY = 'dg_col_order';
+  const wrap = document.getElementById('dgColumns');
+  if (!wrap) return;
+
+  function applySavedOrder(){
+    let order;
+    try { order = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch(e){ order = []; }
+    if (!order.length) return;
+    const cols = Array.from(wrap.querySelectorAll('.dg-col'));
+    const byId = {};
+    cols.forEach(c => { byId[c.dataset.doctorId] = c; });
+    order.forEach(id => { if (byId[id]) wrap.appendChild(byId[id]); });
+    // колонки, которых нет в сохранённом порядке (новые врачи), остаются в конце как есть
+  }
+  applySavedOrder();
+
+  let dragged = null;
+  wrap.addEventListener('dragstart', e => {
+    const head = e.target.closest('.dg-col-head');
+    if (!head || head.getAttribute('draggable') !== 'true') return;
+    dragged = head.closest('.dg-col');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  wrap.addEventListener('dragover', e => {
+    if (!dragged) return;
+    const overCol = e.target.closest('.dg-col');
+    if (!overCol || overCol === dragged) return;
+    e.preventDefault();
+    const rect = overCol.getBoundingClientRect();
+    const before = (e.clientX - rect.left) < rect.width / 2;
+    wrap.insertBefore(dragged, before ? overCol : overCol.nextSibling);
+  });
+  wrap.addEventListener('dragend', () => {
+    if (!dragged) return;
+    dragged = null;
+    const order = Array.from(wrap.querySelectorAll('.dg-col')).map(c => c.dataset.doctorId).filter(Boolean);
+    localStorage.setItem(KEY, JSON.stringify(order));
+  });
+})();
+
+// авто-скролл к первой записи дня
+(function(){ const el = document.getElementById('dgScroll'); if (el) el.scrollTop = {{ scroll_to }}; })();
 </script>
+<style>
+.dg-drop-target{ box-shadow: inset 0 0 0 2px var(--primary); background-color: rgba(99,102,241,.06) !important; }
+.dg-col-head[draggable="true"]:active{ cursor:grabbing; }
+</style>
 {% endblock %}
