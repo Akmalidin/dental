@@ -94,6 +94,15 @@ class DayGridBookingModalTestCase(TestCase):
         self.assertContains(resp, "dayGridPage")
         self.assertContains(resp, "dgEmptyClick")
 
+    def test_day_grid_root_has_stable_id_for_alpine_lookup(self):
+        """Регресс: dgEmptyClick находит Alpine-компонент по id, а не по общему
+        [x-data] — в base.html этому селектору предшествуют другие x-data
+        (toastSystem, shell и т.д.), и generic-селектор попадал не туда,
+        из-за чего клик по пустой ячейке не открывал модалку."""
+        resp = self.client.get("/appointments/day/")
+        self.assertContains(resp, 'id="dayGridRoot"')
+        self.assertContains(resp, "getElementById('dayGridRoot')")
+
 
 class AppointmentMoveTestCase(TestCase):
     """Перетаскивание записи в «Расписание по врачам»: смена времени (как раньше)

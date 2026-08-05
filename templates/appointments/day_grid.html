@@ -2,7 +2,7 @@
 {% block page_title %}Расписание по врачам{% endblock %}
 
 {% block content %}
-<div class="space-y-4" x-data="dayGridPage()">
+<div class="space-y-4" id="dayGridRoot" x-data="dayGridPage()">
   <!-- Toolbar -->
   <div class="card card-pad flex flex-wrap items-center gap-3">
     <div class="flex items-center gap-2">
@@ -164,7 +164,7 @@ function dgEmptyClick(e, colBody){
   let m = Math.round((minutes % 60) / 15) * 15;
   if (m === 60) { h++; m = 0; }
   const time = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-  const root = document.querySelector('[x-data]');
+  const root = document.getElementById('dayGridRoot');
   if (root && window.Alpine) Alpine.$data(root).openBooking(colBody.dataset.doctorId, colBody.dataset.doctorName, time);
 }
 function dgApptClick(e, apptId){
@@ -225,7 +225,9 @@ function dgStartDrag(e, el){
     if (origNext) origParent.insertBefore(el, origNext); else origParent.appendChild(el);
     if (!col) return;
     const rect = col.getBoundingClientRect();
-    const minutes = Math.max(0, Math.round(ev.clientY - rect.top));
+    // offsetY — где внутри блока пользователь его схватил; без вычитания время
+    // "уезжает" на эту разницу от места, где блок визуально отпущен.
+    const minutes = Math.max(0, Math.round(ev.clientY - offsetY - rect.top));
     let h = DAY_START + Math.floor(minutes / 60);
     let m = Math.round((minutes % 60) / 15) * 15;
     if (m === 60) { h++; m = 0; }
