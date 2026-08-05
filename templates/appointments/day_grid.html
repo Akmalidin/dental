@@ -95,6 +95,37 @@
       </div>
     </div>
   </div>
+
+  <!-- Detail view modal -->
+  <div x-show="showView" x-cloak class="modal-overlay" @click.self="showView=false">
+    <div class="modal-box" style="max-width:460px">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom:1px solid var(--border)">
+        <h2 class="font-bold text-lg" style="color:var(--text)">Запись</h2>
+        <button @click="showView=false" class="text-2xl muted">&times;</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <div class="card card-pad" style="background:var(--surface-2)">
+          <p class="font-bold" style="color:var(--text)">
+            <a :href="av.patient_id ? '/patients/'+av.patient_id+'/' : '#'" style="color:var(--primary)" class="hover:underline" x-text="av.patient_name"></a>
+          </p>
+          <p class="text-sm muted" x-show="av.patient_phone" x-text="av.patient_phone"></p>
+          <p class="text-xs mt-1" x-show="av.patient_debt>0"><span class="badge badge-red" x-text="'Долг: ' + Math.round(av.patient_debt).toLocaleString('ru-RU')"></span></p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Врач</p><p class="font-semibold" style="color:var(--text)" x-text="av.doctor"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Время</p><p class="font-semibold" style="color:var(--text)" x-text="av.time"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Дата</p><p class="font-semibold" style="color:var(--text)" x-text="av.date"></p></div>
+          <div class="card card-pad"><p class="text-xs muted mb-0.5">Статус</p><span class="badge" :class="av.cancelled ? 'badge-red' : (av.status==='completed'?'badge-green':'badge-orange')" x-text="av.status_display"></span></div>
+        </div>
+        <div class="card card-pad" x-show="av.notes"><p class="text-xs muted mb-0.5">Комментарий</p><p class="text-sm" style="color:var(--text)" x-text="av.notes"></p></div>
+      </div>
+      <div class="flex flex-wrap gap-2 px-6 py-4" style="border-top:1px solid var(--border)">
+        <a :href="'/appointments/' + av.id + '/edit/'" class="btn btn-ghost btn-sm">Изменить</a>
+        <template x-if="av.patient_id"><a :href="'/patients/' + av.patient_id + '/'" class="btn btn-ghost btn-sm">Карта пациента</a></template>
+        <button @click="showView=false" class="btn btn-ghost btn-sm ml-auto">Закрыть</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 {{ patients_json|json_script:"dg-patients" }}
@@ -110,6 +141,22 @@ function dayGridPage(){
     bookError: '',
     bk: { doctorId: null, doctorName: '', time: '09:00' },
     patientTS: null, serviceTS: null,
+    showView: false,
+    av: {},
+
+    async openView(id){
+      this.av = {};
+      this.showView = true;
+      const res = await fetch('/appointments/' + id + '/detail/');
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        this.av = { ...data.appointment, patient_name: data.patient.name, patient_id: data.patient.id,
+          patient_phone: data.patient.phone, patient_debt: data.patient.debt };
+      } else {
+        this.showView = false;
+        if (window.toast) toast('Не удалось загрузить запись', 'error');
+      }
+    },
 
     init(){
       if (window.TomSelect) {
@@ -169,8 +216,9 @@ function dgEmptyClick(e, colBody){
 }
 function dgApptClick(e, apptId){
   e.stopPropagation();
-  if (dgDragMoved) { dgDragMoved = false; return; } // не открывать переход после перетаскивания
-  location.href = '/appointments/?focus=' + apptId;
+  if (dgDragMoved) { dgDragMoved = false; return; } // не открывать модалку после перетаскивания
+  const root = document.getElementById('dayGridRoot');
+  if (root && window.Alpine) Alpine.$data(root).openView(apptId);
 }
 
 /* ---- перетаскивание записи между временем/врачами ---- */

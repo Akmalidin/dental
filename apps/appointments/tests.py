@@ -103,6 +103,14 @@ class DayGridBookingModalTestCase(TestCase):
         self.assertContains(resp, 'id="dayGridRoot"')
         self.assertContains(resp, "getElementById('dayGridRoot')")
 
+    def test_day_grid_appt_click_opens_detail_modal_not_list_page(self):
+        """Клик по записи открывает модалку деталей (openView → /appointments/<id>/detail/),
+        а не уводит на страницу списка записей."""
+        resp = self.client.get("/appointments/day/")
+        self.assertContains(resp, "openView(apptId)")
+        self.assertContains(resp, "'/appointments/' + id + '/detail/'")
+        self.assertNotContains(resp, "/appointments/?focus=")
+
 
 class AppointmentMoveTestCase(TestCase):
     """Перетаскивание записи в «Расписание по врачам»: смена времени (как раньше)
