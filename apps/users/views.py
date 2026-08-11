@@ -7,8 +7,915 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 
 from .forms import LoginForm, UserForm, BranchForm
-from .models import User, Branch, Role
+from .models import User, Branch, Role, Permission
 from .decorators import role_required, require_permission
+
+
+def _newui_role_data(clinic):
+    """Роли клиники в формате, ожидаемом новым интерфейсом (Персонал → Роли).
+    Права даём по 4 реальным категориям каталога (Permission/PermissionCategory);
+    у макета изначально было 7 фиктивных флагов (schedule/lab/settings/…),
+    которых в реальной системе не существует как отслеживаемых прав."""
+    from .roles_views import roles_for_clinic
+    color_cycle = ["cobalt", "teal", "amber", "coral", "grey"]
+    roles_qs = roles_for_clinic(clinic).order_by("-is_system", "name").prefetch_related("granular_permissions")
+    data = []
+    for i, role in enumerate(roles_qs):
+        codes = set(role.granular_permissions.values_list("code", flat=True))
+        categories = set(role.granular_permissions.values_list("category", flat=True))
+        data.append({
+            "id": role.pk,
+            "name": role.display_name,
+            "isSystem": role.is_system,
+            "color": color_cycle[i % len(color_cycle)],
+            "perms": {
+                "patients": "patients" in categories,
+                "finance": "finance" in categories,
+                "staff": "staff" in categories,
+                "reports": "reports" in categories,
+            },
+            "grantedCodes": sorted(codes),
+            "staffCount": role.users.count(),
+        })
+    return data
+
+
+def _newui_staff_data(request, clinic):
+    """Сотрудники клиники для нового интерфейса — те же правила видимости,
+    что и в staff_list (скрываем суперпользователя от не-суперадминов)."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.appointments.models import Appointment
+
+    users = User.objects.select_related("role").prefetch_related("branches")
+    users = users.filter(clinic=clinic) if clinic else users
+    if not request.user.is_superadmin:
+        users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
+
+    today = timezone.localdate()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=7)
+    doctor_ids = [u.pk for u in users if u.is_doctor]
+    weekly_counts = {}
+    if doctor_ids:
+        appt_qs = (Appointment.objects.filter(doctor_id__in=doctor_ids, start_at__date__gte=week_start, start_at__date__lt=week_end)
+                   .values_list("doctor_id"))
+        for (doc_id,) in appt_qs:
+            weekly_counts[doc_id] = weekly_counts.get(doc_id, 0) + 1
+
+    color_by_role = {}
+    for i, name in enumerate(Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).values_list("name", flat=True).order_by("name")):
+        color_by_role[name] = ["cobalt", "teal", "amber", "coral", "grey"][i % 5]
+
+    data = []
+    for u in users.order_by("name"):
+        branch_ids = [b.pk for b in u.branches.all()]
+        branch_names = ", ".join(b.name for b in u.branches.all()) or "—"
+        load = f"{weekly_counts.get(u.pk, 0)} на неделе" if u.is_doctor else "—"
+        data.append({
+            "id": u.pk,
+            "login": u.login,
+            "name": u.name or u.login,
+            "email": u.email,
+            "roleId": u.role_id,
+            "roleName": u.role.display_name if u.role else "",
+            "roleColor": color_by_role.get(u.role.name, "grey") if u.role else "grey",
+            "branchIds": branch_ids,
+            "branch": branch_names,
+            "load": load,
+            "phone": u.phone or "",
+            "active": u.is_active,
+        })
+    return data
+
+
+def _newui_dashboard_data():
+    """KPI и списки дашборда — только реальные метрики. У макета «Новые заявки»
+    и план по выручке опирались на несуществующую в системе CRM-воронку —
+    здесь эти карточки заменены на реальные аналоги (новые пациенты, выручка
+    вчера вместо плана). Заказы лаборатории — реальные (apps.technicians)."""
+    from apps.tenancy import get_current_clinic
+    clinic = get_current_clinic()
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.finance.models import Payment
+    from apps.appointments.models import Appointment
+    from apps.patients.models import Patient
+    from apps.technicians.models import TechnicianTask
+
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+
+    def day_revenue(d):
+        income = Payment.objects.filter(created_at__date=d, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+        refund = Payment.objects.filter(created_at__date=d, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+        return float(income - refund)
+
+    revenue_today = day_revenue(today)
+    revenue_yesterday = day_revenue(yesterday)
+    revenue_delta_pct = round((revenue_today - revenue_yesterday) / revenue_yesterday * 100) if revenue_yesterday else None
+
+    week_labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    week_revenue = [day_revenue(week_start + timedelta(days=i)) if week_start + timedelta(days=i) <= today else 0 for i in range(7)]
+    max_week_revenue = max(week_revenue) or 1
+    week_bars = [
+        {"label": week_labels[i], "amount": week_revenue[i], "heightPct": round(week_revenue[i] / max_week_revenue * 100)}
+        for i in range(7)
+    ]
+
+    patients_today_ids = set(Appointment.objects.filter(start_at__date=today).exclude(patient__isnull=True).values_list("patient_id", flat=True))
+    new_patients_today = Patient.objects.filter(created_at__date=today).count()
+    new_patients_month = Patient.objects.filter(created_at__date__gte=month_start).count()
+
+    lab_open_qs = TechnicianTask.objects.filter(status__in=TechnicianTask.OPEN_STATUSES)
+    lab_open_count = lab_open_qs.count()
+    lab_overdue_count = lab_open_qs.filter(expected_ready__lt=today).count()
+
+    upcoming_qs = (Appointment.objects
+                   .filter(start_at__date=today, status__in=[Appointment.STATUS_SCHEDULED, Appointment.STATUS_CONFIRMED, Appointment.STATUS_ARRIVED])
+                   .select_related("patient", "doctor", "cabinet").order_by("start_at")[:6])
+    upcoming = [{
+        "patient": a.patient.full_name if a.patient else "Без пациента",
+        "service": a.service.name if a.service else "",
+        "doctor": a.doctor.name if a.doctor else "",
+        "cabinet": a.cabinet.name if a.cabinet else "",
+        "time": timezone.localtime(a.start_at).strftime("%H:%M"),
+    } for a in upcoming_qs]
+
+    recent_patients = [{
+        "name": p.full_name, "phone": p.phone,
+        "when": timezone.localtime(p.created_at).strftime("%d.%m %H:%M"),
+    } for p in Patient.objects.order_by("-created_at")[:5]]
+
+    return {
+        "revenueToday": revenue_today,
+        "revenueYesterday": revenue_yesterday,
+        "revenueDeltaPct": revenue_delta_pct,
+        "patientsToday": len(patients_today_ids),
+        "newPatientsToday": new_patients_today,
+        "newPatientsMonth": new_patients_month,
+        "labOpenCount": lab_open_count,
+        "labOverdueCount": lab_overdue_count,
+        "weekBars": week_bars,
+        "upcoming": upcoming,
+        "recentPatients": recent_patients,
+        "cashSummary": _dashboard_cash_summary(clinic),
+    }
+
+
+def _dashboard_cash_summary(clinic):
+    """Касса на дашборде: статус текущей смены главного филиала клиники +
+    приход/возврат/баланс с момента открытия (та же логика, что
+    _newui_cashdesk_data/CashShift.z_report, но сжато для карточки)."""
+    from django.utils import timezone
+    from apps.finance.models import CashShift
+    from apps.users.models import Branch
+
+    closed = {"opened": False, "openedAt": None, "openedBy": None,
+              "incomeTotal": 0.0, "refundTotal": 0.0, "balance": 0.0}
+    if not clinic:
+        return closed
+
+    branch = Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
+    shift = CashShift.objects.filter(branch=branch, status=CashShift.STATUS_OPEN).first() if branch else None
+    if not shift:
+        return closed
+
+    z = shift.z_report()
+    return {
+        "opened": True,
+        "openedAt": timezone.localtime(shift.opened_at).strftime("%d.%m.%Y %H:%M"),
+        "openedBy": shift.opened_by.name if shift.opened_by else "—",
+        "incomeTotal": float(z["incomeTotal"]),
+        "refundTotal": float(z["refundTotal"]),
+        "balance": float(z["expectedCash"]),
+    }
+
+
+def _newui_patients_data():
+    """Пациенты клиники для нового интерфейса. Ограничено последними 300 —
+    полноценные серверные поиск/пагинация/фильтры старого /patients/ списка
+    сюда пока не перенесены (это отдельная, более крупная задача)."""
+    from django.utils import timezone
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    from apps.appointments.models import Appointment
+
+    patients_qs = list(Patient.objects.select_related("primary_doctor", "source", "branch").order_by("-created_at")[:300])
+    ids = [p.pk for p in patients_qs]
+
+    last_visit = {}
+    for a in Appointment.objects.filter(patient_id__in=ids, start_at__lte=timezone.now()).order_by("patient_id", "-start_at"):
+        last_visit.setdefault(a.patient_id, a.start_at)
+
+    active_treatment_ids = set(
+        Treatment.objects.filter(patient_id__in=ids, status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS])
+        .values_list("patient_id", flat=True)
+    )
+
+    today = timezone.localdate()
+    data = []
+    for p in patients_qs:
+        age = None
+        if p.birth_date:
+            age = today.year - p.birth_date.year - ((today.month, today.day) < (p.birth_date.month, p.birth_date.day))
+        lv = last_visit.get(p.pk)
+        if p.pk in active_treatment_ids:
+            status_label, status_color = "В лечении", "amber"
+        elif p.balance < 0:
+            status_label, status_color = "Должник", "coral"
+        else:
+            status_label, status_color = ("Активен", "teal") if lv else ("Новый", "cobalt")
+        data.append({
+            "id": p.pk,
+            "fullName": p.full_name,
+            "firstName": p.first_name, "lastName": p.last_name, "middleName": p.middle_name,
+            "phone": p.phone,
+            "birthDate": p.birth_date.strftime("%d.%m.%Y") if p.birth_date else "",
+            "birthDateIso": p.birth_date.isoformat() if p.birth_date else "",
+            "age": age,
+            "gender": p.get_gender_display() if p.gender else "",
+            "genderCode": p.gender or "",
+            "address": p.address,
+            "doctorId": p.primary_doctor_id,
+            "doctorName": p.primary_doctor.name if p.primary_doctor else "",
+            "sourceId": p.source_id,
+            "sourceName": p.source.name if p.source else "",
+            "branchId": p.branch_id,
+            "allergy": p.allergy or "",
+            "balance": float(p.balance),
+            "lastVisit": timezone.localtime(lv).strftime("%d.%m.%Y") if lv else "—",
+            "sinceLabel": p.created_at.strftime("%m.%Y"),
+            "hasActiveTreatment": p.pk in active_treatment_ids,
+            "hasDebt": p.balance < 0,
+            "statusLabel": status_label,
+            "statusColor": status_color,
+        })
+    return data
+
+
+def _newui_services_data():
+    """Услуги и категории для нового интерфейса — реальный прайс-лист."""
+    from apps.services.models import Service, ServiceCategory
+    categories = list(ServiceCategory.objects.order_by("sort_order", "name"))
+    services = [{
+        "id": s.pk, "name": s.name, "code": s.code or "",
+        "categoryId": s.category_id, "categoryName": s.category.name if s.category else "",
+        "price": float(s.price), "isActive": s.is_active, "duration": s.duration,
+    } for s in Service.objects.select_related("category").order_by("category__sort_order", "name")]
+    return {
+        "services": services,
+        "categories": [{"id": c.pk, "name": c.name} for c in categories],
+    }
+
+
+def _newui_finance_data(clinic):
+    """Финансы для нового интерфейса — реальные суммы. У макета «Касса» (смены,
+    наличные/картой в текущей смене, Z-отчёт) опирается на кассовые смены,
+    которых в реальной системе нет как модели — этот раздел размечен как
+    неподключённый (см. v-cashdesk), а не подделан."""
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.finance.models import Payment, Expense, PatientAdvance
+    from apps.patients.models import Patient
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+
+    income = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+    refund = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+    revenue_month = float(income - refund)
+    expenses_month = float(Expense.objects.filter(created_at__date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
+    # PatientAdvance не clinic-scoped моделью (в отличие от Payment/Expense) —
+    # фильтруем вручную через пациента, иначе утечка сумм других клиник.
+    advances_qs = PatientAdvance.objects.filter(patient__clinic=clinic) if clinic else PatientAdvance.objects.none()
+    deposits_total = float(advances_qs.aggregate(s=Sum("amount"))["s"] or 0)
+    debtors = Patient.objects.filter(balance__lt=0)
+    debt_total = float(-(debtors.aggregate(s=Sum("balance"))["s"] or 0))
+    debt_count = debtors.count()
+
+    txns = []
+    for p in Payment.objects.select_related("patient", "received_by").order_by("-created_at")[:10]:
+        txns.append({
+            "who": p.patient.full_name if p.patient else "—",
+            "type": "Возврат" if p.type == Payment.TYPE_REFUND else "Оплата",
+            "method": p.get_method_display(),
+            "amount": float(p.amount) * (-1 if p.type == Payment.TYPE_REFUND else 1),
+            "time": timezone.localtime(p.created_at).strftime("%d.%m %H:%M"),
+        })
+    for e in Expense.objects.select_related("category").order_by("-created_at")[:10]:
+        txns.append({
+            "who": "Клиника", "type": f"Расход · {e.category.name if e.category else '—'}",
+            "method": "—", "amount": -float(e.amount),
+            "time": timezone.localtime(e.created_at).strftime("%d.%m %H:%M"),
+        })
+    txns.sort(key=lambda t: t["time"], reverse=True)
+
+    return {
+        "revenueMonth": revenue_month,
+        "expensesMonth": expenses_month,
+        "depositsTotal": deposits_total,
+        "debtTotal": debt_total,
+        "debtCount": debt_count,
+        "transactions": txns[:12],
+    }
+
+
+def _newui_lab_data():
+    """Заказы лаборатории — реальные данные (apps.technicians)."""
+    from apps.technicians.models import TechnicianTask
+    status_col = {
+        TechnicianTask.STATUS_TRANSFERRED: "Принят",
+        TechnicianTask.STATUS_IN_PROGRESS: "В работе",
+        TechnicianTask.STATUS_FITTING: "В работе",
+        TechnicianTask.STATUS_CORRECTION: "В работе",
+        TechnicianTask.STATUS_READY: "Готово",
+        TechnicianTask.STATUS_INSTALLED: "Выдано · гарантия",
+    }
+    orders = []
+    for t in (TechnicianTask.objects.exclude(status=TechnicianTask.STATUS_CANCELLED)
+              .select_related("patient", "service").order_by("-created_at")[:60]):
+        col = status_col.get(t.status)
+        if not col:
+            continue
+        orders.append({
+            "id": t.pk, "code": f"#L-{t.pk:04d}",
+            "service": t.service.name if t.service else "",
+            "patient": t.patient.full_name if t.patient else "—",
+            "detail": t.material or (t.tooth_number and f"Зуб {t.tooth_number}") or "",
+            "column": col,
+        })
+    return {"orders": orders}
+
+
+def _newui_warehouse_data():
+    """Склад материалов — реальные остатки (apps.warehouse). Цена за единицу
+    не хранится на Product — берём цену последнего прихода (WarehouseEntry)."""
+    from apps.warehouse.models import Product, WarehouseEntry
+    products = list(Product.objects.filter(is_active=True).select_related("category").order_by("name"))
+    last_price = {}
+    for e in WarehouseEntry.objects.filter(product_id__in=[p.pk for p in products]).order_by("product_id", "-date", "-created_at"):
+        last_price.setdefault(e.product_id, float(e.price))
+
+    low_stock = [p for p in products if p.quantity <= p.min_qty]
+    total_value = sum(float(p.quantity) * last_price.get(p.pk, 0) for p in products)
+    items = []
+    for p in products:
+        qty, min_qty = float(p.quantity), float(p.min_qty)
+        status = "order" if qty <= min_qty else ("low" if qty <= min_qty * 1.5 else "ok")
+        items.append({
+            "id": p.pk, "name": p.name, "quantity": qty, "unit": p.unit,
+            "minQty": min_qty, "status": status,
+        })
+    return {
+        "items": items,
+        "lowStockCount": len(low_stock),
+        "totalValue": total_value,
+        "activeCount": len(products),
+    }
+
+
+def _newui_reports_data():
+    """Отчёты для нового интерфейса — пока только верхние real-KPI «Общего
+    отчёта». Конструктор сравнения, ИИ-помощник и детальные разрезы
+    (врачи/кабинеты/повторные визиты/источники) не подключены — см. баннер
+    на странице; ИИ-рекомендаций как функции в системе не существует."""
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.finance.models import Payment
+    from apps.appointments.models import Appointment
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    income = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+    refund = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+    month_appts = Appointment.objects.filter(start_at__date__gte=month_start)
+    completed = month_appts.filter(status=Appointment.STATUS_COMPLETED).count()
+    cancelled = month_appts.filter(status=Appointment.STATUS_CANCELLED).count()
+    noshow = month_appts.filter(status=Appointment.STATUS_NO_SHOW).count()
+    total = month_appts.count()
+    return {
+        "revenueMonth": float(income - refund),
+        "completed": completed,
+        "cancelled": cancelled,
+        "cancelledPct": round(cancelled / total * 100, 1) if total else 0,
+        "noshow": noshow,
+    }
+
+
+def _newui_schedule_data(clinic):
+    """Расписание врачей для нового интерфейса — реальные врачи и реальные
+    приёмы в окне ±30 дней от сегодня (день/неделя/месяц листаются внутри
+    этого окна). Создание записи кликом по пустой ячейке и перетаскивание
+    записи между ячейками/врачами подключены к тем же view, что и старый
+    интерфейс — appointment_create_quick / appointment_move (см. схему
+    day_grid.html), логика конфликтов/расписания не дублируется."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.users.models import clinic_doctors
+    from apps.appointments.models import Appointment
+
+    doctors = list(clinic_doctors(clinic).order_by("name")) if clinic else []
+    doctor_ids = [d.pk for d in doctors]
+    doctors_data = [{
+        "id": d.pk, "init": initials_of(d.name), "name": d.name,
+        "role": d.role.display_name if d.role else "",
+    } for d in doctors]
+
+    today = timezone.localdate()
+    window_start = today - timedelta(days=30)
+    window_end = today + timedelta(days=30)
+    appts_qs = (Appointment.objects
+                .filter(doctor_id__in=doctor_ids, start_at__date__gte=window_start, start_at__date__lte=window_end)
+                .exclude(status=Appointment.STATUS_CANCELLED)
+                .select_related("patient", "service").order_by("start_at"))
+
+    status_color = {
+        Appointment.STATUS_SCHEDULED: "cobalt", Appointment.STATUS_CONFIRMED: "cobalt",
+        Appointment.STATUS_ARRIVED: "amber", Appointment.STATUS_IN_PROGRESS: "amber",
+        Appointment.STATUS_COMPLETED: "teal", Appointment.STATUS_NO_SHOW: "coral",
+    }
+    appts_data = [{
+        "id": a.pk,
+        "date": timezone.localtime(a.start_at).date().isoformat(),
+        "time": timezone.localtime(a.start_at).strftime("%H:%M"),
+        "docId": a.doctor_id,
+        "patientId": a.patient_id,
+        "patient": a.patient.full_name if a.patient else "Без пациента",
+        "service": a.service.name if a.service else "",
+        "status": status_color.get(a.status, "cobalt"),
+        "durationMin": max(int((a.end_at - a.start_at).total_seconds() // 60), 1),
+        "movable": a.status not in (Appointment.STATUS_COMPLETED, Appointment.STATUS_NO_SHOW),
+    } for a in appts_qs]
+
+    return {
+        "doctors": doctors_data,
+        "appointments": appts_data,
+        "windowStart": window_start.isoformat(),
+        "windowEnd": window_end.isoformat(),
+    }
+
+
+def _newui_blacklist_data():
+    """Общий чёрный список — та же модель и те же данные, что и в старом
+    интерфейсе (apps.patients.views.blacklist_view), просто отрисованы в
+    новом дизайне. Добавление/удаление идут через тот же view (/patients/blacklist/)."""
+    from apps.patients.models import BlacklistEntry
+    entries = BlacklistEntry.objects.select_related("clinic", "added_by").order_by("-created_at")[:300]
+    return [{
+        "id": e.pk,
+        "name": e.name or "—",
+        "phone": e.phone,
+        "reason": e.reason,
+        "addedBy": e.added_by.name if e.added_by else "—",
+        "date": e.created_at.strftime("%d.%m.%Y"),
+    } for e in entries]
+
+
+def _newui_treatplans_data(clinic):
+    """Планы лечения — реальная модель TreatmentPlan (apps.treatments.models_plan),
+    та же, что используется в редакторе плана старого интерфейса (plan_detail).
+    Полноценный редактор этапов/услуг в новом интерфейсе не переносим (сложная
+    форма с построчным добавлением услуг) — переход на реальный /treatments/plans/<id>/."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.treatments.models_plan import TreatmentPlan
+
+    qs = TreatmentPlan.objects.filter(patient__clinic=clinic) if clinic else TreatmentPlan.objects.none()
+    qs = qs.select_related("patient", "doctor").prefetch_related("stages", "items")
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+
+    plans = []
+    active_count = 0
+    completed_month = 0
+    awaiting_payment = 0
+    for p in qs.order_by("-created_at")[:300]:
+        stage_titles = [s.title for s in p.stages.all() if s.title]
+        total = p.total_price
+        done = p.done_price
+        if p.status in (TreatmentPlan.STATUS_APPROVED, TreatmentPlan.STATUS_IN_PROGRESS):
+            active_count += 1
+        if p.status == TreatmentPlan.STATUS_COMPLETED and timezone.localtime(p.updated_at).date() >= month_start:
+            completed_month += 1
+        if p.status == TreatmentPlan.STATUS_COMPLETED and done < total:
+            awaiting_payment += 1
+        plans.append({
+            "id": p.pk,
+            "patientId": p.patient_id,
+            "patient": p.patient.full_name,
+            "stage": stage_titles[0] if stage_titles else p.title,
+            "doctor": p.doctor.name if p.doctor else "—",
+            "completionPct": p.completion_pct,
+            "totalPrice": float(total),
+            "status": p.get_status_display(),
+            "statusCode": p.status,
+        })
+
+    return {
+        "plans": plans,
+        "activeCount": active_count,
+        "completedMonthCount": completed_month,
+        "awaitingPaymentCount": awaiting_payment,
+    }
+
+
+def _newui_visits_data(clinic):
+    """«Визиты» — реальные записи (Appointment), та же модель, что и
+    /new/schedule/ и старый интерфейс. Смена статуса идёт через тот же
+    appointment_status, что и старый интерфейс (без дублирования логики).
+    Окно ±30 дней от сегодня (не вся история — на живой клинике это могут
+    быть тысячи записей), вкладка «Все» на фронте снимает фильтр по дню,
+    но не по этому окну."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.appointments.models import Appointment
+    from apps.users.models import clinic_doctors
+
+    doctor_ids = list(clinic_doctors(clinic).values_list("pk", flat=True)) if clinic else []
+    today = timezone.localdate()
+    qs = (Appointment.objects.filter(
+              doctor_id__in=doctor_ids,
+              start_at__date__gte=today - timedelta(days=30),
+              start_at__date__lte=today + timedelta(days=30),
+          )
+          .select_related("patient", "doctor", "service").order_by("-start_at")[:500])
+
+    status_label = dict(Appointment.STATUS_CHOICES)
+    status_pill = {
+        Appointment.STATUS_SCHEDULED: "cobalt", Appointment.STATUS_CONFIRMED: "cobalt",
+        Appointment.STATUS_ARRIVED: "amber", Appointment.STATUS_IN_PROGRESS: "amber",
+        Appointment.STATUS_COMPLETED: "teal", Appointment.STATUS_NO_SHOW: "coral",
+        Appointment.STATUS_CANCELLED: "coral",
+    }
+    visits = [{
+        "id": a.pk,
+        "date": timezone.localtime(a.start_at).strftime("%Y-%m-%d"),
+        "dateLabel": timezone.localtime(a.start_at).strftime("%d.%m.%Y"),
+        "time": timezone.localtime(a.start_at).strftime("%H:%M"),
+        "patient": a.patient.full_name if a.patient else "Без пациента",
+        "patientId": a.patient_id,
+        "doctor": a.doctor.name if a.doctor else "—",
+        "service": a.service.name if a.service else "—",
+        "status": a.status,
+        "statusLabel": status_label.get(a.status, a.status),
+        "statusColor": status_pill.get(a.status, "cobalt"),
+    } for a in qs]
+    today_iso = today.strftime("%Y-%m-%d")
+    today_visits = [v for v in visits if v["date"] == today_iso]
+
+    return {
+        "visits": visits,
+        "todayIso": today_iso,
+        "totalToday": len(today_visits),
+        "plannedCount": sum(1 for v in today_visits if v["status"] in (Appointment.STATUS_SCHEDULED, Appointment.STATUS_CONFIRMED)),
+        "openCount": sum(1 for v in today_visits if v["status"] in (Appointment.STATUS_ARRIVED, Appointment.STATUS_IN_PROGRESS)),
+    }
+
+
+def _newui_accounting_data(clinic):
+    """Бухгалтерия — реальная выручка (Payment) и расходы по реальным
+    категориям клиники (ExpenseCategory/Expense) за месяц. В системе нет
+    модели зарплат/аренды как отдельной проводки — показываем только то, что
+    реально заведено клиникой как категория расхода."""
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.finance.models import Payment, Expense
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    month_label = today.strftime("%m.%Y")
+
+    revenue = float(Payment.objects.filter(
+        created_at__date__gte=month_start, type=Payment.TYPE_INCOME,
+    ).aggregate(s=Sum("amount"))["s"] or 0)
+    refunds = float(Payment.objects.filter(
+        created_at__date__gte=month_start, type=Payment.TYPE_REFUND,
+    ).aggregate(s=Sum("amount"))["s"] or 0)
+    revenue_net = revenue - refunds
+
+    by_category = (Expense.objects.filter(date__gte=month_start)
+                   .values("category__name").annotate(total=Sum("amount")).order_by("-total"))
+    expense_lines = [{"name": row["category__name"] or "Без категории", "amount": float(row["total"])} for row in by_category]
+    expenses_total = sum(line["amount"] for line in expense_lines)
+    profit = revenue_net - expenses_total
+
+    return {
+        "monthLabel": month_label,
+        "revenue": revenue_net,
+        "expenseLines": expense_lines,
+        "expensesTotal": expenses_total,
+        "profit": profit,
+        "marginPct": round(profit / revenue_net * 100, 1) if revenue_net else 0.0,
+    }
+
+
+def _newui_audit_data(clinic):
+    """Журнал аудита — реальная история изменений (django-simple-history) по
+    пациентам и приёмам лечения; это единственные модели с HistoricalRecords
+    в системе сейчас. Входы в систему и изменения в финансах отдельно не
+    логируются — честно ограничиваем раздел тем, что реально есть."""
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    from django.utils import timezone
+
+    if not clinic:
+        return []
+    events = []
+    for h in (Patient.history.filter(clinic=clinic)
+              .select_related("history_user").order_by("-history_date")[:60]):
+        # Историческая модель simple_history — отдельный класс с копией полей,
+        # без кастомных @property исходной модели (full_name и т.п.) — собираем вручную.
+        name = " ".join(p for p in (h.last_name, h.first_name, h.middle_name) if p)
+        events.append({
+            "time": timezone.localtime(h.history_date).strftime("%d.%m.%Y %H:%M"),
+            "user": h.history_user.name if h.history_user else "—",
+            "action": {"+": "Создание", "~": "Изменение", "-": "Удаление"}.get(h.history_type, h.history_type),
+            "object": f"Пациент — {name}",
+            "sortKey": h.history_date,
+        })
+    for h in (Treatment.history.filter(clinic=clinic)
+              .select_related("history_user").order_by("-history_date")[:60]):
+        events.append({
+            "time": timezone.localtime(h.history_date).strftime("%d.%m.%Y %H:%M"),
+            "user": h.history_user.name if h.history_user else "—",
+            "action": {"+": "Создание", "~": "Изменение", "-": "Удаление"}.get(h.history_type, h.history_type),
+            "object": f"Приём №{h.number or h.pk} — {h.get_status_display()}",
+            "sortKey": h.history_date,
+        })
+    events.sort(key=lambda e: e["sortKey"], reverse=True)
+    for e in events:
+        del e["sortKey"]
+    return events[:80]
+
+
+def _newui_settings_data(clinic):
+    """Настройки клиники — те же реальные поля ClinicSettings/Clinic.timezone,
+    что и старый /settings/ (apps.settings_clinic.views.settings_view), просто
+    подмножество (общие + контакты/реквизиты) в дизайне нового интерфейса.
+    Подключение WhatsApp/Telegram (QR/webhook) — отдельные страницы, ведём
+    туда же, что и старый интерфейс (/notifications/wa-connect/, /tg-connect/)."""
+    from apps.settings_clinic.models import ClinicSettings
+    from apps.users.models import TIMEZONE_CHOICES
+
+    cs = ClinicSettings.get()
+    return {
+        # Поля формы ClinicSettingsForm, для которых в новом интерфейсе пока
+        # нет своего элемента управления — передаём как есть, чтобы форма
+        # сохранения (POST всех полей формы разом, как и старый /settings/)
+        # их не затёрла пустыми/выключенными значениями.
+        "currency": cs.currency,
+        "telegramBotToken": cs.telegram_bot_token,
+        "requireUniquePhone": cs.require_unique_phone,
+        "visitsJournalStaff": cs.visits_journal_staff,
+        "appointmentSlot": cs.appointment_slot,
+        "language": cs.language,
+        "timezone": getattr(clinic, "timezone", "Asia/Bishkek"),
+        "timezoneChoices": [{"code": c, "label": lbl} for c, lbl in TIMEZONE_CHOICES],
+        "name": cs.name,
+        "phone": cs.phone,
+        "address": cs.address,
+        "receiptFormat": cs.receipt_format,
+        "receiptFormatChoices": [{"code": c, "label": lbl} for c, lbl in ClinicSettings.RECEIPT_FORMAT_CHOICES],
+        "receiptClinicName": cs.receipt_clinic_name,
+        "receiptLegalName": cs.receipt_legal_name,
+        "receiptInn": cs.receipt_inn,
+        "receiptAddress": cs.receipt_address,
+        "warrantyTerms": cs.warranty_terms,
+        "waEnabled": cs.wa_enabled,
+        "waRemindDay": cs.wa_remind_day,
+        "waRemindHour": cs.wa_remind_hour,
+        "waRemindDebtDays": cs.wa_remind_debt_days,
+        "telegramEnabled": cs.telegram_enabled,
+        "telegramBotUsername": cs.telegram_bot_username,
+    }
+
+
+def _newui_funnel_data(clinic):
+    """CRM-воронка заявок («Заявки · CRM») — раздел, которого раньше не было
+    вообще нигде в системе (ни в старом интерфейсе). Реальная модель
+    apps.patients.models.Lead, создана специально для этого раздела."""
+    from apps.patients.models import Lead, LeadSource
+    from apps.users.models import clinic_staff
+
+    leads = list(Lead.objects.filter(clinic=clinic).select_related("source", "assigned_to")) if clinic else []
+    return {
+        "leads": [{
+            "id": l.pk, "name": l.name, "phone": l.phone,
+            "sourceId": l.source_id, "sourceName": l.source.name if l.source else "",
+            "stage": l.stage, "comment": l.comment,
+            "assignedToId": l.assigned_to_id, "assignedToName": l.assigned_to.name if l.assigned_to else "",
+            "patientId": l.patient_id,
+        } for l in leads],
+        "stages": [{"code": c, "label": lbl} for c, lbl in Lead.STAGE_CHOICES],
+        "sourceOptions": [{"id": s.pk, "name": s.name} for s in LeadSource.objects.filter(is_active=True).order_by("name")],
+        "staffOptions": [{"id": u.pk, "name": u.name} for u in (clinic_staff(clinic).order_by("name") if clinic else [])],
+    }
+
+
+def _newui_cashdesk_data(request, clinic):
+    """Касса — реальная кассовая смена (apps.finance.models.CashShift) и
+    реальная очередь ожидающих оплат: уведомления, отправленные врачами
+    через send_to_cashier (apps.finance.views.send_to_cashier), тому же
+    механизму, что уже используется в старом интерфейсе."""
+    from urllib.parse import urlparse, parse_qs
+    from django.utils import timezone
+    from apps.finance.models import CashShift, Payment
+    from apps.notifications.models import Notification
+
+    branch = None
+    if clinic:
+        from apps.users.models import Branch
+        branch = Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
+
+    shift = CashShift.objects.filter(branch=branch, status=CashShift.STATUS_OPEN).first() if branch else None
+    shift_data = None
+    if shift:
+        z = shift.z_report()
+        shift_data = {
+            "id": shift.pk,
+            "openedAt": timezone.localtime(shift.opened_at).strftime("%d.%m.%Y %H:%M"),
+            "openedBy": shift.opened_by.name if shift.opened_by else "—",
+            "openingCash": float(shift.opening_cash),
+            "byMethod": {code: float(z["byMethod"].get(code, 0)) for code, _ in Payment.METHOD_CHOICES},
+            "incomeTotal": float(z["incomeTotal"]),
+            "refundTotal": float(z["refundTotal"]),
+            "expectedCash": float(z["expectedCash"]),
+        }
+
+    # send_to_cashier рассылает одно Notification на КАЖДОГО админа клиники
+    # (fan-out) — раньше очередь фильтровалась строго по user=request.user,
+    # поэтому другие администраторы не видели уже отправленные заявки
+    # ("после отправки в кассу — в кассе ничего нет"). Показываем общую
+    # очередь по клинике и схлопываем дубли fan-out по link (одна заявка =
+    # одна строка, кто бы её ни принял — см. cashdesk_queue_dismiss).
+    # type="payment" покрывает и «примите оплату» (send_to_cashier, link вида
+    # /finance/payments/?patient=..) и «оплата принята» — просто уведомление
+    # без действия (apps.finance.views._notify_cashier_payment, link без
+    # query-строки), которое иначе после каждого «Принято» тут же
+    # воскрешало бы ту же заявку в очереди. В очередь берём только первое.
+    queue = []
+    seen_links = set()
+    qset = Notification.objects.filter(type="payment", is_read=False, link__startswith="/finance/payments/?patient=")
+    qset = qset.filter(clinic=clinic) if clinic else qset.filter(user=request.user)
+    for n in qset.select_related("actor").order_by("-created_at")[:100]:
+        if n.link and n.link in seen_links:
+            continue
+        if n.link:
+            seen_links.add(n.link)
+        qs = parse_qs(urlparse(n.link or "").query)
+        queue.append({
+            "id": n.pk,
+            "patientId": int(qs["patient"][0]) if qs.get("patient") else None,
+            "treatmentId": int(qs["treatment"][0]) if qs.get("treatment") else None,
+            "amount": qs.get("amount", [""])[0],
+            "body": n.body,
+            "from": n.actor.name if n.actor else "—",
+            "time": timezone.localtime(n.created_at).strftime("%d.%m %H:%M"),
+            "link": n.link,
+        })
+        if len(queue) >= 30:
+            break
+
+    return {"shift": shift_data, "queue": queue, "branchId": branch.pk if branch else None}
+
+
+def _newui_messages_data(clinic):
+    """Список бесед WhatsApp/Telegram для нового интерфейса — та же выборка
+    (сгруппировать WaMessage по пациенту, взять последнее сообщение и счётчик
+    непрочитанных), что и apps.notifications.views.wa_inbox. Сама переписка
+    по конкретному пациенту грузится на лету через patient_wa_messages,
+    отправка — через тот же patient_notify, что и старый интерфейс."""
+    from django.utils import timezone
+    from apps.notifications.models import WaMessage
+    from apps.notifications.whatsapp import wa_enabled
+    from apps.notifications.telegram import tg_enabled
+
+    base = WaMessage.all_clinics.exclude(patient__isnull=True)
+    if clinic:
+        base = base.filter(clinic=clinic)
+    convos = {}
+    for m in base.select_related("patient").order_by("-id")[:2000]:
+        c = convos.get(m.patient_id)
+        if c is None:
+            c = convos[m.patient_id] = {"patient": m.patient, "last": m, "unread": 0}
+        if m.direction == "in" and not m.read:
+            c["unread"] += 1
+    rows = sorted(convos.values(), key=lambda c: c["last"].created_at, reverse=True)
+    clients = [{
+        "id": c["patient"].pk,
+        "name": c["patient"].full_name,
+        "phone": c["patient"].phone,
+        "channel": "whatsapp" if c["last"].channel == WaMessage.CH_WA else "telegram",
+        "lastBody": c["last"].body or ("[медиа]" if c["last"].media_file else ""),
+        "lastTime": timezone.localtime(c["last"].created_at).strftime("%d.%m %H:%M"),
+        "unread": c["unread"],
+    } for c in rows[:150]]
+    return {"clients": clients, "waEnabled": wa_enabled(), "tgEnabled": tg_enabled()}
+
+
+def _newui_patientcard_detail_data(patient):
+    """Вкладки карточки пациента (История приёмов/Зубная карта/План лечения/
+    Финансы/Документы) нового интерфейса — те же запросы, что и старый
+    apps.patients.views.patient_detail (apps/patients/views.py:393+), просто
+    сериализованы в JSON вместо серверного рендера в шаблон."""
+    from decimal import Decimal
+    from django.utils import timezone
+    from apps.finance.models import Payment
+    from apps.treatments.models import Treatment, TreatmentFile
+    from apps.treatments.models_teeth import ToothCondition
+    from apps.treatments.models_plan import TreatmentPlan
+
+    status_pill = {
+        Treatment.STATUS_DRAFT: "grey", Treatment.STATUS_PLANNED: "cobalt",
+        Treatment.STATUS_IN_PROGRESS: "amber", Treatment.STATUS_COMPLETED: "teal",
+        Treatment.STATUS_CANCELLED: "coral", Treatment.STATUS_PAID: "teal",
+    }
+    history = []
+    for t in (Treatment.all_objects.filter(patient=patient, is_deleted=False)
+              .select_related("doctor").prefetch_related("cures__service").order_by("-created_at")[:100]):
+        services = ", ".join(c.service.name for c in t.cures.all()) or "—"
+        history.append({
+            "id": t.pk,
+            "date": timezone.localtime(t.created_at).strftime("%d.%m.%Y"),
+            "service": services,
+            "doctor": t.doctor.name if t.doctor else "—",
+            "amount": float(t.total_amount),
+            "status": t.get_status_display(),
+            "statusColor": status_pill.get(t.status, "cobalt"),
+        })
+
+    plan_status_pill = {"draft": "grey", "approved": "cobalt", "in_progress": "amber", "completed": "teal", "cancelled": "coral"}
+    plans = []
+    for p in (TreatmentPlan.objects.filter(patient=patient)
+              .select_related("doctor").prefetch_related("stages").order_by("-created_at")[:50]):
+        stage_titles = [s.title for s in p.stages.all() if s.title]
+        plans.append({
+            "id": p.pk,
+            "stage": stage_titles[0] if stage_titles else p.title,
+            "doctor": p.doctor.name if p.doctor else "—",
+            "completionPct": p.completion_pct,
+            "totalPrice": float(p.total_price),
+            "status": p.get_status_display(),
+            "statusCode": p.status,
+        })
+
+    payments_qs = Payment.all_clinics.filter(patient=patient).select_related("received_by").order_by("-created_at")
+    payments = [{
+        "date": timezone.localtime(pm.created_at).strftime("%d.%m.%Y"),
+        "purpose": "Возврат" if pm.type == Payment.TYPE_REFUND else "Оплата",
+        "method": pm.get_method_display(),
+        "amount": float(pm.amount) * (-1 if pm.type == Payment.TYPE_REFUND else 1),
+    } for pm in payments_qs[:100]]
+    total_paid = sum((pm["amount"] for pm in payments if pm["amount"] > 0), 0.0)
+
+    from apps.treatments.models_teeth import REAL_TO_JS_TOOTH_CODE, ToothSurfaceCondition, ToothGumCondition
+    tooth_conditions = {}
+    for tc in ToothCondition.objects.filter(patient=patient).select_related("status"):
+        prefix = "baby" if tc.tooth_number >= 51 else "adult"
+        if tc.status:
+            tooth_conditions[f"{prefix}-{tc.tooth_number}"] = REAL_TO_JS_TOOTH_CODE.get(tc.status.code, "norma")
+    # коды в БД совпадают с JS 1:1 (см. apps/treatments/models_teeth.py) — без маппинга
+    tooth_surface_conditions = {}
+    for sc in ToothSurfaceCondition.objects.filter(patient=patient).select_related("status"):
+        if sc.status:
+            prefix = "baby" if sc.tooth_number >= 51 else "adult"
+            tooth_surface_conditions[f"{prefix}-{sc.tooth_number}-s{sc.surface_index}"] = sc.status.code
+    tooth_gum_conditions = {}
+    for gc in ToothGumCondition.objects.filter(patient=patient).select_related("status"):
+        if gc.status:
+            prefix = "baby" if gc.tooth_number >= 51 else "adult"
+            tooth_gum_conditions[f"{prefix}-{gc.tooth_number}"] = gc.status.code
+
+    kind_labels = dict(TreatmentFile.KIND_CHOICES)
+    documents = [{
+        "name": f.name,
+        "kind": kind_labels.get(f.kind, f.kind),
+        "url": f.file.url,
+        "date": timezone.localtime(f.uploaded_at).strftime("%d.%m.%Y"),
+    } for f in (TreatmentFile.objects.filter(treatment__patient=patient)
+                .select_related("treatment").order_by("-uploaded_at")[:100])]
+
+    return {
+        "history": history,
+        "plans": plans,
+        "payments": payments,
+        "totalPaid": total_paid,
+        "toothConditions": tooth_conditions,
+        "toothSurfaceConditions": tooth_surface_conditions,
+        "toothGumConditions": tooth_gum_conditions,
+        "documents": documents,
+    }
+
+
+def initials_of(name):
+    parts = (name or "").split()
+    return "".join(p[0] for p in parts[:2]).upper()
 
 
 @login_required
