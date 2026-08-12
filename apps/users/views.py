@@ -163,6 +163,7 @@ def _newui_dashboard_data():
         "upcoming": upcoming,
         "recentPatients": recent_patients,
         "cashSummary": _dashboard_cash_summary(clinic),
+        "doctorsLoad": _dashboard_doctors_load(clinic),
     }
 
 
@@ -193,6 +194,64 @@ def _dashboard_cash_summary(clinic):
         "refundTotal": float(z["refundTotal"]),
         "balance": float(z["expectedCash"]),
     }
+
+
+def _dashboard_minutes_between(start_time, end_time):
+    """Разница между двумя datetime.time в минутах (time сам по себе
+    вычитать нельзя — комбинируем с фиктивной датой)."""
+    import datetime as dt
+    start_dt = dt.datetime.combine(dt.date.min, start_time)
+    end_dt = dt.datetime.combine(dt.date.min, end_time)
+    return int((end_dt - start_dt).total_seconds() // 60)
+
+
+def _dashboard_doctors_load(clinic):
+    """Загрузка врачей сегодня: % занятых минут от рабочего графика
+    (apps.users.models_salary.DoctorSchedule). Показываются только врачи,
+    у которых есть рабочий график на сегодняшний день недели — отсутствие в
+    списке означает выходной, а не 0% загрузки."""
+    from django.utils import timezone
+    from apps.appointments.models import Appointment
+    from apps.users.models import clinic_doctors
+    from apps.users.models_salary import DoctorSchedule
+
+    if not clinic:
+        return []
+
+    today = timezone.localdate()
+    doctors = list(clinic_doctors(clinic))
+    doctor_ids = [d.pk for d in doctors]
+
+    available_minutes = {}
+    schedules = DoctorSchedule.objects.filter(
+        doctor_id__in=doctor_ids, day_of_week=today.weekday(), is_working=True,
+    )
+    for s in schedules:
+        minutes = _dashboard_minutes_between(s.start_time, s.end_time)
+        available_minutes[s.doctor_id] = available_minutes.get(s.doctor_id, 0) + minutes
+
+    booked_minutes = {}
+    appts = (Appointment.objects
+             .filter(doctor_id__in=list(available_minutes.keys()), start_at__date=today)
+             .exclude(status=Appointment.STATUS_CANCELLED))
+    for a in appts:
+        minutes = max(int((a.end_at - a.start_at).total_seconds() // 60), 0)
+        booked_minutes[a.doctor_id] = booked_minutes.get(a.doctor_id, 0) + minutes
+
+    by_id = {d.pk: d for d in doctors}
+    result = []
+    for doctor_id, avail in available_minutes.items():
+        doctor = by_id.get(doctor_id)
+        if doctor is None or avail <= 0:
+            continue
+        booked = booked_minutes.get(doctor_id, 0)
+        result.append({
+            "doctorId": doctor_id,
+            "name": doctor.name,
+            "occupancyPct": round(booked / avail * 100),
+        })
+    result.sort(key=lambda r: r["occupancyPct"], reverse=True)
+    return result
 
 
 def _newui_patients_data():

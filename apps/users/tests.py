@@ -195,6 +195,28 @@ class NewUIDashboardTestCase(TestCase):
         self.assertEqual(cash["incomeTotal"], 300.0)
         self.assertEqual(cash["balance"], 1300.0)  # 1000 opening + 300 cash income
 
+    def test_dashboard_doctors_load_excludes_doctor_without_schedule_today(self):
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["dashboard"]["doctorsLoad"], [])
+
+    def test_dashboard_doctors_load_reflects_todays_appointments(self):
+        from apps.users.models_salary import DoctorSchedule
+        import datetime as dt
+        from django.utils import timezone
+        DoctorSchedule.objects.create(
+            doctor=self.doctor, branch=self.branch,
+            day_of_week=timezone.localdate().weekday(),
+            start_time=dt.time(9, 0), end_time=dt.time(18, 0), is_working=True,
+        )
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        load = data["dashboard"]["doctorsLoad"]
+        self.assertEqual(len(load), 1)
+        self.assertEqual(load[0]["doctorId"], self.doctor.pk)
+        self.assertEqual(load[0]["name"], "Врач DB")
+        self.assertEqual(load[0]["occupancyPct"], 11)  # 60 занятых мин / 540 доступных (09:00–18:00)
+
 
 class NewUIPatientsTestCase(TestCase):
     """Раздел «Пациенты» нового интерфейса — список на реальных данных,
