@@ -395,6 +395,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   .toolbar .chip:not(.active){display:none;}
   .sched-appt,.week-appt-chip,.month-badge{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 }
+
+/* Лайтбокс фото/видео (Документы в карточке пациента) — тот же слайдер, что в
+   старом интерфейсе (templates/base.html #lightbox), портирован сюда 1:1 по
+   стилю + добавлена поддержка видео (старый умел только фото). */
+.lb{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center;}
+.lb.open{display:flex;}
+.lb-img,.lb-video{max-width:92vw;max-height:86vh;border-radius:10px;box-shadow:0 10px 50px rgba(0,0,0,.5);object-fit:contain;user-select:none;}
+.lb-btn{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:none;cursor:pointer;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+.lb-btn:hover{background:rgba(255,255,255,.28);}
+.lb-close{top:18px;right:20px;width:44px;height:44px;font-size:26px;line-height:1;}
+.lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:52px;height:64px;font-size:38px;line-height:1;}
+.lb-prev{left:16px;}.lb-next{right:16px;}
+.lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e2e8f0;font-size:13px;padding:0 16px;}
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
+.docs-grid .doc-item{display:flex;flex-direction:column;cursor:pointer;}
+.docs-grid .doc-tile{border-radius:10px;overflow:hidden;background:var(--cloud);position:relative;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
+.docs-grid .doc-tile img,.docs-grid .doc-tile video{width:100%;height:100%;object-fit:cover;}
+.docs-grid .doc-tile .doc-play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:rgba(15,23,42,.25);}
+.docs-grid .doc-tile .doc-file-icon{font-size:32px;}
+.docs-grid .doc-name{font-size:11px;color:var(--ink-soft);padding:6px 4px 0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:640px){.lb-prev,.lb-next{width:40px;height:52px;font-size:30px;}}
 </style>
 {% block extra_head %}{% endblock %}
 </head>
@@ -666,6 +687,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
     </div>
   </div>
+</div>
+
+<!-- Лайтбокс фото/видео (Документы в карточке пациента) — слайдер с переключением
+     между файлами, как в старом интерфейсе (templates/base.html #lightbox). -->
+<div id="newuiLightbox" class="lb" aria-hidden="true">
+  <button class="lb-btn lb-close" title="Закрыть (Esc)" onclick="lbClose()">✕</button>
+  <button class="lb-btn lb-prev" title="Назад (←)" onclick="event.stopPropagation();lbStep(-1)">&#8249;</button>
+  <img class="lb-img" alt="" style="display:none;">
+  <video class="lb-video" controls style="display:none;"></video>
+  <button class="lb-btn lb-next" title="Вперёд (→)" onclick="event.stopPropagation();lbStep(1)">&#8250;</button>
+  <div class="lb-cap"></div>
 </div>
 
 <!-- Новая / редактирование услуги -->
@@ -4268,15 +4300,90 @@ function renderPatientCardFinance(d){
        <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('')}</tbody></table></div>`;
   el.innerHTML=kpi+rows;
 }
+const DOC_IMG_EXT=['jpg','jpeg','png','gif','webp','bmp','svg'];
+const DOC_VIDEO_EXT=['mp4','webm','mov','ogg','ogv','m4v'];
+function docExt(url){ const clean=(url||'').split('?')[0]; const m=clean.match(/\.([a-z0-9]+)$/i); return m ? m[1].toLowerCase() : ''; }
+function docFileIcon(ext){
+  if(ext==='pdf') return '📕';
+  if(['doc','docx'].includes(ext)) return '📘';
+  if(['xls','xlsx'].includes(ext)) return '📗';
+  return '📄';
+}
+// Документы карточки пациента (снимки/фото/видео/файлы приёмов) — реальные
+// TreatmentFile, кликабельная сетка миниатюр + лайтбокс-слайдер (фото/видео)
+// с переключением, как в старом интерфейсе (templates/base.html #lightbox);
+// файлы, которые нельзя показать инлайн (PDF/документы) — просто открываются
+// в новой вкладке по клику, в слайдер не попадают.
 function renderPatientCardDocs(d){
   const el=document.getElementById('pcPanelDocs');
-  if(!d.documents || d.documents.length===0){
+  const docs=d.documents || [];
+  if(docs.length===0){
     el.innerHTML='<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">Пока нет загруженных документов</div><div style="font-size:11.5px;margin-top:4px;">Загрузка снимков/документов — в старом интерфейсе, на карточке приёма</div></div>';
     return;
   }
+  const media=docs.map(f=>{
+    const ext=docExt(f.url);
+    return Object.assign({}, f, {isImage:DOC_IMG_EXT.includes(ext), isVideo:DOC_VIDEO_EXT.includes(ext), ext});
+  });
+  // Индексы для лайтбокса считаются ТОЛЬКО по фото/видео (файлы вроде PDF в
+  // слайдер не входят — у них своя логика открытия в новой вкладке).
+  const lbList=media.filter(f=>f.isImage||f.isVideo);
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div>
-    <div class="card-body">${d.documents.map(f=>`<div class="row"><div class="row-main"><b>${f.name}</b><span>${f.kind} · ${f.date}</span></div><a class="btn btn-ghost btn-sm" href="${f.url}" target="_blank" rel="noopener">Открыть</a></div>`).join('')}</div>`;
+    <div class="card-body"><div class="docs-grid">${media.map(f=>{
+      const lbIdx=lbList.indexOf(f);
+      const onclick = lbIdx>=0 ? `openDocLightbox(${lbIdx})` : `window.open('${f.url}','_blank')`;
+      let tile;
+      if(f.isImage) tile=`<img src="${f.url}" alt="${f.name}" loading="lazy">`;
+      else if(f.isVideo) tile=`<video src="${f.url}" muted></video><div class="doc-play">▶</div>`;
+      else tile=`<span class="doc-file-icon">${docFileIcon(f.ext)}</span>`;
+      return `<div class="doc-item" onclick="${onclick}"><div class="doc-tile">${tile}</div><div class="doc-name" title="${f.name}">${f.name}</div></div>`;
+    }).join('')}</div></div>`;
+  window.patientCardLightboxItems=lbList;
 }
+let lbItems=[], lbIdx=0;
+function lbShow(){
+  const it=lbItems[lbIdx];
+  const lb=document.getElementById('newuiLightbox');
+  if(!it || !lb) return;
+  const img=lb.querySelector('.lb-img'), vid=lb.querySelector('.lb-video'), cap=lb.querySelector('.lb-cap');
+  if(it.isVideo){
+    img.style.display='none'; img.src='';
+    vid.style.display=''; vid.src=it.url; vid.play().catch(()=>{});
+  } else {
+    vid.pause(); vid.style.display='none'; vid.src='';
+    img.style.display=''; img.src=it.url;
+  }
+  cap.textContent=it.name + (it.date ? ' · '+it.date : '') + ` (${lbIdx+1}/${lbItems.length})`;
+}
+function openDocLightbox(idx){
+  lbItems=window.patientCardLightboxItems || [];
+  lbIdx=idx<0?0:idx;
+  lbShow();
+  document.getElementById('newuiLightbox').classList.add('open');
+}
+function lbClose(){
+  const lb=document.getElementById('newuiLightbox');
+  if(!lb) return;
+  lb.classList.remove('open');
+  const img=lb.querySelector('.lb-img'), vid=lb.querySelector('.lb-video');
+  vid.pause(); vid.src=''; img.src='';
+}
+function lbStep(delta){
+  if(!lbItems.length) return;
+  lbIdx=(lbIdx+delta+lbItems.length)%lbItems.length;
+  lbShow();
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  const lb=document.getElementById('newuiLightbox');
+  if(lb) lb.addEventListener('click', e=>{ if(e.target===lb) lbClose(); });
+});
+document.addEventListener('keydown', e=>{
+  const lb=document.getElementById('newuiLightbox');
+  if(!lb || !lb.classList.contains('open')) return;
+  if(e.key==='Escape') lbClose();
+  else if(e.key==='ArrowRight') lbStep(1);
+  else if(e.key==='ArrowLeft') lbStep(-1);
+});
 
 function openPatientCard(id){
   const p=patientsList.find(x=>x.id===id);
