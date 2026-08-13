@@ -536,7 +536,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_date">Дата</label><input type="date" id="appt-date"></div>
-        <div class="form-group"><label data-i18n="w_time">Время</label><input type="time" id="appt-time"></div>
+        <div class="form-group"><label data-i18n="w_time">Время</label><input type="time" id="appt-time" lang="ru"></div>
       </div>
       <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно"></textarea></div>
     </div>
@@ -3908,7 +3908,26 @@ async function submitNewAppt(){
     const data=await res.json();
     if(res.ok && data.ok){
       closeModal('m-appt');
-      flashAndReload('Запись создана');
+      // Без полной перезагрузки страницы (location.reload() заново гоняет весь
+      // Django-рендер + ±30-дневную выборку приёмов — заметная задержка на
+      // календаре с большим числом записей). Собираем запись из уже известных
+      // на клиенте данных (тех же, что только что ушли на сервер) и дорисовываем
+      // сетку локально — appointment_create_quick уже всё провалидировал.
+      if(scheduleRealData && scheduleRealData.appointments){
+        const patient=patientsList.find(p=>p.id===Number(patientId));
+        const service=servicesList.find(s=>s.id===Number(serviceId));
+        scheduleRealData.appointments.push({
+          id: data.id, date, time, docId: Number(doctorId),
+          patientId: patientId?Number(patientId):null,
+          patient: patient ? patient.fullName : 'Без пациента',
+          service: service ? service.name : '',
+          status: 'cobalt', durationMin: (service && service.duration) || 30, movable: true,
+        });
+        renderSchedule();
+        showToast('Запись создана');
+      } else {
+        flashAndReload('Запись создана');
+      }
     } else {
       errBox.textContent=data.error || 'Не удалось создать запись';
       errBox.classList.remove('hidden');
@@ -3954,7 +3973,12 @@ async function schedDrop(ev, time, docId){
   try{
     const res=await apiJson('/appointments/'+apptId+'/move/', { start: startIso, end: localIso(endDt), doctor_id: docId });
     const data=await res.json();
-    if(res.ok && data.ok){ flashAndReload('Запись перенесена'); }
+    if(res.ok && data.ok){
+      // Как и в submitNewAppt() — обновляем локально вместо полной перезагрузки страницы.
+      appt.date=dateIso; appt.time=time; appt.docId=docId;
+      renderSchedule();
+      showToast('Запись перенесена');
+    }
     else { showToast(data.error || 'Не удалось перенести запись', 'error'); }
   } catch(e){ showToast('Ошибка сети — попробуйте ещё раз', 'error'); }
 }

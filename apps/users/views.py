@@ -518,6 +518,18 @@ def _newui_schedule_data(clinic):
         Appointment.STATUS_ARRIVED: "amber", Appointment.STATUS_IN_PROGRESS: "amber",
         Appointment.STATUS_COMPLETED: "teal", Appointment.STATUS_NO_SHOW: "coral",
     }
+    # Завершённые приёмы — красим по факту оплаты (Treatment.debt), а не
+    # одним цветом «завершён»: не оплачен (есть долг) — красный, оплачен
+    # полностью — зелёный. Одним запросом по всем id окна, чтобы не плодить
+    # N+1 на списке из ±30-дневного окна расписания.
+    from apps.treatments.models import Treatment
+    completed_ids = [a.pk for a in appts_qs if a.status == Appointment.STATUS_COMPLETED]
+    debt_by_appt = {
+        t.appointment_id: t.debt
+        for t in Treatment.objects.filter(appointment_id__in=completed_ids).only(
+            "appointment_id", "total_amount", "discount", "paid_amount", "status"
+        )
+    }
     appts_data = [{
         "id": a.pk,
         "date": timezone.localtime(a.start_at).date().isoformat(),
@@ -526,7 +538,11 @@ def _newui_schedule_data(clinic):
         "patientId": a.patient_id,
         "patient": a.patient.full_name if a.patient else "Без пациента",
         "service": a.service.name if a.service else "",
-        "status": status_color.get(a.status, "cobalt"),
+        "status": (
+            ("coral" if debt_by_appt[a.pk] > 0 else "teal")
+            if a.status == Appointment.STATUS_COMPLETED and a.pk in debt_by_appt
+            else status_color.get(a.status, "cobalt")
+        ),
         "durationMin": max(int((a.end_at - a.start_at).total_seconds() // 60), 1),
         "movable": a.status not in (Appointment.STATUS_COMPLETED, Appointment.STATUS_NO_SHOW),
     } for a in appts_qs]

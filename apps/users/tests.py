@@ -369,6 +369,26 @@ class NewUIScheduleTestCase(TestCase):
         doctor_row = next(d for d in data["schedule"]["doctors"] if d["name"] == "Врач SC")
         self.assertEqual(doctor_row["color"], "#00AABB")
 
+    def test_completed_appointment_colored_red_when_unpaid_green_when_paid(self):
+        from apps.appointments.models import Appointment
+        from apps.treatments.models import Treatment
+
+        self.appt.status = Appointment.STATUS_COMPLETED
+        self.appt.save(update_fields=["status"])
+        unpaid = Treatment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch, appointment=self.appt,
+            status=Treatment.STATUS_COMPLETED, total_amount=1000, paid_amount=0, clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/schedule/").content.decode())
+        appt_row = next(a for a in data["schedule"]["appointments"] if a["id"] == self.appt.pk)
+        self.assertEqual(appt_row["status"], "coral")
+
+        unpaid.paid_amount = 1000
+        unpaid.save(update_fields=["paid_amount"])
+        data = _extract_newui_real_data(self.client.get("/new/schedule/").content.decode())
+        appt_row = next(a for a in data["schedule"]["appointments"] if a["id"] == self.appt.pk)
+        self.assertEqual(appt_row["status"], "teal")
+
     def test_schedule_includes_appointment_within_window(self):
         resp = self.client.get("/new/schedule/")
         data = _extract_newui_real_data(resp.content.decode())
