@@ -24,4 +24,5 @@ urlpatterns = [
     path("settings/", v.newui_settings, name="newui_settings"),
     path("visit/start/", v.newui_visit_start, name="newui_visit_start"),
     path("visitcard/<int:pk>/", v.newui_visitcard, name="newui_visitcard"),
+    path("menu-prefs/save/", v.newui_menu_prefs_save, name="newui_menu_prefs_save"),
 ]

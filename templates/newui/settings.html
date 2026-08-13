@@ -11,6 +11,10 @@
             <button id="setNavContacts" onclick="setSettingsTab('contacts')" data-i18n="w_contacts_req">Контакты и реквизиты</button>
             <button id="setNavWa" onclick="setSettingsTab('wa')">WhatsApp / Telegram</button>
             <button onclick="settingsNotWired()" data-i18n="w_cabinets_sched">Кабинеты и график</button>
+            <!-- Только директор/суперадмин (CAN_SET_CLINIC_MENU) — общее меню для всех
+                 сотрудников без личной настройки. Открывает тот же редактор, что и
+                 «Настроить меню» в сайдбаре, но сохраняет в ClinicSettings.menu_prefs. -->
+            <button id="setNavClinicMenu" class="hidden" onclick="openMenuSettings('clinic')" data-i18n="w_clinic_menu_settings">Меню клиники</button>
             <div class="grp" data-i18n="w_grp_reception">Приём пациентов</div>
             <button onclick="openModal('m-visitresult')" data-i18n="w_visit_results">Результаты визита</button>
             <button onclick="openModal('m-cancel')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
@@ -116,6 +120,7 @@
   document.getElementById('set-slot').value = String(s.appointmentSlot);
   document.getElementById('set-language').value = s.language;
   document.getElementById('set-timezone').innerHTML = s.timezoneChoices.map(t=>`<option value="${t.code}" ${t.code===s.timezone?'selected':''}>${t.label}</option>`).join('');
+  document.getElementById('setNavClinicMenu').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
   document.getElementById('set-currency').innerHTML = s.currencyChoices.map(c=>`<option value="${c.code}" ${c.code===s.currency?'selected':''}>${c.label}</option>`).join('');
   document.getElementById('set-currency-secondary').innerHTML = `<option value="">${t('w_currency_none','— нет —')}</option>` + s.currencyChoices.map(c=>`<option value="${c.code}" ${c.code===s.currencySecondary?'selected':''}>${c.label}</option>`).join('');
 

@@ -41,6 +41,14 @@ def _shared_options(request, clinic):
         "clinicCurrencySymbol": cs.currency_label,
         "clinicCurrencySecondarySymbol": cs.currency_secondary_label,
         "clinicHasSecondaryCurrency": cs.has_secondary_currency,
+        # Настройка меню (сайдбара) — личная (per-user, между устройствами) и
+        # клиникина по умолчанию (директор задаёт в Настройках → «Меню клиники»,
+        # применяется всем, у кого нет своей личной). base.html сам решает
+        # приоритет в loadMenuPrefs(). canSetClinicMenu — показывать ли саму
+        # вкладку «Меню клиники» в Настройках (только директор/суперадмин).
+        "userMenuPrefs": getattr(request.user, "menu_prefs", None) or {},
+        "clinicMenuPrefs": cs.menu_prefs or {},
+        "canSetClinicMenu": bool(request.user.is_superadmin or request.user.has_role("admin_main")),
         "roleOptions": [
             {"id": r.pk, "name": r.display_name}
             for r in Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).order_by("name")
@@ -267,3 +275,42 @@ def newui_settings(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     return _render(request, "settings", "settings.html", {"settingsData": _newui_settings_data(clinic)})
+
+
+@login_required
+def newui_menu_prefs_save(request):
+    """Сохранение настройки сайдбара («Настроить меню» / «Меню клиники» в
+    Настройках) — POST JSON {"prefs": {...}, "scope": "user"|"clinic"}.
+    scope="user" — личная настройка (User.menu_prefs), доступна всем.
+    scope="clinic" — меню по умолчанию для ВСЕХ сотрудников (ClinicSettings.menu_prefs),
+    только для директора/суперадмина — обычный сотрудник не должен иметь возможность
+    незаметно поменять сайдбар всем коллегам."""
+    from django.http import JsonResponse
+    import json
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "invalid JSON"}, status=400)
+    prefs = data.get("prefs")
+    if not isinstance(prefs, dict):
+        return JsonResponse({"error": "prefs required"}, status=400)
+    scope = data.get("scope", "user")
+    prefs = {
+        "hidden": prefs.get("hidden") or [],
+        "order": prefs.get("order") or {},
+        "home": prefs.get("home"),
+    }
+    if scope == "clinic":
+        if not (request.user.is_superadmin or request.user.has_role("admin_main")):
+            return JsonResponse({"error": "Только директор может менять меню клиники"}, status=403)
+        from apps.settings_clinic.models import ClinicSettings
+        cs = ClinicSettings.get()
+        cs.menu_prefs = prefs
+        cs.save(update_fields=["menu_prefs"])
+    else:
+        request.user.menu_prefs = prefs
+        request.user.save(update_fields=["menu_prefs"])
+    return JsonResponse({"ok": True})

@@ -206,6 +206,11 @@ class User(AbstractUser):
         related_name="users", verbose_name="Клиника",
     )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True, verbose_name="Аватар")
+    # Персональная настройка сайдбара нового интерфейса (скрытые пункты/порядок/
+    # главный экран — см. "Настроить меню" в /new/*): {hidden:[...], order:{...}, home:"..."}.
+    # Пусто — используется меню клиники по умолчанию (ClinicSettings.menu_prefs), если оно
+    # задано директором, иначе — стандартный порядок сайдбара как есть.
+    menu_prefs = models.JSONField(default=dict, blank=True, verbose_name="Настройка меню (личная)")
     color = models.CharField(
         max_length=7, blank=True, verbose_name="Цвет",
         help_text="Необязательно. Используется для аватара и различения врачей в расписании. "

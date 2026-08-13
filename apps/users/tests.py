@@ -494,6 +494,71 @@ class NewUIServicesTestCase(TestCase):
         self.assertIsNone(self.service.price_secondary)
 
 
+class NewUIMenuPrefsTestCase(TestCase):
+    """Настройка меню (сайдбара) — личная (User.menu_prefs, per-user, между
+    устройствами) и клиникина по умолчанию (ClinicSettings.menu_prefs, только
+    директор/суперадмин), см. /new/menu-prefs/save/."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника MP", slug="clinic-newui-menuprefs")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="mp_director", name="Директор MP", email="mpd@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.staff = User.objects.create(
+            login="mp_staff", name="Сотрудник MP", email="mps@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+
+    def test_saving_personal_prefs_persists_and_is_exposed_only_to_that_user(self):
+        client = Client()
+        client.force_login(self.staff)
+        res = client.post("/new/menu-prefs/save/",
+                           data=json.dumps({"prefs": {"hidden": ["marketing"], "order": {}, "home": "schedule"}, "scope": "user"}),
+                           content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.staff.refresh_from_db()
+        self.assertEqual(self.staff.menu_prefs["hidden"], ["marketing"])
+        self.assertEqual(self.staff.menu_prefs["home"], "schedule")
+        data = _extract_newui_real_data(client.get("/new/").content.decode())
+        self.assertEqual(data["userMenuPrefs"]["hidden"], ["marketing"])
+        # Директора эта личная настройка не касается
+        self.director.refresh_from_db()
+        self.assertEqual(self.director.menu_prefs, {})
+
+    def test_non_admin_cannot_save_clinic_wide_menu(self):
+        client = Client()
+        client.force_login(self.staff)
+        res = client.post("/new/menu-prefs/save/",
+                           data=json.dumps({"prefs": {"hidden": ["finance"], "order": {}, "home": None}, "scope": "clinic"}),
+                           content_type="application/json")
+        self.assertEqual(res.status_code, 403)
+        from apps.settings_clinic.models import ClinicSettings
+        cs = ClinicSettings.objects.filter(clinic=self.clinic).first()
+        self.assertTrue(cs is None or cs.menu_prefs == {})
+
+    def test_director_can_save_clinic_wide_menu_and_it_falls_back_for_staff_without_personal_prefs(self):
+        director_client = Client()
+        director_client.force_login(self.director)
+        res = director_client.post("/new/menu-prefs/save/",
+                                    data=json.dumps({"prefs": {"hidden": ["marketing"], "order": {}, "home": "patients"}, "scope": "clinic"}),
+                                    content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        # canSetClinicMenu виден директору
+        data = _extract_newui_real_data(director_client.get("/new/").content.decode())
+        self.assertTrue(data["canSetClinicMenu"])
+
+        # Сотрудник без личной настройки — видит клиникину как эффективную
+        staff_client = Client()
+        staff_client.force_login(self.staff)
+        data = _extract_newui_real_data(staff_client.get("/new/").content.decode())
+        self.assertFalse(data["canSetClinicMenu"])
+        self.assertEqual(data["clinicMenuPrefs"]["hidden"], ["marketing"])
+        self.assertEqual(data["userMenuPrefs"], {})
+
+
 class NewUICurrencySettingsTestCase(TestCase):
     """Настройки → Общие → Основная/Дополнительная валюта — реальное поле
     ClinicSettings, используется в fmtSom()/суммах по всему новому интерфейсу."""

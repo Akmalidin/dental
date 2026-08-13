@@ -24,6 +24,10 @@ class ClinicSettings(models.Model):
     # второй цены (напр. услуги в сомах + долларах). Пусто = у клиники только одна валюта.
     currency_secondary = models.CharField(max_length=10, blank=True, verbose_name="Дополнительная валюта")
     language = models.CharField(max_length=5, default="ru", verbose_name="Язык")
+    # Меню по умолчанию для ВСЕХ сотрудников клиники (директор настраивает через
+    # Настройки → «Меню клиники») — тот же формат, что и User.menu_prefs, но применяется
+    # только сотрудникам, у которых нет своей личной настройки (User.menu_prefs пуст).
+    menu_prefs = models.JSONField(default=dict, blank=True, verbose_name="Настройка меню клиники")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
     telegram_enabled = models.BooleanField(default=True, verbose_name="Telegram включён для клиники")

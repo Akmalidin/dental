@@ -653,7 +653,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 <!-- Настройка меню -->
 <div class="modal-backdrop" id="m-menu-settings">
   <div class="modal wide">
-    <div class="modal-head"><h3 data-i18n="nav_настроить_меню">Настроить меню</h3><button class="modal-close" onclick="closeModal('m-menu-settings')">✕</button></div>
+    <div class="modal-head"><h3 id="menuSettingsTitle" data-i18n="nav_настроить_меню">Настроить меню</h3><button class="modal-close" onclick="closeModal('m-menu-settings')">✕</button></div>
     <div class="modal-body">
       <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;" data-i18n="w_menu_settings_hint">Скройте разделы, которыми вы не пользуетесь, и перетащите ⠿, чтобы поменять порядок — это только для вас, остальные сотрудники видят меню по-своему.</div>
       <div id="menuSettingsList"></div>
@@ -2342,6 +2342,10 @@ const translations={
   nav_журнал_аудита:  {ru:'Журнал аудита',      ky:'Аудит журналы',    en:'Audit log',         uz:'Audit jurnali'},
   nav_настройки:      {ru:'Настройки',          ky:'Жөндөөлөр',        en:'Settings',          uz:'Sozlamalar'},
   nav_настроить_меню: {ru:'Настроить меню',     ky:'Менюну ырастоо',   en:'Customize menu',    uz:'Menyuni sozlash'},
+  w_menu_settings_title: {ru:'Настроить меню', ky:'Менюну ырастоо', en:'Customize menu', uz:'Menyuni sozlash'},
+  w_clinic_menu_title: {ru:'Меню клиники (по умолчанию для всех сотрудников)', ky:'Клиниканын менюсу (бардык кызматкерлер үчүн демейки)', en:'Clinic menu (default for all staff)', uz:'Klinika menyusi (barcha xodimlar uchun standart)'},
+  w_clinic_menu_saved: {ru:'Меню клиники сохранено — применится сотрудникам без личной настройки', ky:'Клиниканын менюсу сакталды — жеке ырастоосу жок кызматкерлерге колдонулат', en:'Clinic menu saved — applies to staff without a personal setup', uz:'Klinika menyusi saqlandi — shaxsiy sozlamasi yo\'q xodimlarga qo\'llaniladi'},
+  w_clinic_menu_settings: {ru:'Меню клиники', ky:'Клиниканын менюсу', en:'Clinic menu', uz:'Klinika menyusi'},
   /* Заголовки страниц (topbar h1) — отдельные ключи от nav_*, т.к. текст
      не всегда совпадает дословно с подписью в меню (напр. «Услуги и
      прайс-лист» вместо «Услуги»). */
@@ -3149,16 +3153,34 @@ function saveVisitResult(){
    сохранённые скрытие/порядок JS'ом сразу при загрузке (applyMenuPrefs, см.
    ниже, вызывается из loadRealStaffData). */
 const MENU_PREFS_KEY='newui_menu_prefs';
+/* Приоритет источника настройки меню (см. Настройки → «Настроить меню» /
+   «Меню клиники»): личная серверная (переезжает вместе с пользователем между
+   браузерами/устройствами) → меню клиники по умолчанию (директор задал общее
+   для всех) → localStorage (офлайн-кэш на случай, если real_data не пришли) →
+   пусто (обычный порядок сайдбара как есть). */
 function loadMenuPrefs(){
+  const norm=p=>({hidden:p.hidden||[], order:p.order||{}, home:p.home||null});
+  if(SERVER_USER_MENU_PREFS && Object.keys(SERVER_USER_MENU_PREFS).length) return norm(SERVER_USER_MENU_PREFS);
+  if(SERVER_CLINIC_MENU_PREFS && Object.keys(SERVER_CLINIC_MENU_PREFS).length) return norm(SERVER_CLINIC_MENU_PREFS);
   try{
     const raw=localStorage.getItem(MENU_PREFS_KEY);
     if(!raw) return {hidden:[], order:{}, home:null};
-    const p=JSON.parse(raw);
-    return {hidden:p.hidden||[], order:p.order||{}, home:p.home||null};
+    return norm(JSON.parse(raw));
   }catch(e){ return {hidden:[], order:{}, home:null}; }
 }
 function saveMenuPrefsToStorage(prefs){
   try{ localStorage.setItem(MENU_PREFS_KEY, JSON.stringify(prefs)); }catch(e){}
+}
+async function saveMenuPrefsToServer(prefs, scope){
+  try{
+    const res=await fetch('/new/menu-prefs/save/', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json', 'X-CSRFToken':getCookie('csrftoken')},
+      body: JSON.stringify({prefs, scope}),
+    });
+    const data=await res.json();
+    return res.ok && data.ok;
+  }catch(e){ return false; }
 }
 /* Главный экран — личный per-браузер выбор (localStorage), т.к. "/new/" всегда
    отдаёт дашборд с сервера; редиректим на выбранный раздел уже в браузере,
@@ -3209,10 +3231,20 @@ function msPickHome(view, btn){
     b.title = active ? t('w_home_screen_current') : t('w_home_screen_set');
   });
 }
-function openMenuSettings(){
+let menuSettingsMode='user';
+function openMenuSettings(mode){
+  menuSettingsMode = mode==='clinic' ? 'clinic' : 'user';
   const list=document.getElementById('menuSettingsList');
   const sidebar=document.querySelector('.sidebar');
-  msHomeSelection=loadMenuPrefs().home || 'dashboard';
+  const titleEl=document.getElementById('menuSettingsTitle');
+  if(titleEl) titleEl.textContent = menuSettingsMode==='clinic' ? t('w_clinic_menu_title','Меню клиники (по умолчанию для всех сотрудников)') : t('w_menu_settings_title','Настроить меню');
+  // Вкладку «Меню клиники» открывают редактировать ОБЩУЮ настройку — стартуем
+  // от неё (а не от личной пользователя), иначе директор случайно продавит
+  // всем свою личную раскладку вместо осознанно заданной общей.
+  const basePrefs = menuSettingsMode==='clinic'
+    ? {hidden:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.hidden)||[], order:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.order)||{}, home:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.home)||null}
+    : loadMenuPrefs();
+  msHomeSelection=basePrefs.home || 'dashboard';
   let html='';
   // Плоский список (без вложенных .ms-group на каждую секцию) — заголовки
   // групп тут просто неперетаскиваемые метки среди пунктов, поэтому пункт
@@ -3229,7 +3261,10 @@ function openMenuSettings(){
     clone.querySelectorAll('svg, .nav-badge').forEach(n=>n.remove());
     const label=clone.textContent.replace(/\s+/g,' ').trim();
     const iconHtml=el.querySelector('svg') ? el.querySelector('svg').outerHTML : '';
-    const isVisible=!el.classList.contains('menu-hidden');
+    // В режиме «Меню клиники» видимость берём из basePrefs (общей настройки),
+    // а не из classList текущего сайдбара — тот отражает ЛИЧНЫЙ эффективный
+    // вид сидящего сейчас директора, который может отличаться от общей.
+    const isVisible = menuSettingsMode==='clinic' ? !basePrefs.hidden.includes(view) : !el.classList.contains('menu-hidden');
     const isHome=view===msHomeSelection;
     html+=`<label class="ms-item${isVisible?'':' ms-item-hidden'}" draggable="${!pinned}" data-menu-item="${view}" style="cursor:${pinned?'default':'grab'};">
       <span class="ms-drag-handle" style="color:var(--ink-faint);${pinned?'visibility:hidden;':''}">⠿</span>
@@ -3276,7 +3311,21 @@ function saveMenuSettings(){
       order[currentGroup].push(el.dataset.menuItem);
     }
   });
-  saveMenuPrefsToStorage({hidden, order, home: msHomeSelection});
+  const prefs={hidden, order, home: msHomeSelection};
+  if(menuSettingsMode==='clinic'){
+    // Меню клиники — общий дефолт для всех сотрудников без личной настройки,
+    // это НЕ личный вид сохраняющего директора: не трогаем localStorage/личные
+    // серверные prefs и не применяем к текущему сайдбару принудительно.
+    SERVER_CLINIC_MENU_PREFS=prefs;
+    saveMenuPrefsToServer(prefs, 'clinic').then(ok=>{
+      showToast(ok ? t('w_clinic_menu_saved','Меню клиники сохранено — применится сотрудникам без личной настройки') : t('w_save_failed','Не удалось сохранить'), ok?'success':'error');
+    });
+    closeModal('m-menu-settings');
+    return;
+  }
+  saveMenuPrefsToStorage(prefs);
+  SERVER_USER_MENU_PREFS=prefs;
+  saveMenuPrefsToServer(prefs, 'user');
   applyMenuPrefs();
   // если скрыли раздел, который сейчас открыт — уходим на дашборд
   const activeItem=document.querySelector('.nav-item.active');
@@ -4046,6 +4095,10 @@ let cashdeskData=null;
 // настройка ClinicSettings.currency[_secondary], прокинута через _shared_options
 // на КАЖДОЙ странице /new/*, чтобы fmtSom() везде показывала правильный символ.
 let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
+// Настройка меню (сайдбара) — серверные значения (личная per-user + клиникина по
+// умолчанию от директора), см. loadMenuPrefs() ниже. CAN_SET_CLINIC_MENU — может ли
+// текущий пользователь сохранить меню клиники (директор/суперадмин).
+let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_MENU=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -4096,6 +4149,9 @@ let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
     CUR_SYM=data.clinicCurrencySymbol || 'сом';
     CUR_SYM2=data.clinicCurrencySecondarySymbol || '';
     CUR_HAS2=!!data.clinicHasSecondaryCurrency;
+    SERVER_USER_MENU_PREFS=data.userMenuPrefs || {};
+    SERVER_CLINIC_MENU_PREFS=data.clinicMenuPrefs || {};
+    CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();
