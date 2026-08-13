@@ -770,9 +770,11 @@ def _handle_tg_callback(cq, token):
         if appt.status in ("scheduled",):
             appt.status = "confirmed"
             appt.save(update_fields=["status"])
+        from django.utils import timezone as _tz
+        local_start = _tz.localtime(appt.start_at)
         tg_edit_message(chat_id, message_id,
                         "✅ <b>Запись подтверждена</b>\nЖдём вас %s в %s" % (
-                            appt.start_at.strftime("%d.%m.%Y"), appt.start_at.strftime("%H:%M")),
+                            local_start.strftime("%d.%m.%Y"), local_start.strftime("%H:%M")),
                         token=token)
         tg_answer_callback(cq_id, "Запись подтверждена ✅", token=token)
     elif action == "appt_cancel":

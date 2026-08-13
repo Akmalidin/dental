@@ -679,8 +679,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_code">Код</label><input type="text" id="svc-code" placeholder="T-014"></div>
         <div class="form-group"><label data-i18n="w_category">Категория</label><select id="svc-category"></select></div>
       </div>
-      <div class="form-group"><label data-i18n="w_price_som">Цена, сом</label><input type="number" id="svc-price" placeholder="0"></div>
-      <div class="form-group toggle"><input type="checkbox" checked id="svc-active"><span style="font-size:13px;margin-left:2px">Услуга активна (доступна для записи)</span></div>
+      <div class="form-group"><label><span data-i18n="w_price">Цена</span>, <span id="svcPriceCurLabel">сом</span></label><input type="number" id="svc-price" placeholder="0"></div>
+      <!-- Вторая цена (в доп. валюте клиники) — переключатель показан только когда у клиники
+           реально настроены 2 валюты (Настройки → Общие); при 1 валюте поле не нужно и скрыто. -->
+      <div class="form-group toggle hidden" id="svcSecondaryToggleRow"><input type="checkbox" id="svc-price2-toggle" onchange="svcToggleSecondaryPrice()"><span style="font-size:13px;margin-left:2px" id="svcSecondaryToggleLabel" data-i18n="w_also_set_price2">Указать цену и во второй валюте</span></div>
+      <div class="form-group hidden" id="svcSecondaryPriceRow"><label><span data-i18n="w_price">Цена</span>, <span id="svcPrice2CurLabel"></span></label><input type="number" id="svc-price2" placeholder="0"></div>
+      <div class="form-group toggle"><input type="checkbox" checked id="svc-active"><span style="font-size:13px;margin-left:2px" data-i18n="w_service_active">Услуга активна (доступна для записи)</span></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-service')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="svcModalSaveBtn" onclick="saveService()">Добавить услугу</button></div>
   </div>
@@ -2069,13 +2073,13 @@ function renderCashShift(){
     return;
   }
   const methodLabel={cash:'Наличные', card:'Карта', transfer:'Перевод', online:'Онлайн'};
-  const rows=Object.keys(methodLabel).map(k=>`<div class="row"><div class="row-main"><b>${methodLabel[k]}</b></div><span class="mono">${Math.round(s.byMethod[k]||0).toLocaleString('ru-RU')} сом</span></div>`).join('');
+  const rows=Object.keys(methodLabel).map(k=>`<div class="row"><div class="row-main"><b>${methodLabel[k]}</b></div><span class="mono">${Math.round(s.byMethod[k]||0).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`).join('');
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_shift_open">Смена открыта</h3><span style="font-size:11px;color:var(--ink-soft);">с ${s.openedAt} · ${s.openedBy}</span></div>
     <div class="card-body">
       ${rows}
-      <div class="row"><div class="row-main"><b>Приход</b></div><span class="mono" style="color:var(--teal)">+${Math.round(s.incomeTotal).toLocaleString('ru-RU')} сом</span></div>
-      <div class="row"><div class="row-main"><b>Возвраты</b></div><span class="mono" style="color:var(--coral)">−${Math.round(s.refundTotal).toLocaleString('ru-RU')} сом</span></div>
-      <div class="row"><div class="row-main"><b>Ожидаемые наличные (Z-отчёт)</b></div><span class="mono">${Math.round(s.expectedCash).toLocaleString('ru-RU')} сом</span></div>
+      <div class="row"><div class="row-main"><b>Приход</b></div><span class="mono" style="color:var(--teal)">+${Math.round(s.incomeTotal).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
+      <div class="row"><div class="row-main"><b>Возвраты</b></div><span class="mono" style="color:var(--coral)">−${Math.round(s.refundTotal).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
+      <div class="row"><div class="row-main"><b>Ожидаемые наличные (Z-отчёт)</b></div><span class="mono">${Math.round(s.expectedCash).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
       <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input type="number" id="shiftClosingCash" value="${Math.round(s.expectedCash)}" min="0"></div>
       <button class="btn btn-ghost btn-sm" onclick="cashCloseShift(${s.id})">Закрыть смену</button>
     </div>`;
@@ -2112,7 +2116,7 @@ function renderCashQueue(){
   el.innerHTML=queue.map(item=>`
     <div class="row">
       <div class="row-main"><b>${item.body}</b><span>от ${item.from} · ${item.time}</span></div>
-      ${item.amount?`<span class="mono" style="margin-right:12px;">${Number(item.amount).toLocaleString('ru-RU')} сом</span>`:''}
+      ${item.amount?`<span class="mono" style="margin-right:12px;">${Number(item.amount).toLocaleString('ru-RU')} ${CUR_SYM}</span>`:''}
       ${item.patientId?`<a class="btn btn-ghost btn-sm" href="/new/patients/${item.patientId}/" style="margin-right:6px;">Карта пациента</a>`:''}
       <button class="btn btn-cobalt btn-sm" onclick="${item.patientId?'openCashAcceptModal':'cashQueueDismiss'}(${item.id})">Принято</button>
     </div>`).join('');
@@ -2138,7 +2142,7 @@ function acceptCashierPayment(id){
     const tr=document.createElement('tr');
     const now=new Date();
     const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-    tr.innerHTML=`<td class="mono">${time}</td><td>${item.patient}</td><td>${item.description}</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+${formatNum(item.amount)} сом</td>`;
+    tr.innerHTML=`<td class="mono">${time}</td><td>${item.patient}</td><td>${item.description}</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+${formatNum(item.amount)} ${CUR_SYM}</td>`;
     opsBody.insertBefore(tr, opsBody.firstChild);
   }
   if(item.statusElId){
@@ -2160,7 +2164,7 @@ function reportsTab(which){
   });
   if(which==='ai') renderAIInsights();
   if(which==='overview') renderOverviewCharts();
-  if(which==='doctors') document.getElementById('doctorsChart').innerHTML = buildDonutChart(reportDatasets.doctors.revenue, ' сом');
+  if(which==='doctors') document.getElementById('doctorsChart').innerHTML = buildDonutChart(reportDatasets.doctors.revenue, ' '+CUR_SYM);
   if(which==='rooms') document.getElementById('roomsChart').innerHTML = buildDonutChart(reportDatasets.rooms.utilization, '%');
   if(which==='cancelled') document.getElementById('cancelledChart').innerHTML = buildDonutChart(cancelReasonsData, '');
   if(which==='repeat') document.getElementById('repeatChart').innerHTML = buildBarChart(repeatVisitsData, ' визитов');
@@ -2233,7 +2237,7 @@ function renderReportConstructor(){
   const type=document.getElementById('rcType').value;
   const ds=reportDatasets[dim] || {};
   const data = ds[metric] || ds[Object.keys(ds)[0]] || [];
-  const suffix = metric==='utilization' ? '%' : (metric==='revenue'||metric==='avgcheck' ? ' сом' : '');
+  const suffix = metric==='utilization' ? '%' : (metric==='revenue'||metric==='avgcheck' ? ' '+CUR_SYM : '');
   const el=document.getElementById('rcChartArea');
   if(!el) return;
   el.innerHTML = type==='donut' ? buildDonutChart(data, suffix) : buildBarChart(data, suffix);
@@ -2604,6 +2608,11 @@ const translations={
   w_30min: {ru:'30 минут', ky:'30 мүнөт', en:'30 minutes', uz:'30 daqiqa'},
   w_60min: {ru:'60 минут', ky:'60 мүнөт', en:'60 minutes', uz:'60 daqiqa'},
   w_timezone: {ru:'Часовой пояс', ky:'Убакыт алкагы', en:'Timezone', uz:'Vaqt mintaqasi'},
+  w_currency_primary: {ru:'Основная валюта', ky:'Негизги валюта', en:'Primary currency', uz:'Asosiy valyuta'},
+  w_currency_primary_hint: {ru:'Используется во всех суммах в системе', ky:'Системадагы бардык суммаларда колдонулат', en:'Used for all amounts in the system', uz:'Tizimdagi barcha summalarda ishlatiladi'},
+  w_currency_secondary: {ru:'Дополнительная валюта', ky:'Кошумча валюта', en:'Secondary currency', uz:'Qo\'shimcha valyuta'},
+  w_currency_secondary_hint: {ru:'Необязательно — позволяет указывать вторую цену у услуг', ky:'Милдеттүү эмес — кызматтарга экинчи баа коюуга мүмкүндүк берет', en:'Optional — lets you set a second price on services', uz:'Ixtiyoriy — xizmatlarga ikkinchi narx qo\'yish imkonini beradi'},
+  w_currency_none: {ru:'— нет —', ky:'— жок —', en:'— none —', uz:'— yo\'q —'},
   w_save_changes: {ru:'Сохранить изменения', ky:'Өзгөртүүлөрдү сактоо', en:'Save changes', uz:'O\'zgarishlarni saqlash'},
   w_clinic_name: {ru:'Название клиники', ky:'Клиниканын аталышы', en:'Clinic name', uz:'Klinika nomi'},
   w_receipt_format: {ru:'Формат чека', ky:'Чектин форматы', en:'Receipt format', uz:'Chek formati'},
@@ -2732,6 +2741,8 @@ const translations={
   w_min_stock: {ru:'Мин. остаток', ky:'Мин. калдык', en:'Min. stock', uz:'Min. qoldiq'},
   w_new_service: {ru:'Новая услуга', ky:'Жаңы кызмат', en:'New service', uz:'Yangi xizmat'},
   w_price: {ru:'Цена', ky:'Баасы', en:'Price', uz:'Narxi'},
+  w_also_set_price2: {ru:'Указать цену и во второй валюте', ky:'Экинчи валютада да баа көрсөтүү', en:'Also set a price in the secondary currency', uz:'Ikkinchi valyutada ham narx belgilash'},
+  w_service_active: {ru:'Услуга активна (доступна для записи)', ky:'Кызмат активдүү (жазылууга жеткиликтүү)', en:'Service is active (available for booking)', uz:'Xizmat faol (yozilish uchun mavjud)'},
   w_active_f: {ru:'Активна', ky:'Активдүү', en:'Active', uz:'Faol'},
   btn_add_staff: {ru:'Добавить сотрудника', ky:'Кызматкер кошуу', en:'Add staff', uz:'Xodim qo\'shish'},
   w_staff: {ru:'Сотрудники', ky:'Кызматкерлер', en:'Staff', uz:'Xodimlar'},
@@ -2854,13 +2865,23 @@ function renderServicesTable(){
       <td>${s.name}</td>
       <td class="mono">${s.code||'—'}</td>
       <td>${s.categoryName||'—'}</td>
-      <td class="mono">${formatNum(s.price)} сом</td>
+      <td class="mono">${formatNum(s.price)} ${CUR_SYM}${(s.priceSecondary!==null && s.priceSecondary!==undefined)?` <span style="color:var(--ink-soft);">· ${formatNum(s.priceSecondary)} ${CUR_SYM2}</span>`:''}</td>
       <td><span class="pill ${s.isActive?'teal':'grey'}">${s.isActive?'Да':'Нет'}</span></td>
       <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="editService(${s.id})">Изменить</button></td>
     </tr>`).join('');
 }
 function populateServiceCategorySelect(selectedId){
   document.getElementById('svc-category').innerHTML='<option value="">—</option>'+serviceCategories.map(c=>`<option value="${c.id}" ${c.id===selectedId?'selected':''}>${c.name}</option>`).join('');
+}
+function svcSetupCurrencyFields(){
+  document.getElementById('svcPriceCurLabel').textContent=CUR_SYM;
+  document.getElementById('svcPrice2CurLabel').textContent=CUR_SYM2;
+  document.getElementById('svcSecondaryToggleRow').classList.toggle('hidden', !CUR_HAS2);
+}
+function svcToggleSecondaryPrice(){
+  const on=document.getElementById('svc-price2-toggle').checked;
+  document.getElementById('svcSecondaryPriceRow').classList.toggle('hidden', !on);
+  if(!on) document.getElementById('svc-price2').value='';
 }
 function openNewService(){
   editingServiceId=null;
@@ -2871,6 +2892,10 @@ function openNewService(){
   populateServiceCategorySelect(null);
   document.getElementById('svc-price').value='';
   document.getElementById('svc-active').checked=true;
+  svcSetupCurrencyFields();
+  document.getElementById('svc-price2-toggle').checked=false;
+  document.getElementById('svc-price2').value='';
+  document.getElementById('svcSecondaryPriceRow').classList.add('hidden');
   document.getElementById('svcModalError').classList.add('hidden');
   openModal('m-service');
 }
@@ -2885,6 +2910,11 @@ function editService(id){
   populateServiceCategorySelect(s.categoryId);
   document.getElementById('svc-price').value=s.price;
   document.getElementById('svc-active').checked=s.isActive;
+  svcSetupCurrencyFields();
+  const has2 = s.priceSecondary!==null && s.priceSecondary!==undefined;
+  document.getElementById('svc-price2-toggle').checked=has2;
+  document.getElementById('svc-price2').value=has2 ? s.priceSecondary : '';
+  document.getElementById('svcSecondaryPriceRow').classList.toggle('hidden', !has2);
   document.getElementById('svcModalError').classList.add('hidden');
   openModal('m-service');
 }
@@ -2898,6 +2928,10 @@ async function saveService(){
   fd.append('code', document.getElementById('svc-code').value.trim());
   fd.append('category', document.getElementById('svc-category').value);
   fd.append('price', price);
+  // Вторая цена — только если переключатель включён и клиника вообще имеет 2-ю валюту;
+  // иначе явно шлём пустую строку, чтобы редактирование могло СНЯТЬ ранее сохранённую цену.
+  const price2On = CUR_HAS2 && document.getElementById('svc-price2-toggle').checked;
+  fd.append('price_secondary', price2On ? document.getElementById('svc-price2').value : '');
   fd.append('duration', (s && s.duration) || 30);
   if(document.getElementById('svc-active').checked) fd.append('is_active', 'on');
 
@@ -2980,7 +3014,7 @@ function renderTreatplans(){
   body.innerHTML=treatplansData.plans.map(p=>`
     <tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'">
       <td><b>${p.patient}</b></td><td>${p.stage}</td><td>${p.doctor}</td>
-      <td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} сом</td>
+      <td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td>
       <td><span class="pill ${statusPill[p.statusCode]||'cobalt'}">${p.status}</span></td>
     </tr>`).join('');
 }
@@ -3045,16 +3079,16 @@ function renderAccounting(){
   const wrap=document.getElementById('acctLines');
   if(!wrap) return;
   document.getElementById('acctMonthLabel').textContent=accountingData.monthLabel;
-  let html=`<div class="row"><div class="row-main"><b>Выручка</b></div><span class="mono">${Math.round(accountingData.revenue).toLocaleString('ru-RU')} сом</span></div>`;
+  let html=`<div class="row"><div class="row-main"><b>Выручка</b></div><span class="mono">${Math.round(accountingData.revenue).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`;
   if(accountingData.expenseLines.length===0){
     html+=`<div class="row"><div class="row-main" style="color:var(--ink-soft);">Расходов за месяц не заведено</div></div>`;
   } else {
     accountingData.expenseLines.forEach(l=>{
-      html+=`<div class="row"><div class="row-main"><b>${l.name}</b></div><span class="mono" style="color:var(--coral)">−${Math.round(l.amount).toLocaleString('ru-RU')} сом</span></div>`;
+      html+=`<div class="row"><div class="row-main"><b>${l.name}</b></div><span class="mono" style="color:var(--coral)">−${Math.round(l.amount).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`;
     });
   }
   wrap.innerHTML=html;
-  document.getElementById('acctProfit').textContent=Math.round(accountingData.profit).toLocaleString('ru-RU')+' сом';
+  document.getElementById('acctProfit').textContent=Math.round(accountingData.profit).toLocaleString('ru-RU')+' '+CUR_SYM;
   document.getElementById('acctMargin').textContent='Рентабельность '+accountingData.marginPct+'%';
 }
 
@@ -3614,7 +3648,7 @@ async function openApptInfo(apptId){
   const procWrap=document.getElementById('av-procedures-wrap');
   if(data.procedures && data.procedures.length){
     procWrap.classList.remove('hidden');
-    document.getElementById('av-procedures-body').innerHTML=data.procedures.map(pr=>`<tr><td>${pr.service}</td><td class="mono">${pr.tooth||'—'}</td><td>${pr.doctor||'—'}</td><td class="mono">${Math.round(pr.price).toLocaleString('ru-RU')} сом</td></tr>`).join('');
+    document.getElementById('av-procedures-body').innerHTML=data.procedures.map(pr=>`<tr><td>${pr.service}</td><td class="mono">${pr.tooth||'—'}</td><td>${pr.doctor||'—'}</td><td class="mono">${Math.round(pr.price).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('');
   } else procWrap.classList.add('hidden');
 
   const patientLink=document.getElementById('av-patient-link');
@@ -3984,6 +4018,10 @@ let accountingData=null;
 let auditEvents=[];
 let patientCardDetail=null;
 let cashdeskData=null;
+// Валюта клиники (Настройки → Общие → Основная/Дополнительная валюта) — реальная
+// настройка ClinicSettings.currency[_secondary], прокинута через _shared_options
+// на КАЖДОЙ странице /new/*, чтобы fmtSom() везде показывала правильный символ.
+let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -4031,18 +4069,24 @@ let cashdeskData=null;
       window.newuiTgEnabled=data.messagesData.tgEnabled;
     }
     setLanguage(data.clinicLanguage || 'ru');
+    CUR_SYM=data.clinicCurrencySymbol || 'сом';
+    CUR_SYM2=data.clinicCurrencySecondarySymbol || '';
+    CUR_HAS2=!!data.clinicHasSecondaryCurrency;
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();
 })();
 
 /* ================= DASHBOARD (реальные данные клиники) ================= */
-function fmtSom(n){ return Math.round(n).toLocaleString('ru-RU') + ' сом'; }
+function fmtSom(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + CUR_SYM; }
+// Сумма во второй (дополнительной) валюте клиники — только для явного ручного ввода
+// (напр. Service.priceSecondary), без автоконвертации по курсу: курс в системе не ведётся.
+function fmtCur2(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + CUR_SYM2; }
 function renderDashboard(){
   if(!dashboardData) return;
   const d=dashboardData;
 
-  document.getElementById('kpi-revenue-today').innerHTML = `${Math.round(d.revenueToday).toLocaleString('ru-RU')} <span style="font-size:13px;color:var(--ink-soft)">сом</span>`;
+  document.getElementById('kpi-revenue-today').innerHTML = `${Math.round(d.revenueToday).toLocaleString('ru-RU')} <span style="font-size:13px;color:var(--ink-soft)">${CUR_SYM}</span>`;
   const revDelta=document.getElementById('kpi-revenue-delta');
   if(d.revenueDeltaPct===null){ revDelta.textContent=''; }
   else { revDelta.textContent=(d.revenueDeltaPct>=0?'+':'')+d.revenueDeltaPct+'%'; revDelta.className='kpi-delta '+(d.revenueDeltaPct>=0?'up':'down'); }
@@ -4100,7 +4144,7 @@ function renderPatientsTable(){
 
   if(list.length===0){ body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Ничего не найдено</td></tr>'; return; }
   body.innerHTML = list.map(p=>
-    `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono">${Math.round(p.balance).toLocaleString('ru-RU')} сом</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td></tr>`
+    `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono">${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td></tr>`
   ).join('');
 }
 
@@ -4121,27 +4165,27 @@ function renderPatientCardHistory(d){
   if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Приёмов пока не было'); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
     <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th></tr></thead>
-    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} сом</td><td><span class="pill ${h.statusColor}">${h.status}</span></td></tr>`).join('')}</tbody></table>`;
+    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td></tr>`).join('')}</tbody></table>`;
 }
 function renderPatientCardPlan(d){
   const el=document.getElementById('pcPanelPlan');
   if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Планов лечения пока нет'); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3></div>
     <table><thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
-    <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} сом</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
+    <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
 }
 function renderPatientCardFinance(d){
   const el=document.getElementById('pcPanelFinance');
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   const balance=p ? p.balance : 0;
   const kpi=`<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-    <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} сом</b></div>
-    <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} сом</b></div>
+    <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
+    <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
   </div>`;
   const rows=(!d.payments || d.payments.length===0)
     ? PATIENT_TAB_EMPTY('Платежей пока не было')
     : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th>Дата</th><th>Назначение</th><th>Способ</th><th>Сумма</th></tr></thead>
-       <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} сом</td></tr>`).join('')}</tbody></table></div>`;
+       <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('')}</tbody></table></div>`;
   el.innerHTML=kpi+rows;
 }
 function renderPatientCardDocs(d){
@@ -4183,7 +4227,7 @@ function openPatientCard(id){
   document.getElementById('pi-source').textContent=p.sourceName || '—';
   document.getElementById('pi-notes').textContent=p.allergy || 'Не указано';
   const balPill=document.getElementById('pi-balance-pill');
-  balPill.textContent=Math.round(p.balance).toLocaleString('ru-RU')+' сом';
+  balPill.textContent=Math.round(p.balance).toLocaleString('ru-RU')+' '+CUR_SYM;
   balPill.className='pill '+(p.balance<0?'coral':'teal');
 
   const detail=patientCardDetail || {history:[], plans:[], payments:[], totalPaid:0, toothConditions:{}, documents:[]};

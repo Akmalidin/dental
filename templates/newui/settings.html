@@ -40,6 +40,14 @@
                 <label data-i18n="w_timezone">Часовой пояс</label>
                 <select id="set-timezone"></select>
               </div>
+              <div class="field-row">
+                <label><span data-i18n="w_currency_primary">Основная валюта</span><div class="hint" data-i18n="w_currency_primary_hint">Используется во всех суммах в системе</div></label>
+                <select id="set-currency"></select>
+              </div>
+              <div class="field-row">
+                <label><span data-i18n="w_currency_secondary">Дополнительная валюта</span><div class="hint" data-i18n="w_currency_secondary_hint">Необязательно — позволяет указывать вторую цену у услуг</div></label>
+                <select id="set-currency-secondary"></select>
+              </div>
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
                 <button class="btn btn-primary" type="button" onclick="saveSettingsGeneral()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
@@ -108,6 +116,8 @@
   document.getElementById('set-slot').value = String(s.appointmentSlot);
   document.getElementById('set-language').value = s.language;
   document.getElementById('set-timezone').innerHTML = s.timezoneChoices.map(t=>`<option value="${t.code}" ${t.code===s.timezone?'selected':''}>${t.label}</option>`).join('');
+  document.getElementById('set-currency').innerHTML = s.currencyChoices.map(c=>`<option value="${c.code}" ${c.code===s.currency?'selected':''}>${c.label}</option>`).join('');
+  document.getElementById('set-currency-secondary').innerHTML = `<option value="">${t('w_currency_none','— нет —')}</option>` + s.currencyChoices.map(c=>`<option value="${c.code}" ${c.code===s.currencySecondary?'selected':''}>${c.label}</option>`).join('');
 
   document.getElementById('set-name').value = s.name;
   document.getElementById('set-phone').value = s.phone;
@@ -141,7 +151,8 @@
   // отправляем текущими значениями, чтобы частичное сохранение их не стёрло.
   function baseFormData(){
     const fd = new FormData();
-    fd.append('currency', s.currency);
+    fd.append('currency', document.getElementById('set-currency').value);
+    fd.append('currency_secondary', document.getElementById('set-currency-secondary').value);
     fd.append('telegram_bot_token', s.telegramBotToken);
     if(s.requireUniquePhone) fd.append('require_unique_phone', 'on');
     if(s.visitsJournalStaff) fd.append('visits_journal_staff', 'on');

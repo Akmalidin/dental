@@ -342,6 +342,7 @@ def _newui_services_data():
         "id": s.pk, "name": s.name, "code": s.code or "",
         "categoryId": s.category_id, "categoryName": s.category.name if s.category else "",
         "price": float(s.price), "isActive": s.is_active, "duration": s.duration,
+        "priceSecondary": float(s.price_secondary) if s.price_secondary is not None else None,
     } for s in Service.objects.select_related("category").order_by("category__sort_order", "name")]
     return {
         "services": services,
@@ -748,6 +749,8 @@ def _newui_settings_data(clinic):
         # сохранения (POST всех полей формы разом, как и старый /settings/)
         # их не затёрла пустыми/выключенными значениями.
         "currency": cs.currency,
+        "currencySecondary": cs.currency_secondary,
+        "currencyChoices": [{"code": c, "label": lbl} for c, lbl in ClinicSettings.CURRENCY_CHOICES],
         "telegramBotToken": cs.telegram_bot_token,
         "requireUniquePhone": cs.require_unique_phone,
         "visitsJournalStaff": cs.visits_journal_staff,

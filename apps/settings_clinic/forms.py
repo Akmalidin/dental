@@ -7,7 +7,7 @@ class ClinicSettingsForm(forms.ModelForm):
         model = ClinicSettings
         fields = [
             "logo", "name", "phone", "address",
-            "appointment_slot", "currency", "language",
+            "appointment_slot", "currency", "currency_secondary", "language",
             "require_unique_phone", "telegram_bot_token",
             "visits_journal_staff", "receipt_format",
             "receipt_clinic_name", "receipt_legal_name", "receipt_inn", "receipt_address",

@@ -405,9 +405,15 @@ def appointment_create_quick(request):
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
+            # start_at/end_at приходят из БД в UTC (USE_TZ=True) — форматировать
+            # напрямую strftime() нельзя, иначе в сообщении об ошибке показывается
+            # время в UTC, а не в локальном поясе клиники (Asia/Bishkek), что выглядит
+            # как случайное/несуществующее время и сбивает администратора с толку.
+            ov_start = _tz.localtime(overlap.start_at)
+            ov_end = _tz.localtime(overlap.end_at)
             return JsonResponse({
                 "error": "У врача уже есть запись на это время (%s–%s). Выберите другое время." % (
-                    overlap.start_at.strftime("%H:%M"), overlap.end_at.strftime("%H:%M"))
+                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"))
             }, status=400)
 
         sched_err = schedule_violation(doctor, start, end)

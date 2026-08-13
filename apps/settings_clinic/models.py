@@ -19,7 +19,10 @@ class ClinicSettings(models.Model):
         help_text='{"mon": ["09:00","18:00"], "tue": ["09:00","18:00"], ...}',
     )
     appointment_slot = models.PositiveIntegerField(default=30, verbose_name="Слот записи (мин)")
-    currency = models.CharField(max_length=10, default="KGS", verbose_name="Валюта")
+    currency = models.CharField(max_length=10, default="KGS", verbose_name="Основная валюта")
+    # Дополнительная валюта — необязательная, используется для параллельного отображения
+    # второй цены (напр. услуги в сомах + долларах). Пусто = у клиники только одна валюта.
+    currency_secondary = models.CharField(max_length=10, blank=True, verbose_name="Дополнительная валюта")
     language = models.CharField(max_length=5, default="ru", verbose_name="Язык")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
@@ -116,11 +119,27 @@ class ClinicSettings(models.Model):
         "KGS": "сом", "UZS": "сум", "KZT": "₸", "RUB": "₽",
         "USD": "$", "EUR": "€", "TJS": "сомони",
     }
+    # Для выпадающих списков в настройках (код + человекочитаемая подпись).
+    CURRENCY_CHOICES = [
+        ("KGS", "Кыргызский сом (KGS)"), ("UZS", "Узбекский сум (UZS)"),
+        ("KZT", "Казахский тенге (KZT)"), ("RUB", "Российский рубль (RUB)"),
+        ("USD", "Доллар США (USD)"), ("EUR", "Евро (EUR)"),
+        ("TJS", "Таджикский сомони (TJS)"),
+    ]
 
     @property
     def currency_label(self):
         code = (self.currency or "").upper().strip()
         return self.CURRENCY_LABELS.get(code, code or "сом")
+
+    @property
+    def currency_secondary_label(self):
+        code = (self.currency_secondary or "").upper().strip()
+        return self.CURRENCY_LABELS.get(code, code)
+
+    @property
+    def has_secondary_currency(self):
+        return bool((self.currency_secondary or "").strip())
 
     @property
     def receipt_display_name(self):

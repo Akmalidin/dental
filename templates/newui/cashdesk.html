@@ -19,7 +19,7 @@
           <div class="modal-body">
             <div id="cashAcceptError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
             <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;" id="cashAcceptWho"></p>
-            <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cash-accept-amount" min="1"></div>
+            <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cash-accept-amount" min="0"></div>
             <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
               <select id="cash-accept-method">
                 <option value="cash" data-i18n="w_cash">Наличные</option>
@@ -64,8 +64,12 @@ function openCashAcceptModal(notifId){
 }
 async function submitCashAccept(){
   if(!cashAcceptItem || !cashAcceptItem.patientId) return;
+  // amount может легитимно быть 0 (приём уже оплачен другим способом / бесплатная
+  // консультация) — заявка всё равно должна закрываться нажатием «Принять оплату»,
+  // поэтому блокируем только пустое поле и отрицательные суммы, а не 0 (min="1" раньше
+  // ошибочно требовал строго положительную сумму и «зависал» на заявках «к оплате: 0»).
   const amount=document.getElementById('cash-accept-amount').value;
-  if(!amount || Number(amount)<=0){
+  if(amount===''  || Number(amount)<0){
     const err=document.getElementById('cashAcceptError');
     err.textContent=t('w_specify_amount'); err.classList.remove('hidden');
     return;

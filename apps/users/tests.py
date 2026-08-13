@@ -450,6 +450,69 @@ class NewUIServicesTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 302)
 
+    def test_service_secondary_price_persists_and_is_exposed(self):
+        resp = self.client.post(f"/services/{self.service.pk}/edit/", {
+            "name": "Пломбирование", "code": "T-014", "category": self.category.pk,
+            "price": 3500, "price_secondary": 40, "duration": 30, "is_active": "on",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.service.refresh_from_db()
+        self.assertEqual(float(self.service.price_secondary), 40.0)
+        data = _extract_newui_real_data(self.client.get("/new/services/").content.decode())
+        entry = next(s for s in data["servicesData"]["services"] if s["id"] == self.service.pk)
+        self.assertEqual(entry["priceSecondary"], 40.0)
+
+    def test_service_secondary_price_empty_string_clears_it(self):
+        self.service.price_secondary = 40
+        self.service.save(update_fields=["price_secondary"])
+        resp = self.client.post(f"/services/{self.service.pk}/edit/", {
+            "name": "Пломбирование", "code": "T-014", "category": self.category.pk,
+            "price": 3500, "price_secondary": "", "duration": 30, "is_active": "on",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.service.refresh_from_db()
+        self.assertIsNone(self.service.price_secondary)
+
+
+class NewUICurrencySettingsTestCase(TestCase):
+    """Настройки → Общие → Основная/Дополнительная валюта — реальное поле
+    ClinicSettings, используется в fmtSom()/суммах по всему новому интерфейсу."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника CUR", slug="clinic-newui-currency")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="cur_director", name="Директор CUR", email="curd@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_default_currency_is_kgs_with_no_secondary(self):
+        data = _extract_newui_real_data(self.client.get("/new/").content.decode())
+        self.assertEqual(data["clinicCurrencySymbol"], "сом")
+        self.assertFalse(data["clinicHasSecondaryCurrency"])
+
+    def test_saving_primary_and_secondary_currency_persists_and_exposed_everywhere(self):
+        from apps.settings_clinic.models import ClinicSettings
+        # ClinicSettings.get() зависит от thread-local текущей клиники (apps.tenancy),
+        # которая выставляется только СРЕДИ обработки запроса (middleware) — вне запроса
+        # (прямо в теле теста) она пуста, и .get() вернул бы служебную запись
+        # clinic__isnull=True, а не запись именно self.clinic. Берём запись напрямую.
+        resp = self.client.post("/settings/", {
+            "name": self.clinic.name, "currency": "USD", "currency_secondary": "KGS",
+            "appointment_slot": 30, "language": "ru", "receipt_format": "thermal",
+        })
+        self.assertEqual(resp.status_code, 302)
+        cs = ClinicSettings.objects.get(clinic=self.clinic)
+        self.assertEqual(cs.currency, "USD")
+        self.assertEqual(cs.currency_secondary, "KGS")
+        # видно на ЛЮБОЙ странице /new/*, не только /new/settings/
+        data = _extract_newui_real_data(self.client.get("/new/schedule/").content.decode())
+        self.assertEqual(data["clinicCurrencySymbol"], "$")
+        self.assertEqual(data["clinicCurrencySecondarySymbol"], "сом")
+        self.assertTrue(data["clinicHasSecondaryCurrency"])
+
 
 class NewUIFinanceLabWarehouseTestCase(TestCase):
     """Финансы/Лаборатория/Склад — реальные суммы и списки. Кассовые смены

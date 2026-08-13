@@ -28,13 +28,19 @@ def _shared_options(request, clinic):
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
     from apps.patients.models import LeadSource
     from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
     return {
         # Язык интерфейса — реальная настройка клиники (Настройки → Общие),
         # уже сохраняется через ClinicSettingsForm/language. Нужен на КАЖДОЙ
         # странице (не только settings.html), чтобы подписи меню в base.html
         # переводились сразу при заходе, а не только пока открыта сама
         # страница настроек.
-        "clinicLanguage": ClinicSettings.get().language or "ru",
+        "clinicLanguage": cs.language or "ru",
+        # Валюта клиники — нужна на КАЖДОЙ странице (не только settings.html),
+        # т.к. fmtSom()/формат сумм в base.html общий для всего интерфейса.
+        "clinicCurrencySymbol": cs.currency_label,
+        "clinicCurrencySecondarySymbol": cs.currency_secondary_label,
+        "clinicHasSecondaryCurrency": cs.has_secondary_currency,
         "roleOptions": [
             {"id": r.pk, "name": r.display_name}
             for r in Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).order_by("name")

@@ -27,7 +27,13 @@ class Service(ClinicSoftDeleteModel):
         related_name="services",
         verbose_name="Категория",
     )
-    price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Цена (сом)")
+    price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Цена (осн. валюта)")
+    # Цена в дополнительной валюте клиники (ClinicSettings.currency_secondary) — вводится
+    # вручную администратором, БЕЗ автоконвертации по курсу (курс в системе не ведётся).
+    # Пусто/None — у услуги нет цены во второй валюте (форма её просто не покажет).
+    price_secondary = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Цена (доп. валюта)"
+    )
     dms_price = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Цена ДМС (сом)"
     )
