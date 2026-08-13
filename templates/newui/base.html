@@ -190,6 +190,8 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .ms-item .ms-item-label{font-size:13px;flex:1;min-width:0;overflow-wrap:break-word;}
 .ms-item .toggle{flex-shrink:0;}
 .ms-item.dragging{opacity:.4;}
+.ms-item-hidden{opacity:.45;}
+.ms-item-hidden .ms-item-label{text-decoration:line-through;}
 .legend{display:flex;gap:14px;font-size:11px;color:var(--ink-soft);flex-wrap:wrap;}
 .legend span{display:flex;align-items:center;gap:6px;}
 .legend i{width:8px;height:8px;border-radius:3px;display:inline-block;}
@@ -3138,18 +3140,20 @@ function applyMenuPrefs(){
     return n;
   }
 }
+function msSetHiddenLook(item, hidden){
+  item.classList.toggle('ms-item-hidden', hidden);
+}
 function openMenuSettings(){
   const list=document.getElementById('menuSettingsList');
   const sidebar=document.querySelector('.sidebar');
   let html='';
-  let currentGroup='';
-  let groupOpen=false;
+  // Плоский список (без вложенных .ms-group на каждую секцию) — заголовки
+  // групп тут просто неперетаскиваемые метки среди пунктов, поэтому пункт
+  // можно перетащить в ЛЮБОЕ место списка, в т.ч. в другую секцию или вовсе
+  // на самый верх (раньше перетаскивание работало только внутри своей группы).
   sidebar.querySelectorAll('.nav-label, .nav-item[data-view]').forEach(el=>{
     if(el.classList.contains('nav-label')){
-      if(groupOpen) html+='</div>'; // закрыть предыдущую группу — иначе группы вкладываются друг в друга
-      currentGroup=el.textContent.trim();
-      html+=`<div class="ms-group-label" data-group="${currentGroup}">${currentGroup}</div><div class="ms-group" data-group-list="${currentGroup}">`;
-      groupOpen=true;
+      html+=`<div class="ms-group-label">${el.textContent.trim()}</div>`;
       return;
     }
     const view=el.dataset.view;
@@ -3159,27 +3163,27 @@ function openMenuSettings(){
     const label=clone.textContent.replace(/\s+/g,' ').trim();
     const iconHtml=el.querySelector('svg') ? el.querySelector('svg').outerHTML : '';
     const isVisible=!el.classList.contains('menu-hidden');
-    html+=`<label class="ms-item" draggable="${!pinned}" data-menu-item="${view}" style="cursor:${pinned?'default':'grab'};">
+    html+=`<label class="ms-item${isVisible?'':' ms-item-hidden'}" draggable="${!pinned}" data-menu-item="${view}" style="cursor:${pinned?'default':'grab'};">
       <span class="ms-drag-handle" style="color:var(--ink-faint);${pinned?'visibility:hidden;':''}">⠿</span>
       ${iconHtml}
       <span class="ms-item-label">${label}</span>
-      ${pinned ? '' : `<div class="toggle"><input type="checkbox" data-menu-view="${view}" ${isVisible?'checked':''} style="width:auto;"></div>`}
+      ${pinned ? '' : `<div class="toggle"><input type="checkbox" data-menu-view="${view}" ${isVisible?'checked':''} style="width:auto;" onchange="msSetHiddenLook(this.closest('.ms-item'), !this.checked)"></div>`}
     </label>`;
   });
-  html+='</div>';
   list.innerHTML=html;
   list.querySelectorAll('.ms-item[draggable="true"]').forEach(item=>{
     item.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', item.dataset.menuItem); item.classList.add('dragging'); });
     item.addEventListener('dragend', ()=>item.classList.remove('dragging'));
   });
-  list.querySelectorAll('.ms-group').forEach(group=>{
-    group.addEventListener('dragover', e=>{
-      e.preventDefault();
-      const dragging=group.querySelector('.dragging');
-      if(!dragging) return;
-      const after=[...group.querySelectorAll('.ms-item:not(.dragging)')].find(el=>e.clientY < el.getBoundingClientRect().top + el.getBoundingClientRect().height/2);
-      group.insertBefore(dragging, after || null);
-    });
+  list.addEventListener('dragover', e=>{
+    e.preventDefault();
+    const dragging=list.querySelector('.dragging');
+    if(!dragging) return;
+    // Ищем ближайший элемент (пункт МЕНЮ) — не заголовок группы, чтобы можно
+    // было бросить пункт прямо под заголовком новой секции.
+    const candidates=[...list.querySelectorAll('.ms-item:not(.dragging), .ms-group-label')];
+    const after=candidates.find(el=>e.clientY < el.getBoundingClientRect().top + el.getBoundingClientRect().height/2);
+    list.insertBefore(dragging, after || null);
   });
   openModal('m-menu-settings');
 }
@@ -3188,9 +3192,20 @@ function saveMenuSettings(){
   document.querySelectorAll('#menuSettingsList input[data-menu-view]').forEach(chk=>{
     if(!chk.checked) hidden.push(chk.dataset.menuView);
   });
+  // Порядок И группа каждого пункта считываются по его ТЕКУЩЕЙ позиции в
+  // плоском списке (после перетаскивания) — какой заголовок секции идёт
+  // перед пунктом, в ту секцию он и попадёт в реальном сайдбаре.
   const order={};
-  document.querySelectorAll('#menuSettingsList .ms-group').forEach(group=>{
-    order[group.dataset.groupList]=[...group.querySelectorAll('.ms-item')].map(el=>el.dataset.menuItem);
+  let currentGroup=null;
+  document.querySelectorAll('#menuSettingsList > *').forEach(el=>{
+    if(el.classList.contains('ms-group-label')){
+      currentGroup=el.textContent.trim();
+      if(!order[currentGroup]) order[currentGroup]=[];
+      return;
+    }
+    if(el.classList.contains('ms-item') && currentGroup){
+      order[currentGroup].push(el.dataset.menuItem);
+    }
   });
   saveMenuPrefsToStorage({hidden, order});
   applyMenuPrefs();
