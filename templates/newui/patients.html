@@ -1,0 +1,23 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Пациенты{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="title_patients">Пациенты</h1>
+        <div class="topbar-right">
+          <div class="search-box"><input type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" oninput="renderPatientsTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <button class="btn btn-ghost" onclick="location.href='/new/blacklist/'" style="position:relative;">🚫 <span data-i18n="nav_черный_список">Чёрный список</span><span class="nav-badge" id="blacklistNavBadge" style="margin-left:6px;">0</span></button>
+          <button class="btn btn-cobalt" onclick="openNewPatient()">+ <span data-i18n="w_new_patient">Новый пациент</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="toolbar">
+          <div class="toolbar-left" id="patientChips"></div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_phone">Телефон</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_last_visit">Посл. визит</th><th data-i18n="w_balance">Баланс</th><th data-i18n="w_status">Статус</th></tr></thead>
+            <tbody id="patientsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

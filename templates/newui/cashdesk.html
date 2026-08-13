@@ -1,0 +1,114 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Касса{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_cashdesk">Касса</h1><div class="topbar-right"></div></div>
+      <div class="page">
+        <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
+        <div class="card">
+          <div class="card-head"><h3 data-i18n="w_awaiting_payment_h">Ожидают оплаты</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashQueueCount">0 позиций</span></div>
+          <div class="card-body" id="cashQueueBody">
+            <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_nothing_sent_cashier">Пока ничего не отправлено в кассу</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Принять оплату: сумма + способ, вместо мгновенного «Принято» без реального платежа -->
+      <div class="modal-backdrop" id="m-cash-accept">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_accept_payment">Принять оплату</h3><button class="modal-close" onclick="closeModal('m-cash-accept')">✕</button></div>
+          <div class="modal-body">
+            <div id="cashAcceptError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+            <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;" id="cashAcceptWho"></p>
+            <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cash-accept-amount" min="1"></div>
+            <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
+              <select id="cash-accept-method">
+                <option value="cash" data-i18n="w_cash">Наличные</option>
+                <option value="card" data-i18n="w_card">Карта</option>
+                <option value="transfer" data-i18n="w_transfer">Перевод</option>
+                <option value="online" data-i18n="w_online">Онлайн</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-cash-accept')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" onclick="submitCashAccept()" data-i18n="w_accept_payment">Принять оплату</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Выдать чек? — после успешного приёма оплаты -->
+      <div class="modal-backdrop" id="m-cash-receipt">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_payment_accepted">Оплата принята</h3><button class="modal-close" onclick="closeModal('m-cash-receipt')">✕</button></div>
+          <div class="modal-body"><p style="font-size:13.5px;color:var(--ink-soft);margin:0;"><span data-i18n="w_issue_receipt_q">Выдать пациенту чек?</span></p></div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="cashReceiptNo()"><span data-i18n="w_not_now">Не сейчас</span></button>
+            <button class="btn btn-cobalt" onclick="cashReceiptYes()"><span data-i18n="w_issue_receipt">Выдать чек</span></button>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let cashAcceptItem=null;
+let lastAcceptedPaymentId=null;
+function openCashAcceptModal(notifId){
+  const item=(cashdeskData.queue||[]).find(i=>i.id===notifId);
+  if(!item) return;
+  cashAcceptItem=item;
+  document.getElementById('cashAcceptError').classList.add('hidden');
+  document.getElementById('cashAcceptWho').textContent=item.body || ('от '+item.from);
+  document.getElementById('cash-accept-amount').value=item.amount || '';
+  document.getElementById('cash-accept-method').value='cash';
+  openModal('m-cash-accept');
+}
+async function submitCashAccept(){
+  if(!cashAcceptItem || !cashAcceptItem.patientId) return;
+  const amount=document.getElementById('cash-accept-amount').value;
+  if(!amount || Number(amount)<=0){
+    const err=document.getElementById('cashAcceptError');
+    err.textContent=t('w_specify_amount'); err.classList.remove('hidden');
+    return;
+  }
+  const fd=new FormData();
+  fd.append('patient', cashAcceptItem.patientId);
+  if(cashAcceptItem.treatmentId) fd.append('treatment', cashAcceptItem.treatmentId);
+  fd.append('amount', amount);
+  fd.append('method', document.getElementById('cash-accept-method').value);
+  fd.append('type', 'income');
+  fd.append('channel', 'cashier');
+  // X-Requested-With — payment_create() в ответ на него отдаёт JSON с id
+  // платежа вместо redirect на список платежей старого интерфейса, чтобы
+  // «Выдать чек» открывал именно этот чек, а не старую версию сайта.
+  const res=await fetch('/finance/payments/create/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(!res.ok || !payload || !payload.ok){
+    const err=document.getElementById('cashAcceptError');
+    err.textContent = (payload && payload.error) || t('w_save_failed');
+    err.classList.remove('hidden');
+    return;
+  }
+  lastAcceptedPaymentId = payload.payment_id;
+  // Платёж принят — закрываем заявку в очереди (общую, а не только у себя) и спрашиваем про чек
+  await fetch('/finance/cashdesk/queue/'+cashAcceptItem.id+'/dismiss/', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+  removeFromCashQueue(cashAcceptItem.id);
+  closeModal('m-cash-accept');
+  openModal('m-cash-receipt');
+}
+function cashReceiptYes(){
+  closeModal('m-cash-receipt');
+  if(lastAcceptedPaymentId){
+    window.open('/finance/payments/'+lastAcceptedPaymentId+'/receipt/', '_blank');
+  }
+  flashAndReload(t('w_payment_accepted'));
+}
+function cashReceiptNo(){
+  closeModal('m-cash-receipt');
+  flashAndReload(t('w_payment_accepted'));
+}
+</script>
+{% endblock %}

@@ -141,10 +141,18 @@ class NewUIDashboardTestCase(TestCase):
             start_at=start_local, end_at=end_local,
             status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
         )
-        Payment.objects.create(
+        setup_payment = Payment.objects.create(
             patient=self.patient, amount=1500, branch=self.branch, received_by=self.director,
             type=Payment.TYPE_INCOME, clinic=self.clinic,
         )
+        # created_at=auto_now_add — сдвигаем на 5 минут назад (.update() в обход
+        # auto_now_add), чтобы не зависеть от точности часов машины: тесты кассовой
+        # смены создают CashShift позже в этом же setUp/тесте и фильтруют платежи
+        # по created_at>=opened_at — при совпадении меток в пределах одной секунды
+        # этот платёж мог бы ошибочно попасть в приход смены (flaky test). Именно
+        # минуты, не сутки — другие тесты этого класса ждут его в «выручке за
+        # сегодня» (revenueToday, фильтр по календарному дню).
+        Payment.objects.filter(pk=setup_payment.pk).update(created_at=timezone.now() - dt.timedelta(minutes=5))
 
         technician = Technician.objects.create(name="Техник DB", clinic=self.clinic)
         treatment = Treatment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch, clinic=self.clinic)
@@ -157,6 +165,16 @@ class NewUIDashboardTestCase(TestCase):
         resp = self.client.get("/new/")
         data = _extract_newui_real_data(resp.content.decode())
         self.assertEqual(data["dashboard"]["revenueToday"], 1500.0)
+
+    def test_sidebar_nav_items_carry_data_view_for_menu_settings(self):
+        """«Настроить меню» (openMenuSettings/applyMenuPrefs в base.html) находит
+        пункты по .nav-item[data-view] — без этого атрибута модалка настройки
+        меню всегда была пустой (ни скрыть, ни переставить было нечего)."""
+        resp = self.client.get("/new/")
+        html = resp.content.decode()
+        for view in ["dashboard", "patients", "visits", "schedule", "finance",
+                     "reports", "settings", "cashdesk", "staff"]:
+            self.assertIn(f'data-view="{view}"', html, f"нет data-view для {view}")
 
     def test_dashboard_upcoming_appointments_reflects_real_appointment(self):
         resp = self.client.get("/new/")
@@ -216,6 +234,22 @@ class NewUIDashboardTestCase(TestCase):
         self.assertEqual(load[0]["doctorId"], self.doctor.pk)
         self.assertEqual(load[0]["name"], "Врач DB")
         self.assertEqual(load[0]["occupancyPct"], 11)  # 60 занятых мин / 540 доступных (09:00–18:00)
+
+    def test_dashboard_funnel_new_empty_by_default(self):
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["dashboard"]["funnelNew"], [])
+
+    def test_dashboard_funnel_new_lists_unprocessed_leads(self):
+        from apps.patients.models import Lead
+        Lead.objects.create(name="Азизбекова М.", phone="+996555221109", stage=Lead.STAGE_NEW, clinic=self.clinic)
+        Lead.objects.create(name="Обработанная", phone="+996555000000", stage=Lead.STAGE_COMPLETED, clinic=self.clinic)
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        funnel = data["dashboard"]["funnelNew"]
+        self.assertEqual(len(funnel), 1)
+        self.assertEqual(funnel[0]["name"], "Азизбекова М.")
+        self.assertEqual(funnel[0]["phone"], "+996555221109")
 
 
 class NewUIPatientsTestCase(TestCase):
@@ -1167,10 +1201,11 @@ class NewUIVisitWizardTestCase(TestCase):
         self.appt.refresh_from_db()
         self.assertEqual(self.appt.status, "completed")
 
-    def test_completed_treatment_rejects_further_save_upload_commit(self):
-        """После завершения приёма редактирование должно блокироваться на бэкенде,
-        а не только в интерфейсе — иначе повторный commit продублирует
-        списание материалов/заказы технику, а save исказит уже закрытую ЭМК."""
+    def test_completed_treatment_allows_save_upload_but_blocks_repeat_commit(self):
+        """После завершения приёма ЭМК/зубы/файлы всё ещё можно поправить
+        (обычная клиническая необходимость дописать/исправить задним числом) —
+        заблокирован только повторный commit: там списание материалов и заказы
+        технику, повторный запуск задвоил бы их."""
         from apps.treatments.models import Treatment
         self.client.get(f"/new/visit/start/?appointment={self.appt.pk}")
         treatment = Treatment.objects.get(appointment=self.appt)
@@ -1179,10 +1214,12 @@ class NewUIVisitWizardTestCase(TestCase):
 
         resp = self.client.post(
             f"/treatments/visit/{treatment.pk}/save/",
-            data=json.dumps({"diagnosis": "Попытка изменить после завершения"}),
+            data=json.dumps({"diagnosis": "Поправка диагноза после завершения"}),
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+        from apps.treatments.models_emr import MedicalRecord
+        self.assertEqual(MedicalRecord.objects.get(treatment=treatment).diagnosis, "Поправка диагноза после завершения")
 
         resp = self.client.post(
             f"/treatments/visit/{treatment.pk}/commit/",
@@ -1196,7 +1233,33 @@ class NewUIVisitWizardTestCase(TestCase):
             f"/treatments/visit/{treatment.pk}/upload/",
             {"files": SimpleUploadedFile("x.jpg", b"data", content_type="image/jpeg")},
         )
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_completed_treatment_tooth_condition_still_saves(self):
+        """Жалоба пользователя: после завершения приёма отметка состояния зуба
+        визуально менялась, но не сохранялась (бэкенд отвечал 403) — при
+        перезагрузке карточки зуб возвращался к прежнему состоянию."""
+        from apps.treatments.models import Treatment
+        from apps.treatments.models_teeth import ToothCondition
+        self.client.get(f"/new/visit/start/?appointment={self.appt.pk}")
+        treatment = Treatment.objects.get(appointment=self.appt)
+        self.client.get(f"/new/visitcard/{treatment.pk}/")  # сеет ToothStatus (_ensure_tooth_statuses)
+        treatment.status = "completed"
+        treatment.save(update_fields=["status"])
+
+        resp = self.client.post(
+            f"/treatments/visit/{treatment.pk}/save/",
+            data=json.dumps({"teeth": {"26": "caries"}}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        tc = ToothCondition.objects.get(patient=self.patient, tooth_number=26)
+        self.assertEqual(tc.status.code, "caries")
+
+        # ...и переживает перезагрузку карточки приёма (реально из БД, а не сессия).
+        resp2 = self.client.get(f"/new/visitcard/{treatment.pk}/")
+        data2 = _extract_newui_real_data(resp2.content.decode())
+        self.assertEqual(data2["visitWizard"]["toothConditionsJs"]["adult-26"], "caries_mid")
 
     def test_already_completed_treatment_reopens_view_not_new_wizard(self):
         from apps.treatments.models import Treatment

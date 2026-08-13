@@ -1,0 +1,21 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Маркетинг{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_marketing">Маркетинг</h1><div class="topbar-right"><button class="btn btn-cobalt">+ <span data-i18n="w_broadcast">Рассылка</span></button></div></div>
+      <div class="page">
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_marketing_hint">Рассылок как функциональности в системе нет — раздел демонстрационный, не подключён к базе.</span></div>
+        <div class="toolbar"><div class="toolbar-left">
+          <button class="chip active" data-i18n="w_broadcasts">Рассылки</button><button class="chip" data-i18n="w_recipient_groups">Группы получателей</button><button class="chip" data-i18n="nav_мессенджеры">Уведомления</button><button class="chip" data-i18n="w_broadcast_report">Отчёт по рассылкам</button>
+        </div></div>
+        <div class="card">
+          <table>
+            <thead><tr><th data-i18n="w_name">Название</th><th data-i18n="w_type">Тип</th><th data-i18n="w_recipients">Получатели</th><th data-i18n="w_channel">Канал</th><th data-i18n="w_status">Статус</th></tr></thead>
+            <tbody>
+              <tr><td>Напоминание о визите за 24ч</td><td>Автоматическая</td><td>Все пациенты</td><td>WhatsApp</td><td><span class="pill teal">Активна</span></td></tr>
+              <tr><td>Акция на отбеливание</td><td>Разовая</td><td>Клиенты 2025 года</td><td>SMS</td><td><span class="pill amber">Черновик</span></td></tr>
+              <tr><td>Поздравление с днём рождения</td><td>Автоматическая</td><td>Все пациенты</td><td>Telegram</td><td><span class="pill teal">Активна</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

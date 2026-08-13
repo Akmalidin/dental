@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 
-from .models import Patient, Tag, LeadSource, SharedPhoneNumber
+from .models import Patient, Tag, LeadSource, SharedPhoneNumber, Lead
 from .forms import PatientForm
 from apps.treatments.models import Treatment, TreatmentCure
 from apps.finance.models import Payment
@@ -389,6 +389,95 @@ def patient_create_quick(request):
     return JsonResponse({"ok": True, "id": patient.pk, "name": patient.full_name, "phone": patient.phone})
 
 
+def _serialize_lead(lead):
+    return {
+        "id": lead.pk,
+        "name": lead.name,
+        "phone": lead.phone,
+        "sourceId": lead.source_id,
+        "sourceName": lead.source.name if lead.source else "",
+        "stage": lead.stage,
+        "comment": lead.comment,
+        "assignedToId": lead.assigned_to_id,
+        "assignedToName": lead.assigned_to.name if lead.assigned_to else "",
+        "patientId": lead.patient_id,
+    }
+
+
+@login_required
+@require_POST
+def lead_create(request):
+    """AJAX: новая заявка (карточка воронки CRM нового интерфейса)."""
+    import json
+    from django.http import JsonResponse
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "bad json"}, status=400)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "Укажите имя"}, status=400)
+    lead = Lead.objects.create(
+        name=name, phone=(data.get("phone") or "").strip(),
+        source_id=data.get("source_id") or None,
+        stage=data.get("stage") or Lead.STAGE_NEW,
+        comment=(data.get("comment") or "").strip(),
+        assigned_to_id=data.get("assigned_to_id") or None,
+        created_by=request.user,
+    )
+    return JsonResponse({"ok": True, "lead": _serialize_lead(lead)})
+
+
+@login_required
+@require_POST
+def lead_update(request, pk):
+    """AJAX: изменить заявку — используется и формой редактирования, и
+    перетаскиванием карточки между колонками воронки (тогда меняется только stage)."""
+    import json
+    from django.http import JsonResponse
+    lead = get_object_or_404(Lead, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "bad json"}, status=400)
+    fields = []
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return JsonResponse({"error": "Укажите имя"}, status=400)
+        lead.name = name
+        fields.append("name")
+    if "phone" in data:
+        lead.phone = (data.get("phone") or "").strip()
+        fields.append("phone")
+    if "source_id" in data:
+        lead.source_id = data.get("source_id") or None
+        fields.append("source")
+    if "stage" in data:
+        if data["stage"] not in dict(Lead.STAGE_CHOICES):
+            return JsonResponse({"error": "Некорректный этап"}, status=400)
+        lead.stage = data["stage"]
+        fields.append("stage")
+    if "comment" in data:
+        lead.comment = (data.get("comment") or "").strip()
+        fields.append("comment")
+    if "assigned_to_id" in data:
+        lead.assigned_to_id = data.get("assigned_to_id") or None
+        fields.append("assigned_to")
+    if fields:
+        fields.append("updated_at")
+        lead.save(update_fields=fields)
+    return JsonResponse({"ok": True, "lead": _serialize_lead(lead)})
+
+
+@login_required
+@require_POST
+def lead_delete(request, pk):
+    from django.http import JsonResponse
+    Lead.objects.filter(pk=pk).delete()
+    return JsonResponse({"ok": True})
+
+
 @login_required
 def patient_detail(request, pk):
     patient = get_object_or_404(Patient.objects.prefetch_related("tags"), pk=pk)
@@ -558,17 +647,25 @@ def patient_notify(request, pk):
 
 @login_required
 def patient_wa_messages(request, pk):
-    """JSON новых сообщений чата для авто-обновления."""
+    """JSON сообщений чата. ?after=<id> (как шлёт старый интерфейс,
+    patients/notify.html, всегда с явным id — даже 0) — новые сообщения для
+    авто-обновления уже открытого чата. Без ?after вовсе (новый интерфейс,
+    первое открытие чата) — последние 300 сообщений в хронологическом порядке,
+    та же выборка, что и в patient_notify(), плюс отметка входящих прочитанными."""
     from django.http import JsonResponse
     from django.utils import timezone
     patient = get_object_or_404(Patient, pk=pk)
     from apps.notifications.models import WaMessage
-    after = request.GET.get("after") or 0
-    try:
-        after = int(after)
-    except (TypeError, ValueError):
-        after = 0
-    qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
+    after_raw = request.GET.get("after")
+    if after_raw is None:
+        WaMessage.all_clinics.filter(patient=patient, direction="in", read=False).update(read=True)
+        qs = WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300]
+    else:
+        try:
+            after = int(after_raw)
+        except (TypeError, ValueError):
+            after = 0
+        qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
     msgs = [{"id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok, "channel": m.channel,
              "media_url": (m.media_file.url if m.media_file else ""), "media_type": m.media_type,
              "by": m.sent_by.name if m.sent_by else "",

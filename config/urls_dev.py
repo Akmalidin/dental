@@ -27,6 +27,9 @@ urlpatterns = [
     # Auth
     path("", include("apps.users.urls")),
 
+    # Новый интерфейс (в разработке) — разбит на отдельные страницы/URL
+    path("new/", include("apps.users.newui_urls")),
+
     # App modules
     path("patients/", include("apps.patients.urls")),
     path("treatments/", include("apps.treatments.urls")),

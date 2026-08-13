@@ -1,0 +1,47 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Заявки · CRM{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <div><h1 data-i18n="title_funnel">Заявки и обращения</h1><div class="topbar-sub" data-i18n="w_funnel">Воронка</div></div>
+        <div class="topbar-right">
+          <button class="btn btn-cobalt" onclick="openNewLead()">+ <span data-i18n="w_new_lead">Новая заявка</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="funnel">
+          <div class="funnel-col" data-col="new">
+            <div class="funnel-head"><b data-i18n="w_stage_new">Новая</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="notreached">
+            <div class="funnel-head"><b data-i18n="w_stage_notreached">Не дозвонились</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="thinking">
+            <div class="funnel-head"><b data-i18n="w_stage_thinking">Думает</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="booked">
+            <div class="funnel-head"><b data-i18n="w_stage_booked">Записан</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="noshow">
+            <div class="funnel-head"><b data-i18n="w_stage_noshow">Не пришёл</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="came">
+            <div class="funnel-head"><b data-i18n="w_stage_came">Пришёл</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="completed">
+            <div class="funnel-head"><b data-i18n="w_stage_completed">Завершено</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+          <div class="funnel-col" data-col="rejected">
+            <div class="funnel-head"><b data-i18n="w_stage_rejected">Отказ</b><span class="fcount">0</span></div>
+            <div class="funnel-body"></div>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:10px;"><span data-i18n="w_funnel_hint">Реальные заявки клиники. Перетащите карточку в другую колонку, чтобы изменить этап воронки — сохраняется сразу.</span></div>
+      </div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Мессенджеры{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="title_messages">Мессенджеры</h1>
+        <div class="topbar-right">
+          <div style="display:flex;gap:8px;">
+            <button class="chip active" id="msgChAll" onclick="msgSetChannelFilter('all')" data-i18n="w_all">Все</button>
+            <button class="chip" id="msgChWA" onclick="msgSetChannelFilter('whatsapp')">🟢 WhatsApp</button>
+            <button class="chip" id="msgChTG" onclick="msgSetChannelFilter('telegram')">🔵 Telegram</button>
+          </div>
+          <button class="btn btn-ghost" onclick="openModal('m-templates')"><span data-i18n="w_templates">Шаблоны</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div style="display:grid;grid-template-columns:320px 1fr;gap:14px;height:calc(100vh - 220px);">
+
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:14px;border-bottom:1px solid var(--mist-line);">
+              <div class="search-box" style="width:100%;"><input type="text" id="msgSearchInput" placeholder="Поиск по имени, телефону…" oninput="renderClientList()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+            </div>
+            <div id="clientListWrap" style="overflow-y:auto;flex:1;"></div>
+          </div>
+
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid var(--mist-line);display:flex;justify-content:space-between;align-items:center;" id="chatHeader"></div>
+            <div style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px;" id="chatMessages"></div>
+            <div style="padding:12px 14px;border-top:1px solid var(--mist-line);">
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <select id="chatTemplateSelect" onchange="chatApplyTemplate()" style="flex:1;">
+                  <option value="" data-i18n="w_insert_template">Вставить шаблон…</option>
+                </select>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="chatInput" placeholder="Написать сообщение…" style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage();">
+                <button class="btn btn-cobalt" onclick="sendChatMessage()"><span data-i18n="w_send">Отправить</span></button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+{% endblock %}

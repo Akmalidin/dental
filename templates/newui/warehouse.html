@@ -1,0 +1,18 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Склад{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_warehouse">Склад материалов</h1><div class="topbar-right"></div></div>
+      <div class="page">
+        <div class="kpi-grid">
+          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_running_low">Заканчиваются</span><b style="font-size:22px" id="wh-low">—</b></div>
+          <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_warehouse_value">Стоимость склада</span><b style="font-size:22px" id="wh-value">—</b></div>
+          <div class="card kpi b-teal"><span class="lbl" data-i18n="w_active_items">Активных позиций</span><b style="font-size:22px" id="wh-active">—</b></div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_stock">Остаток</th><th data-i18n="w_unit">Ед.</th><th data-i18n="w_min_stock">Мин. остаток</th><th data-i18n="w_status">Статус</th></tr></thead>
+            <tbody id="wh-table"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

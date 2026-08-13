@@ -3,12 +3,13 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.translation import gettext_lazy as _
+from django.db import IntegrityError
 from django.db.models import Sum, Q
 from django.utils import timezone
 from datetime import date, timedelta
 from decimal import Decimal
 
-from .models import Payment, Expense, ExpenseCategory, PatientAdvance
+from .models import Payment, Expense, ExpenseCategory, PatientAdvance, CashShift
 from .forms import PaymentForm, ExpenseForm
 from apps.patients.models import Patient
 from apps.users.decorators import require_permission
@@ -295,6 +296,58 @@ def payment_public(request, token):
     })
 
 
+def _cashier_branch(request):
+    from apps.tenancy import get_current_clinic
+    from apps.users.models import Branch
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    if not clinic:
+        return None
+    return Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
+
+
+@login_required
+@require_POST
+def cashshift_open(request):
+    """Открыть кассовую смену текущего филиала. Одна открытая смена на
+    филиал одновременно — гарантируется constraint one_open_cash_shift_per_branch."""
+    from django.http import JsonResponse
+    branch = _cashier_branch(request)
+    if not branch:
+        return JsonResponse({"error": "Не удалось определить филиал"}, status=400)
+    if CashShift.objects.filter(branch=branch, status=CashShift.STATUS_OPEN).exists():
+        return JsonResponse({"error": "Смена по этому филиалу уже открыта"}, status=400)
+    try:
+        opening_cash = Decimal(request.POST.get("opening_cash") or "0")
+    except Exception:
+        return JsonResponse({"error": "Некорректная сумма"}, status=400)
+    try:
+        shift = CashShift.objects.create(branch=branch, opened_by=request.user, opening_cash=opening_cash)
+    except IntegrityError:
+        # Гонка: смену открыли параллельным запросом между проверкой .exists() и .create()
+        # — ловим DB-constraint (one_open_cash_shift_per_branch), а не роняем 500.
+        return JsonResponse({"error": "Смена по этому филиалу уже открыта"}, status=400)
+    return JsonResponse({"ok": True, "id": shift.pk})
+
+
+@login_required
+@require_POST
+def cashshift_close(request, pk):
+    """Закрыть кассовую смену — фиксирует closed_at/closed_by и заявленный
+    остаток наличных по факту пересчёта (для сверки с ожидаемым по Z-отчёту)."""
+    from django.http import JsonResponse
+    shift = get_object_or_404(CashShift, pk=pk, status=CashShift.STATUS_OPEN)
+    try:
+        closing_cash_actual = Decimal(request.POST.get("closing_cash_actual") or "0")
+    except Exception:
+        return JsonResponse({"error": "Некорректная сумма"}, status=400)
+    shift.status = CashShift.STATUS_CLOSED
+    shift.closed_by = request.user
+    shift.closed_at = timezone.now()
+    shift.closing_cash_actual = closing_cash_actual
+    shift.save(update_fields=["status", "closed_by", "closed_at", "closing_cash_actual"])
+    return JsonResponse({"ok": True})
+
+
 @login_required
 def send_to_cashier(request, patient_id):
     """«В кассу»: уведомить администратора/кассира принять оплату и выдать чек.
@@ -336,6 +389,30 @@ def send_to_cashier(request, patient_id):
     else:
         messages.warning(request, _("В клинике нет администратора-кассира для приёма оплаты"))
     return redirect("patient_detail", pk=patient_id)
+
+
+@login_required
+@require_permission("finance.accept_payments")
+def cashdesk_queue_dismiss(request, pk):
+    """Отметить заявку «в кассу» обработанной. send_to_cashier рассылает
+    одно Notification на каждого администратора клиники (fan-out) — если
+    отмечать прочитанным только уведомление вызывающего (как делает общий
+    mark_read), в очереди у остальных администраторов заявка «зависает»
+    навсегда, хотя её уже приняли. Поэтому здесь гасим все уведомления с тем
+    же link в рамках клиники — общая очередь, а не личный инбокс.
+
+    Требует finance.accept_payments — то же право, что и payment_create:
+    «отметить принятым» по сути и есть подтверждение приёма оплаты, без
+    этой проверки любой залогиненный сотрудник (в т.ч. без права принимать
+    деньги) мог тихо скрыть заявку из очереди, не оплатив её."""
+    from django.http import JsonResponse
+    from apps.notifications.models import Notification
+    n = get_object_or_404(Notification, pk=pk, type="payment")
+    if n.clinic_id and getattr(request.user, "clinic_id", None) not in (None, n.clinic_id) \
+            and not getattr(request.user, "is_superadmin", False):
+        return JsonResponse({"error": "Нет доступа"}, status=403)
+    Notification.objects.filter(clinic=n.clinic, type="payment", link=n.link, is_read=False).update(is_read=True)
+    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -416,6 +493,7 @@ def payment_delete(request, pk):
 @require_permission("finance.accept_payments")
 def payment_create(request):
     from apps.treatments.models import Treatment
+    from django.http import JsonResponse
     patient_id = request.POST.get("patient") or request.GET.get("patient")
     treatment_id = request.POST.get("treatment") or request.GET.get("treatment")
     form = PaymentForm(request.POST or None, initial={
@@ -470,6 +548,11 @@ def payment_create(request):
         # уведомление администраторам о принятой оплате
         _notify_cashier_payment(request, payment)
         messages.success(request, _("Платёж зафиксирован"))
+        # Новый интерфейс шлёт этот заголовок из fetch() и ждёт id платежа
+        # обратно, чтобы сразу открыть его чек (finance/payments/<id>/receipt/),
+        # а не список платежей старого интерфейса.
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": True, "payment_id": payment.pk})
         if patient_id:
             return redirect("patient_detail", pk=patient_id)
         return redirect("payment_list")

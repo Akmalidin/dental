@@ -22,6 +22,53 @@ class LeadSource(models.Model):
         return self.name
 
 
+class Lead(ClinicScopedModel):
+    """Заявка/обращение — CRM-воронка нового интерфейса (раздел «Заявки·CRM»).
+    Отдельная от Patient сущность: заявка может не дойти до записи/визита."""
+    STAGE_NEW = "new"
+    STAGE_NOTREACHED = "notreached"
+    STAGE_THINKING = "thinking"
+    STAGE_BOOKED = "booked"
+    STAGE_NOSHOW = "noshow"
+    STAGE_CAME = "came"
+    STAGE_COMPLETED = "completed"
+    STAGE_REJECTED = "rejected"
+    STAGE_CHOICES = [
+        (STAGE_NEW, "Новая"), (STAGE_NOTREACHED, "Не дозвонились"), (STAGE_THINKING, "Думает"),
+        (STAGE_BOOKED, "Записан"), (STAGE_NOSHOW, "Не пришёл"), (STAGE_CAME, "Пришёл"),
+        (STAGE_COMPLETED, "Завершено"), (STAGE_REJECTED, "Отказ"),
+    ]
+
+    name = models.CharField(max_length=200, verbose_name="Имя")
+    phone = models.CharField(max_length=30, blank=True, verbose_name="Телефон")
+    source = models.ForeignKey(
+        LeadSource, on_delete=models.SET_NULL, null=True, blank=True, related_name="leads", verbose_name="Источник",
+    )
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_NEW, verbose_name="Этап")
+    comment = models.TextField(blank=True, verbose_name="Комментарий")
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="assigned_leads", verbose_name="Ответственный",
+    )
+    patient = models.ForeignKey(
+        "patients.Patient", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="leads", verbose_name="Связанный пациент",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Заявка"
+        verbose_name_plural = "Заявки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} — {self.get_stage_display()}"
+
+
 def normalize_phone(phone):
     """Нормализация телефона для сравнения: цифры, последние 9 (без кода страны/8)."""
     d = "".join(ch for ch in (phone or "") if ch.isdigit())

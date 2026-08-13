@@ -1,0 +1,23 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Финансы{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="title_finance">Финансы</h1>
+        <div class="topbar-right"></div>
+      </div>
+      <div class="page">
+        <div class="kpi-grid">
+          <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_revenue_month">Выручка за месяц</span><b style="font-size:22px" id="fin-revenue">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_expenses_month">Расходы за месяц</span><b style="font-size:22px" id="fin-expenses">—</b></div>
+          <div class="card kpi b-amber"><span class="lbl" data-i18n="w_on_deposits">На депозитах</span><b style="font-size:22px" id="fin-deposits">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_receivables">Дебиторка</span><b style="font-size:22px;color:var(--coral)" id="fin-debt">—</b><span class="lbl" id="fin-debt-sub"></span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3 data-i18n="w_recent_tx">Последние транзакции</h3></div>
+          <table>
+            <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_type">Тип</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_time">Время</th></tr></thead>
+            <tbody id="fin-transactions"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

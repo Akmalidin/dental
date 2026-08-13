@@ -25,4 +25,7 @@ urlpatterns = [
     path("<int:pk>/delete/", views.patient_delete, name="patient_delete"),
     path("<int:pk>/notify/", views.patient_notify, name="patient_notify"),
     path("<int:pk>/wa-messages/", views.patient_wa_messages, name="patient_wa_messages"),
+    path("leads/create/", views.lead_create, name="lead_create"),
+    path("leads/<int:pk>/update/", views.lead_update, name="lead_update"),
+    path("leads/<int:pk>/delete/", views.lead_delete, name="lead_delete"),
 ]

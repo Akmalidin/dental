@@ -164,6 +164,7 @@ def _newui_dashboard_data():
         "recentPatients": recent_patients,
         "cashSummary": _dashboard_cash_summary(clinic),
         "doctorsLoad": _dashboard_doctors_load(clinic),
+        "funnelNew": _dashboard_funnel_new(clinic),
     }
 
 
@@ -252,6 +253,22 @@ def _dashboard_doctors_load(clinic):
         })
     result.sort(key=lambda r: r["occupancyPct"], reverse=True)
     return result
+
+
+def _dashboard_funnel_new(clinic, limit=10):
+    """Последние необработанные заявки (CRM-воронка, apps.patients.models.Lead,
+    stage="new") для карточки на дашборде."""
+    from django.utils import timezone
+    from apps.patients.models import Lead
+
+    if not clinic:
+        return []
+    leads = (Lead.objects.filter(clinic=clinic, stage=Lead.STAGE_NEW)
+             .order_by("-created_at")[:limit])
+    return [{
+        "id": lead.pk, "name": lead.name, "phone": lead.phone,
+        "createdAt": timezone.localtime(lead.created_at).strftime("%d.%m %H:%M"),
+    } for lead in leads]
 
 
 def _newui_patients_data():

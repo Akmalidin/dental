@@ -1,0 +1,611 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Приём{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-bottom:2px;">
+            <a href="/new/patients/" style="color:var(--cobalt);" data-i18n="nav_пациенты">Пациенты</a> /
+            <a href="#" id="vwPatientLink" style="color:var(--cobalt);">…</a> /
+            <span data-i18n="title_visitcard">Карточка лечения</span>
+          </div>
+          <h1 data-i18n="title_visitcard">Карточка лечения</h1>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost" id="vwBackBtn" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_card">Назад в карту</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div id="vwSavedNote" style="display:none;font-size:11.5px;color:var(--teal);margin-bottom:10px;"><span data-i18n="w_saved_ok">Сохранено ✓</span></div>
+
+        <div class="tab-strip">
+          <button class="active" id="vcTabDesc" onclick="vcTab('desc')" data-i18n="w_description">Описание</button>
+          <button id="vcTabTeeth" onclick="vcTab('teeth')" data-i18n="w_teeth">Зубы</button>
+          <button id="vcTabXray" onclick="vcTab('xray')" data-i18n="w_xray">Рентген</button>
+          <button id="vcTabMsg" onclick="vcTab('msg')" data-i18n="w_messages">Сообщения</button>
+          <button id="vcTabOther" onclick="vcTab('other')" data-i18n="w_other">Прочее</button>
+        </div>
+
+        <!-- ---- ОПИСАНИЕ ---- -->
+        <div id="vcPanelDesc">
+          <button class="btn btn-cobalt" id="vwCommitBtn" style="width:100%;justify-content:center;padding:14px;font-size:14px;margin-bottom:16px;" onclick="vwCommitVisit()">✓ Завершить приём</button>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head"><h3 data-i18n="w_visit_stages">Этапы приёма</h3><span style="font-size:11.5px;color:var(--ink-soft);" id="vwStageProgress">0 из 6 выполнено</span></div>
+            <div class="card-body" id="vwStageList"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-body">
+              <div class="form-row2">
+                <div class="form-group"><label data-i18n="w_visit_date">Дата визита</label><input type="date" id="vw-appt-date" disabled></div>
+                <div class="form-group"></div>
+              </div>
+              <div class="form-row2" style="grid-template-columns:1fr 1fr 1fr;">
+                <div class="form-group"><label data-i18n="w_start">Начало</label><input type="text" id="vw-appt-start" disabled></div>
+                <div class="form-group"><label data-i18n="w_end">Окончание</label><input type="text" id="vw-appt-end" disabled></div>
+                <div class="form-group"><label data-i18n="w_duration_min">Длительность (мин)</label><input type="number" id="vw-appt-duration" disabled></div>
+              </div>
+              <div class="form-row2">
+                <div class="form-group"><label data-i18n="w_attending_doctor">Лечащий врач</label><select id="vw-doctor" onchange="vwAutosave()"></select></div>
+                <div class="form-group"><label data-i18n="w_assistant">Ассистент</label><select id="vw-assistant"><option>—</option></select></div>
+              </div>
+              <div class="form-row2">
+                <div class="form-group" style="position:relative;"><label><span data-i18n="w_planned_service">Планируемая услуга</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;" data-i18n="w_adds_row_hint">Добавляет строку в «Процедуры и план» ниже</div></label>
+                  <input type="text" id="vw-plan-search" placeholder="Поиск услуги…" autocomplete="off"
+                         oninput="vwPlanServiceSearch(this.value)" onfocus="vwPlanServiceSearch(this.value)"
+                         onblur="setTimeout(()=>document.getElementById('vw-plan-suggestions').classList.add('hidden'),200)">
+                  <div id="vw-plan-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow-y:auto;"></div>
+                </div>
+                <div class="form-group"><label data-i18n="w_direction">Направление</label><select id="vw-direction"><option>—</option></select></div>
+              </div>
+              <div class="form-group"><label data-i18n="w_status">Статус</label><select id="vw-status-select" disabled></select></div>
+              <div class="form-group"><label data-i18n="w_visit_comment">Комментарий к визиту</label><textarea rows="2" id="vw-notes" onblur="vwAutosave()" placeholder="Комментарий к визиту"></textarea></div>
+              <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="vwFillFromPrevious()"><span data-i18n="w_fill_from_prev">Заполнить анамнез из предыдущих визитов</span></button>
+            </div>
+          </div>
+
+          <div id="vwAccordion"></div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head"><h3 data-i18n="w_procedures_plan">Процедуры и план</h3><button class="btn btn-ghost btn-sm" onclick="vwAddPlanRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button></div>
+            <div class="card-body">
+              <table>
+                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
+                <tbody id="vwPlanBody"></tbody>
+              </table>
+              <div id="vwPlanEmpty" style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;"><span data-i18n="w_no_procedures">Процедуры не добавлены</span></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                <button class="btn btn-ghost btn-sm" id="vwSendToCashierBtn" onclick="vwSendToCashier()"><span data-i18n="w_send_to_cashier">Отправить в кассу</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:4px;">
+            <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;"><input type="checkbox" checked style="width:auto;"> <span data-i18n="w_include_043">Включить в форму 043</span></label>
+              <button class="btn btn-cobalt" onclick="vwAutosave(true)" data-i18n="w_save">Сохранить</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- ЗУБЫ ---- -->
+        <div id="vcPanelTeeth" class="hidden">
+          <div class="accordion-item">
+            <button class="accordion-head open" onclick="toggleAccordion(this)"><span data-i18n="w_tooth_chart">Зубная карта</span><span class="chev">⌄</span></button>
+            <div class="accordion-body open">
+              <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsUpper" style="width:auto;" onchange="selectQuadrant('upper', this.checked)"> <span data-i18n="w_upper_jaw">Верхняя челюсть</span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsLower" style="width:auto;" onchange="selectQuadrant('lower', this.checked)"> <span data-i18n="w_lower_jaw">Нижняя челюсть</span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsAll" style="width:auto;" onchange="selectQuadrant('all', this.checked)"> <span data-i18n="w_oral_cavity">Ротовая полость</span></label>
+              </div>
+              <div class="odontogram-lg" id="vcOdontogram"></div>
+              <div class="legend" style="margin-top:16px;" id="vcLegend"></div>
+              <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;"><span data-i18n="w_mark_tooth_hint">Отметьте зуб галочкой, чтобы добавить его в план ниже. Клик по самому зубу — быстрая смена состояния.</span></div>
+            </div>
+          </div>
+
+          <div class="accordion-item">
+            <button class="accordion-head open" onclick="toggleAccordion(this)"><span data-i18n="w_selected_teeth">Выбранные зубы</span><span class="chev">⌄</span></button>
+            <div class="accordion-body open" id="vcSelectedTeeth">
+              <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_no_teeth_selected">Зубы не выбраны — отметьте зуб галочкой выше</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- РЕНТГЕН ---- -->
+        <div id="vcPanelXray" class="hidden">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_images_attachments">Снимки и вложения</h3>
+              <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload_image">Загрузить снимок</span><input type="file" id="vwFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="vwUploadFiles(this.files)"></label>
+            </div>
+            <div class="card-body" id="vwFilesBody">
+              <div style="text-align:center;padding:30px;color:var(--ink-soft);"><span data-i18n="w_no_images_yet">Пока нет загруженных снимков</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- СООБЩЕНИЯ ---- -->
+        <div id="vcPanelMsg" class="hidden">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_send_msg_to_patient">Отправить сообщение пациенту</h3></div>
+            <div class="card-body">
+              <div style="display:flex;gap:8px;margin-bottom:14px;">
+                <button class="chip active" id="vcMsgChWA" onclick="vcSetChannel('whatsapp')">🟢 WhatsApp</button>
+                <button class="chip" id="vcMsgChTG" onclick="vcSetChannel('telegram')">🔵 Telegram</button>
+              </div>
+              <div class="form-group"><label data-i18n="w_template">Шаблон</label>
+                <select id="vcMsgTemplate" onchange="vcApplyTemplate()">
+                  <option value="" data-i18n="w_choose_template">— выбрать шаблон —</option>
+                </select>
+              </div>
+              <div class="form-group"><label data-i18n="w_message_text">Текст сообщения</label><textarea rows="4" id="vcMsgText" placeholder="Текст сообщения…"></textarea></div>
+              <button class="btn btn-cobalt" onclick="vwSendVisitMessage()" data-i18n="w_send">Отправить</button>
+              <span id="vcMsgSentNote" style="font-size:11.5px;color:var(--teal);margin-left:10px;display:none;"><span data-i18n="w_sent_ok">Отправлено ✓</span></span>
+            </div>
+          </div>
+          <div class="card" style="margin-top:14px;">
+            <div class="card-head"><h3 data-i18n="w_chat_history">История переписки</h3><span class="link-btn" onclick="vwOpenRealChat()"><span data-i18n="w_open_chat">Открыть чат →</span></span></div>
+            <div class="card-body" id="vcMsgHistory"></div>
+          </div>
+        </div>
+
+        <!-- ---- ПРОЧЕЕ ---- -->
+        <div id="vcPanelOther" class="hidden">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_other">Прочее</h3></div>
+            <div class="card-body">
+              <div class="form-group"><label data-i18n="w_visit_documents">Документы визита</label><div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_files_in_xray_tab">Снимки и файлы — во вкладке «Рентген»</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка «Отправить в кассу» — показывается сразу после завершения приёма,
+           если по плану есть что оплачивать (см. vwCommitVisit). -->
+      <div class="modal-backdrop" id="m-vw-cashier">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_visit_completed">Приём завершён</h3><button class="modal-close" onclick="vwSkipCashierAndLeave()">✕</button></div>
+          <div class="modal-body">
+            <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 4px;"><span data-i18n="w_amount_due_visit">К оплате по этому приёму:</span> <b id="vwCashierModalAmount" style="color:var(--ink);"></b> <span data-i18n="w_som">сом</span>.</p>
+            <p style="font-size:13.5px;color:var(--ink-soft);margin:0;" data-i18n="w_send_patient_to_cashier_q">Отправить пациента в кассу, чтобы администратор принял оплату и выдал чек?</p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="vwSkipCashierAndLeave()" data-i18n="w_not_now">Не сейчас</button>
+            <button class="btn btn-cobalt" onclick="vwConfirmSendToCashierAndLeave()"><span data-i18n="w_send_to_cashier">Отправить в кассу</span></button>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const vw = window.visitWizard;
+  if(!vw) return;
+
+  document.getElementById('vwPatientLink').textContent = vw.patientName;
+  document.getElementById('vwPatientLink').href = '/new/patients/'+vw.patientId+'/';
+  document.getElementById('vwBackBtn').onclick = () => location.href='/new/patients/'+vw.patientId+'/';
+
+  document.getElementById('vw-appt-date').value = vw.appointmentDate || '';
+  document.getElementById('vw-appt-start').value = vw.appointmentStart || '—';
+  document.getElementById('vw-appt-end').value = vw.appointmentEnd || '—';
+  document.getElementById('vw-appt-duration').value = vw.appointmentDurationMin != null ? vw.appointmentDurationMin : '';
+
+  const docSel=document.getElementById('vw-doctor');
+  docSel.innerHTML = doctorOptions.map(d=>`<option value="${d.id}" ${String(d.id)===String(vw.doctorId)?'selected':''}>${d.name}</option>`).join('') || `<option>${vw.doctorName||'—'}</option>`;
+
+  window.vwPlanServiceSearch = function(q){
+    const box=document.getElementById('vw-plan-suggestions');
+    const query=(q||'').trim().toLowerCase();
+    const matches = (query ? vw.services.filter(s=>s.name.toLowerCase().includes(query)) : vw.services).slice(0,30);
+    if(matches.length===0){
+      box.innerHTML=`<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
+    } else {
+      box.innerHTML=matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="vwPickPlanService(${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('');
+    }
+    box.classList.remove('hidden');
+  };
+  window.vwPickPlanService = function(id){
+    vwAddServiceFromSelect(id);
+    document.getElementById('vw-plan-search').value='';
+    document.getElementById('vw-plan-suggestions').classList.add('hidden');
+  };
+  const directions = [...new Set(vw.services.map(s=>s.cat).filter(Boolean))];
+  document.getElementById('vw-direction').innerHTML = '<option>—</option>' + directions.map(d=>`<option>${d}</option>`).join('');
+
+  document.getElementById('vw-status-select').innerHTML = `<option selected>${vw.statusLabel}</option>`;
+  document.getElementById('vw-notes').value = vw.notes || '';
+
+  const icdListForAccordion = vw.icdList; // используется ниже в блоке диагноза (в аккордеоне «Описание визита врачом» диагноз не дублируем)
+
+  // Приём завершён — блокируем только повторное «Завершить приём» (там
+  // списание материалов и заказы технику, повторный запуск задвоил бы их).
+  // ЭМК/зубы/план/файлы остаются редактируемыми и после завершения — обычная
+  // клиническая необходимость поправить/дописать запись задним числом.
+  const commitLocked = vw.status==='completed' || vw.status==='paid';
+  const readOnlyClosed = false;
+  window.vwReadOnlyClosed = false; // читают openToothModal/openSurfaceModal/openGumModal в base.html
+  const commitBtn = document.getElementById('vwCommitBtn');
+  if(commitLocked){
+    commitBtn.textContent=t('w_visit_completed');
+    commitBtn.disabled=true;
+    commitBtn.classList.remove('btn-cobalt');
+    document.getElementById('vwSendToCashierBtn').disabled=false; // отправить в кассу нужно именно после завершения приёма
+  } else {
+    commitBtn.textContent='⏸ '+t('w_visit_in_progress');
+    commitBtn.className='btn btn-danger';
+    commitBtn.style.cssText='width:100%;justify-content:center;padding:14px;font-size:14px;margin-bottom:16px;';
+  }
+
+  // ---- этапы приёма: локальный чек-лист (как и в макете — не персистится, только на время сессии) ----
+  const defaultStageKeys=['w_stage1','w_stage2','w_stage3','w_stage4','w_stage5','w_stage6'];
+  let stages = defaultStageKeys.map(k=>({labelKey:k, done:false}));
+  function renderStages(){
+    const doneCount=stages.filter(s=>s.done).length;
+    document.getElementById('vwStageProgress').textContent=doneCount+' '+t('w_of')+' '+stages.length+' '+t('w_done_plural');
+    document.getElementById('vwStageList').innerHTML=stages.map((s,i)=>`
+      <div class="stage-row">
+        <input type="checkbox" ${s.done?'checked':''} ${readOnlyClosed?'disabled':''} onchange="vwToggleStage(${i})">
+        <span class="${s.done?'done':''}" style="font-size:13px;" data-i18n="${s.labelKey}">${t(s.labelKey)}</span>
+      </div>`).join('');
+  }
+  window.vwToggleStage = function(i){ stages[i].done=!stages[i].done; renderStages(); };
+  renderStages();
+
+  // ---- жалобы/осмотр/диагноз — те же 9 разделов, что и в макете, плюс диагноз/МКБ/рекомендации отдельным блоком ----
+  const diagBlock = document.createElement('div');
+  diagBlock.className='card';
+  diagBlock.style.marginBottom='16px';
+  diagBlock.innerHTML = `<div class="card-head"><h3 data-i18n="w_diagnosis">Диагноз</h3></div>
+    <div class="card-body">
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_diagnosis">Диагноз</label><textarea rows="2" id="vw-diagnosis" onblur="vwAutosave()" placeholder="${t('w_diagnosis')}…"></textarea></div>
+        <div class="form-group"><label data-i18n="w_icd10">МКБ-10</label><select id="vw-icd" onchange="vwAutosave()"></select></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_recommendations">Рекомендации</label><textarea rows="2" id="vw-recommendations" onblur="vwAutosave()" placeholder="${t('w_recommendations_for_patient')}…"></textarea></div>
+    </div>`;
+  document.getElementById('vwAccordion').before(diagBlock);
+  document.getElementById('vw-diagnosis').value = vw.emr.diagnosis;
+  document.getElementById('vw-recommendations').value = vw.emr.recommendations;
+  const icdSel = document.getElementById('vw-icd');
+  icdSel.innerHTML = `<option value="">${t('w_not_selected')}</option>` + icdListForAccordion.map(c=>`<option value="${c.code}">${c.code} — ${c.name}</option>`).join('');
+  icdSel.value = vw.emr.icd_code || '';
+
+  const accordionSections=[
+    {id:'complaints', labelKey:'w_complaints', get:()=>vw.emr.complaints},
+    {id:'anamnesis_disease', labelKey:'w_anamnesis_disease', get:()=>vw.emr.anamnesis},
+    {id:'anamnesis_life', labelKey:'w_anamnesis_life', get:()=>(vw.emr.exam_data||{}).anamnesis_life, examKey:'anamnesis_life'},
+    {id:'external', labelKey:'w_external_exam', get:()=>vw.emr.externalExam},
+    {id:'objective', labelKey:'w_objective', get:()=>vw.emr.objective},
+    {id:'subjective', labelKey:'w_subjective', get:()=>(vw.emr.exam_data||{}).subjective, examKey:'subjective'},
+    {id:'bite', labelKey:'w_bite', get:()=>(vw.emr.exam_data||{}).bite, examKey:'bite'},
+    {id:'xraydata', labelKey:'w_xray_lab_data', get:()=>(vw.emr.exam_data||{}).xraydata, examKey:'xraydata'},
+    {id:'doctordesc', labelKey:'w_doctor_visit_desc', get:()=>vw.emr.treatmentText},
+  ];
+  function buildAccordion(){
+    const el=document.getElementById('vwAccordion');
+    el.innerHTML=accordionSections.map((s,i)=>`
+      <div class="accordion-item">
+        <button class="accordion-head ${i===0?'open':''}" onclick="toggleAccordion(this)"><span data-i18n="${s.labelKey}">${t(s.labelKey)}</span><span class="chev">⌄</span></button>
+        <div class="accordion-body ${i===0?'open':''}">
+          <textarea rows="2" placeholder="${t(s.labelKey)}" id="vw-field-${s.id}" onblur="vwAutosave()" ${readOnlyClosed?'disabled':''}>${s.get()||''}</textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+            <button class="btn btn-ghost btn-sm" ${readOnlyClosed?'disabled':''} data-i18n="w_save_as_template">${t('w_save_as_template')}</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+  buildAccordion();
+  window.vwFillFromPrevious = function(){
+    if(readOnlyClosed) return;
+    if(!vw.previousVisit){ showToast(t('w_no_previous_visits'), 'error'); return; }
+    const pv=vw.previousVisit;
+    document.getElementById('vw-field-complaints').value = pv.complaints || '';
+    document.getElementById('vw-field-anamnesis_disease').value = pv.anamnesis || '';
+    document.getElementById('vw-field-external').value = pv.externalExam || '';
+    document.getElementById('vw-field-objective').value = pv.objective || '';
+    const pvExam = pv.exam_data || {};
+    ['anamnesis_life','subjective','bite','xraydata'].forEach(k=>{
+      const f=document.getElementById('vw-field-'+k);
+      if(f && pvExam[k]) f.value=pvExam[k];
+    });
+    vwAutosave();
+  };
+
+  // ---- зубная карта: та же buildOdontogram(), что и на карточке пациента ----
+  Object.keys(vw.toothConditionsJs||{}).forEach(k=>{ toothStates[k]=vw.toothConditionsJs[k]; });
+  Object.keys(vw.toothSurfaceConditionsJs||{}).forEach(k=>{ surfaceStates[k]=vw.toothSurfaceConditionsJs[k]; });
+  Object.keys(vw.toothGumConditionsJs||{}).forEach(k=>{ gumStates[k]=vw.toothGumConditionsJs[k]; });
+  renderAllOdontograms();
+  buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', !readOnlyClosed);
+  window.vwOnToothSaved = function(key, jsCode){
+    if(readOnlyClosed) return;
+    const num = key.split('-')[1];
+    const JS_TO_REAL = {norma:'healthy', caries_mid:'caries', filling:'filling', canal_filled:'root_canal',
+      crown:'crown', implant:'implant', bridge:'bridge', to_remove:'to_remove', missing:'missing'};
+    const realCode = JS_TO_REAL[jsCode];
+    if(!realCode) return; // код без соответствия в реальном справочнике — не персистим
+    vwSaveTeeth({[num]: realCode});
+  };
+  // Поверхности/дёсны — коды в БД совпадают с JS 1:1 (см. apps/treatments/models_teeth.py),
+  // маппинг не нужен, в отличие от зубов целиком выше.
+  // key для поверхности — "adult-26-s2" (toothKey + '-s' + surfaceIdx).
+  window.vwOnSurfaceSaved = function(key, jsCode){
+    if(readOnlyClosed) return;
+    const parts = key.split('-'); // ['adult','26','s2']
+    const num = parts[1];
+    const sidx = (parts[2]||'').replace('s','');
+    if(!sidx) return;
+    vwSaveSurfaces({[num+'-'+sidx]: jsCode});
+  };
+  window.vwOnGumSaved = function(key, jsCode){
+    if(readOnlyClosed) return;
+    const num = key.split('-')[1];
+    vwSaveGums({[num]: jsCode});
+  };
+
+  // ---- план/процедуры ----
+  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, done:true}));
+  // Общий datalist для поиска услуги в строке плана — нативная фильтрация
+  // браузера по мере ввода, вместо длинного select со всеми услугами разом.
+  if(!document.getElementById('vwServicesDatalist')){
+    const dl=document.createElement('datalist');
+    dl.id='vwServicesDatalist';
+    dl.innerHTML = vw.services.map(s=>`<option data-id="${s.id}" value="${s.name.replace(/"/g,'&quot;')} · ${Math.round(s.price)} сом"></option>`).join('');
+    document.body.appendChild(dl);
+  }
+  window.vwPlanServiceInputChange = function(i, val){
+    const svc = vw.services.find(s=>`${s.name} · ${Math.round(s.price)} сом`===val) || vw.services.find(s=>s.name===val);
+    if(svc){ vwPlanSetField(i,'service_id',svc.id); vwPlanFillPrice(i, svc.id); }
+    else { vwPlanSetField(i,'service_id',''); }
+  };
+  function vwRenderPlan(){
+    const body=document.getElementById('vwPlanBody');
+    document.getElementById('vwPlanEmpty').style.display = vwPlan.length ? 'none' : '';
+    body.innerHTML = vwPlan.map((it,i)=>{
+      const svc = vw.services.find(s=>String(s.id)===String(it.service_id));
+      const svcLabel = svc ? `${svc.name} · ${Math.round(svc.price)} сом` : '';
+      return `<tr>
+        <td><input type="text" list="vwServicesDatalist" value="${svcLabel.replace(/"/g,'&quot;')}" placeholder="${t('w_search_service')}…" style="min-width:180px;" onchange="vwPlanServiceInputChange(${i},this.value)"></td>
+        <td><input type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
+        <td><input type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
+        <td><input type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
+        <td style="text-align:center;"><input type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
+        <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
+      </tr>`;
+    }).join('');
+  }
+  window.vwAddPlanRow = function(){
+    if(readOnlyClosed) return;
+    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, done:false});
+    vwRenderPlan();
+  };
+  window.vwAddServiceFromSelect = function(serviceId){
+    if(readOnlyClosed || !serviceId) return;
+    const svc=vw.services.find(s=>String(s.id)===String(serviceId));
+    if(!svc) return;
+    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, done:false});
+    vwRenderPlan();
+    vwAutosave();
+  };
+  window.vwPlanSetField = function(i, field, val){
+    if(field==='qty') val=Math.max(1, parseInt(val)||1);
+    if(field==='price') val=parseFloat(val)||0;
+    vwPlan[i][field]=val;
+  };
+  window.vwPlanFillPrice = function(i, serviceId){
+    const svc = vw.services.find(s=>String(s.id)===String(serviceId));
+    if(svc){ vwPlan[i].price=svc.price; vwRenderPlan(); }
+  };
+  window.vwPlanRemove = function(i){ vwPlan.splice(i,1); vwRenderPlan(); vwAutosave(); };
+  vwRenderPlan();
+
+  window.vwRenderSelectedTeeth = function(selectedTeethSet){
+    const el=document.getElementById('vcSelectedTeeth');
+    if(!el) return;
+    if(selectedTeethSet.size===0){
+      el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_no_teeth_selected">Зубы не выбраны — отметьте зуб галочкой выше</span></div>';
+      return;
+    }
+    el.innerHTML=[...selectedTeethSet].map(key=>{
+      const [pfx,numStr]=key.split('-');
+      const num=Number(numStr);
+      const code=toothStates[key] || 'norma';
+      const cond=getCondition(code);
+      const style=toothStyle(cond);
+      const iconHtml=toothIconSVG(style, null, pfx==='adult'?num:null);
+      const planItem=vwPlan.find(it=>String(it.tooth)===String(num));
+      const svcOptions=vw.services.map(s=>`<option value="${s.id}" ${planItem && String(planItem.service_id)===String(s.id)?'selected':''}>${s.name}</option>`).join('');
+      return `<div class="selected-tooth-block">
+        <div class="selected-tooth-side">
+          <div class="tooth-num-cell">${num}</div>
+          ${iconHtml}
+          <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>Убрать</button>
+        </div>
+        <div>
+          <div class="form-group"><label>Диагноз</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
+          <div class="form-row2">
+            <div class="form-group"><label>Услуги<div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">добавится в «Процедуры и план»</div></label><select onchange="vwTeethSetService(${num}, this.value)" ${readOnlyClosed?'disabled':''}><option value="">—</option>${svcOptions}</select></div>
+            <div class="form-group"><label>Комплексные услуги</label><select ${readOnlyClosed?'disabled':''}><option>—</option></select></div>
+          </div>
+          <div class="form-group"><label>План обследования</label><textarea rows="1" placeholder="План обследования" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>Лечение / Консультация</label><textarea rows="1" placeholder="Лечение / Консультация" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>Рекомендации</label><textarea rows="1" placeholder="Рекомендации" ${readOnlyClosed?'disabled':''}></textarea></div>
+        </div>
+      </div>`;
+    }).join('');
+  };
+  window.vwTeethSetService = function(num, serviceId){
+    if(readOnlyClosed) return;
+    const idx=vwPlan.findIndex(it=>String(it.tooth)===String(num));
+    if(!serviceId){
+      if(idx>-1){ vwPlan.splice(idx,1); vwRenderPlan(); vwAutosave(); }
+      return;
+    }
+    const svc=vw.services.find(s=>String(s.id)===String(serviceId));
+    if(idx===-1) vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc?svc.price:0, done:false});
+    else { vwPlan[idx].service_id=serviceId; vwPlan[idx].price=svc?svc.price:vwPlan[idx].price; }
+    vwRenderPlan();
+    vwAutosave();
+  };
+
+  // ---- файлы ----
+  function vwRenderFiles(files){
+    const body=document.getElementById('vwFilesBody');
+    if(!files || files.length===0){
+      body.innerHTML='<div style="text-align:center;padding:30px;color:var(--ink-soft);"><span data-i18n="w_no_images_yet">Пока нет загруженных снимков</span></div>';
+      return;
+    }
+    body.innerHTML = files.map(f=>`
+      <div class="row"><div class="row-main">${f.is_image?`<img src="${f.url}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle;">`:''}<b>${f.name}</b><span>${f.kind_label}${f.tooth?' · зуб '+f.tooth:''} · ${f.date} · ${f.by}</span></div>
+      <a class="btn btn-ghost btn-sm" href="${f.url}" target="_blank">Открыть</a></div>`).join('');
+  }
+  vwRenderFiles(vw.files);
+  window.vwUploadFiles = async function(fileList){
+    if(!fileList || fileList.length===0) return;
+    const fd=new FormData();
+    for(const f of fileList) fd.append('files', f);
+    const res = await postForm('/treatments/visit/'+vw.treatmentId+'/upload/', fd);
+    if(res.ok){
+      const data = await res.json();
+      vw.files = (vw.files||[]).concat(data.files||[]);
+      vwRenderFiles(vw.files);
+      showToast(t('w_file_uploaded'));
+    } else {
+      showToast(t('w_file_upload_failed'), 'error');
+    }
+  };
+
+  // ---- сообщения: реальный чат пациента (переиспользует /new/messages/ логику) ----
+  if(!chatClients.find(c=>c.id===vw.patientId)){
+    chatClients.push({id: vw.patientId, name: vw.patientName, phone: '', channel: 'whatsapp', lastBody:'', lastTime:'', unread:0});
+  }
+  currentClientId = vw.patientId;
+  window.vwSendVisitMessage = async function(){
+    const text = document.getElementById('vcMsgText').value.trim();
+    if(!text) return;
+    const channel = document.getElementById('vcMsgChWA').classList.contains('active') ? 'wa' : 'tg';
+    const fd = new FormData();
+    fd.append('text', text);
+    fd.append('channel', channel);
+    const res = await postForm('/patients/'+vw.patientId+'/notify/', fd);
+    if(res.redirected){
+      document.getElementById('vcMsgText').value='';
+      const note=document.getElementById('vcMsgSentNote');
+      note.style.display='inline';
+      setTimeout(()=>{ note.style.display='none'; }, 2500);
+      vwLoadVisitChatHistory();
+    } else {
+      showToast(t('w_send_failed_wa_tg'), 'error');
+    }
+  };
+  window.vwOpenRealChat = function(){ location.href='/new/messages/'; };
+  async function vwLoadVisitChatHistory(){
+    const el=document.getElementById('vcMsgHistory');
+    if(!el) return;
+    try{
+      const res = await fetch('/patients/'+vw.patientId+'/wa-messages/');
+      const data = await res.json();
+      const msgs = (data.messages||[]).slice(-5);
+      el.innerHTML = msgs.length===0
+        ? `<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_no_chat_yet')}</div>`
+        : '<div style="display:flex;flex-direction:column;gap:8px;">'+msgs.map(m=>`<div class="chat-bubble ${m.dir==='in'?'in':'out'}" style="max-width:100%;">${m.body||''}<span class="time">${m.time}</span></div>`).join('')+'</div>';
+    }catch(e){}
+  }
+  vwLoadVisitChatHistory();
+
+  // ---- автосохранение ----
+  let vwSaving=false;
+  window.vwAutosave = async function(showNote){
+    if(vwSaving) return;
+    vwSaving=true;
+    try{
+      const examData={};
+      accordionSections.forEach(s=>{
+        if(s.examKey){
+          const f=document.getElementById('vw-field-'+s.id);
+          if(f) examData[s.examKey]=f.value;
+        }
+      });
+      const val=id=>{ const el=document.getElementById(id); return el ? el.value : undefined; };
+      const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {
+        complaints: val('vw-field-complaints'),
+        anamnesis: val('vw-field-anamnesis_disease'),
+        external_exam: val('vw-field-external'),
+        objective: val('vw-field-objective'),
+        diagnosis: val('vw-diagnosis'),
+        icd_code: val('vw-icd'),
+        recommendations: val('vw-recommendations'),
+        treatment_text: val('vw-field-doctordesc'),
+        notes: val('vw-notes'),
+        doctor_id: val('vw-doctor'),
+        exam_data: examData,
+        plan: vwPlan,
+      });
+      if(res.ok){
+        if(showNote){
+          const note=document.getElementById('vwSavedNote');
+          note.style.display='block';
+          setTimeout(()=>{ note.style.display='none'; }, 2000);
+        }
+      } else {
+        let msg=t('w_save_failed');
+        try{ const data=await res.json(); if(data && data.error) msg=data.error; }catch(e){}
+        showToast(msg, 'error');
+      }
+    } catch(e){
+      showToast(t('w_save_failed_connection'), 'error');
+    } finally { vwSaving=false; }
+  };
+  async function vwSaveTeeth(teeth){
+    await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {teeth});
+  }
+  async function vwSaveSurfaces(surfaces){
+    await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {surfaces});
+  }
+  async function vwSaveGums(gums){
+    await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {gums});
+  }
+
+  window.vwCommitVisit = async function(){
+    if(commitLocked) return;
+    if(!confirm(t('w_confirm_finish_visit'))) return;
+    await vwAutosave();
+    const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan: vwPlan});
+    const data = await res.json();
+    if(res.ok && data.ok){
+      sessionStorage.setItem('newui_flash', JSON.stringify({msg:t('w_visit_completed'), type:'success'}));
+      const owed = vwPlan.reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.qty)||1),0);
+      if(owed > 0){
+        document.getElementById('vwCashierModalAmount').textContent = Math.round(owed).toLocaleString('ru-RU');
+        document.getElementById('m-vw-cashier').classList.add('open');
+      } else {
+        location.href='/new/patients/'+vw.patientId+'/';
+      }
+    } else {
+      showToast(data.error || t('w_finish_visit_failed'), 'error');
+    }
+  };
+  window.vwSkipCashierAndLeave = function(){
+    location.href='/new/patients/'+vw.patientId+'/';
+  };
+  window.vwConfirmSendToCashierAndLeave = async function(){
+    await vwSendToCashier();
+    location.href='/new/patients/'+vw.patientId+'/';
+  };
+
+  window.vwSendToCashier = async function(){
+    // Сумма именно ЭТОГО приёма (план на экране), а не весь накопленный долг
+    // пациента по всем визитам — иначе в кассу уходит не то число, которое
+    // видел врач на карточке (напр. приём на 8000, а в кассе весь долг 23300).
+    const owed = vwPlan.reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.qty)||1),0);
+    const fd = new FormData();
+    fd.append('treatment', vw.treatmentId);
+    if(owed > 0) fd.append('amount', String(Math.round(owed)));
+    const res = await postForm('/finance/payments/send-to-cashier/'+vw.patientId+'/', fd);
+    if(res.redirected){ showToast(t('w_sent_to_cashier')); }
+    else { showToast(t('w_send_to_cashier_failed'), 'error'); }
+  };
+})();
+</script>
+{% endblock %}

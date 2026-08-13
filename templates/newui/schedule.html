@@ -1,0 +1,28 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Расписание врачей{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <div><h1 data-i18n="title_schedule">Расписание врачей</h1><div class="topbar-sub" id="schedViewLabel">Вид по умолчанию: 1 день</div></div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost" id="schedPrintBtn" onclick="window.print()">🖨 <span data-i18n="w_print">Печать</span></button>
+          <button class="icon-btn" title="Настройки календаря" onclick="openModal('m-calsettings')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          </button>
+          <button class="btn btn-cobalt" onclick="openNewAppt()">+ <span data-i18n="w_new_appt">Новая запись</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="chip active" id="chipDay" onclick="calSetView('day')" data-i18n="w_day">День</button>
+            <button class="chip" id="chipWeek" onclick="calSetView('week')" data-i18n="w_week">Неделя</button>
+            <button class="chip" id="chipMonth" onclick="calSetView('month')" data-i18n="w_month">Месяц</button>
+          </div>
+          <div class="toolbar-right-nav" style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-soft)">
+            <button class="icon-btn" onclick="changeDay(-1)">‹</button><span id="schedDateLabel">31.07.2026</span><button class="icon-btn" onclick="changeDay(1)">›</button>
+          </div>
+        </div>
+        <div class="sched-wrap" id="scheduleContent"></div>
+        <div style="font-size:11.5px;color:var(--ink-faint);margin-top:10px;"><span data-i18n="w_sched_hint">В дневном виде запись можно перетащить в другую ячейку или к другому врачу, а клик по пустой ячейке открывает создание записи. Часы работы и цвета календаря настраиваются кнопкой ⚙ выше.</span></div>
+      </div>
+{% endblock %}

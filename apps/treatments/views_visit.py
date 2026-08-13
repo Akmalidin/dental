@@ -15,7 +15,11 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import Treatment, TreatmentCure, TreatmentFile
 from .models_emr import MedicalRecord
-from .models_teeth import ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES
+from .models_teeth import (
+    ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES, REAL_TO_JS_TOOTH_CODE,
+    ToothSurfaceStatus, ToothGumStatus, ToothSurfaceCondition, ToothGumCondition,
+    DEFAULT_SURFACE_STATUSES, DEFAULT_GUM_STATUSES,
+)
 from .icd10 import DENTAL_ICD10, suggest_icd
 from apps.patients.models import Patient
 
@@ -25,6 +29,12 @@ def _ensure_tooth_statuses():
     if not ToothStatus.objects.exists():
         for i, (code, name, color) in enumerate(DEFAULT_TOOTH_STATUSES):
             ToothStatus.objects.create(code=code, name=name, color=color, sort_order=i)
+    if not ToothSurfaceStatus.objects.exists():
+        for i, (code, name, color) in enumerate(DEFAULT_SURFACE_STATUSES):
+            ToothSurfaceStatus.objects.create(code=code, name=name, color=color, sort_order=i)
+    if not ToothGumStatus.objects.exists():
+        for i, (code, name, color) in enumerate(DEFAULT_GUM_STATUSES):
+            ToothGumStatus.objects.create(code=code, name=name, color=color, sort_order=i)
 
 
 def _main_branch(request, patient=None):
@@ -35,9 +45,17 @@ def _main_branch(request, patient=None):
             or Branch.objects.first())
 
 
-@login_required
-def visit_start(request):
-    """Начать приём: создать/найти Treatment для записи (или пациента) и открыть мастер."""
+def _resolve_or_create_visit(request):
+    """Найти/создать Treatment для приёма (по appointment или patient из GET)
+    — общая логика для visit_start (старый интерфейс) и newui_visit_start
+    (новый интерфейс), чтобы оба вели себя одинаково и не плодили дубли.
+
+    Возвращает (status, payload):
+      "no_patient"  → payload=None — не указан пациент.
+      "completed"   → payload=Treatment — приём уже завершён/оплачен, мастер не открываем.
+      "appt_done"   → payload=Patient — запись уже завершена, приёма нет, не создаём.
+      "ok"          → payload=Treatment — можно открывать мастер.
+    """
     from apps.appointments.models import Appointment
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
@@ -50,8 +68,7 @@ def visit_start(request):
     if patient is None:
         patient = Patient.objects.filter(pk=request.GET.get("patient")).first()
     if patient is None:
-        messages.error(request, _("Не указан пациент для приёма"))
-        return redirect("calendar_view")
+        return "no_patient", None
 
     # уже начатый приём по этой записи — продолжаем его, не плодим дубли
     treatment = None
@@ -60,11 +77,10 @@ def visit_start(request):
                      .exclude(status="cancelled").order_by("-created_at").first())
     # Приём уже завершён/оплачен → не запускаем мастер заново, открываем карточку (просмотр)
     if treatment is not None and treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
-        return redirect("treatment_detail", pk=treatment.pk)
+        return "completed", treatment
     # Запись уже завершена, но приёма нет → не создаём новый «пустой» приём
     if appt is not None and appt.status == "completed" and treatment is None:
-        messages.info(request, _("Запись уже завершена. Новый приём не создаётся."))
-        return redirect("patient_detail", pk=patient.pk)
+        return "appt_done", patient
     if treatment is None:
         clinic = get_current_clinic()
         doctor = None
@@ -84,7 +100,22 @@ def visit_start(request):
     if appt and appt.status not in ("cancelled", "completed", "in_progress"):
         appt.status = "in_progress"
         appt.save(update_fields=["status"])
-    return redirect("visit_wizard", pk=treatment.pk)
+    return "ok", treatment
+
+
+@login_required
+def visit_start(request):
+    """Начать приём (старый интерфейс): создать/найти Treatment и открыть мастер."""
+    status, payload = _resolve_or_create_visit(request)
+    if status == "no_patient":
+        messages.error(request, _("Не указан пациент для приёма"))
+        return redirect("calendar_view")
+    if status == "completed":
+        return redirect("treatment_detail", pk=payload.pk)
+    if status == "appt_done":
+        messages.info(request, _("Запись уже завершена. Новый приём не создаётся."))
+        return redirect("patient_detail", pk=payload.pk)
+    return redirect("visit_wizard", pk=payload.pk)
 
 
 @login_required
@@ -99,6 +130,33 @@ def visit_wizard(request, pk):
     appt_done = treatment.appointment_id and treatment.appointment.status == "completed"
     if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID) or appt_done:
         return redirect("treatment_detail", pk=treatment.pk)
+    emr, ctx = _visit_wizard_context(treatment)
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+    return render(request, "treatments/visit.html", {
+        "treatment": treatment,
+        "patient": treatment.patient,
+        "emr": emr,
+        "emr_json": ctx["emr"],
+        "exam_data": ctx["emr"]["exam_data"],
+        "services_json": ctx["services"],
+        "technicians_json": ctx["technicians"],
+        "tooth_statuses_json": ctx["toothStatuses"],
+        "tooth_conditions_json": ctx["toothConditions"],
+        "cures_json": ctx["cures"],
+        "files_json": ctx["files"],
+        "file_kinds_json": ctx["fileKinds"],
+        "icd_list_json": ctx["icdList"],
+        "doctors": clinic_doctors(get_current_clinic()),
+    })
+
+
+def _visit_wizard_context(treatment):
+    """Данные мастера приёма (ЭМК/зубы/процедуры/файлы/справочники) — общая
+    выборка для HTML-страницы старого интерфейса (visit_wizard) и JSON для
+    новой карточки приёма (apps.users.newui_views.newui_visitcard). Один
+    источник данных — чтобы оба интерфейса видели одно и то же и не
+    расходились в бизнес-логике."""
     emr, _c = MedicalRecord.objects.get_or_create(
         treatment=treatment,
         defaults={"patient": treatment.patient, "doctor": treatment.doctor},
@@ -121,6 +179,14 @@ def visit_wizard(request, pk):
     # сохранённые состояния зубов пациента (для предзаполнения карты)
     tooth_conditions = {str(tc.tooth_number): (tc.status.code if tc.status else "")
                         for tc in ToothCondition.objects.filter(patient=treatment.patient).select_related("status")}
+    # поверхности и дёсны — коды в БД совпадают с JS 1:1 (см. models_teeth.py),
+    # поэтому маппинг не нужен, в отличие от toothConditionsJs выше
+    surface_conditions = {f"{sc.tooth_number}-{sc.surface_index}": sc.status.code
+                          for sc in ToothSurfaceCondition.objects.filter(patient=treatment.patient).select_related("status")
+                          if sc.status}
+    gum_conditions = {str(gc.tooth_number): gc.status.code
+                      for gc in ToothGumCondition.objects.filter(patient=treatment.patient).select_related("status")
+                      if gc.status}
     # уже добавленные сегодня процедуры
     cures = [{"service_id": c.service_id, "name": c.service.name, "tooth": c.tooth_number,
               "qty": c.quantity, "price": float(c.price), "done": True}
@@ -137,34 +203,89 @@ def visit_wizard(request, pk):
     emr_json = {
         "complaints": emr.complaints or "",
         "anamnesis": emr.anamnesis or "",
+        "externalExam": emr.external_exam or "",
         "objective": emr.objective or "",
         "diagnosis": emr.diagnosis or "",
         "icd_code": emr.icd_code or "",
         "recommendations": emr.recommendations or "",
+        "treatmentText": emr.treatment_text or "",
         "exam_data": emr.exam_data or {},
     }
-    return render(request, "treatments/visit.html", {
-        "treatment": treatment,
-        "patient": treatment.patient,
-        "emr": emr,
-        "emr_json": emr_json,
-        "exam_data": emr.exam_data or {},
-        "services_json": services,
-        "technicians_json": technicians_json,
-        "tooth_statuses_json": statuses,
-        "tooth_conditions_json": tooth_conditions,
-        "cures_json": cures,
-        "files_json": files,
-        "file_kinds_json": [{"code": k, "label": lbl} for k, lbl in TreatmentFile.KIND_CHOICES],
-        "icd_list_json": [{"code": c, "name": n} for c, n in DENTAL_ICD10],
-        "doctors": clinic_doctors(get_current_clinic()),
-    })
+    # Предыдущий визит того же пациента (для «Заполнить анамнез из
+    # предыдущих визитов») — реальная последняя ЭМК другого приёма, не демо-текст.
+    prev_emr = (MedicalRecord.objects.filter(patient=treatment.patient)
+                .exclude(treatment=treatment).order_by("-treatment__created_at").first())
+    previous_visit = None
+    if prev_emr:
+        previous_visit = {
+            "complaints": prev_emr.complaints or "",
+            "anamnesis": prev_emr.anamnesis or "",
+            "externalExam": prev_emr.external_exam or "",
+            "objective": prev_emr.objective or "",
+            "exam_data": prev_emr.exam_data or {},
+        }
+    appt = treatment.appointment
+    ctx = {
+        "treatmentId": treatment.pk,
+        "status": treatment.status,
+        "statusLabel": treatment.get_status_display(),
+        "patientId": treatment.patient_id,
+        "patientName": treatment.patient.full_name,
+        "doctorId": treatment.doctor_id,
+        "doctorName": treatment.doctor.name if treatment.doctor else "",
+        "appointmentId": treatment.appointment_id,
+        "appointmentDate": _tz.localtime(appt.start_at).strftime("%Y-%m-%d") if appt else "",
+        "appointmentStart": _tz.localtime(appt.start_at).strftime("%H:%M") if appt else "",
+        "appointmentEnd": _tz.localtime(appt.end_at).strftime("%H:%M") if appt else "",
+        "appointmentDurationMin": int((appt.end_at - appt.start_at).total_seconds() // 60) if appt else None,
+        "createdAt": _tz.localtime(treatment.created_at).strftime("%d.%m.%Y %H:%M"),
+        "notes": treatment.notes or "",
+        "emr": emr_json,
+        "previousVisit": previous_visit,
+        "services": services,
+        "technicians": technicians_json,
+        "toothStatuses": statuses,
+        "toothConditions": tooth_conditions,
+        # Тот же словарь, что и «Зубная карта» на карточке пациента нового
+        # интерфейса (apps.users.views._newui_patientcard_detail_data) —
+        # {"adult-14": "caries_mid", ...}, чтобы переиспользовать buildOdontogram()
+        # без отдельной ветки маппинга под карточку приёма.
+        "toothConditionsJs": {
+            f"{'baby' if int(num) >= 51 else 'adult'}-{num}": REAL_TO_JS_TOOTH_CODE.get(code, "norma")
+            for num, code in tooth_conditions.items() if code
+        },
+        # Ключи в формате surfaceStates/gumStates из base.html:
+        # "adult-14-s2" для поверхности, "adult-14" для дёсен.
+        "toothSurfaceConditionsJs": {
+            f"{'baby' if int(key.split('-')[0]) >= 51 else 'adult'}-{key.split('-')[0]}-s{key.split('-')[1]}": code
+            for key, code in surface_conditions.items()
+        },
+        "toothGumConditionsJs": {
+            f"{'baby' if int(num) >= 51 else 'adult'}-{num}": code
+            for num, code in gum_conditions.items()
+        },
+        "surfaceStatuses": [{"code": s.code, "name": s.name, "color": s.color}
+                            for s in ToothSurfaceStatus.objects.filter(is_active=True)],
+        "gumStatuses": [{"code": s.code, "name": s.name, "color": s.color}
+                        for s in ToothGumStatus.objects.filter(is_active=True)],
+        "cures": cures,
+        "files": files,
+        "fileKinds": [{"code": k, "label": lbl} for k, lbl in TreatmentFile.KIND_CHOICES],
+        "icdList": [{"code": c, "name": n} for c, n in DENTAL_ICD10],
+        "doctorOptions": [{"id": d.pk, "name": d.name} for d in clinic_doctors(get_current_clinic())],
+    }
+    return emr, ctx
 
 
 @login_required
 @require_POST
 def visit_save(request, pk):
-    """Автосохранение шагов (жалобы/осмотр/диагноз + состояния зубов). AJAX."""
+    """Автосохранение шагов (жалобы/осмотр/диагноз + состояния зубов). AJAX.
+
+    Редактирование ЭМК/зубов/плана разрешено и после завершения приёма
+    (поправить диагноз, дописать после того как приём уже закрыт — обычная
+    клиническая необходимость). Заблокирован только повторный visit_commit
+    (там списание материалов и заказы технику — их нельзя запускать дважды)."""
     treatment = get_object_or_404(Treatment, pk=pk)
     emr, _c = MedicalRecord.objects.get_or_create(
         treatment=treatment,
@@ -182,9 +303,24 @@ def visit_save(request, pk):
     emr.diagnosis = data.get("diagnosis", emr.diagnosis) or ""
     emr.icd_code = (data.get("icd_code") or suggest_icd(emr.diagnosis) or "")[:20]
     emr.recommendations = data.get("recommendations", emr.recommendations) or ""
+    emr.treatment_text = data.get("treatment_text", emr.treatment_text) or ""
     if isinstance(data.get("exam_data"), dict):
         emr.exam_data = data["exam_data"]
     emr.save()
+
+    update_fields = []
+    if "notes" in data:
+        treatment.notes = data.get("notes") or ""
+        update_fields.append("notes")
+    if data.get("doctor_id"):
+        from apps.users.models import clinic_doctors
+        from apps.tenancy import get_current_clinic
+        doctor = clinic_doctors(get_current_clinic()).filter(pk=data["doctor_id"]).first()
+        if doctor:
+            treatment.doctor = doctor
+            update_fields.append("doctor")
+    if update_fields:
+        treatment.save(update_fields=update_fields + ["updated_at"])
 
     # состояния зубов: {"36": "caries", ...} → upsert ToothCondition пациента
     teeth = data.get("teeth")
@@ -199,6 +335,33 @@ def visit_save(request, pk):
                 patient=treatment.patient, tooth_number=tnum,
                 defaults={"status": status},
             )
+    # поверхности зубов: {"36-2": "caries_simple", ...} → upsert ToothSurfaceCondition
+    surfaces = data.get("surfaces")
+    if isinstance(surfaces, dict):
+        for key, code in surfaces.items():
+            try:
+                tnum_s, sidx_s = key.split("-")
+                tnum, sidx = int(tnum_s), int(sidx_s)
+            except (ValueError, AttributeError):
+                continue
+            status = ToothSurfaceStatus.objects.filter(code=code).first() if code else None
+            ToothSurfaceCondition.objects.update_or_create(
+                patient=treatment.patient, tooth_number=tnum, surface_index=sidx,
+                defaults={"status": status, "updated_by": request.user},
+            )
+    # дёсны зубов: {"36": "parodontoz", ...} → upsert ToothGumCondition
+    gums = data.get("gums")
+    if isinstance(gums, dict):
+        for num, code in gums.items():
+            try:
+                tnum = int(num)
+            except (ValueError, TypeError):
+                continue
+            status = ToothGumStatus.objects.filter(code=code).first() if code else None
+            ToothGumCondition.objects.update_or_create(
+                patient=treatment.patient, tooth_number=tnum,
+                defaults={"status": status, "updated_by": request.user},
+            )
     # план/процедуры — сохраняем и при автосохранении (без списания материалов)
     if isinstance(data.get("plan"), list):
         _apply_plan(treatment, data["plan"], request.user, do_writeoff=False)
@@ -208,7 +371,8 @@ def visit_save(request, pk):
 @login_required
 @require_POST
 def visit_file_upload(request, pk):
-    """Загрузка фото/рентгена на шаге Осмотр (привязка к зубу). AJAX, до 10 файлов."""
+    """Загрузка фото/рентгена на шаге Осмотр (привязка к зубу). AJAX, до 10 файлов.
+    Разрешена и после завершения приёма — см. docstring visit_save."""
     from .models import TreatmentFile
     treatment = get_object_or_404(Treatment, pk=pk)
     files = request.FILES.getlist("files") or request.FILES.getlist("file")
@@ -342,6 +506,8 @@ def visit_commit(request, pk):
     from apps.services.models import Service
     from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
     treatment = get_object_or_404(Treatment.objects.select_related("patient", "doctor"), pk=pk)
+    if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
+        return JsonResponse({"error": "Приём уже завершён"}, status=403)
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):

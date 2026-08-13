@@ -1,0 +1,36 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Персонал{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="title_staff">Персонал</h1>
+        <div class="topbar-right">
+          <button class="btn btn-ghost" onclick="openNewRole()">+ <span data-i18n="title_m_role">Новая роль</span></button>
+          <button class="btn btn-cobalt" onclick="openNewStaff()">+ <span data-i18n="btn_add_staff">Добавить сотрудника</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="tab-strip">
+          <button class="active" id="staffTabBtn" onclick="staffTab('list')" data-i18n="w_staff">Сотрудники</button>
+          <button id="rolesTabBtn" onclick="staffTab('roles')" data-i18n="w_roles_perms">Роли и права доступа</button>
+        </div>
+
+        <div id="staffPanel">
+          <div class="card">
+            <table>
+              <thead><tr><th data-i18n="w_staff_member">Сотрудник</th><th data-i18n="w_role">Роль</th><th data-i18n="w_branch">Филиал</th><th data-i18n="w_visits_per_week">Приёмов/нед</th><th data-i18n="w_phone">Телефон</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
+              <tbody id="staffTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rolesPanel" class="hidden">
+          <div style="font-size:11.5px;color:var(--ink-faint);margin-bottom:10px;"><span data-i18n="w_click_role_hint">Кликните по роли, чтобы посмотреть/изменить права и сотрудников</span></div>
+          <div class="card">
+            <table>
+              <thead><tr><th data-i18n="w_role">Роль</th><th data-i18n="w_type">Тип</th><th data-i18n="nav_пациенты">Пациенты</th><th data-i18n="nav_финансы">Финансы</th><th data-i18n="nav_персонал">Персонал</th><th data-i18n="nav_отч_ты">Отчёты</th><th data-i18n="w_staff_count">Сотрудников</th></tr></thead>
+              <tbody id="rolesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+{% endblock %}

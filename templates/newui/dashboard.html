@@ -1,0 +1,38 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Дашборд{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <div><h1 data-i18n="title_dashboard">Дашборд</h1><div class="topbar-sub"><span class="dot-live"></span> <span data-i18n="w_updated_now">обновлено только что</span></div></div>
+        <div class="topbar-right">
+          <div class="search-box">⌕ <span data-i18n="w_search_hint_dash">Пациент, запись, заявка…</span></div>
+          <button class="icon-btn">🔔<span class="badge-dot"></span></button>
+          <button class="btn btn-cobalt" onclick="openNewAppt()">+ <span data-i18n="w_new_appt">Новая запись</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="kpi-grid">
+          <div class="card kpi b-cobalt"><div class="kpi-top"><span data-i18n="w_revenue_today">Выручка сегодня</span><span class="kpi-delta" id="kpi-revenue-delta"></span></div><b id="kpi-revenue-today">—</b><span class="lbl" id="kpi-revenue-sub"></span></div>
+          <div class="card kpi b-teal"><div class="kpi-top"><span data-i18n="w_patients_today">Пациентов сегодня</span></div><b id="kpi-patients-today">—</b><span class="lbl" id="kpi-patients-sub"></span></div>
+          <div class="card kpi b-amber"><div class="kpi-top"><span data-i18n="w_new_patients_month">Новых пациентов (месяц)</span></div><b id="kpi-new-patients-month">—</b><span class="lbl" id="kpi-new-patients-sub"></span></div>
+          <div class="card kpi b-coral"><div class="kpi-top"><span data-i18n="w_lab_orders">Заказы лаборатории</span><span class="kpi-delta down" id="kpi-lab-delta"></span></div><b id="kpi-lab-open">—</b><span class="lbl" data-i18n="w_open_orders">открытых заказов</span></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_revenue_week">Выручка за неделю</h3><span class="link-btn" onclick="location.href='/new/finance/'" data-i18n="w_link_finance">Финансы →</span></div>
+            <div class="card-body">
+              <div class="bars" id="week-revenue-bars"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_new_patients">Новые пациенты</h3><span class="link-btn" onclick="location.href='/new/patients/'" data-i18n="w_link_patients">Пациенты →</span></div>
+            <div class="card-body" id="recent-patients-list"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 data-i18n="w_upcoming_today">Ближайшие приёмы сегодня</h3><span class="link-btn" onclick="location.href='/new/schedule/'" data-i18n="w_link_schedule">Расписание →</span></div>
+          <div class="card-body" id="upcoming-appts-list"></div>
+        </div>
+      </div>
+{% endblock %}

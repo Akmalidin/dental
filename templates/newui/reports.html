@@ -1,0 +1,207 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Отчёты{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
+      <div class="page">
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Показатели ниже — реальные. Конструктор сравнения, графики, вкладки «ИИ-помощник» и детальная статистика по врачам/кабинетам/повторным визитам пока не подключены к базе (ИИ-рекомендаций в системе вообще нет).</span></div>
+        <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
+          <button class="chip" id="rtAI" onclick="reportsTab('ai')">✦ <span data-i18n="w_ai_assistant">ИИ-помощник</span></button>
+          <button class="chip" id="rtCancelled" onclick="reportsTab('cancelled')"><span data-i18n="w_cancelled_visits">Отменённые визиты</span></button>
+          <button class="chip" id="rtDoctors" onclick="reportsTab('doctors')"><span data-i18n="w_doctor_stats">Статистика по врачам</span></button>
+          <button class="chip" id="rtRooms" onclick="reportsTab('rooms')"><span data-i18n="w_room_load">Загрузка кабинетов</span></button>
+          <button class="chip" id="rtRepeat" onclick="reportsTab('repeat')"><span data-i18n="w_repeat_visits">Повторные визиты</span></button>
+          <button class="chip" id="rtSources" onclick="reportsTab('sources')"><span data-i18n="w_lead_sources">Источники заявок</span></button>
+        </div>
+
+        <!-- ---- ОБЩИЙ ОТЧЁТ ---- -->
+        <div id="rpOverview">
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head"><h3 data-i18n="w_comparison_builder">Конструктор сравнения</h3></div>
+            <div class="card-body">
+              <div class="form-row2" style="grid-template-columns:1fr 1fr 1fr;">
+                <div class="form-group"><label data-i18n="w_compare">Сравнить</label>
+                  <select id="rcDimension" onchange="renderReportConstructor()">
+                    <option value="doctors" data-i18n="nav_расписание_врачей">Врачи</option>
+                    <option value="rooms" data-i18n="w_rooms">Кабинеты</option>
+                    <option value="materials" data-i18n="w_material">Материалы</option>
+                    <option value="services" data-i18n="w_services">Услуги</option>
+                    <option value="sources" data-i18n="w_lead_sources">Источники заявок</option>
+                  </select>
+                </div>
+                <div class="form-group"><label data-i18n="w_metric">Показатель</label>
+                  <select id="rcMetric" onchange="renderReportConstructor()">
+                    <option value="revenue" data-i18n="w_revenue">Выручка</option>
+                    <option value="count" data-i18n="w_count">Количество</option>
+                    <option value="avgcheck" data-i18n="w_avg_check">Средний чек</option>
+                    <option value="utilization" data-i18n="w_utilization">Загрузка, %</option>
+                  </select>
+                </div>
+                <div class="form-group"><label data-i18n="w_chart_type">Тип графика</label>
+                  <select id="rcType" onchange="renderReportConstructor()">
+                    <option value="bar" data-i18n="w_bar_chart">Столбчатый</option>
+                    <option value="donut" data-i18n="w_donut_chart">Круговой</option>
+                  </select>
+                </div>
+              </div>
+              <div id="rcChartArea" style="margin-top:6px;"></div>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_revenue_month">Выручка за месяц</span><b style="font-size:22px" id="rp-revenue">—</b></div>
+            <div class="card kpi b-teal"><span class="lbl" data-i18n="w_visits_completed">Приёмов завершено</span><b style="font-size:22px" id="rp-completed">—</b></div>
+            <div class="card kpi b-coral"><span class="lbl" data-i18n="w_visits_cancelled">Отменено визитов</span><b style="font-size:22px" id="rp-cancelled">—</b><span class="lbl" id="rp-cancelled-sub"></span></div>
+            <div class="card kpi b-amber"><span class="lbl" data-i18n="w_noshow">Не пришли (no-show)</span><b style="font-size:22px" id="rp-noshow">—</b></div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_revenue_by_week">Выручка по неделям</h3></div>
+              <div class="card-body">
+                <div class="bars">
+                  <div class="col"><div class="bar" style="height:55%"></div><span class="lbl">Нед. 1</span></div>
+                  <div class="col"><div class="bar" style="height:70%"></div><span class="lbl">Нед. 2</span></div>
+                  <div class="col"><div class="bar" style="height:62%"></div><span class="lbl">Нед. 3</span></div>
+                  <div class="col"><div class="bar" style="height:88%"></div><span class="lbl">Нед. 4</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_lead_sources">Источники заявок</h3></div>
+              <div class="card-body" id="ovSourcesChart"></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_doctor_load">Загрузка врачей</h3></div>
+              <div class="card-body" id="ovDoctorsChart"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_cancel_reasons">Причины отмены визитов</h3></div>
+              <div class="card-body" id="ovCancelReasonsChart"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- ИИ-ПОМОЩНИК ---- -->
+        <div id="rpAI" class="hidden">
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head"><h3 data-i18n="w_ai_today">✦ Рекомендации ИИ на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);">Обновлено 31.07.2026, 09:00</span></div>
+            <div class="card-body" id="aiInsightsList"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_ask_ai">Спросить у ИИ</h3></div>
+            <div class="card-body">
+              <div id="aiChatMessages" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;margin-bottom:12px;padding-right:4px;"></div>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="aiChatInput" placeholder="Например: где мы теряем деньги?" onkeydown="if(event.key==='Enter')sendAIQuestion();">
+                <button class="btn btn-cobalt" onclick="sendAIQuestion()" data-i18n="w_ask">Спросить</button>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                <button class="chip" onclick="askAIPreset('выручка')">Как выручка?</button>
+                <button class="chip" onclick="askAIPreset('врачи')">Кого догрузить?</button>
+                <button class="chip" onclick="askAIPreset('отмены')">Почему отменяют?</button>
+                <button class="chip" onclick="askAIPreset('должники')">Кто должен оплатить?</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- ОТДЕЛЬНЫЕ ОТЧЁТЫ ---- -->
+        <div id="rpCancelled" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_cancel_reasons_share">Причины отмен — доля</h3></div>
+            <div class="card-body" id="cancelledChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Отменённые визиты · Июль 2026</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_reason">Причина</th></tr></thead>
+              <tbody>
+                <tr><td>Осмонова Н.</td><td>29.07.2026</td><td>Асанов Б.</td><td><span class="pill coral">Заболел</span></td></tr>
+                <tr><td>Токтогулов Э.</td><td>27.07.2026</td><td>Нурбекова С.</td><td><span class="pill amber">Не успевает</span></td></tr>
+                <tr><td>Бекова Ж.</td><td>25.07.2026</td><td>Мамедов Т.</td><td><span class="pill grey">Забыл</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rpDoctors" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_revenue_share_doctors">Доля выручки по врачам</h3></div>
+            <div class="card-body" id="doctorsChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Статистика по врачам · Июль 2026</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_utilization_short">Загрузка</th></tr></thead>
+              <tbody>
+                <tr><td>Асанов Б.</td><td class="mono">184</td><td class="mono">1 240 000 сом</td><td class="mono">6 740 сом</td><td><span class="pill teal">92%</span></td></tr>
+                <tr><td>Нурбекова С.</td><td class="mono">96</td><td class="mono">980 000 сом</td><td class="mono">10 200 сом</td><td><span class="pill teal">78%</span></td></tr>
+                <tr><td>Мамедов Т.</td><td class="mono">61</td><td class="mono">610 000 сом</td><td class="mono">10 000 сом</td><td><span class="pill amber">54%</span></td></tr>
+                <tr><td>Джумабекова А.</td><td class="mono">44</td><td class="mono">120 000 сом</td><td class="mono">2 700 сом</td><td><span class="pill coral">31%</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rpRooms" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3>Загрузка кабинетов</h3></div>
+            <div class="card-body" id="roomsChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Загрузка кабинетов · неделя</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_room">Кабинет</th><th data-i18n="w_hours_busy">Часов занято</th><th data-i18n="w_utilization_short">Загрузка</th></tr></thead>
+              <tbody>
+                <tr><td>Кабинет 1</td><td class="mono">38 ч</td><td><span class="pill amber">54%</span></td></tr>
+                <tr><td>Кабинет 2</td><td class="mono">65 ч</td><td><span class="pill teal">92%</span></td></tr>
+                <tr><td>Кабинет 3</td><td class="mono">22 ч</td><td><span class="pill coral">31%</span></td></tr>
+                <tr><td>Кабинет 4</td><td class="mono">55 ч</td><td><span class="pill teal">78%</span></td></tr>
+                <tr><td>Кабинет 5</td><td class="mono">40 ч</td><td><span class="pill amber">57%</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rpRepeat" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_visits_per_patient">Количество визитов на пациента</h3></div>
+            <div class="card-body" id="repeatChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Повторные визиты · квартал</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_visits">Визитов</th><th data-i18n="w_last_visit_full">Последний визит</th><th data-i18n="w_status">Статус</th></tr></thead>
+              <tbody>
+                <tr><td>Кыдыров Р.</td><td class="mono">6</td><td>30.07.2026</td><td><span class="pill teal">Активный</span></td></tr>
+                <tr><td>Молдалиева Т.</td><td class="mono">4</td><td>28.07.2026</td><td><span class="pill teal">Активный</span></td></tr>
+                <tr><td>Осмонова Н.</td><td class="mono">1</td><td>12.02.2026</td><td><span class="pill coral">Не был 5 мес.</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rpSources" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_lead_share_sources">Доля заявок по источникам</h3></div>
+            <div class="card-body" id="sourcesChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Аналитика по источникам заявок · Июль 2026</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_source">Источник</th><th data-i18n="w_leads">Заявок</th><th data-i18n="w_conversion">Конверсия в визит</th><th data-i18n="w_acquisition_cost">Стоимость привлечения</th></tr></thead>
+              <tbody>
+                <tr><td>Instagram</td><td class="mono">142</td><td><span class="pill teal">64%</span></td><td class="mono">340 сом</td></tr>
+                <tr><td>Звонки</td><td class="mono">98</td><td><span class="pill teal">71%</span></td><td class="mono">—</td></tr>
+                <tr><td>WhatsApp / Telegram</td><td class="mono">71</td><td><span class="pill amber">52%</span></td><td class="mono">180 сом</td></tr>
+                <tr><td>Сайт</td><td class="mono">58</td><td><span class="pill coral">38%</span></td><td class="mono">510 сом</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+{% endblock %}

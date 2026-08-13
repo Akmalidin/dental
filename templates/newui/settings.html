@@ -1,0 +1,180 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Настройки клиники{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_settings">Настройки клиники</h1></div>
+      <div class="page">
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты» и напоминания WhatsApp/Telegram ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). Остальные пункты слева (кабинеты, результаты визита, причины отмены, способы оплаты, страховые и т.д.) пока демонстрационные.</span></div>
+        <div class="settings-grid">
+          <div class="settings-nav">
+            <div class="grp" data-i18n="w_grp_clinic">Клиника</div>
+            <button class="active" id="setNavGeneral" onclick="setSettingsTab('general')" data-i18n="w_general">Общие</button>
+            <button id="setNavContacts" onclick="setSettingsTab('contacts')" data-i18n="w_contacts_req">Контакты и реквизиты</button>
+            <button id="setNavWa" onclick="setSettingsTab('wa')">WhatsApp / Telegram</button>
+            <button onclick="settingsNotWired()" data-i18n="w_cabinets_sched">Кабинеты и график</button>
+            <div class="grp" data-i18n="w_grp_reception">Приём пациентов</div>
+            <button onclick="openModal('m-visitresult')" data-i18n="w_visit_results">Результаты визита</button>
+            <button onclick="openModal('m-cancel')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
+            <button onclick="settingsNotWired()" data-i18n="title_m_treatplan_stage_card">Карточка лечения</button>
+            <div class="grp" data-i18n="w_grp_money">Деньги</div>
+            <button onclick="settingsNotWired()" data-i18n="w_payment_methods">Способы оплаты</button>
+            <button onclick="settingsNotWired()" data-i18n="w_deposit_accounts">Депозитные счета</button>
+            <button onclick="openModal('m-insurance')" data-i18n="w_insurance_companies">Страховые компании</button>
+            <div class="grp" data-i18n="w_grp_system">Система</div>
+            <button onclick="settingsNotWired()" data-i18n="w_integrations">Интеграции</button>
+            <button onclick="settingsNotWired()" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
+          </div>
+
+          <form id="settingsForm" onsubmit="return false;">
+          <div id="setPanelGeneral" class="card">
+            <div class="card-head"><h3 data-i18n="w_general_settings">Общие настройки</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div class="field-row">
+                <label><span data-i18n="w_slot_interval">Интервал слота календаря</span><div class="hint" data-i18n="w_grid_step">Шаг сетки расписания</div></label>
+                <select id="set-slot"><option value="15" data-i18n="w_15min">15 минут</option><option value="30" data-i18n="w_30min">30 минут</option><option value="60" data-i18n="w_60min">60 минут</option></select>
+              </div>
+              <div class="field-row">
+                <label>Язык интерфейса<div class="hint">Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже</div></label>
+                <select id="set-language" onchange="setLanguage(this.value)"><option value="ru">Русский</option><option value="ky">Кыргызча</option><option value="uz">O'zbekcha</option><option value="en">English</option></select>
+              </div>
+              <div class="field-row">
+                <label data-i18n="w_timezone">Часовой пояс</label>
+                <select id="set-timezone"></select>
+              </div>
+              <div class="field-row" style="border-bottom:none;">
+                <label></label>
+                <button class="btn btn-primary" type="button" onclick="saveSettingsGeneral()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div id="setPanelContacts" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_contacts_req">Контакты и реквизиты</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input type="text" id="set-name"></div>
+              <div class="field-row"><label>Телефон</label><input type="text" id="set-phone"></div>
+              <div class="field-row"><label>Адрес</label><input type="text" id="set-address"></div>
+              <div class="field-row"><label data-i18n="w_receipt_format">Формат чека</label><select id="set-receipt-format"></select></div>
+              <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input type="text" id="set-receipt-name"></div>
+              <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input type="text" id="set-receipt-legal"></div>
+              <div class="field-row"><label>ИНН/ИИН</label><input type="text" id="set-receipt-inn"></div>
+              <div class="field-row"><label data-i18n="w_receipt_address">Адрес в чеке</label><input type="text" id="set-receipt-address"></div>
+              <div class="field-row"><label data-i18n="w_warranty_terms">Условия гарантии (лаб. работы)</label><textarea rows="3" id="set-warranty"></textarea></div>
+              <div class="field-row" style="border-bottom:none;">
+                <label></label>
+                <button class="btn btn-primary" type="button" onclick="saveSettingsContacts()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div id="setPanelWa" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_wa_tg_reminders">WhatsApp / Telegram — напоминания</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div class="field-row">
+                <label><span data-i18n="w_wa_connected">WhatsApp подключён</span><div class="hint" id="setWaState">—</div></label>
+                <a class="btn btn-ghost btn-sm" href="/notifications/wa-connect/"><span data-i18n="w_configure_connection">Настроить подключение →</span></a>
+              </div>
+              <div class="field-row">
+                <label><span data-i18n="w_tg_bot">Telegram-бот</span><div class="hint" id="setTgState">—</div></label>
+                <a class="btn btn-ghost btn-sm" href="/notifications/tg-connect/"><span data-i18n="w_configure_bot">Настроить бота →</span></a>
+              </div>
+              <div class="field-row">
+                <label data-i18n="w_remind_day_before">Напоминать за день до приёма</label>
+                <div class="toggle"><input type="checkbox" id="set-remind-day"></div>
+              </div>
+              <div class="field-row">
+                <label data-i18n="w_remind_hour_before">Напоминать за час до приёма</label>
+                <div class="toggle"><input type="checkbox" id="set-remind-hour"></div>
+              </div>
+              <div class="field-row">
+                <label><span data-i18n="w_remind_debtors">Напоминать должникам каждые N дней</span><div class="hint" data-i18n="w_zero_off">0 — выключено</div></label>
+                <input type="number" min="0" id="set-remind-debt-days" style="max-width:120px;">
+              </div>
+              <div class="field-row" style="border-bottom:none;">
+                <label></label>
+                <button class="btn btn-primary" type="button" onclick="saveSettingsWa()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
+              </div>
+            </div>
+          </div>
+          </form>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const s = window.newuiSettingsData;
+  if(!s) return;
+
+  document.getElementById('set-slot').value = String(s.appointmentSlot);
+  document.getElementById('set-language').value = s.language;
+  document.getElementById('set-timezone').innerHTML = s.timezoneChoices.map(t=>`<option value="${t.code}" ${t.code===s.timezone?'selected':''}>${t.label}</option>`).join('');
+
+  document.getElementById('set-name').value = s.name;
+  document.getElementById('set-phone').value = s.phone;
+  document.getElementById('set-address').value = s.address;
+  document.getElementById('set-receipt-format').innerHTML = s.receiptFormatChoices.map(r=>`<option value="${r.code}" ${r.code===s.receiptFormat?'selected':''}>${r.label}</option>`).join('');
+  document.getElementById('set-receipt-name').value = s.receiptClinicName;
+  document.getElementById('set-receipt-legal').value = s.receiptLegalName;
+  document.getElementById('set-receipt-inn').value = s.receiptInn;
+  document.getElementById('set-receipt-address').value = s.receiptAddress;
+  document.getElementById('set-warranty').value = s.warrantyTerms;
+
+  document.getElementById('setWaState').textContent = s.waEnabled ? '🟢 Включён' : '⚪ Выключен';
+  document.getElementById('setTgState').textContent = s.telegramEnabled ? ('🟢 ' + (s.telegramBotUsername ? '@'+s.telegramBotUsername : 'Включён')) : '⚪ Выключен';
+  document.getElementById('set-remind-day').checked = s.waRemindDay;
+  document.getElementById('set-remind-hour').checked = s.waRemindHour;
+  document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
+
+  window.setSettingsTab = function(tab){
+    ['general','contacts','wa'].forEach(t=>{
+      document.getElementById('setPanel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden', t!==tab);
+      document.getElementById('setNav'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
+    });
+  };
+  // Пункты без реального раздела (пока) — явная обратная связь вместо
+  // молчаливого «ничего не произошло» при клике.
+  window.settingsNotWired = function(){
+    showToast('Этот раздел настроек ещё не подключён к реальным данным', 'error');
+  };
+
+  // Поля формы ClinicSettingsForm без своего контрола в новом интерфейсе —
+  // отправляем текущими значениями, чтобы частичное сохранение их не стёрло.
+  function baseFormData(){
+    const fd = new FormData();
+    fd.append('currency', s.currency);
+    fd.append('telegram_bot_token', s.telegramBotToken);
+    if(s.requireUniquePhone) fd.append('require_unique_phone', 'on');
+    if(s.visitsJournalStaff) fd.append('visits_journal_staff', 'on');
+    fd.append('name', document.getElementById('set-name').value);
+    fd.append('phone', document.getElementById('set-phone').value);
+    fd.append('address', document.getElementById('set-address').value);
+    fd.append('appointment_slot', document.getElementById('set-slot').value);
+    fd.append('language', document.getElementById('set-language').value);
+    fd.append('receipt_format', document.getElementById('set-receipt-format').value);
+    fd.append('receipt_clinic_name', document.getElementById('set-receipt-name').value);
+    fd.append('receipt_legal_name', document.getElementById('set-receipt-legal').value);
+    fd.append('receipt_inn', document.getElementById('set-receipt-inn').value);
+    fd.append('receipt_address', document.getElementById('set-receipt-address').value);
+    fd.append('warranty_terms', document.getElementById('set-warranty').value);
+    fd.append('timezone', document.getElementById('set-timezone').value);
+    return fd;
+  }
+  async function submitSettings(){
+    const res = await postForm('/settings/', baseFormData());
+    if(res.redirected){ flashAndReload('Настройки сохранены'); }
+    else { showToast('Не удалось сохранить — проверьте поля', 'error'); }
+  }
+  window.saveSettingsGeneral = submitSettings;
+  window.saveSettingsContacts = submitSettings;
+  window.saveSettingsWa = async function(){
+    const fd = new FormData();
+    if(document.getElementById('set-remind-day').checked) fd.append('wa_remind_day', 'on');
+    if(document.getElementById('set-remind-hour').checked) fd.append('wa_remind_hour', 'on');
+    fd.append('wa_remind_debt_days', document.getElementById('set-remind-debt-days').value || '0');
+    const res = await postForm('/notifications/wa-settings/', fd);
+    if(res.redirected){ flashAndReload('Настройки напоминаний сохранены'); }
+    else { showToast('Не удалось сохранить', 'error'); }
+  };
+})();
+</script>
+{% endblock %}

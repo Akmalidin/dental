@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from apps.users.models import Branch
 from apps.patients.models import Patient
 from apps.tenancy import ClinicScopedModel
@@ -119,6 +120,67 @@ class PaymentAllocation(models.Model):
 
     def __str__(self):
         return f"{self.payment_id} → приём #{self.treatment_id}: {self.amount}"
+
+
+class CashShift(ClinicScopedModel):
+    """Кассовая смена: открытие/закрытие, пересчёт наличных, Z-отчёт по
+    методам оплаты. Сами платежи (Payment) не привязаны к смене жёстко —
+    Z-отчёт считается по времени (opened_at..closed_at/сейчас) и филиалу,
+    той же логикой, что уже используется в /finance/ (Payment.method/type)."""
+    STATUS_OPEN = "open"
+    STATUS_CLOSED = "closed"
+    STATUS_CHOICES = [(STATUS_OPEN, "Открыта"), (STATUS_CLOSED, "Закрыта")]
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="cash_shifts", verbose_name="Филиал")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_OPEN, verbose_name="Статус")
+    opened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="opened_cash_shifts", verbose_name="Открыл",
+    )
+    opened_at = models.DateTimeField(auto_now_add=True)
+    opening_cash = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Наличные на начало смены")
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="closed_cash_shifts", verbose_name="Закрыл",
+    )
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closing_cash_actual = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Наличные по факту на закрытии",
+    )
+
+    class Meta:
+        verbose_name = "Кассовая смена"
+        verbose_name_plural = "Кассовые смены"
+        ordering = ["-opened_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["branch"], condition=models.Q(status="open"), name="one_open_cash_shift_per_branch"),
+        ]
+
+    def __str__(self):
+        return f"Смена {self.branch} — {self.opened_at:%d.%m.%Y %H:%M}"
+
+    def payments_qs(self):
+        end = self.closed_at or timezone.now()
+        return Payment.objects.filter(branch=self.branch, created_at__gte=self.opened_at, created_at__lte=end)
+
+    def z_report(self):
+        from decimal import Decimal
+        totals = {code: Decimal(0) for code, _ in Payment.METHOD_CHOICES}
+        income_total = Decimal(0)
+        refund_total = Decimal(0)
+        for p in self.payments_qs().only("amount", "method", "type"):
+            signed = p.amount if p.type == Payment.TYPE_INCOME else -p.amount
+            totals[p.method] = totals.get(p.method, Decimal(0)) + signed
+            if p.type == Payment.TYPE_INCOME:
+                income_total += p.amount
+            else:
+                refund_total += p.amount
+        expected_cash = self.opening_cash + totals.get(Payment.METHOD_CASH, Decimal(0))
+        return {
+            "byMethod": totals,
+            "incomeTotal": income_total,
+            "refundTotal": refund_total,
+            "expectedCash": expected_cash,
+        }
 
 
 class Expense(ClinicScopedModel):

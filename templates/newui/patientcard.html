@@ -1,0 +1,166 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Карта пациента{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="title_patientcard">Карта пациента</h1>
+        <div class="topbar-right">
+          <button class="btn btn-ghost" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_list">К списку</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div id="pcNotWired" class="hidden" style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_upload_not_avail">Загрузка новых документов/снимков из этого раздела пока недоступна — для этого используйте старый интерфейс.</span></div>
+        <div class="patient-header">
+          <div class="patient-id">
+            <div class="patient-avatar" id="pc-avatar">МТ</div>
+            <div><h2 id="pc-name">Молдалиева Толгонай</h2><span id="pc-subline">ID #0231 · 34 года · +996 555 12 34 56 · с нами с марта 2024</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="pill teal" id="pc-status-pill" style="padding:6px 14px;font-size:12px;">—</span>
+            <a href="tel:" id="pc-call-link" class="btn btn-ghost btn-sm" title="Позвонить пациенту">📞 <span data-i18n="w_call">Позвонить</span></a>
+            <button class="btn btn-ghost btn-sm" onclick="openEditPatient()">✎ <span data-i18n="w_edit_data">Изменить данные</span></button>
+          </div>
+        </div>
+        <div class="hidden" id="pcBlacklistWarning" style="background:var(--coral-tint);border:1px solid var(--coral);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:13px;color:var(--coral);"><b data-i18n="w_patient_in_blacklist">⚠ Пациент в чёрном списке.</b> <span id="pcBlacklistReason"></span></div>
+          <button class="btn btn-ghost btn-sm" onclick="removeCurrentFromBlacklist()"><span data-i18n="w_remove_from_list">Убрать из списка</span></button>
+        </div>
+        <div class="tab-strip">
+          <button id="pcTabInfo" onclick="pcTab('info')" data-i18n="w_all_info">Вся информация</button>
+          <button class="active" id="pcTabTeeth" onclick="pcTab('teeth')" data-i18n="w_tooth_chart">Зубная карта</button>
+          <button id="pcTabHistory" onclick="pcTab('history')" data-i18n="w_visit_history">История приёмов</button>
+          <button id="pcTabPlan" onclick="pcTab('plan')" data-i18n="w_treatment_plan_one">План лечения</button>
+          <button id="pcTabFinance" onclick="pcTab('finance')" data-i18n="nav_финансы">Финансы</button>
+          <button id="pcTabDocs" onclick="pcTab('docs')" data-i18n="w_documents">Документы</button>
+        </div>
+
+        <!-- ---- ВСЯ ИНФОРМАЦИЯ ---- -->
+        <div id="pcPanelInfo" class="hidden">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_personal_data">Личные данные</h3></div>
+              <div class="card-body">
+                <div class="row"><div class="row-main"><b data-i18n="w_fullname">ФИО</b><span id="pi-fullname">Молдалиева Толгонай</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_birthdate">Дата рождения</b><span id="pi-birthdate">14.05.1992 · 34 года</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_gender">Пол</b><span id="pi-gender">Женский</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_phone">Телефон</b><span id="pi-phone">+996 555 12 34 56</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_address">Адрес</b><span id="pi-address">г. Бишкек</span></div></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3 data-i18n="w_clinical_data">Клинические данные</h3></div>
+              <div class="card-body">
+                <div class="row"><div class="row-main"><b data-i18n="w_patient_id">ID пациента</b><span id="pi-id">#0231</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_patient_since">Пациент с</b><span id="pi-since">марта 2024</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_respdoctor">Ответственный врач</b><span id="pi-doctor">Асанов Б.</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_source">Источник</b><span id="pi-source">Instagram</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_allergies">Аллергии / особенности</b><span id="pi-notes">Не выявлено</span></div></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_balance">Баланс</b></div><span class="pill" id="pi-balance-pill">—</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- ЗУБНАЯ КАРТА ---- -->
+        <div id="pcPanelTeeth">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head">
+              <h3 data-i18n="w_tooth_formula">Зубная формула</h3>
+              <span style="font-size:11px;color:var(--ink-soft)">Обновлено 28.07.2026</span>
+            </div>
+            <div class="card-body">
+              <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <button class="chip active" id="odTabAdult" onclick="odontoTab('adult')" style="border-radius:100px;" data-i18n="w_adult_teeth">Постоянные зубы</button>
+                <button class="chip" id="odTabBaby" onclick="odontoTab('baby')" style="border-radius:100px;" data-i18n="w_baby_teeth">Молочные зубы</button>
+                <button class="chip" id="odTabJaws" onclick="odontoTab('jaws')" style="border-radius:100px;" data-i18n="w_jaws">Челюсти</button>
+              </div>
+
+              <div id="odPanelAdult">
+                <div class="odontogram-lg" id="patientOdontogram"></div>
+              </div>
+
+              <div id="odPanelBaby" class="hidden">
+                <div class="odontogram-lg" id="patientOdontogramBaby" style="grid-template-columns:repeat(10,1fr);max-width:520px;"></div>
+              </div>
+
+              <div id="odPanelJaws" class="hidden">
+                <div class="row"><div class="row-main"><b data-i18n="w_upper_jaw">Верхняя челюсть</b><span>Без особенностей, последний осмотр 28.07.2026</span></div><span class="pill teal">Норма</span></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_lower_jaw">Нижняя челюсть</b><span>Умеренная стираемость, наблюдение</span></div><span class="pill amber">Наблюдение</span></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_bite">Прикус</b><span>Ортогнатический</span></div><span class="pill teal">Норма</span></div>
+                <div class="row"><div class="row-main"><b data-i18n="w_tmj">ВНЧС</b><span>Жалоб нет</span></div><span class="pill teal">Норма</span></div>
+              </div>
+
+              <div class="legend" style="margin-top:16px;" id="odLegend"></div>
+              <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;"><span data-i18n="w_click_tooth_hint">Нажмите на зуб, чтобы указать его состояние</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_current_tooth_states">Текущие состояния зубов</h3></div>
+            <div class="card-body" id="toothStatesSummary"></div>
+          </div>
+        </div>
+
+        <!-- ---- ИСТОРИЯ ПРИЁМОВ ---- -->
+        <div id="pcPanelHistory" class="hidden card">
+          <div class="card-head"><h3>История приёмов</h3></div>
+          <table>
+            <thead><tr><th>Дата</th><th>Услуга</th><th>Врач</th><th>Сумма</th><th>Статус</th></tr></thead>
+            <tbody>
+              <tr><td>28.07.2026</td><td>Пломбирование, зуб 26</td><td>Асанов Б.</td><td class="mono">3 200 сом</td><td><span class="pill teal">Завершён</span></td></tr>
+              <tr><td>14.06.2026</td><td>Профессиональная чистка</td><td>Джумабекова А.</td><td class="mono">1 800 сом</td><td><span class="pill teal">Завершён</span></td></tr>
+              <tr><td>02.03.2024</td><td>Консультация, диагностика</td><td>Асанов Б.</td><td class="mono">500 сом</td><td><span class="pill teal">Завершён</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ---- ПЛАН ЛЕЧЕНИЯ ---- -->
+        <div id="pcPanelPlan" class="hidden card">
+          <div class="card-head"><h3>План лечения</h3><span class="link-btn" onclick="openModal('m-treatplan')">+ Добавить этап</span></div>
+          <table>
+            <thead><tr><th>Этап</th><th>Зуб</th><th>Врач</th><th>Стоимость</th><th>Статус</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>Пломбирование (композит)</td><td class="mono">26</td><td>Асанов Б.</td><td class="mono">3 200 сом</td><td><span class="pill teal">Оплачено</span></td><td></td></tr>
+              <tr><td>Профессиональная чистка</td><td class="mono">—</td><td>Джумабекова А.</td><td class="mono">1 800 сом</td><td><span class="pill teal">Оплачено</span></td><td></td></tr>
+              <tr id="planRowUnpaid"><td>Установка коронки</td><td class="mono">14</td><td>Мамедов Т.</td><td class="mono">18 500 сом</td><td><span class="pill amber" id="planStatusUnpaid">Ожидает оплаты</span></td><td><button class="btn btn-ghost btn-sm" id="planSendBtn" onclick="sendToCashier('Установка коронки, зуб 14', 18500, 'Молдалиева Толгонай', this, 'planStatusUnpaid')">Отправить в кассу</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ---- ФИНАНСЫ ---- -->
+        <div id="pcPanelFinance" class="hidden">
+          <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+            <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">5 500 сом</b></div>
+            <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">0 сом</b></div>
+            <div class="card kpi b-amber"><span class="lbl">На депозите</span><b style="font-size:20px">0 сом</b></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Платежи</h3><button class="btn btn-cobalt btn-sm" onclick="openModal('m-payment')">+ Приём оплаты</button></div>
+            <table>
+              <thead><tr><th>Дата</th><th>Назначение</th><th>Способ</th><th>Сумма</th></tr></thead>
+              <tbody>
+                <tr><td>28.07.2026</td><td>Пломбирование, зуб 26</td><td>Карта</td><td class="mono" style="color:var(--teal)">+3 200 сом</td></tr>
+                <tr><td>14.06.2026</td><td>Проф. чистка</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+1 800 сом</td></tr>
+                <tr><td>02.03.2024</td><td>Консультация</td><td>Карта</td><td class="mono" style="color:var(--teal)">+500 сом</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ---- ДОКУМЕНТЫ ---- -->
+        <div id="pcPanelDocs" class="hidden card">
+          <div class="card-head"><h3>Документы</h3><button class="btn btn-cobalt btn-sm">+ Загрузить</button></div>
+          <div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);">
+            <div style="font-size:13px;">Пока нет загруженных документов</div>
+            <div style="font-size:11.5px;margin-top:4px;">Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»</div>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+if(window.newuiOpenPatientId){
+  openPatientCard(window.newuiOpenPatientId);
+} else {
+  document.querySelector('.page').innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--ink-soft);"><span data-i18n="w_patient_not_found">Пациент не найден.</span></div></div>';
+}
+</script>
+{% endblock %}

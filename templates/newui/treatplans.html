@@ -1,0 +1,18 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Планы лечения{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_treatplans">Планы лечения</h1><div class="topbar-right"><button class="btn btn-cobalt" onclick="location.href='/patients/'" title="Новый план создаётся из карточки пациента в старом интерфейсе">+ <span data-i18n="w_new_plan">Новый план</span></button></div></div>
+      <div class="page">
+        <div class="kpi-grid">
+          <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_active_plans">Активные планы</span><b style="font-size:22px" id="tpKpiActive">0</b></div>
+          <div class="card kpi b-teal"><span class="lbl" data-i18n="w_completed_month">Завершены за месяц</span><b style="font-size:22px" id="tpKpiCompleted">0</b></div>
+          <div class="card kpi b-amber"><span class="lbl" data-i18n="w_awaiting_payment">Ожидают оплаты</span><b style="font-size:22px" id="tpKpiAwaiting">0</b></div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
+            <tbody id="treatplansTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

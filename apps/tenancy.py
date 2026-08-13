@@ -260,6 +260,25 @@ class SectionAccessMiddleware:
         ("/technicians", "technicians"),
         ("/tasks", "tasks"),
         ("/reports", "reports"),
+        # Новый интерфейс (/new/*) — те же разделы, что и в старом, просто
+        # другой URL-префикс. Без этого личные ограничения доступа
+        # (allowed_sections) обходились через /new/... — см. сессию про сборку
+        # ODONTIS-интерфейса.
+        ("/new/staff", "staff"),
+        ("/new/settings", "settings"),
+        ("/new/schedule", "appointments"),
+        ("/new/visitcard", "treatments"),
+        ("/new/treatplans", "treatments"),
+        ("/new/patients", "patients"),
+        ("/new/blacklist", "patients"),
+        ("/new/services", "services"),
+        ("/new/finance", "finance"),
+        ("/new/accounting", "finance"),
+        ("/new/cashdesk", "finance"),
+        ("/new/warehouse", "warehouse"),
+        ("/new/lab", "technicians"),
+        ("/new/reports", "reports"),
+        ("/new/audit", "reports"),
     ]
 
     def __init__(self, get_response):

@@ -1,0 +1,21 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Бухгалтерия{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="title_accounting">Бухгалтерия</h1><div class="topbar-right"><span id="acctMonthLabel" class="btn btn-ghost" style="pointer-events:none;"></span></div></div>
+      <div class="page">
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_acct_hint">Реальная выручка и расходы по категориям, заведённым в клинике (модели зарплат/аренды отдельной проводкой в системе нет — только то, что реально внесено как расход).</span></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_accruals">Начисления</h3></div>
+            <div class="card-body" id="acctLines"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_total_profit">Итого прибыль</h3></div>
+            <div class="card-body" style="text-align:center;padding:36px 18px;">
+              <div class="mono" style="font-size:30px;color:var(--teal);" id="acctProfit">0 сом</div>
+              <span class="lbl" style="display:block;margin-top:6px;" id="acctMargin">Рентабельность 0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+{% endblock %}
