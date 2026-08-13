@@ -3,15 +3,50 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Показатели ниже — реальные. Конструктор сравнения, графики, вкладки «ИИ-помощник» и детальная статистика по врачам/кабинетам/повторным визитам пока не подключены к базе (ИИ-рекомендаций в системе вообще нет).</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Расходы, Должники, Отменённые визиты, Статистика по врачам и Источники заявок — реальные данные за текущий месяц. Конструктор сравнения (свободный график), «ИИ-помощник», «Загрузка кабинетов» (нет модели кабинетов в системе) и «Повторные визиты» пока демонстрационные.</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
+          <button class="chip" id="rtExpenses" onclick="reportsTab('expenses')"><span data-i18n="w_expenses">Расходы</span></button>
+          <button class="chip" id="rtDebtors" onclick="reportsTab('debtors')"><span data-i18n="w_debtors">Должники</span></button>
           <button class="chip" id="rtAI" onclick="reportsTab('ai')">✦ <span data-i18n="w_ai_assistant">ИИ-помощник</span></button>
           <button class="chip" id="rtCancelled" onclick="reportsTab('cancelled')"><span data-i18n="w_cancelled_visits">Отменённые визиты</span></button>
           <button class="chip" id="rtDoctors" onclick="reportsTab('doctors')"><span data-i18n="w_doctor_stats">Статистика по врачам</span></button>
           <button class="chip" id="rtRooms" onclick="reportsTab('rooms')"><span data-i18n="w_room_load">Загрузка кабинетов</span></button>
           <button class="chip" id="rtRepeat" onclick="reportsTab('repeat')"><span data-i18n="w_repeat_visits">Повторные визиты</span></button>
           <button class="chip" id="rtSources" onclick="reportsTab('sources')"><span data-i18n="w_lead_sources">Источники заявок</span></button>
+        </div>
+
+        <!-- ---- РАСХОДЫ (реальные Expense/ExpenseCategory, за месяц) ---- -->
+        <div id="rpExpenses" class="hidden">
+          <div class="kpi-grid" style="margin-bottom:16px;">
+            <div class="card kpi b-coral"><span class="lbl" data-i18n="w_expenses_month">Расходы за месяц</span><b style="font-size:22px" id="rp-expenses-total">—</b></div>
+          </div>
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_expenses_by_category">Расходы по категориям</h3></div>
+            <div class="card-body" id="expensesCatChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_expenses_list">Список расходов · этот месяц</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_category">Категория</th><th data-i18n="w_description">Описание</th><th data-i18n="w_sum">Сумма</th></tr></thead>
+              <tbody id="expensesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ---- ДОЛЖНИКИ (реальный Patient.balance < 0) ---- -->
+        <div id="rpDebtors" class="hidden">
+          <div class="kpi-grid" style="margin-bottom:16px;">
+            <div class="card kpi b-coral"><span class="lbl" data-i18n="w_total_debt">Общий долг</span><b style="font-size:22px" id="rp-debtors-total">—</b></div>
+            <div class="card kpi b-amber"><span class="lbl" data-i18n="w_debtors_count">Должников</span><b style="font-size:22px" id="rp-debtors-count">—</b></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_debtors_list">Список должников</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_phone">Телефон</th><th data-i18n="w_debt">Долг</th></tr></thead>
+              <tbody id="debtorsTableBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- ---- ОБЩИЙ ОТЧЁТ ---- -->
@@ -111,19 +146,11 @@
 
         <!-- ---- ОТДЕЛЬНЫЕ ОТЧЁТЫ ---- -->
         <div id="rpCancelled" class="hidden">
-          <div class="card" style="margin-bottom:14px;">
-            <div class="card-head"><h3 data-i18n="w_cancel_reasons_share">Причины отмен — доля</h3></div>
-            <div class="card-body" id="cancelledChart"></div>
-          </div>
           <div class="card">
-            <div class="card-head"><h3>Отменённые визиты · Июль 2026</h3></div>
+            <div class="card-head"><h3 data-i18n="w_cancelled_visits_month">Отменённые визиты · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_reason">Причина</th></tr></thead>
-              <tbody>
-                <tr><td>Осмонова Н.</td><td>29.07.2026</td><td>Асанов Б.</td><td><span class="pill coral">Заболел</span></td></tr>
-                <tr><td>Токтогулов Э.</td><td>27.07.2026</td><td>Нурбекова С.</td><td><span class="pill amber">Не успевает</span></td></tr>
-                <tr><td>Бекова Ж.</td><td>25.07.2026</td><td>Мамедов Т.</td><td><span class="pill grey">Забыл</span></td></tr>
-              </tbody>
+              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_status">Статус</th></tr></thead>
+              <tbody id="cancelledTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -134,15 +161,10 @@
             <div class="card-body" id="doctorsChart"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Статистика по врачам · Июль 2026</h3></div>
+            <div class="card-head"><h3 data-i18n="w_doctor_stats_month">Статистика по врачам · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_utilization_short">Загрузка</th></tr></thead>
-              <tbody>
-                <tr><td>Асанов Б.</td><td class="mono">184</td><td class="mono">1 240 000 сом</td><td class="mono">6 740 сом</td><td><span class="pill teal">92%</span></td></tr>
-                <tr><td>Нурбекова С.</td><td class="mono">96</td><td class="mono">980 000 сом</td><td class="mono">10 200 сом</td><td><span class="pill teal">78%</span></td></tr>
-                <tr><td>Мамедов Т.</td><td class="mono">61</td><td class="mono">610 000 сом</td><td class="mono">10 000 сом</td><td><span class="pill amber">54%</span></td></tr>
-                <tr><td>Джумабекова А.</td><td class="mono">44</td><td class="mono">120 000 сом</td><td class="mono">2 700 сом</td><td><span class="pill coral">31%</span></td></tr>
-              </tbody>
+              <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_fill_rate">Заполняемость</th></tr></thead>
+              <tbody id="doctorStatsTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -191,15 +213,10 @@
             <div class="card-body" id="sourcesChart"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Аналитика по источникам заявок · Июль 2026</h3></div>
+            <div class="card-head"><h3 data-i18n="w_lead_sources_month">Аналитика по источникам заявок · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_source">Источник</th><th data-i18n="w_leads">Заявок</th><th data-i18n="w_conversion">Конверсия в визит</th><th data-i18n="w_acquisition_cost">Стоимость привлечения</th></tr></thead>
-              <tbody>
-                <tr><td>Instagram</td><td class="mono">142</td><td><span class="pill teal">64%</span></td><td class="mono">340 сом</td></tr>
-                <tr><td>Звонки</td><td class="mono">98</td><td><span class="pill teal">71%</span></td><td class="mono">—</td></tr>
-                <tr><td>WhatsApp / Telegram</td><td class="mono">71</td><td><span class="pill amber">52%</span></td><td class="mono">180 сом</td></tr>
-                <tr><td>Сайт</td><td class="mono">58</td><td><span class="pill coral">38%</span></td><td class="mono">510 сом</td></tr>
-              </tbody>
+              <thead><tr><th data-i18n="w_source">Источник</th><th data-i18n="w_leads">Заявок</th><th data-i18n="w_conversion">Конверсия в визит</th></tr></thead>
+              <tbody id="leadSourcesTableBody"></tbody>
             </table>
           </div>
         </div>

@@ -2186,7 +2186,7 @@ function acceptCashierPayment(id){
 
 /* ================= REPORTS: tabs + charts + AI assistant ================= */
 function reportsTab(which){
-  const idMap={overview:'Overview', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
+  const idMap={overview:'Overview', expenses:'Expenses', debtors:'Debtors', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
   Object.keys(idMap).forEach(t=>{
     const suffix=idMap[t];
     const panel=document.getElementById('rp'+suffix);
@@ -2196,11 +2196,69 @@ function reportsTab(which){
   });
   if(which==='ai') renderAIInsights();
   if(which==='overview') renderOverviewCharts();
-  if(which==='doctors') document.getElementById('doctorsChart').innerHTML = buildDonutChart(reportDatasets.doctors.revenue, ' '+CUR_SYM);
+  if(which==='expenses') renderReportsExpenses();
+  if(which==='debtors') renderReportsDebtors();
+  if(which==='doctors') renderReportsDoctors();
   if(which==='rooms') document.getElementById('roomsChart').innerHTML = buildDonutChart(reportDatasets.rooms.utilization, '%');
-  if(which==='cancelled') document.getElementById('cancelledChart').innerHTML = buildDonutChart(cancelReasonsData, '');
+  if(which==='cancelled') renderReportsCancelled();
   if(which==='repeat') document.getElementById('repeatChart').innerHTML = buildBarChart(repeatVisitsData, ' визитов');
-  if(which==='sources') document.getElementById('sourcesChart').innerHTML = buildDonutChart(reportDatasets.sources.count, '');
+  if(which==='sources') renderReportsSources();
+}
+/* ---- Расходы/Должники/Отменённые/Врачи/Источники — реальные данные из
+   _newui_reports_data() (apps/users/views.py), за текущий месяц. ---- */
+function renderReportsExpenses(){
+  const d=reportsRealData;
+  if(!d) return;
+  document.getElementById('rp-expenses-total').textContent=fmtSom(d.expensesTotal);
+  document.getElementById('expensesCatChart').innerHTML = buildDonutChart(
+    (d.expensesByCategory||[]).map((c,i)=>({label:c.category, value:c.total, color:['coral','amber','cobalt','teal'][i%4]})), ' '+CUR_SYM
+  );
+  const body=document.getElementById('expensesTableBody');
+  body.innerHTML = (d.expensesList||[]).length===0
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : d.expensesList.map(e=>`<tr><td>${e.date}</td><td>${e.category}</td><td>${e.description||'—'}</td><td class="mono">${fmtSom(e.amount)}</td></tr>`).join('');
+}
+function renderReportsDebtors(){
+  const d=reportsRealData;
+  if(!d) return;
+  document.getElementById('rp-debtors-total').textContent=fmtSom(Math.abs(d.debtorsTotal));
+  document.getElementById('rp-debtors-count').textContent=(d.debtorsList||[]).length;
+  const body=document.getElementById('debtorsTableBody');
+  body.innerHTML = (d.debtorsList||[]).length===0
+    ? `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : d.debtorsList.map(p=>`<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.name}</b></td><td class="mono">${p.phone||'—'}</td><td class="mono" style="color:var(--coral)">${fmtSom(Math.abs(p.balance))}</td></tr>`).join('');
+}
+function renderReportsCancelled(){
+  const d=reportsRealData;
+  if(!d) return;
+  const body=document.getElementById('cancelledTableBody');
+  body.innerHTML = (d.cancelledVisits||[]).length===0
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : d.cancelledVisits.map(a=>`<tr><td>${a.patient}</td><td>${a.date}</td><td>${a.doctor}</td><td><span class="pill ${a.statusColor}">${a.status}</span></td></tr>`).join('');
+}
+function renderReportsDoctors(){
+  const d=reportsRealData;
+  if(!d) return;
+  const stats=d.doctorStats||[];
+  document.getElementById('doctorsChart').innerHTML = buildDonutChart(
+    stats.map((s,i)=>({label:s.doctor, value:s.revenue, color:['cobalt','teal','amber','coral'][i%4]})), ' '+CUR_SYM
+  );
+  const body=document.getElementById('doctorStatsTableBody');
+  body.innerHTML = stats.length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : stats.map(s=>`<tr><td>${s.doctor}</td><td class="mono">${s.count}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td><span class="pill ${s.fillRatePct>=70?'teal':(s.fillRatePct>=40?'amber':'coral')}">${s.fillRatePct}%</span></td></tr>`).join('');
+}
+function renderReportsSources(){
+  const d=reportsRealData;
+  if(!d) return;
+  const sources=d.leadSources||[];
+  document.getElementById('sourcesChart').innerHTML = buildDonutChart(
+    sources.map((s,i)=>({label:s.source, value:s.count, color:['cobalt','teal','amber','coral'][i%4]})), ''
+  );
+  const body=document.getElementById('leadSourcesTableBody');
+  body.innerHTML = sources.length===0
+    ? `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : sources.map(s=>`<tr><td>${s.source}</td><td class="mono">${s.count}</td><td><span class="pill ${s.conversionPct>=60?'teal':(s.conversionPct>=35?'amber':'coral')}">${s.conversionPct}%</span></td></tr>`).join('');
 }
 
 /* ---- chart datasets ---- */
@@ -2755,6 +2813,18 @@ const translations={
   w_total_profit: {ru:'Итого прибыль', ky:'Жалпы пайда', en:'Total profit', uz:'Jami foyda'},
   w_revenue_month: {ru:'Выручка за месяц', ky:'Айлык түшүм', en:'Revenue this month', uz:'Oylik tushum'},
   w_expenses_month: {ru:'Расходы за месяц', ky:'Айлык чыгашалар', en:'Expenses this month', uz:'Oylik xarajatlar'},
+  w_expenses: {ru:'Расходы', ky:'Чыгашалар', en:'Expenses', uz:'Xarajatlar'},
+  w_debtors: {ru:'Должники', ky:'Карызкорлор', en:'Debtors', uz:'Qarzdorlar'},
+  w_expenses_by_category: {ru:'Расходы по категориям', ky:'Категориялар боюнча чыгашалар', en:'Expenses by category', uz:'Kategoriyalar bo\'yicha xarajatlar'},
+  w_expenses_list: {ru:'Список расходов · этот месяц', ky:'Чыгашалар тизмеси · бул ай', en:'Expenses list · this month', uz:'Xarajatlar ro\'yxati · shu oy'},
+  w_total_debt: {ru:'Общий долг', ky:'Жалпы карыз', en:'Total debt', uz:'Umumiy qarz'},
+  w_debtors_count: {ru:'Должников', ky:'Карызкорлор саны', en:'Debtors', uz:'Qarzdorlar soni'},
+  w_debtors_list: {ru:'Список должников', ky:'Карызкорлордун тизмеси', en:'Debtors list', uz:'Qarzdorlar ro\'yxati'},
+  w_debt: {ru:'Долг', ky:'Карыз', en:'Debt', uz:'Qarz'},
+  w_cancelled_visits_month: {ru:'Отменённые визиты · этот месяц', ky:'Жокко чыгарылган визиттер · бул ай', en:'Cancelled visits · this month', uz:'Bekor qilingan tashriflar · shu oy'},
+  w_doctor_stats_month: {ru:'Статистика по врачам · этот месяц', ky:'Дарыгерлер боюнча статистика · бул ай', en:'Doctor stats · this month', uz:'Shifokorlar statistikasi · shu oy'},
+  w_fill_rate: {ru:'Заполняемость', ky:'Толуктук', en:'Fill rate', uz:'To\'ldirilganlik'},
+  w_lead_sources_month: {ru:'Аналитика по источникам заявок · этот месяц', ky:'Кайрылуулардын булактары боюнча аналитика · бул ай', en:'Lead sources analytics · this month', uz:'Murojaat manbalari tahlili · shu oy'},
   w_on_deposits: {ru:'На депозитах', ky:'Депозиттерде', en:'On deposits', uz:'Depozitlarda'},
   w_receivables: {ru:'Дебиторка', ky:'Дебитордук карыз', en:'Receivables', uz:'Debitorlik qarz'},
   w_recent_tx: {ru:'Последние транзакции', ky:'Акыркы транзакциялар', en:'Recent transactions', uz:'So\'nggi tranzaksiyalar'},

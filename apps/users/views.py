@@ -458,14 +458,20 @@ def _newui_warehouse_data():
 
 
 def _newui_reports_data():
-    """Отчёты для нового интерфейса — пока только верхние real-KPI «Общего
-    отчёта». Конструктор сравнения, ИИ-помощник и детальные разрезы
-    (врачи/кабинеты/повторные визиты/источники) не подключены — см. баннер
-    на странице; ИИ-рекомендаций как функции в системе не существует."""
-    from django.db.models import Sum
+    """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта» + реальные
+    вкладки Расходы/Должники/Отменённые визиты/Статистика по врачам/Источники
+    заявок (все — за текущий месяц, тот же период, что и остальной раздел).
+    Конструктор сравнения (свободный разрез по любому измерению/графику) и
+    ИИ-помощник НЕ подключены — см. баннер на странице; ИИ-рекомендаций как
+    функции в системе не существует. «Загрузка кабинетов» тоже не подключена —
+    модели кабинетов/помещений в системе нет вообще (только Cabinet — учётная
+    единица техники в расписании, не про загрузку помещений)."""
+    from django.db.models import Sum, Count
     from django.utils import timezone
-    from apps.finance.models import Payment
+    from apps.finance.models import Payment, Expense
     from apps.appointments.models import Appointment
+    from apps.patients.models import Patient, Lead
+    from apps.treatments.models import Treatment
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
@@ -476,12 +482,87 @@ def _newui_reports_data():
     cancelled = month_appts.filter(status=Appointment.STATUS_CANCELLED).count()
     noshow = month_appts.filter(status=Appointment.STATUS_NO_SHOW).count()
     total = month_appts.count()
+
+    # ── Расходы (Expense/ExpenseCategory) — за месяц ──
+    expenses_qs = Expense.objects.filter(date__gte=month_start).select_related("category")
+    expenses_total = float(expenses_qs.aggregate(s=Sum("amount"))["s"] or 0)
+    expenses_by_cat = list(
+        expenses_qs.values("category__name").annotate(total=Sum("amount")).order_by("-total")
+    )
+    expenses_list = [{
+        "date": e.date.strftime("%d.%m.%Y"), "category": e.category.name if e.category else "—",
+        "amount": float(e.amount), "description": e.description,
+    } for e in expenses_qs.order_by("-date")[:100]]
+
+    # ── Должники — тот же запрос, что и старый /finance/payments/debtors/ ──
+    debtors_qs = Patient.objects.filter(balance__lt=0).order_by("balance")
+    debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
+    debtors_total = float(sum(p["balance"] for p in debtors_list))
+
+    # ── Отменённые визиты (cancelled + no-show) — за месяц. Причина отмены не
+    # хранится в Appointment (нет такого поля), поэтому колонки «Причина» нет —
+    # вместо неё честный статус (Отменён/Не пришёл). ──
+    cancelled_qs = (month_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW])
+                     .select_related("patient", "doctor").order_by("-start_at"))
+    cancelled_list = [{
+        "date": timezone.localtime(a.start_at).strftime("%d.%m.%Y"),
+        "patient": a.patient.full_name if a.patient else "—",
+        "doctor": a.doctor.name if a.doctor else "—",
+        "status": a.get_status_display(),
+        "statusColor": "coral" if a.status == Appointment.STATUS_CANCELLED else "amber",
+    } for a in cancelled_qs[:200]]
+
+    # ── Статистика по врачам — завершённые/оплаченные приёмы за месяц ──
+    doctor_treatments = (Treatment.objects.filter(
+        created_at__date__gte=month_start, status__in=[Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID],
+    ).values("doctor__name").annotate(cnt=Count("id"), revenue=Sum("total_amount")).order_by("-revenue"))
+    doctor_appt_totals = dict(month_appts.values_list("doctor__name").annotate(cnt=Count("id")))
+    doctor_appt_completed = dict(month_appts.filter(status=Appointment.STATUS_COMPLETED).values_list("doctor__name").annotate(cnt=Count("id")))
+    doctor_stats = []
+    for row in doctor_treatments:
+        name = row["doctor__name"] or "—"
+        cnt = row["cnt"]
+        revenue = float(row["revenue"] or 0)
+        appt_total = doctor_appt_totals.get(name, 0)
+        appt_done = doctor_appt_completed.get(name, 0)
+        doctor_stats.append({
+            "doctor": name, "count": cnt, "revenue": revenue,
+            "avgCheck": round(revenue / cnt, 2) if cnt else 0,
+            "fillRatePct": round(appt_done / appt_total * 100, 1) if appt_total else 0,
+        })
+
+    # ── Источники заявок (Lead/LeadSource) — за месяц, конверсия = дошли/завершено
+    # из всех заявок этого источника (грубая, но реальная метрика; стоимость
+    # привлечения не считаем — в LeadSource такого поля нет). ──
+    month_leads = Lead.objects.filter(created_at__date__gte=month_start).select_related("source")
+    sources = {}
+    for lead in month_leads:
+        key = lead.source.name if lead.source else "Без источника"
+        s = sources.setdefault(key, {"source": key, "count": 0, "converted": 0})
+        s["count"] += 1
+        if lead.stage in (Lead.STAGE_CAME, Lead.STAGE_COMPLETED):
+            s["converted"] += 1
+    lead_sources = sorted(
+        [{"source": s["source"], "count": s["count"],
+          "conversionPct": round(s["converted"] / s["count"] * 100, 1) if s["count"] else 0}
+         for s in sources.values()],
+        key=lambda x: -x["count"],
+    )
+
     return {
         "revenueMonth": float(income - refund),
         "completed": completed,
         "cancelled": cancelled,
         "cancelledPct": round(cancelled / total * 100, 1) if total else 0,
         "noshow": noshow,
+        "expensesTotal": expenses_total,
+        "expensesByCategory": [{"category": c["category__name"] or "Без категории", "total": float(c["total"])} for c in expenses_by_cat],
+        "expensesList": expenses_list,
+        "debtorsTotal": debtors_total,
+        "debtorsList": debtors_list,
+        "cancelledVisits": cancelled_list,
+        "doctorStats": doctor_stats,
+        "leadSources": lead_sources,
     }
 
 

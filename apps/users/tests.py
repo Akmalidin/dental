@@ -723,6 +723,69 @@ class NewUIReportsTestCase(TestCase):
         self.assertEqual(data["reportsData"]["cancelled"], 1)
         self.assertEqual(data["reportsData"]["cancelledPct"], 100.0)
 
+    def test_reports_cancelled_visits_list_has_real_row(self):
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        rows = data["reportsData"]["cancelledVisits"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["patient"], "Тест RP")
+        self.assertEqual(rows[0]["status"], "Отменён")
+
+    def test_reports_expenses_tab_reflects_real_expense(self):
+        from django.utils import timezone
+        from apps.finance.models import Expense, ExpenseCategory
+
+        cat = ExpenseCategory.objects.create(name="Аренда", clinic=self.clinic)
+        Expense.objects.create(
+            category=cat, amount=15000, description="Аренда за месяц", branch=self.branch,
+            created_by=self.director, date=timezone.localdate(), clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        rd = data["reportsData"]
+        self.assertEqual(rd["expensesTotal"], 15000.0)
+        self.assertEqual(rd["expensesByCategory"], [{"category": "Аренда", "total": 15000.0}])
+        self.assertEqual(rd["expensesList"][0]["description"], "Аренда за месяц")
+
+    def test_reports_debtors_tab_reflects_real_negative_balance(self):
+        from apps.patients.models import Patient
+
+        debtor = Patient.objects.create(
+            first_name="Должник", last_name="Тестовый", phone="+996700333444",
+            branch=self.branch, clinic=self.clinic, balance=-2500,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        rd = data["reportsData"]
+        self.assertEqual(rd["debtorsTotal"], -2500.0)
+        names = [d["name"] for d in rd["debtorsList"]]
+        self.assertIn(debtor.full_name, names)
+
+    def test_reports_doctor_stats_reflects_real_completed_treatment(self):
+        from apps.patients.models import Patient
+        from apps.treatments.models import Treatment
+
+        patient = Patient.objects.create(first_name="Лечится", last_name="У врача", phone="+996700555666", branch=self.branch, clinic=self.clinic)
+        Treatment.objects.create(
+            patient=patient, doctor=self.director, branch=self.branch,
+            status=Treatment.STATUS_COMPLETED, total_amount=5000, clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        stats = data["reportsData"]["doctorStats"]
+        row = next(s for s in stats if s["doctor"] == self.director.name)
+        self.assertEqual(row["count"], 1)
+        self.assertEqual(row["revenue"], 5000.0)
+        self.assertEqual(row["avgCheck"], 5000.0)
+
+    def test_reports_lead_sources_reflects_real_lead_conversion(self):
+        from apps.patients.models import Lead, LeadSource
+
+        source = LeadSource.objects.create(name="Instagram")
+        Lead.objects.create(name="Заявка 1", source=source, stage=Lead.STAGE_CAME, clinic=self.clinic)
+        Lead.objects.create(name="Заявка 2", source=source, stage=Lead.STAGE_NEW, clinic=self.clinic)
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        sources = data["reportsData"]["leadSources"]
+        row = next(s for s in sources if s["source"] == "Instagram")
+        self.assertEqual(row["count"], 2)
+        self.assertEqual(row["conversionPct"], 50.0)
+
 
 class NewUIBlacklistTestCase(TestCase):
     """Чёрный список — та же модель BlacklistEntry и тот же view
