@@ -85,6 +85,7 @@ def _newui_staff_data(request, clinic):
             "load": load,
             "phone": u.phone or "",
             "active": u.is_active,
+            "color": u.color or "",
         })
     return data
 
@@ -500,6 +501,7 @@ def _newui_schedule_data(clinic):
     doctors_data = [{
         "id": d.pk, "init": initials_of(d.name), "name": d.name,
         "role": d.role.display_name if d.role else "",
+        "color": d.color or "",
     } for d in doctors]
 
     today = timezone.localdate()

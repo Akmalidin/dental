@@ -69,6 +69,9 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .topbar-right{display:flex;align-items:center;gap:12px;}
 .search-box{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--mist);border-radius:9px;padding:9px 13px;font-size:13px;color:var(--ink-faint);width:250px;}
 .icon-btn{width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--mist);display:flex;align-items:center;justify-content:center;position:relative;font-size:14px;}
+#schedDateLabel{font-size:16px;font-weight:700;color:var(--ink);min-width:100px;display:inline-block;text-align:center;}
+@keyframes schedDatePulse{0%{opacity:0;transform:translateY(-4px);}100%{opacity:1;transform:translateY(0);}}
+#schedDateLabel.sched-date-anim{animation:schedDatePulse .25s ease-out;}
 .icon-btn .badge-dot{position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--coral);}
 .page{padding:24px 28px 64px;}
 
@@ -192,6 +195,9 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .ms-item.dragging{opacity:.4;}
 .ms-item-hidden{opacity:.45;}
 .ms-item-hidden .ms-item-label{text-decoration:line-through;}
+.ms-home-btn{flex-shrink:0;cursor:pointer;opacity:.25;filter:grayscale(1);font-size:14px;}
+.ms-home-btn:hover{opacity:.7;}
+.ms-home-btn.ms-home-active{opacity:1;filter:none;}
 .legend{display:flex;gap:14px;font-size:11px;color:var(--ink-soft);flex-wrap:wrap;}
 .legend span{display:flex;align-items:center;gap:6px;}
 .legend i{width:8px;height:8px;border-radius:3px;display:inline-block;}
@@ -206,7 +212,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-doc b{font-size:12.5px;}
 .sched-doc span{font-size:10.5px;color:var(--ink-soft);}
 .sched-time{padding:0 8px;font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;text-align:right;border-top:1px solid var(--mist-line);display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px;height:56px;position:sticky;left:0;background:var(--paper);z-index:2;min-width:60px;}
-.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);height:56px;padding:3px;position:relative;}
+.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);height:56px;padding:3px;position:relative;background:var(--doc-tint,transparent);}
 .sched-cell-empty{cursor:pointer;}
 .sched-cell-empty:hover{background:var(--cobalt-tint);}
 .sched-cell-empty:hover::after{content:'+ Записать';position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--cobalt-dark);font-weight:600;pointer-events:none;}
@@ -922,6 +928,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label id="staff-password-label">Пароль</label><input type="password" id="staff-password" placeholder=""></div>
       </div>
       <div class="form-group"><label data-i18n="w_branches">Филиалы</label><div id="staff-branches" style="display:flex;flex-wrap:wrap;gap:10px;"></div></div>
+      <div class="form-group"><label data-i18n="w_staff_color">Цвет<div class="hint" data-i18n="w_staff_color_hint">Необязательно — для аватара и ячейки в расписании</div></label><input type="color" id="staff-color" value="#6366F1" style="width:64px;padding:2px;height:34px;"></div>
       <div class="form-group toggle" style="margin-top:2px;"><input type="checkbox" checked id="staff-active"><span style="font-size:13px;margin-left:2px">Сотрудник активен</span></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-staff')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="staffModalSaveBtn" onclick="submitStaffModal()"><span data-i18n="btn_add_staff">Добавить сотрудника</span></button></div>
@@ -2450,6 +2457,10 @@ const translations={
   w_recommendations: {ru:'Рекомендации', ky:'Сунуштар', en:'Recommendations', uz:'Tavsiyalar'},
   w_opening_cash: {ru:'Наличные на начало смены', ky:'Смена башталышындагы накталай акча', en:'Opening cash', uz:'Smena boshidagi naqd pul'},
   w_actual_cash: {ru:'Наличные по факту пересчёта', ky:'Кайра эсептөө боюнча накталай акча', en:'Actual recounted cash', uz:'Qayta sanalgan naqd pul'},
+  w_home_screen_current: {ru:'Главный экран', ky:'Башкы экран', en:'Home screen', uz:'Bosh ekran'},
+  w_home_screen_set: {ru:'Сделать главным экраном', ky:'Башкы экран кылуу', en:'Set as home screen', uz:'Bosh ekran qilib belgilash'},
+  w_staff_color: {ru:'Цвет', ky:'Түс', en:'Color', uz:'Rang'},
+  w_staff_color_hint: {ru:'Необязательно — для аватара и ячейки в расписании', ky:'Милдеттүү эмес — аватар жана графиктеги уячасы үчүн', en:'Optional — used for the avatar and their column in the schedule', uz:'Ixtiyoriy — avatar va jadvaldagi ustuni uchun'},
   w_menu_settings_hint: {ru:'Скройте разделы, которыми вы не пользуетесь, и перетащите ⠿, чтобы поменять порядок — это только для вас, остальные сотрудники видят меню по-своему.', ky:'Колдонбогон бөлүмдөрдү жашырыңыз жана иретин өзгөртүү үчүн ⠿ сүйрөңүз — бул жеке сиз үчүн, башка кызматкерлер менюну өзүнчө көрөт.', en:'Hide the sections you don\'t use, and drag ⠿ to reorder them — this is just for you, other staff see the menu their own way.', uz:'Foydalanmaydigan bo\'limlaringizni yashiring va tartibni o\'zgartirish uchun ⠿ ni suring — bu faqat siz uchun, boshqa xodimlar menyuni o\'zicha ko\'radi.'},
   w_search_service: {ru:'Поиск услуги', ky:'Кызматты издөө', en:'Search service', uz:'Xizmat qidirish'},
   w_sum: {ru:'Сумма', ky:'Сумма', en:'Amount', uz:'Summa'},
@@ -3107,13 +3118,25 @@ const MENU_PREFS_KEY='newui_menu_prefs';
 function loadMenuPrefs(){
   try{
     const raw=localStorage.getItem(MENU_PREFS_KEY);
-    if(!raw) return {hidden:[], order:{}};
+    if(!raw) return {hidden:[], order:{}, home:null};
     const p=JSON.parse(raw);
-    return {hidden:p.hidden||[], order:p.order||{}};
-  }catch(e){ return {hidden:[], order:{}}; }
+    return {hidden:p.hidden||[], order:p.order||{}, home:p.home||null};
+  }catch(e){ return {hidden:[], order:{}, home:null}; }
 }
 function saveMenuPrefsToStorage(prefs){
   try{ localStorage.setItem(MENU_PREFS_KEY, JSON.stringify(prefs)); }catch(e){}
+}
+/* Главный экран — личный per-браузер выбор (localStorage), т.к. "/new/" всегда
+   отдаёт дашборд с сервера; редиректим на выбранный раздел уже в браузере,
+   но только когда реально попали на дашборд (не мешаем прямым переходам). */
+function redirectToHomeIfNeeded(){
+  const prefs=loadMenuPrefs();
+  if(!prefs.home || prefs.home==='dashboard') return;
+  const activeItem=document.querySelector('.nav-item.active');
+  if(!activeItem || activeItem.dataset.view!=='dashboard') return;
+  const target=document.querySelector(`.nav-item[data-view="${prefs.home}"]`);
+  const href=target && target.getAttribute('href');
+  if(href) location.replace(href);
 }
 function applyMenuPrefs(){
   const prefs=loadMenuPrefs();
@@ -3143,9 +3166,19 @@ function applyMenuPrefs(){
 function msSetHiddenLook(item, hidden){
   item.classList.toggle('ms-item-hidden', hidden);
 }
+let msHomeSelection=null;
+function msPickHome(view, btn){
+  msHomeSelection=view;
+  document.querySelectorAll('#menuSettingsList .ms-home-btn').forEach(b=>{
+    const active=b.dataset.view===view;
+    b.classList.toggle('ms-home-active', active);
+    b.title = active ? t('w_home_screen_current') : t('w_home_screen_set');
+  });
+}
 function openMenuSettings(){
   const list=document.getElementById('menuSettingsList');
   const sidebar=document.querySelector('.sidebar');
+  msHomeSelection=loadMenuPrefs().home || 'dashboard';
   let html='';
   // Плоский список (без вложенных .ms-group на каждую секцию) — заголовки
   // групп тут просто неперетаскиваемые метки среди пунктов, поэтому пункт
@@ -3163,10 +3196,12 @@ function openMenuSettings(){
     const label=clone.textContent.replace(/\s+/g,' ').trim();
     const iconHtml=el.querySelector('svg') ? el.querySelector('svg').outerHTML : '';
     const isVisible=!el.classList.contains('menu-hidden');
+    const isHome=view===msHomeSelection;
     html+=`<label class="ms-item${isVisible?'':' ms-item-hidden'}" draggable="${!pinned}" data-menu-item="${view}" style="cursor:${pinned?'default':'grab'};">
       <span class="ms-drag-handle" style="color:var(--ink-faint);${pinned?'visibility:hidden;':''}">⠿</span>
       ${iconHtml}
       <span class="ms-item-label">${label}</span>
+      <span class="ms-home-btn${isHome?' ms-home-active':''}" data-view="${view}" title="${isHome?t('w_home_screen_current'):t('w_home_screen_set')}" onclick="event.preventDefault();msPickHome('${view}', this)">🏠</span>
       ${pinned ? '' : `<div class="toggle"><input type="checkbox" data-menu-view="${view}" ${isVisible?'checked':''} style="width:auto;" onchange="msSetHiddenLook(this.closest('.ms-item'), !this.checked)"></div>`}
     </label>`;
   });
@@ -3207,7 +3242,7 @@ function saveMenuSettings(){
       order[currentGroup].push(el.dataset.menuItem);
     }
   });
-  saveMenuPrefsToStorage({hidden, order});
+  saveMenuPrefsToStorage({hidden, order, home: msHomeSelection});
   applyMenuPrefs();
   // если скрыли раздел, который сейчас открыт — уходим на дашборд
   const activeItem=document.querySelector('.nav-item.active');
@@ -3444,11 +3479,19 @@ function timeToMinutes(t){ const [h,m]=t.split(':').map(Number); return h*60+m; 
 function minutesToTime(m){ const h=Math.floor(m/60), mm=m%60; return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0'); }
 function formatDMY(d){ return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear(); }
 
+function animateDateLabel(){
+  const el=document.getElementById('schedDateLabel');
+  if(!el) return;
+  el.classList.remove('sched-date-anim');
+  void el.offsetWidth; // форсируем reflow, чтобы анимация перезапустилась при повторных сменах даты подряд
+  el.classList.add('sched-date-anim');
+}
 function updateDayDateLabel(){
   const d=new Date(baseScheduleDate);
   d.setDate(d.getDate()+currentDayOffset);
   document.getElementById('schedDateLabel').textContent=formatDMY(d);
   document.getElementById('schedViewLabel').textContent='Вид: 1 день · '+weekdayShort[d.getDay()];
+  animateDateLabel();
 }
 
 function changeDay(delta){
@@ -3461,7 +3504,10 @@ function changeDay(delta){
   }
   renderSchedule();
   const c=document.getElementById('scheduleContent');
-  if(c) c.scrollLeft=0;
+  // Вперёд (delta>0) — начинаем с начала дня (слева). Назад (delta<0) —
+  // "приземляемся" у конца дня (справа), иначе продолжать скроллить влево
+  // от предыдущего дня, за который только что зашли, было бы странно.
+  if(c) c.scrollLeft = delta<0 ? c.scrollWidth : 0;
 }
 
 function calSetView(v){
@@ -3477,6 +3523,7 @@ function calSetView(v){
     document.getElementById('schedViewLabel').textContent=labels[v];
     const dateLabels={week:'27 июля – 2 августа 2026', month:'Июль 2026'};
     document.getElementById('schedDateLabel').textContent=dateLabels[v];
+    animateDateLabel();
   }
   renderSchedule();
 }
@@ -3490,6 +3537,12 @@ function renderSchedule(){
   attachScheduleScrollWatcher();
 }
 
+function hexToRgba(hex, alpha){
+  const h=(hex||'').replace('#','');
+  if(!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 function buildDayHTML(){
   const dateIso=isoDate(dateAtOffset(currentDayOffset));
   const n=Math.max(scheduleDoctors.length,1);
@@ -3500,21 +3553,28 @@ function buildDayHTML(){
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
+  // Цвет врача (User.color, задаётся в карточке сотрудника) — красим весь его
+  // столбец, не только аватар, чтобы визуально сразу отличать врачей в сетке.
   scheduleDoctors.forEach(d=>{
-    html+=`<div class="sched-head"><div class="sched-doc"><div class="av">${d.init}</div><b>${d.name}</b><span>${d.role}</span></div></div>`;
+    const headBg = d.color ? hexToRgba(d.color, .12) : '';
+    const headStyle = d.color ? `style="border-top:3px solid ${d.color};background:${headBg};"` : '';
+    const avStyle = d.color ? `style="background:${d.color};"` : '';
+    html+=`<div class="sched-head" ${headStyle}><div class="sched-doc"><div class="av" ${avStyle}>${d.init}</div><b>${d.name}</b><span>${d.role}</span></div></div>`;
   });
   const startMin=calSettings.start*60, endMin=calSettings.end*60;
   for(let t=startMin; t<endMin; t+=calSettings.interval){
     const label=minutesToTime(t);
     html+=`<div class="sched-time">${label}</div>`;
     scheduleDoctors.forEach(d=>{
+      const cellBg = d.color ? hexToRgba(d.color, .07) : null;
+      const cellStyle = cellBg ? `style="--doc-tint:${cellBg};"` : '';
       const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
       if(appt){
-        html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})">`;
+        html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})">`;
         html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span><b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
         html+='</div>';
       } else {
-        html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" title="${label}" onclick="schedCellClick('${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})"></div>`;
+        html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" ${cellStyle} title="${label}" onclick="schedCellClick('${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})"></div>`;
       }
     });
   }
@@ -3651,19 +3711,28 @@ async function schedQuickSendToCashier(){
   else { showToast('Не удалось отправить в кассу', 'error'); }
 }
 
-/* ---- auto-advance to next day when horizontal scroll reaches the end ---- */
+/* ---- auto-advance/back a day when horizontal scroll reaches either edge ---- */
 let scrollAdvanceLock=false;
+let schedHasScrolledAway=false; // защита от срабатывания "влево" сразу при загрузке (когда scrollLeft и так 0)
 function attachScheduleScrollWatcher(){
   const el=document.getElementById('scheduleContent');
-  if(!el || el.dataset.scrollWatcher) return;
+  if(!el) return;
+  schedHasScrolledAway=false; // сбрасываем на каждый новый рендер сетки (новый день и т.д.)
+  if(el.dataset.scrollWatcher) return;
   el.dataset.scrollWatcher='1';
   el.addEventListener('scroll', ()=>{
     if(calView!=='day' || scrollAdvanceLock) return;
     const hasOverflow = el.scrollWidth > el.clientWidth + 10;
+    if(el.scrollLeft > 20) schedHasScrolledAway=true;
     const atEnd = hasOverflow && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
+    const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4;
     if(atEnd){
       scrollAdvanceLock=true;
       changeDay(1);
+      setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
+    } else if(atStart){
+      scrollAdvanceLock=true;
+      changeDay(-1);
       setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
     }
   });
@@ -3964,6 +4033,7 @@ let cashdeskData=null;
     setLanguage(data.clinicLanguage || 'ru');
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
+  redirectToHomeIfNeeded();
 })();
 
 /* ================= DASHBOARD (реальные данные клиники) ================= */
@@ -4244,6 +4314,7 @@ function openNewStaff(){
   document.getElementById('staff-password-label').textContent='Пароль (можно задать позже)';
   ['staff-name','staff-login','staff-phone','staff-email','staff-password'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('staff-active').checked=true;
+  document.getElementById('staff-color').value='#6366F1';
   populateStaffRoleSelect(null);
   populateStaffBranches([]);
   document.getElementById('staffModalError').classList.add('hidden');
@@ -4262,6 +4333,7 @@ function editStaff(id){
   document.getElementById('staff-email').value=s.email;
   document.getElementById('staff-password').value='';
   document.getElementById('staff-active').checked=s.active;
+  document.getElementById('staff-color').value=s.color || '#6366F1';
   populateStaffRoleSelect(s.roleId);
   populateStaffBranches(s.branchIds);
   document.getElementById('staffModalError').classList.add('hidden');
@@ -4278,6 +4350,7 @@ async function submitStaffModal(){
   fd.append('phone', document.getElementById('staff-phone').value.trim());
   fd.append('role', document.getElementById('staff-role').value);
   fd.append('password', document.getElementById('staff-password').value);
+  fd.append('color', document.getElementById('staff-color').value);
   if(document.getElementById('staff-active').checked) fd.append('is_active','on');
   fd.append('can_view_all_appointments','on');
   document.querySelectorAll('.staff-branch-cb:checked').forEach(cb=>fd.append('branches', cb.value));

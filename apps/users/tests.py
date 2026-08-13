@@ -359,6 +359,16 @@ class NewUIScheduleTestCase(TestCase):
         doctor_names = [d["name"] for d in data["schedule"]["doctors"]]
         self.assertIn("Врач SC", doctor_names)
 
+    def test_schedule_doctor_color_exposed_for_column_tint(self):
+        """User.color (задаётся в карточке сотрудника) должен доехать до
+        расписания — красит колонку врача в сетке нового интерфейса."""
+        self.doctor.color = "#00AABB"
+        self.doctor.save(update_fields=["color"])
+        resp = self.client.get("/new/schedule/")
+        data = _extract_newui_real_data(resp.content.decode())
+        doctor_row = next(d for d in data["schedule"]["doctors"] if d["name"] == "Врач SC")
+        self.assertEqual(doctor_row["color"], "#00AABB")
+
     def test_schedule_includes_appointment_within_window(self):
         resp = self.client.get("/new/schedule/")
         data = _extract_newui_real_data(resp.content.decode())
@@ -1532,6 +1542,23 @@ class NewUIStaffRoleFetchFlowTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(User.objects.filter(login="modal_staff", clinic=self.clinic).exists())
+
+    def test_staff_create_via_modal_persists_and_exposes_color(self):
+        """Цвет сотрудника (User.color) — задаётся в модалке «Сотрудник», используется
+        для аватара и для закраски его колонки в расписании нового интерфейса."""
+        resp = self.client.post("/users/create/", {
+            "login": "colored_doc", "name": "Цветной Доктор",
+            "password": "", "can_view_all_appointments": "on", "full_access": "on",
+            "color": "#FF5733",
+        })
+        self.assertEqual(resp.status_code, 302)
+        user = User.objects.get(login="colored_doc", clinic=self.clinic)
+        self.assertEqual(user.color, "#FF5733")
+
+        resp2 = self.client.get("/new/staff/")
+        data = _extract_newui_real_data(resp2.content.decode())
+        staff_row = next(s for s in data["staff"] if s["login"] == "colored_doc")
+        self.assertEqual(staff_row["color"], "#FF5733")
 
     def test_staff_create_via_modal_missing_login_does_not_redirect(self):
         resp = self.client.post("/users/create/", {
