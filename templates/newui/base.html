@@ -98,6 +98,11 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .card-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--mist-line);}
 .card-head h3{font-size:14.5px;font-weight:600;}
 .card-body{padding:16px 18px;}
+/* Таблица часто лежит прямо в .card (без обёртки .card-body) — на узких
+   экранах это раньше просто раздвигало всю страницу вбок. Скроллим саму
+   карточку по горизонтали, если её прямой потомок — table (не задевает
+   карточки без таблиц). */
+.card:has(> table){overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .link-btn{font-size:12.5px;color:var(--cobalt);font-weight:600;}
 
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
@@ -428,7 +433,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 @media(max-width:900px){
   .hamburger-btn{display:flex;}
   .app-shell{display:block;height:auto;}
-  .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
   .main{height:auto;min-height:100vh;overflow-x:hidden;}
   .topbar{padding-left:62px;flex-wrap:wrap;row-gap:10px;}
@@ -4299,32 +4304,13 @@ function updateSchedDoctorFilterBadge(){
   badge.style.display = hiddenDoctorIds.size>0 ? '' : 'none';
 }
 
-/* ---- auto-advance/back a day when horizontal scroll reaches either edge ---- */
-let scrollAdvanceLock=false;
-let schedHasScrolledAway=false; // защита от срабатывания "влево" сразу при загрузке (когда scrollLeft и так 0)
-function attachScheduleScrollWatcher(){
-  const el=document.getElementById('scheduleContent');
-  if(!el) return;
-  schedHasScrolledAway=false; // сбрасываем на каждый новый рендер сетки (новый день и т.д.)
-  if(el.dataset.scrollWatcher) return;
-  el.dataset.scrollWatcher='1';
-  el.addEventListener('scroll', ()=>{
-    if(calView!=='day' || scrollAdvanceLock) return;
-    const hasOverflow = el.scrollWidth > el.clientWidth + 10;
-    if(el.scrollLeft > 20) schedHasScrolledAway=true;
-    const atEnd = hasOverflow && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
-    const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4;
-    if(atEnd){
-      scrollAdvanceLock=true;
-      changeDay(1);
-      setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
-    } else if(atStart){
-      scrollAdvanceLock=true;
-      changeDay(-1);
-      setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
-    }
-  });
-}
+/* ---- по просьбе пользователя: раньше горизонтальный скролл сетки расписания
+   до самого края сам переключал день (вперёд/назад) — на телефоне это мешало
+   (обычная прокрутка нечаянно перекидывала на другой день). Переключение дня
+   теперь только по стрелкам ‹ › в тулбаре (changeDay()), скролл сетки — это
+   просто скролл, без побочных эффектов. Функция оставлена как no-op, чтобы
+   не трогать вызов renderSchedule() → attachScheduleScrollWatcher(). ---- */
+function attachScheduleScrollWatcher(){}
 
 function currentWeekDates(){
   const today=new Date();
