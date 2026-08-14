@@ -107,7 +107,7 @@
             </div>
             <div class="form-group" style="position:relative;">
               <label data-i18n="w_patient">Пациент</label>
-              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off"
+              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" autocomplete="off"
                      oninput="qsPatientSearch(this.value)" onfocus="qsPatientSearch(this.value)"
                      onblur="setTimeout(()=>{const b=document.getElementById('qs-patient-suggestions'); if(b) b.classList.add('hidden');},200)">
               <input type="hidden" id="qs-patient-id">
@@ -147,7 +147,7 @@ function openCashAcceptModal(notifId){
   if(!item) return;
   cashAcceptItem=item;
   document.getElementById('cashAcceptError').classList.add('hidden');
-  document.getElementById('cashAcceptWho').textContent=item.body || (t('w_from_short')+' '+item.from);
+  document.getElementById('cashAcceptWho').textContent=item.body || ('от '+item.from);
   document.getElementById('cash-accept-amount').value=item.amount || '';
   document.getElementById('cash-accept-method').value='cash';
   openModal('m-cash-accept');
@@ -182,7 +182,7 @@ async function submitCashAccept(){
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){
     const err=document.getElementById('cashAcceptError');
-    err.textContent = apiErrorMessage(payload, t('w_save_failed'));
+    err.textContent = (payload && payload.error) || t('w_save_failed');
     err.classList.remove('hidden');
     return;
   }
@@ -309,7 +309,7 @@ async function submitCashVisitPayment(){
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){
-    err.textContent = apiErrorMessage(payload, t('w_save_failed'));
+    err.textContent = (payload && payload.error) || t('w_save_failed');
     err.classList.remove('hidden');
     return;
   }
@@ -355,45 +355,35 @@ function qsSelectPatient(id){
   document.getElementById('qs-patient-suggestions').classList.add('hidden');
 }
 function qsAddRow(){
-  qsRows.push({idx: qsRowSeq++, service_id:'', service_name:'', tooth:'', qty:1, price:0, discount:0});
+  qsRows.push({idx: qsRowSeq++, service_id:'', service_name:'', tooth:'', qty:1, price:0});
   renderQsRows();
 }
 function qsRemoveRow(idx){
   qsRows=qsRows.filter(r=>r.idx!==idx);
   if(qsRows.length===0){ qsAddRow(); } else { renderQsRows(); }
 }
-// Единая точка правды для суммы строки с учётом скидки (%) — используется и в
-// строке, и в общем итоге модалки, и при отправке платежа.
-function qsRowTotal(r){
-  const gross=(parseFloat(r.price)||0)*(parseInt(r.qty)||1);
-  const disc=Math.max(0, Math.min(100, parseFloat(r.discount)||0));
-  return gross - gross*disc/100;
-}
 function qsSetRowField(idx, field, val){
   const row=qsRows.find(r=>r.idx===idx);
   if(!row) return;
   if(field==='qty') val=Math.max(1, parseInt(val)||1);
   if(field==='price') val=parseFloat(val)||0;
-  if(field==='discount') val=Math.max(0, Math.min(100, parseFloat(val)||0));
   row[field]=val;
-  if(field==='discount' || field==='price' || field==='qty') renderQsRows(); else qsUpdateTotal();
+  qsUpdateTotal();
 }
 function renderQsRows(){
   const el=document.getElementById('qsRows');
   el.innerHTML=qsRows.map(r=>`
-    <div class="qs-row" style="display:grid;grid-template-columns:1fr 70px 60px 100px 64px 90px 28px;gap:8px;align-items:center;margin-bottom:8px;">
-      <div class="qs-field-service" style="position:relative;">
+    <div style="display:grid;grid-template-columns:1fr 70px 60px 100px 28px;gap:8px;align-items:center;margin-bottom:8px;">
+      <div style="position:relative;">
         <input type="text" id="qsSvcInput-${r.idx}" value="${(r.service_name||'').replace(/"/g,'&quot;')}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off"
                oninput="qsServiceSearch(${r.idx}, this.value)" onfocus="qsServiceSearch(${r.idx}, this.value)"
                onblur="setTimeout(()=>{const b=document.getElementById('qsSvcSuggest-${r.idx}'); if(b) b.classList.add('hidden');},200)">
         <div id="qsSvcSuggest-${r.idx}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:7;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
       </div>
-      <input class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
-      <input class="qs-field-qty" type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
-      <input class="qs-field-price" type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
-      <input class="qs-field-discount" type="number" min="0" max="100" step="1" value="${r.discount||0}" title="${t('w_discount_pct')}" onchange="qsSetRowField(${r.idx},'discount',this.value)">
-      <div class="qs-field-total mono" style="font-size:12.5px;white-space:nowrap;">${fmtSom(qsRowTotal(r))}</div>
-      <button type="button" class="qs-field-remove btn btn-ghost btn-sm" onclick="qsRemoveRow(${r.idx})" style="padding:4px 6px;">✕</button>
+      <input type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
+      <input type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
+      <input type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="qsRemoveRow(${r.idx})" style="padding:4px 6px;">✕</button>
     </div>`).join('');
   qsUpdateTotal();
 }
@@ -416,7 +406,7 @@ function qsPickService(idx, serviceId){
   renderQsRows();
 }
 function qsUpdateTotal(){
-  const total=qsRows.reduce((s,r)=>s+qsRowTotal(r), 0);
+  const total=qsRows.reduce((s,r)=>s+(parseFloat(r.price)||0)*(parseInt(r.qty)||1), 0);
   const el=document.getElementById('qsTotal');
   if(el) el.textContent=fmtSom(total);
 }
@@ -425,10 +415,10 @@ async function submitQuickSale(){
   err.classList.add('hidden');
   const patientId=document.getElementById('qs-patient-id').value;
   const doctorId=document.getElementById('qs-doctor').value;
-  const cures=qsRows.filter(r=>r.service_id).map(r=>({service_id:r.service_id, tooth:r.tooth||'', qty:r.qty||1, price:r.price, discount:r.discount||0}));
+  const cures=qsRows.filter(r=>r.service_id).map(r=>({service_id:r.service_id, tooth:r.tooth||'', qty:r.qty||1, price:r.price}));
   if(!patientId){ err.textContent=t('w_pick_patient','Выберите пациента'); err.classList.remove('hidden'); return; }
-  if(!doctorId){ err.textContent=t('w_choose_doctor','Выберите врача'); err.classList.remove('hidden'); return; }
-  if(cures.length===0){ err.textContent=t('w_add_at_least_one_service','Добавьте хотя бы одну услугу'); err.classList.remove('hidden'); return; }
+  if(!doctorId){ err.textContent='Выберите врача'; err.classList.remove('hidden'); return; }
+  if(cures.length===0){ err.textContent='Добавьте хотя бы одну услугу'; err.classList.remove('hidden'); return; }
   const btn=document.getElementById('qsSubmitBtn');
   btn.disabled=true;
   try{
@@ -436,11 +426,11 @@ async function submitQuickSale(){
     let payload1=null;
     try{ payload1=await res1.json(); }catch(e){}
     if(!res1.ok || !payload1 || !payload1.ok){
-      err.textContent=apiErrorMessage(payload1, t('w_save_failed'));
+      err.textContent=(payload1 && payload1.error) || t('w_save_failed');
       err.classList.remove('hidden');
       return;
     }
-    const total=qsRows.reduce((s,r)=>s+qsRowTotal(r), 0);
+    const total=qsRows.reduce((s,r)=>s+(parseFloat(r.price)||0)*(parseInt(r.qty)||1), 0);
     const fd=new FormData();
     fd.append('patient', patientId);
     fd.append('treatment', payload1.treatment_id);
@@ -457,7 +447,7 @@ async function submitQuickSale(){
     let payload2=null;
     try{ payload2=await res2.json(); }catch(e){}
     if(!res2.ok || !payload2 || !payload2.ok){
-      err.textContent=apiErrorMessage(payload2, t('w_save_failed'));
+      err.textContent=(payload2 && payload2.error) || t('w_save_failed');
       err.classList.remove('hidden');
       return;
     }

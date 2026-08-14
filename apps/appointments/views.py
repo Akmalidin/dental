@@ -625,7 +625,7 @@ def appointment_move(request, pk):
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).exists()
         if overlap:
-            return JsonResponse({"error": "Пересечение с другой записью этого врача", "error_key": "appt_overlap"}, status=400)
+            return JsonResponse({"error": "Пересечение с другой записью этого врача"}, status=400)
         sched_err = schedule_violation(doctor, start, end)
         if sched_err:
             return JsonResponse({"error": sched_err}, status=400)
@@ -712,11 +712,11 @@ def appointment_finish(request, pk):
     new_id = None
     if next_date:
         if not appt.patient_id:
-            return JsonResponse({"error": "У записи нет пациента", "error_key": "appt_no_patient"}, status=400)
+            return JsonResponse({"error": "У записи нет пациента"}, status=400)
         try:
             d = datetime.strptime(next_date, "%Y-%m-%d").date()
         except ValueError:
-            return JsonResponse({"error": "Неверная дата", "error_key": "appt_invalid_date"}, status=400)
+            return JsonResponse({"error": "Неверная дата"}, status=400)
         dur = appt.end_at - appt.start_at
         new_start = datetime.combine(d, _tz.localtime(appt.start_at).timetz())
         nxt = Appointment.objects.create(

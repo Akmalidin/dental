@@ -46,14 +46,6 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 /* ===== APP SHELL ===== */
 .app-shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
 .sidebar{background:var(--ink);color:#fff;padding:20px 14px;display:flex;flex-direction:column;}
-/* Кнопка-гамбургер и подложка для мобильного меню — скрыты по умолчанию,
-   показываются только ниже брейкпоинта (см. @media(max-width:900px) ниже).
-   Кнопка зафиксирована в углу экрана независимо от разметки topbar конкретной
-   страницы (topbar у каждой страницы своя, в {% block content %}) — так не
-   нужно трогать разметку ни одного из ~20 шаблонов страниц. */
-.hamburger-btn{display:none;position:fixed;top:14px;left:14px;z-index:101;width:38px;height:38px;border-radius:9px;background:var(--ink);color:#fff;border:none;font-size:18px;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);cursor:pointer;}
-.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.45);z-index:90;}
-.sidebar-backdrop.open{display:block;}
 .sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
 .sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
 .sidebar-clinic{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:12px;color:#B7BECB;display:flex;justify-content:space-between;align-items:center;}
@@ -169,13 +161,10 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .tab-strip button{padding:10px 0;font-size:13px;color:var(--ink-soft);border-bottom:2px solid transparent;margin-right:22px;font-weight:500;}
 .tab-strip button.active{color:var(--ink);border-color:var(--coral);font-weight:600;}
 
-/* overflow-x:auto — на узких экранах зубная карта скроллится по горизонтали
-   (тот же паттерн, что и у .sched-wrap), а не сжимает 16 зубов до нечитаемого
-   размера; min-width на .odonto-jaws задаёт минимальную ширину строки. */
-.odontogram-lg{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-.odonto-jaws{position:relative;display:flex;flex-direction:column;gap:22px;min-width:480px;}
+.odontogram-lg{display:block;}
+.odonto-jaws{position:relative;display:flex;flex-direction:column;gap:22px;}
 .odonto-jaws::before{content:'';position:absolute;top:0;bottom:0;left:50%;border-left:1px dashed rgba(0,0,0,0.12);pointer-events:none;}
-.odonto-row{display:grid;grid-template-columns:repeat(16,minmax(28px,1fr));gap:4px;}
+.odonto-row{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;}
 .tooth-cell-outline{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:8px;cursor:pointer;position:relative;transition:transform .12s ease, background .12s ease;transform-origin:center;}
 .tooth-cell-outline:hover{background:#E23F63;transform:scale(1.15);z-index:5;box-shadow:0 8px 20px -8px rgba(226,63,99,.45);}
 .tooth-cell-outline:hover .tooth-num-cell{color:#fff;}
@@ -223,10 +212,6 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 
 /* ===== DOCTOR SCHEDULE (columns = doctors) ===== */
 .sched-wrap{border:1px solid var(--mist);border-radius:var(--radius);overflow-x:auto;overflow-y:hidden;background:var(--paper);}
-/* Только у месячного вида нужен ещё и вертикальный скролл — 5-6 строк по
-   88px+ на невысоком экране телефона легко превышают viewport, а в дне/неделе
-   overflow-y:hidden специально не мешает sticky-шапке времени. */
-.sched-wrap.sched-wrap-month{overflow-y:auto;max-height:76vh;}
 .sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;}
 .sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
 .sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
@@ -334,10 +319,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .week-appt-chip .sched-appt-menu-btn:hover{opacity:1;}
 .week-empty{font-size:10.5px;color:var(--ink-faint);}
 
-/* minmax(90px,1fr)+min-width — как и у .sched-grid (день/неделя): на широком
-   экране 7 колонок делят ширину поровну, на узком — не сжимаются до
-   нечитаемого размера, а .sched-wrap.sched-wrap-month скроллит по горизонтали. */
-.month-grid{display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));min-width:630px;border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
 .month-headrow{display:contents;}
 .month-head{padding:10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);background:var(--cloud);font-weight:600;}
 .month-cell{background:var(--paper);min-height:88px;padding:8px;display:flex;flex-direction:column;gap:6px;}
@@ -418,45 +400,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 
 @media(max-width:1100px){.kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr 1fr;}.funnel{grid-template-columns:repeat(4,1fr);overflow-x:auto;}.sched-grid{grid-template-columns:52px repeat(3,1fr);}}
 
-/* ===== АДАПТАЦИЯ ПОД ПЛАНШЕТЫ/ТЕЛЕФОНЫ =====
-   Ниже 900px sidebar (240px, обычно занимает грид-колонку) превращается в
-   выезжающую off-canvas панель (тот же приём, что уже используется в
-   @media print ниже — "спрятать sidebar, .app-shell → block", только теперь
-   через класс-переключатель вместо display:none, см. toggleSidebar()/JS).
-   Ниже 640px дополнительно схлопываем 2-колоночные сетки в 1 колонку и
-   уменьшаем паддинги — тесная, но полностью читаемая раскладка на телефоне. */
-@media(max-width:900px){
-  .hamburger-btn{display:flex;}
-  .app-shell{display:block;height:auto;}
-  .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;}
-  .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
-  .main{height:auto;min-height:100vh;overflow-x:hidden;}
-  .topbar{padding-left:62px;flex-wrap:wrap;row-gap:10px;}
-  .search-box{width:auto;flex:1;min-width:0;}
-  /* Любая таблица внутри карточки получает собственный горизонтальный скролл
-     вместо того, чтобы раздвигать всю страницу — тот же паттерн, что уже
-     годами работает у .sched-wrap (расписание). Не задевает карточки без
-     таблиц — overflow-x:auto на пустом месте не влияет на раскладку. */
-  .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-}
-@media(max-width:640px){
-  .kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr;}
-  .page{padding:16px 14px 48px;}
-  .topbar{padding:14px 14px 14px 58px;}
-  .kpi-grid{gap:10px;}
-  /* Ряд услуги в «Быстрой продаже» (7 колонок фиксированной ширины —
-     220px+ гарантированно) не влезает в модалку на телефоне (~320px) —
-     переключаем на перенос по строкам вместо горизонтального сжатия. */
-  .qs-row{display:flex !important;flex-wrap:wrap;gap:6px !important;}
-  .qs-field-service{flex:1 1 100%;}
-  .qs-field-tooth{flex:1 1 64px;}
-  .qs-field-qty{flex:1 1 56px;}
-  .qs-field-price{flex:1 1 76px;}
-  .qs-field-discount{flex:1 1 64px;}
-  .qs-field-total{flex:1 1 76px;text-align:right;}
-  .qs-field-remove{flex:0 0 auto;margin-left:auto;}
-}
-
 @media print{
   body{background:#fff;}
   .sidebar,.modal-backdrop,.topbar .search-box,.topbar .icon-btn,#schedPrintBtn,#finPrintBtn,.btn-cobalt,.toolbar-right-nav{display:none !important;}
@@ -507,8 +450,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 </head>
 <body>
 
-<button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Меню" title="Меню">☰</button>
-<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 <div class="app-shell">
   <aside class="sidebar">
     <div class="sidebar-logo">
@@ -635,7 +576,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <span>Пациент</span>
           <button type="button" class="link-btn" style="font-weight:600;" onclick="openModal('m-patient')">+ Добавить пациента</button>
         </label>
-        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
+        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
         <input type="hidden" id="appt-patient-id">
         <div id="appt-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
@@ -647,7 +588,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_date">Дата</label><input type="date" id="appt-date"></div>
         <div class="form-group"><label data-i18n="w_time">Время</label><input type="time" id="appt-time" lang="ru"></div>
       </div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-appt')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="apptModalSaveBtn" onclick="submitNewAppt()">Создать запись</button></div>
   </div>
@@ -753,7 +694,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <option>Отказ от оплаты после лечения</option>
         </select>
       </div>
-      <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…" data-i18n-placeholder="w_describe_reason_own_words"></textarea></div>
+      <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-blacklist-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="addToBlacklist()"><span data-i18n="btn_add_to_list">Добавить в список</span></button></div>
   </div>
@@ -848,7 +789,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label><select><option>Наличные</option><option>Карта</option><option>Перевод на карту</option><option>Депозит</option><option>Страховка</option><option>Рассрочка</option></select></div>
       </div>
       <div class="form-group"><label data-i18n="w_purpose">Назначение</label><select><option>Оплата лечения</option><option>Пополнение депозита</option><option>Взнос рассрочки</option></select></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="closeModal('m-payment')">Провести оплату</button></div>
   </div>
@@ -864,7 +805,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <div class="row" style="padding:4px 0;"><div class="row-main"><b id="vr-patient">—</b><span id="vr-meta">—</span></div></div>
         </div>
       </div>
-      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…" data-i18n-placeholder="w_doctor_notes_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…"></textarea></div>
       <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Итог визита</label>
       <label class="reason-opt"><input type="radio" name="vr" value="Начал лечение · НЛ|cobalt" checked><div><b style="font-size:13px;display:block">Начал лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">НЛ</span></div></label>
       <label class="reason-opt"><input type="radio" name="vr" value="Продолжает лечение · ПЛ|amber"><div><b style="font-size:13px;display:block">Продолжает лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">ПЛ</span></div></label>
@@ -886,7 +827,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Не успевает</span></label>
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Не получается</span></label>
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Забыл</span></label>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-cancel')">Назад</button><button class="btn btn-danger" onclick="closeModal('m-cancel')">Отменить визит</button></div>
   </div>
@@ -911,7 +852,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_laborder">Заказ лаборатории</h3><button class="modal-close" onclick="closeModal('m-labOrder')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input type="text" placeholder="Поиск пациента" data-i18n-placeholder="w_search_patient"></div>
+      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input type="text" placeholder="Поиск пациента"></div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_work_type">Тип работы</label><select><option>Коронка</option><option>Протез</option><option>Винир</option><option>Мостовидный протез</option></select></div>
         <div class="form-group"><label data-i18n="w_tooth_plural">Зуб(ы)</label><input type="text" placeholder="26"></div>
@@ -995,7 +936,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div style="border-top:1px solid var(--mist-line);padding-top:16px;">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Новый шаблон</label>
         <div class="form-group"><input type="text" id="tpl-title" placeholder="Название шаблона"></div>
-        <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
+        <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…"></textarea></div>
         <button class="btn btn-cobalt btn-sm" onclick="addTemplate()">+ Добавить шаблон</button>
       </div>
     </div>
@@ -1709,12 +1650,12 @@ function renderBlacklist(){
   const list=blacklistEntries.filter(e=>e.name.toLowerCase().includes(q) || e.phone.includes(q));
   updateBlacklistBadge();
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Список пуст</td></tr>';
     return;
   }
   body.innerHTML=list.map(e=>`
     <tr><td><b>${e.name}</b></td><td class="mono">${e.phone}</td><td>${e.reason}</td><td>${e.addedBy}</td><td class="mono">${e.date}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="removeFromBlacklist(${e.id})">${t('w_remove')}</button></td></tr>`).join('');
+    <td><button class="btn btn-danger btn-sm" onclick="removeFromBlacklist(${e.id})">Убрать</button></td></tr>`).join('');
 }
 function findBlacklistEntryByPhone(phone){
   const norm=normPhoneJs(phone);
@@ -1732,7 +1673,7 @@ async function addToBlacklist(){
   else { showToast('Не удалось добавить в список', 'error'); }
 }
 async function removeFromBlacklist(id){
-  if(!confirm(t('w_confirm_unblacklist','Убрать пациента из чёрного списка?'))) return;
+  if(!confirm('Убрать пациента из чёрного списка?')) return;
   const fd=new FormData();
   fd.append('action','remove'); fd.append('id', id);
   const res=await postForm('/patients/blacklist/', fd);
@@ -1751,7 +1692,7 @@ async function removeCurrentFromBlacklist(){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   const entry=p ? findBlacklistEntryByPhone(p.phone) : null;
   if(!entry) return;
-  if(!confirm(t('w_confirm_unblacklist','Убрать пациента из чёрного списка?'))) return;
+  if(!confirm('Убрать пациента из чёрного списка?')) return;
   const fd=new FormData();
   fd.append('action','remove'); fd.append('id', entry.id);
   const res=await postForm('/patients/blacklist/', fd);
@@ -2028,7 +1969,7 @@ function renderClientList(){
     const matchesCh = msgChannelFilter==='all' || c.channel===msgChannelFilter;
     return matchesQ && matchesCh;
   });
-  if(list.length===0){ wrap.innerHTML=`<div style="padding:20px;font-size:12.5px;color:var(--ink-soft);text-align:center;">${t('w_no_chats_yet')}</div>`; return; }
+  if(list.length===0){ wrap.innerHTML='<div style="padding:20px;font-size:12.5px;color:var(--ink-soft);text-align:center;">Переписок пока нет</div>'; return; }
   wrap.innerHTML=list.map(c=>{
     const initials=c.name.split(' ').map(w=>w[0]).slice(0,2).join('');
     const chIcon = c.channel==='whatsapp' ? '🟢' : '🔵';
@@ -2064,27 +2005,27 @@ function renderChatHeader(){
   if(!el || !c){ if(el) el.innerHTML=''; return; }
   const chLabel = c.channel==='whatsapp' ? '🟢 WhatsApp' : '🔵 Telegram';
   el.innerHTML=`<div><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
-    <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>`;
+    <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">Карточка пациента</a>`;
 }
 async function loadChatThread(patientId){
   const el=document.getElementById('chatMessages');
   if(!el) return;
-  el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">${t('w_loading')}</div>`;
+  el.innerHTML='<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">Загрузка…</div>';
   try{
     const res=await fetch('/patients/'+patientId+'/wa-messages/');
     const data=await res.json();
     renderChatThread(data.messages||[]);
   }catch(e){
-    el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--coral);">${t('w_chat_load_failed')}</div>`;
+    el.innerHTML='<div style="margin:auto;font-size:12.5px;color:var(--coral);">Не удалось загрузить переписку</div>';
   }
 }
 function renderChatThread(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
-  if(msgs.length===0){ el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">${t('w_no_messages_yet')}</div>`; return; }
+  if(msgs.length===0){ el.innerHTML='<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">Сообщений пока нет</div>'; return; }
   el.innerHTML=msgs.map(m=>{
-    const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${m.media_type||t('w_file')}</div>` : '';
-    const failed = (m.dir==='out' && !m.ok) ? ` <span style="color:var(--coral);">(${t('w_not_delivered')})</span>` : '';
+    const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${m.media_type||'файл'}</div>` : '';
+    const failed = (m.dir==='out' && !m.ok) ? ' <span style="color:var(--coral);">(не доставлено)</span>' : '';
     return `<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${m.body||''}${failed}<span class="time">${m.time}</span></div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
@@ -2112,9 +2053,9 @@ async function sendChatMessage(){
   if(res.redirected){
     input.value='';
     await loadChatThread(currentClientId);
-    if(c){ c.lastBody=text; c.lastTime=t('w_just_now'); renderClientList(); }
+    if(c){ c.lastBody=text; c.lastTime='сейчас'; renderClientList(); }
   } else {
-    showToast(t('w_send_message_failed'), 'error');
+    showToast('Не удалось отправить сообщение (проверьте номер/настройки WhatsApp)', 'error');
   }
 }
 
@@ -2222,18 +2163,18 @@ async function cashOpenShift(){
   fd.append('opening_cash', (el?el.value:'0')||'0');
   const res=await postForm('/finance/cashshift/open/', fd);
   const data=await res.json();
-  if(res.ok && data.ok){ flashAndReload(t('w_shift_opened','Смена открыта')); }
-  else { showToast(apiErrorMessage(data, t('w_shift_open_failed','Не удалось открыть смену')), 'error'); }
+  if(res.ok && data.ok){ flashAndReload('Смена открыта'); }
+  else { showToast(data.error || 'Не удалось открыть смену', 'error'); }
 }
 async function cashCloseShift(shiftId){
-  if(!confirm(t('w_confirm_close_shift','Закрыть смену? После закрытия Z-отчёт зафиксируется.'))) return;
+  if(!confirm('Закрыть смену? После закрытия Z-отчёт зафиксируется.')) return;
   const el=document.getElementById('shiftClosingCash');
   const fd=new FormData();
   fd.append('closing_cash_actual', (el?el.value:'0')||'0');
   const res=await postForm('/finance/cashshift/'+shiftId+'/close/', fd);
   const data=await res.json();
-  if(res.ok && data.ok){ flashAndReload(t('w_shift_closed','Смена закрыта')); }
-  else { showToast(apiErrorMessage(data, t('w_shift_close_failed','Не удалось закрыть смену')), 'error'); }
+  if(res.ok && data.ok){ flashAndReload('Смена закрыта'); }
+  else { showToast(data.error || 'Не удалось закрыть смену', 'error'); }
 }
 function renderCashQueue(){
   const el=document.getElementById('cashQueueBody');
@@ -2731,87 +2672,6 @@ const translations={
   w_simple_mode_hint: {ru:'Показывать только вкладки «Зубы» и «Рентген»', ky:'Уруш «Тиштер» жана «Рентген» гана көрсөтүлсүн', en:'Show only the "Teeth" and "X-ray" tabs', uz:'Faqat "Tishlar" va "Rentgen" bo\'limlarini ko\'rsatish'},
   w_no_services_selected: {ru:'Услуги не выбраны', ky:'Кызматтар тандалган жок', en:'No services selected', uz:'Xizmatlar tanlanmagan'},
   w_remove: {ru:'Убрать', ky:'Алып салуу', en:'Remove', uz:'O\'chirish'},
-  w_multi_service_hint: {ru:'можно выбрать несколько — добавятся в «Процедуры и план»', ky:'бир нечесин тандаса болот — «Процедуралар жана план» бөлүмүнө кошулат', en:'you can pick several — they will be added to “Procedures and plan”', uz:'bir nechtasini tanlash mumkin — «Muolajalar va reja» bo‘limiga qo‘shiladi'},
-  w_open_file: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
-  w_no_visits_yet: {ru:'Приёмов пока не было', ky:'Кабылдоолор азырынча болгон эмес', en:'No visits yet', uz:'Hozircha qabullar bo‘lmagan'},
-  w_no_plans_yet: {ru:'Планов лечения пока нет', ky:'Дарылоо пландары азырынча жок', en:'No treatment plans yet', uz:'Hozircha davolash rejalari yo‘q'},
-  w_no_payments_yet: {ru:'Платежей пока не было', ky:'Төлөмдөр азырынча болгон эмес', en:'No payments yet', uz:'Hozircha to‘lovlar bo‘lmagan'},
-  w_total_paid: {ru:'Всего оплачено', ky:'Бардыгы төлөндү', en:'Total paid', uz:'Jami to‘langan'},
-  w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
-  w_docs_upload_old_ui_hint: {ru:'Загрузка снимков/документов — в старом интерфейсе, на карточке приёма', ky:'Сүрөттөрдү/документтерди жүктөө — эски интерфейсте, кабылдоо картасында', en:'Uploading images/documents is available in the old interface, on the visit card', uz:'Rasm/hujjat yuklash — eski interfeysda, qabul kartasida'},
-  w_add_stage: {ru:'Добавить этап', ky:'Этап кошуу', en:'Add stage', uz:'Bosqich qo‘shish'},
-  w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
-  w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
-  w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
-  w_access_restriction_hint: {ru:'Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)', ky:'Кызматкер боюнча жеке чектөөлөр — «Персонал» бетиндеги кызматкер картасында (эски интерфейс)', en:'Per-employee access restrictions — on the employee card in “Staff” (old interface)', uz:'Xodim bo‘yicha shaxsiy cheklovlar — «Xodimlar» sahifasidagi xodim kartasida (eski interfeys)'},
-  w_interface_language: {ru:'Язык интерфейса', ky:'Интерфейс тили', en:'Interface language', uz:'Interfeys tili'},
-  w_interface_language_hint: {ru:'Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже', ky:'Меню жазууларын дароо, кайра жүктөбөй өзгөртөт — төмөнкү баскыч менен сакталат', en:'Changes menu labels instantly, without reloading — saved with the button below', uz:'Menyu yozuvlarini darhol, qayta yuklamasdan o‘zgartiradi — pastdagi tugma bilan saqlanadi'},
-  w_phone_label: {ru:'Телефон', ky:'Телефон', en:'Phone', uz:'Telefon'},
-  w_address_label: {ru:'Адрес', ky:'Дарек', en:'Address', uz:'Manzil'},
-  w_wa_enabled: {ru:'🟢 Включён', ky:'🟢 Күйгүзүлгөн', en:'🟢 Enabled', uz:'🟢 Yoqilgan'},
-  w_wa_disabled: {ru:'⚪ Выключен', ky:'⚪ Өчүрүлгөн', en:'⚪ Disabled', uz:'⚪ O‘chirilgan'},
-  w_settings_not_wired: {ru:'Этот раздел настроек ещё не подключён к реальным данным', ky:'Бул орнотуулар бөлүмү дагы эле чыныгы маалыматтарга туташтырылган эмес', en:'This settings section is not connected to real data yet', uz:'Ushbu sozlamalar bo‘limi hali haqiqiy ma’lumotlarga ulanmagan'},
-  w_settings_saved: {ru:'Настройки сохранены', ky:'Орнотуулар сакталды', en:'Settings saved', uz:'Sozlamalar saqlandi'},
-  w_settings_save_failed: {ru:'Не удалось сохранить — проверьте поля', ky:'Сактоо мүмкүн болгон жок — талааларды текшериңиз', en:'Failed to save — please check the fields', uz:'Saqlab bo‘lmadi — maydonlarni tekshiring'},
-  w_reminder_settings_saved: {ru:'Настройки напоминаний сохранены', ky:'Эскертүү орнотуулары сакталды', en:'Reminder settings saved', uz:'Eslatma sozlamalari saqlandi'},
-  w_ai_input_placeholder: {ru:'Например: где мы теряем деньги?', ky:'Мисалы: акчаны кайда жоготуп жатабыз?', en:'E.g.: where are we losing money?', uz:'Masalan: qayerda pul yo‘qotyapmiz?'},
-  w_ai_preset_revenue: {ru:'Как выручка?', ky:'Түшүм кандай?', en:'How’s revenue?', uz:'Daromad qanday?'},
-  w_ai_preset_doctors: {ru:'Кого догрузить?', ky:'Кимди көбүрөөк жүктөө керек?', en:'Who has spare capacity?', uz:'Kimni ko‘proq band qilish kerak?'},
-  w_ai_preset_cancels: {ru:'Почему отменяют?', ky:'Эмне үчүн жокко чыгарылат?', en:'Why are visits cancelled?', uz:'Nega bekor qilinmoqda?'},
-  w_ai_preset_debtors: {ru:'Кто должен оплатить?', ky:'Ким төлөшү керек?', en:'Who needs to pay?', uz:'Kim to‘lashi kerak?'},
-  w_room_load_week: {ru:'Загрузка кабинетов · неделя', ky:'Кабинеттердин жүктөлүшү · жума', en:'Room utilization · week', uz:'Xonalar bandligi · hafta'},
-  w_repeat_visits_quarter: {ru:'Повторные визиты · квартал', ky:'Кайталанган визиттер · чейрек', en:'Repeat visits · quarter', uz:'Takroriy tashriflar · chorak'},
-  w_search_by_name_phone: {ru:'Поиск по имени или телефону', ky:'Аты же телефону боюнча издөө', en:'Search by name or phone', uz:'Ism yoki telefon bo‘yicha qidirish'},
-  w_from_short: {ru:'от', ky:'дан', en:'from', uz:'dan'},
-  w_search_name_phone_dots: {ru:'Поиск по имени, телефону…', ky:'Аты, телефону боюнча издөө…', en:'Search by name, phone…', uz:'Ism, telefon bo‘yicha qidirish…'},
-  w_write_message_dots: {ru:'Написать сообщение…', ky:'Билдирүү жазуу…', en:'Write a message…', uz:'Xabar yozish…'},
-  w_search_user_object: {ru:'Пользователь, объект…', ky:'Колдонуучу, объект…', en:'User, object…', uz:'Foydalanuvchi, obyekt…'},
-  w_search_patient_doctor: {ru:'Пациент, врач…', ky:'Бейтап, врач…', en:'Patient, doctor…', uz:'Bemor, shifokor…'},
-  w_search_fullname_phone: {ru:'ФИО, телефон…', ky:'Аты-жөнү, телефону…', en:'Full name, phone…', uz:'F.I.Sh., telefon…'},
-  w_optional_placeholder: {ru:'Необязательно', ky:'Милдеттүү эмес', en:'Optional', uz:'Ixtiyoriy'},
-  w_describe_reason_own_words: {ru:'Или опишите причину своими словами…', ky:'Же себебин өз сөзүңүз менен жазыңыз…', en:'Or describe the reason in your own words…', uz:'Yoki sababni o‘z so‘zlaringiz bilan yozing…'},
-  w_doctor_notes_placeholder: {ru:'Что сделано, жалобы, рекомендации…', ky:'Эмне жасалды, даттануулар, сунуштар…', en:'What was done, complaints, recommendations…', uz:'Nima qilindi, shikoyatlar, tavsiyalar…'},
-  w_search_patient: {ru:'Поиск пациента', ky:'Бейтапты издөө', en:'Search patient', uz:'Bemorni qidirish'},
-  w_role_system: {ru:'Системная', ky:'Тутумдук', en:'System', uz:'Tizim'},
-  w_role_custom: {ru:'Своя', ky:'Өздүк', en:'Custom', uz:'Maxsus'},
-  w_check_entered_data: {ru:'Проверьте введённые данные', ky:'Киргизилген маалыматты текшериңиз', en:'Please check the entered data', uz:'Kiritilgan ma\'lumotlarni tekshiring'},
-  w_yesterday_colon: {ru:'вчера:', ky:'кечээ:', en:'yesterday:', uz:'kecha:'},
-  w_of_which_new: {ru:'из них {n} новых', ky:'алардын {n} жаңы', en:'{n} of them new', uz:'ulardan {n} tasi yangi'},
-  w_since_month_start: {ru:'с начала месяца', ky:'ай башынан бери', en:'since the start of the month', uz:'oy boshidan beri'},
-  w_overdue_short: {ru:'просроч.', ky:'мөөнөтү өткөн', en:'overdue', uz:'muddati o‘tgan'},
-  w_on_time: {ru:'в срок', ky:'мөөнөтүндө', en:'on time', uz:'muddatida'},
-  w_no_patients_yet: {ru:'Пока нет пациентов', ky:'Азырынча бейтаптар жок', en:'No patients yet', uz:'Hozircha bemorlar yo‘q'},
-  w_no_more_visits_today: {ru:'На сегодня приёмов не осталось', ky:'Бүгүнгө кабылдоолор калган жок', en:'No more visits scheduled for today', uz:'Bugungi kunga qabullar qolmadi'},
-  w_all_f: {ru:'Все', ky:'Баары', en:'All', uz:'Barchasi'},
-  w_active_treatment: {ru:'Активное лечение', ky:'Активдүү дарылоо', en:'Active treatment', uz:'Faol davolash'},
-  w_active_one: {ru:'активная', ky:'активдүү', en:'active', uz:'faol'},
-  w_active_many: {ru:'активных', ky:'активдүү', en:'active', uz:'faol'},
-  w_no_expenses_month: {ru:'Расходов за месяц не заведено', ky:'Ай ичинде чыгашалар киргизилген эмес', en:'No expenses recorded for the month', uz:'Oy uchun xarajatlar kiritilmagan'},
-  w_margin: {ru:'Рентабельность', ky:'Рентабелдүүлүк', en:'Margin', uz:'Rentabellik'},
-  w_no_events_found: {ru:'Событий не найдено', ky:'Окуялар табылган жок', en:'No events found', uz:'Voqealar topilmadi'},
-  w_new_plan_hint: {ru:'Новый план создаётся из карточки пациента в старом интерфейсе', ky:'Жаңы план бейтап картасынан эски интерфейсте түзүлөт', en:'A new plan is created from the patient card in the old interface', uz:'Yangi reja bemor kartasidan eski interfeysda yaratiladi'},
-  w_today_f: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
-  w_scheduled_pl: {ru:'Запланированы', ky:'Пландаштырылган', en:'Scheduled', uz:'Rejalashtirilgan'},
-  w_not_closed: {ru:'Не закрыты', ky:'Жабылган эмес', en:'Not closed', uz:'Yopilmagan'},
-  w_visit_status_updated: {ru:'Статус визита обновлён', ky:'Визит статусу жаңырды', en:'Visit status updated', uz:'Tashrif holati yangilandi'},
-  w_status_change_failed: {ru:'Не удалось изменить статус', ky:'Статусту өзгөртүү мүмкүн болгон жок', en:'Failed to change status', uz:'Holatni o‘zgartirib bo‘lmadi'},
-  w_visits_not_found: {ru:'Визитов не найдено', ky:'Визиттер табылган жок', en:'No visits found', uz:'Tashriflar topilmadi'},
-  w_start_visit_btn: {ru:'Начать приём', ky:'Кабылдоону баштоо', en:'Start visit', uz:'Qabulni boshlash'},
-  w_cancel_verb: {ru:'Отменить', ky:'Жокко чыгаруу', en:'Cancel', uz:'Bekor qilish'},
-  w_continue_visit_btn: {ru:'Продолжить приём', ky:'Кабылдоону улантуу', en:'Continue visit', uz:'Qabulni davom ettirish'},
-  w_finish_verb: {ru:'Завершить', ky:'Аяктоо', en:'Finish', uz:'Yakunlash'},
-  w_patients_short: {ru:'пациент(ов)', ky:'бейтап(тар)', en:'patient(s)', uz:'bemor(lar)'},
-  w_no_transactions_yet: {ru:'Пока нет операций', ky:'Азырынча операциялар жок', en:'No transactions yet', uz:'Hozircha operatsiyalar yo‘q'},
-  w_list_empty: {ru:'Список пуст', ky:'Тизме бош', en:'The list is empty', uz:'Ro‘yxat bo‘sh'},
-  w_no_chats_yet: {ru:'Переписок пока нет', ky:'Азырынча жазышуулар жок', en:'No chats yet', uz:'Hozircha suhbatlar yo‘q'},
-  w_patient_card: {ru:'Карточка пациента', ky:'Бейтап картасы', en:'Patient card', uz:'Bemor kartasi'},
-  w_loading: {ru:'Загрузка…', ky:'Жүктөлүүдө…', en:'Loading…', uz:'Yuklanmoqda…'},
-  w_chat_load_failed: {ru:'Не удалось загрузить переписку', ky:'Жазышууну жүктөө мүмкүн болгон жок', en:'Failed to load the chat', uz:'Suhbatni yuklab bo‘lmadi'},
-  w_no_messages_yet: {ru:'Сообщений пока нет', ky:'Азырынча билдирүүлөр жок', en:'No messages yet', uz:'Hozircha xabarlar yo‘q'},
-  w_file: {ru:'файл', ky:'файл', en:'file', uz:'fayl'},
-  w_not_delivered: {ru:'не доставлено', ky:'жеткирилген жок', en:'not delivered', uz:'yetkazilmadi'},
-  w_just_now: {ru:'сейчас', ky:'азыр', en:'just now', uz:'hozir'},
-  w_send_message_failed: {ru:'Не удалось отправить сообщение (проверьте номер/настройки WhatsApp)', ky:'Билдирүү жөнөтүлгөн жок (номерди/WhatsApp орнотууларын текшериңиз)', en:'Failed to send the message (check the number/WhatsApp settings)', uz:'Xabar yuborilmadi (raqam/WhatsApp sozlamalarini tekshiring)'},
   w_search_service_dots: {ru:'Поиск услуги…', ky:'Кызматты издөө…', en:'Search service…', uz:'Xizmat qidirish…'},
   w_messages: {ru:'Сообщения', ky:'Билдирүүлөр', en:'Messages', uz:'Xabarlar'},
   w_other: {ru:'Прочее', ky:'Башка', en:'Other', uz:'Boshqa'},
@@ -2933,45 +2793,6 @@ const translations={
   w_quick_sale: {ru:'Быстрая продажа', ky:'Тез сатуу', en:'Quick sale', uz:'Tezkor sotuv'},
   w_open_shift: {ru:'Открыть смену', ky:'Смена ачуу', en:'Open shift', uz:'Smenani ochish'},
   w_total: {ru:'Итого', ky:'Жыйынтыгы', en:'Total', uz:'Jami'},
-  w_discount_pct: {ru:'Скидка %', ky:'Арзандатуу %', en:'Discount %', uz:'Chegirma %'},
-  w_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
-  w_add_at_least_one_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
-  w_shift_opened: {ru:'Смена открыта', ky:'Смена ачылды', en:'Shift opened', uz:'Smena ochildi'},
-  w_shift_open_failed: {ru:'Не удалось открыть смену', ky:'Сменаны ачуу мүмкүн болгон жок', en:'Failed to open shift', uz:'Smenani ochib bo‘lmadi'},
-  w_shift_closed: {ru:'Смена закрыта', ky:'Смена жабылды', en:'Shift closed', uz:'Smena yopildi'},
-  w_shift_close_failed: {ru:'Не удалось закрыть смену', ky:'Сменаны жабуу мүмкүн болгон жок', en:'Failed to close shift', uz:'Smenani yopib bo‘lmadi'},
-  w_confirm_close_shift: {ru:'Закрыть смену? После закрытия Z-отчёт зафиксируется.', ky:'Сменаны жабасызбы? Жабылгандан кийин Z-отчёт бекитилет.', en:'Close the shift? The Z-report will be finalized after closing.', uz:'Smenani yopasizmi? Yopilgandan so‘ng Z-hisobot yakunlanadi.'},
-  w_lead_move_failed: {ru:'Не удалось перенести заявку', ky:'Арызды жылдыруу мүмкүн болгон жок', en:'Failed to move the lead', uz:'Arizani ko‘chirib bo‘lmadi'},
-  w_lead_save_failed: {ru:'Не удалось сохранить заявку', ky:'Арызды сактоо мүмкүн болгон жок', en:'Failed to save the lead', uz:'Arizani saqlab bo‘lmadi'},
-  w_network_error: {ru:'Ошибка сети', ky:'Тармак катасы', en:'Network error', uz:'Tarmoq xatosi'},
-  w_network_error_retry: {ru:'Ошибка сети — попробуйте ещё раз', ky:'Тармак катасы — кайра аракет кылыңыз', en:'Network error — please try again', uz:'Tarmoq xatosi — qayta urinib ko‘ring'},
-  w_appt_created: {ru:'Запись создана', ky:'Жазуу түзүлдү', en:'Appointment created', uz:'Yozuv yaratildi'},
-  w_appt_create_failed: {ru:'Не удалось создать запись', ky:'Жазууну түзүү мүмкүн болгон жок', en:'Failed to create the appointment', uz:'Yozuvni yaratib bo‘lmadi'},
-  w_appt_moved: {ru:'Запись перенесена', ky:'Жазуу жылдырылды', en:'Appointment moved', uz:'Yozuv ko‘chirildi'},
-  w_appt_move_failed: {ru:'Не удалось перенести запись', ky:'Жазууну жылдыруу мүмкүн болгон жок', en:'Failed to move the appointment', uz:'Yozuvni ko‘chirib bo‘lmadi'},
-  // — Переводы серверных ошибок (error_key из JsonResponse({"error":...,
-  // "error_key":...}), см. apps/*/views.py). apiErrorMessage() в base.html
-  // подставляет data.error как fallback, если ключа тут ещё нет. —
-  err_appt_overlap: {ru:'Пересечение с другой записью этого врача', ky:'Ушул врачтын башка жазуусу менен кагылышуу', en:'Overlaps with another appointment of this doctor', uz:'Shu shifokorning boshqa yozuvi bilan ustma-ust tushadi'},
-  err_appt_no_patient: {ru:'У записи нет пациента', ky:'Жазууда пациент жок', en:'The appointment has no patient', uz:'Yozuvda bemor yo‘q'},
-  err_appt_invalid_date: {ru:'Неверная дата', ky:'Туура эмес күн', en:'Invalid date', uz:'Noto‘g‘ri sana'},
-  err_treatment_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
-  err_treatment_no_branches: {ru:'Нет доступных филиалов', ky:'Жеткиликтүү филиалдар жок', en:'No branches available', uz:'Mavjud filiallar yo‘q'},
-  err_treatment_add_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
-  err_visit_no_file: {ru:'Файл не выбран', ky:'Файл тандалган жок', en:'No file selected', uz:'Fayl tanlanmagan'},
-  err_visit_max_10_files: {ru:'Максимум 10 файлов за раз', ky:'Бир жолу максимум 10 файл', en:'Up to 10 files at a time', uz:'Bir martada maksimal 10 ta fayl'},
-  err_visit_already_completed: {ru:'Приём уже завершён', ky:'Кабыл алуу аяктады', en:'The visit is already completed', uz:'Qabul allaqachon yakunlangan'},
-  err_menu_only_director: {ru:'Только директор может менять меню клиники', ky:'Менюну тек директор гана өзгөртө алат', en:'Only a director can change the clinic menu', uz:'Klinika menyusini faqat direktor o‘zgartira oladi'},
-  err_patient_name_required: {ru:'Укажите имя', ky:'Атын көрсөтүңүз', en:'Enter a name', uz:'Ismni kiriting'},
-  err_patient_invalid_stage: {ru:'Некорректный этап', ky:'Туура эмес этап', en:'Invalid stage', uz:'Noto‘g‘ri bosqich'},
-  err_cashshift_no_branch: {ru:'Не удалось определить филиал', ky:'Филиалды аныктоо мүмкүн болгон жок', en:'Could not determine the branch', uz:'Filialni aniqlab bo‘lmadi'},
-  err_cashshift_already_open: {ru:'Смена по этому филиалу уже открыта', ky:'Бул филиал боюнча смена ачык', en:'A shift for this branch is already open', uz:'Ushbu filial uchun smena allaqachon ochilgan'},
-  err_cashshift_invalid_amount: {ru:'Некорректная сумма', ky:'Туура эмес сумма', en:'Invalid amount', uz:'Noto‘g‘ri summa'},
-  err_finance_no_access: {ru:'Нет доступа', ky:'Мүмкүнчүлүк жок', en:'No access', uz:'Ruxsat yo‘q'},
-  w_confirm_unblacklist: {ru:'Убрать пациента из чёрного списка?', ky:'Пациентти кара тизмеден чыгарасызбы?', en:'Remove the patient from the blacklist?', uz:'Bemorni qora ro‘yxatdan chiqarasizmi?'},
-  w_confirm_delete_lead: {ru:'Удалить заявку?', ky:'Арызды өчүрөсүзбү?', en:'Delete the lead?', uz:'Arizani o‘chirasizmi?'},
-  w_confirm_cancel_appt: {ru:'Отменить запись?', ky:'Жазууну жокко чыгарасызбы?', en:'Cancel the appointment?', uz:'Yozuvni bekor qilasizmi?'},
-  w_confirm_delete_role: {ru:'Удалить роль «{name}»?', ky:'«{name}» ролун өчүрөсүзбү?', en:'Delete the role "{name}"?', uz:'"{name}" rolini o‘chirasizmi?'},
   w_needs_doctor_confirmation: {ru:'Ждёт подтверждения врача', ky:'Дарыгердин ырастоосун күтүүдө', en:'Awaiting doctor confirmation', uz:'Shifokor tasdig\'ini kutmoqda'},
   w_confirm: {ru:'Подтвердить', ky:'Ырастоо', en:'Confirm', uz:'Tasdiqlash'},
   w_cash: {ru:'Наличные', ky:'Накталай', en:'Cash', uz:'Naqd'},
@@ -3152,16 +2973,6 @@ function applyI18nTo(root){
     const entry=translations[key];
     if(entry && entry[currentLang]) el.textContent=entry[currentLang];
   });
-  // data-i18n-title/data-i18n-placeholder — то же самое, но для атрибутов
-  // title/placeholder (обычный data-i18n меняет только textContent).
-  root.querySelectorAll('[data-i18n-title]').forEach(el=>{
-    const entry=translations[el.dataset.i18nTitle];
-    if(entry && entry[currentLang]) el.title=entry[currentLang];
-  });
-  root.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{
-    const entry=translations[el.dataset.i18nPlaceholder];
-    if(entry && entry[currentLang]) el.placeholder=entry[currentLang];
-  });
 }
 function setLanguage(lang){
   currentLang=lang;
@@ -3198,7 +3009,7 @@ let editingServiceId=null;
 function renderServiceChips(){
   const wrap=document.getElementById('svcCategoryChips');
   if(!wrap) return;
-  let html=`<button class="chip${serviceCategory==='Все'?' active':''}" onclick="setServiceCategory('Все')">${t('w_all_f')} · ${servicesList.length}</button>`;
+  let html=`<button class="chip${serviceCategory==='Все'?' active':''}" onclick="setServiceCategory('Все')">Все · ${servicesList.length}</button>`;
   serviceCategories.forEach(c=>{
     const n=servicesList.filter(s=>s.categoryId===c.id).length;
     html+=`<button class="chip${serviceCategory===c.name?' active':''}" onclick="setServiceCategory('${c.name.replace(/'/g,"\\'")}')">${c.name} · ${n}</button>`;
@@ -3220,7 +3031,7 @@ function renderServicesTable(){
     return matchesCat && matchesQ;
   });
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`;
+    body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Ничего не найдено</td></tr>';
     return;
   }
   body.innerHTML=list.map(s=>`<tr>
@@ -3311,12 +3122,12 @@ function renderFinance(){
   document.getElementById('fin-expenses').textContent=fmtSom(d.expensesMonth);
   document.getElementById('fin-deposits').textContent=fmtSom(d.depositsTotal);
   document.getElementById('fin-debt').textContent=fmtSom(d.debtTotal);
-  document.getElementById('fin-debt-sub').textContent=`${d.debtCount} ${t('w_patients_short')}`;
+  document.getElementById('fin-debt-sub').textContent=`${d.debtCount} пациент(ов)`;
   const body=document.getElementById('fin-transactions');
   if(!body) return;
   body.innerHTML = d.transactions.length===0
-    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_transactions_yet')}</td></tr>`
-    : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td></tr>`).join('');
+    ? '<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">Пока нет операций</td></tr>'
+    : d.transactions.map(t=>`<tr><td>${t.who}</td><td>${t.type}</td><td>${t.method}</td><td class="mono" style="color:${t.amount<0?'var(--coral)':'var(--teal)'}">${t.amount<0?'−':'+'}${fmtSom(Math.abs(t.amount))}</td><td>${t.time}</td></tr>`).join('');
 }
 
 const LAB_COL_KEY={'Принят':'w_lab_col_accepted','В работе':'w_lab_col_progress','Готово':'w_lab_col_ready','Выдано · гарантия':'w_lab_col_issued'};
@@ -3370,7 +3181,7 @@ function renderTreatplans(){
   document.getElementById('tpKpiAwaiting').textContent=treatplansData.awaitingPaymentCount;
   const statusPill={draft:'grey', approved:'cobalt', in_progress:'amber', completed:'teal', cancelled:'coral'};
   if(treatplansData.plans.length===0){
-    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_plans_yet')}</td></tr>`;
+    body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Планов лечения пока нет</td></tr>';
     return;
   }
   body.innerHTML=treatplansData.plans.map(p=>`
@@ -3388,10 +3199,10 @@ function renderVisitsChips(){
   const wrap=document.getElementById('visitsChips');
   if(!wrap || !visitsData) return;
   const chips=[
-    {key:'today', label:`${t('w_today_f')} · ${visitsData.totalToday}`},
-    {key:'planned', label:`${t('w_scheduled_pl')} · ${visitsData.plannedCount}`},
-    {key:'open', label:`${t('w_not_closed')} · ${visitsData.openCount}`},
-    {key:'all', label:`${t('w_all_f')} · ${visitsData.visits.length}`},
+    {key:'today', label:`Сегодня · ${visitsData.totalToday}`},
+    {key:'planned', label:`Запланированы · ${visitsData.plannedCount}`},
+    {key:'open', label:`Не закрыты · ${visitsData.openCount}`},
+    {key:'all', label:`Все · ${visitsData.visits.length}`},
   ];
   wrap.innerHTML=chips.map(c=>`<button class="chip${visitsChipFilter===c.key?' active':''}" onclick="setVisitsChipFilter('${c.key}')">${c.label}</button>`).join('');
 }
@@ -3399,8 +3210,8 @@ async function visitSetStatus(id, status){
   const fd=new FormData();
   fd.append('status', status);
   const res=await postForm('/appointments/'+id+'/status/', fd);
-  if(res.redirected){ flashAndReload(t('w_visit_status_updated')); }
-  else { showToast(t('w_status_change_failed'), 'error'); }
+  if(res.redirected){ flashAndReload('Статус визита обновлён'); }
+  else { showToast('Не удалось изменить статус', 'error'); }
 }
 function renderVisits(){
   if(!visitsData) return;
@@ -3415,17 +3226,17 @@ function renderVisits(){
   // 'all' — без фильтра по дате/статусу, весь загруженный диапазон (±30 дней)
   if(q) list=list.filter(v=>v.patient.toLowerCase().includes(q) || v.doctor.toLowerCase().includes(q));
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_visits_not_found')}</td></tr>`;
+    body.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">Визитов не найдено</td></tr>';
     return;
   }
   body.innerHTML=list.map(v=>{
     let action='';
     if(['scheduled','confirmed'].includes(v.status)){
-      action=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${v.id}'">${t('w_start_visit_btn')}</button>
-        <button class="btn btn-ghost btn-sm" onclick="visitSetStatus(${v.id},'cancelled')">${t('w_cancel_verb')}</button>`;
+      action=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${v.id}'">Начать приём</button>
+        <button class="btn btn-ghost btn-sm" onclick="visitSetStatus(${v.id},'cancelled')">Отменить</button>`;
     } else if(['arrived','in_progress'].includes(v.status)){
-      action=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${v.id}'">${t('w_continue_visit_btn')}</button>
-        <button class="btn btn-ghost btn-sm" onclick="visitSetStatus(${v.id},'completed')">${t('w_finish_verb')}</button>`;
+      action=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${v.id}'">Продолжить приём</button>
+        <button class="btn btn-ghost btn-sm" onclick="visitSetStatus(${v.id},'completed')">Завершить</button>`;
     }
     return `<tr class="clickable" onclick="location.href='/new/patients/${v.patientId||''}/'">
       <td class="mono">${v.dateLabel||v.date||''}</td><td class="mono">${v.time}</td><td>${v.patient}</td><td>${v.doctor}</td><td>${v.service}</td>
@@ -3441,9 +3252,9 @@ function renderAccounting(){
   const wrap=document.getElementById('acctLines');
   if(!wrap) return;
   document.getElementById('acctMonthLabel').textContent=accountingData.monthLabel;
-  let html=`<div class="row"><div class="row-main"><b>${t('w_revenue')}</b></div><span class="mono">${Math.round(accountingData.revenue).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`;
+  let html=`<div class="row"><div class="row-main"><b>Выручка</b></div><span class="mono">${Math.round(accountingData.revenue).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`;
   if(accountingData.expenseLines.length===0){
-    html+=`<div class="row"><div class="row-main" style="color:var(--ink-soft);">${t('w_no_expenses_month')}</div></div>`;
+    html+=`<div class="row"><div class="row-main" style="color:var(--ink-soft);">Расходов за месяц не заведено</div></div>`;
   } else {
     accountingData.expenseLines.forEach(l=>{
       html+=`<div class="row"><div class="row-main"><b>${l.name}</b></div><span class="mono" style="color:var(--coral)">−${Math.round(l.amount).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`;
@@ -3451,7 +3262,7 @@ function renderAccounting(){
   }
   wrap.innerHTML=html;
   document.getElementById('acctProfit').textContent=Math.round(accountingData.profit).toLocaleString('ru-RU')+' '+CUR_SYM;
-  document.getElementById('acctMargin').textContent=t('w_margin')+' '+accountingData.marginPct+'%';
+  document.getElementById('acctMargin').textContent='Рентабельность '+accountingData.marginPct+'%';
 }
 
 /* ================= ЖУРНАЛ АУДИТА (реальная история изменений) ================= */
@@ -3461,7 +3272,7 @@ function renderAudit(){
   const q=(document.getElementById('auditSearchInput')?.value||'').toLowerCase();
   const list=auditEvents.filter(e=>e.user.toLowerCase().includes(q) || e.object.toLowerCase().includes(q));
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_events_found')}</td></tr>`;
+    body.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">Событий не найдено</td></tr>';
     return;
   }
   body.innerHTML=list.map(e=>`<tr><td class="mono">${e.time}</td><td>${e.user}</td><td>${e.action}</td><td>${e.object}</td></tr>`).join('');
@@ -3734,7 +3545,7 @@ function renderFunnel(){
   });
   recountFunnel();
   const sub=document.querySelector('.topbar-sub');
-  if(sub) sub.textContent=t('w_funnel')+' · '+funnelData.leads.length+' '+(funnelData.leads.length===1?t('w_active_one'):t('w_active_many'));
+  if(sub) sub.textContent='Воронка · '+funnelData.leads.length+' '+(funnelData.leads.length===1?'активная':'активных');
 }
 function startLeadDrag(e, el){
   if(e.button!==0) return;
@@ -3799,10 +3610,10 @@ function startLeadDrag(e, el){
         const data=await res.json();
         if(!res.ok || !data.ok){
           lead.stage=prevStage;
-          showToast(apiErrorMessage(data, t('w_lead_move_failed','Не удалось перенести заявку')), 'error');
+          showToast(data.error || 'Не удалось перенести заявку', 'error');
           renderFunnel();
         }
-      }).catch(()=>{ lead.stage=prevStage; showToast(t('w_network_error','Ошибка сети'), 'error'); renderFunnel(); });
+      }).catch(()=>{ lead.stage=prevStage; showToast('Ошибка сети', 'error'); renderFunnel(); });
     }
   }
   document.addEventListener('mousemove', onMove);
@@ -3877,13 +3688,13 @@ async function saveLeadCard(){
     closeModal('m-lead');
   } else {
     const box=document.getElementById('leadModalError');
-    box.textContent=apiErrorMessage(data, t('w_lead_save_failed','Не удалось сохранить заявку'));
+    box.textContent=data.error || 'Не удалось сохранить заявку';
     box.classList.remove('hidden');
   }
 }
 async function deleteLeadCard(){
   if(editingLeadId){
-    if(!confirm(t('w_confirm_delete_lead','Удалить заявку?'))) { return; }
+    if(!confirm('Удалить заявку?')) { return; }
     const res=await apiJson('/patients/leads/'+editingLeadId+'/delete/', {});
     if(res.ok){
       funnelData.leads=funnelData.leads.filter(l=>l.id!==editingLeadId);
@@ -4022,7 +3833,6 @@ function calSetView(v){
 function renderSchedule(){
   const c=document.getElementById('scheduleContent');
   if(!c) return;
-  c.classList.toggle('sched-wrap-month', calView==='month');
   if(calView==='day'){ updateDayDateLabel(); c.innerHTML = buildDayHTML(); }
   else if(calView==='week') c.innerHTML = buildWeekHTML();
   else c.innerHTML = buildMonthHTML();
@@ -4161,7 +3971,7 @@ function maybeOfferStartVisit(apptId, newStatus){
 }
 async function apptViewSetStatus(status){
   if(!apptViewData) return;
-  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
+  if(status==='cancelled' && !confirm('Отменить запись?')) return;
   const apptId=apptViewData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
@@ -4203,8 +4013,7 @@ async function schedApptQuickMenu(event, apptId){
     || `<div style="padding:6px 10px;font-size:12px;color:var(--ink-soft);">${t('w_no_actions_available')}</div>`;
   const menu=document.createElement('div');
   menu.id='schedApptQuickMenuEl';
-  const menuPos=clampFloatingPanelPos(btnRect, 240, 220);
-  menu.style.cssText=`position:fixed;top:${menuPos.top}px;left:${menuPos.left}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:200px;max-width:240px;`;
+  menu.style.cssText=`position:fixed;top:${btnRect.bottom+4}px;left:${Math.min(btnRect.left,window.innerWidth-240)}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:200px;`;
   menu.innerHTML = `<div style="font-size:12.5px;font-weight:600;padding:2px 4px 4px;border-bottom:1px solid var(--mist-line);margin-bottom:2px;">${a.time} · ${p.name||'—'}</div>`
     + actionsHtml
     + `<button class="btn btn-ghost btn-sm" onclick="closeSchedApptQuickMenu();openApptInfo(${apptId})">Открыть карточку</button>`;
@@ -4214,7 +4023,7 @@ async function schedApptQuickMenu(event, apptId){
 }
 async function schedQuickSetStatus(status){
   if(!schedQuickMenuData) return;
-  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
+  if(status==='cancelled' && !confirm('Отменить запись?')) return;
   const apptId=schedQuickMenuData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
@@ -4271,8 +4080,7 @@ function openSchedDoctorFilterPanel(event){
   const btnRect=event.currentTarget.getBoundingClientRect();
   const panel=document.createElement('div');
   panel.id='schedDoctorFilterPanel';
-  const panelPos=clampFloatingPanelPos(btnRect, 280, 320);
-  panel.style.cssText=`position:fixed;top:${panelPos.top}px;left:${panelPos.left}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-width:280px;`;
+  panel.style.cssText=`position:fixed;top:${btnRect.bottom+4}px;left:${Math.min(btnRect.left,window.innerWidth-260)}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-width:280px;`;
   panel.innerHTML=schedDoctorFilterPanelHtml();
   panel.addEventListener('click', e=>e.stopPropagation());
   document.body.appendChild(panel);
@@ -4480,12 +4288,12 @@ async function submitNewAppt(){
           status: 'cobalt', durationMin: (service && service.duration) || 30, movable: true,
         });
         renderSchedule();
-        showToast(t('w_appt_created','Запись создана'));
+        showToast('Запись создана');
       } else {
-        flashAndReload(t('w_appt_created','Запись создана'));
+        flashAndReload('Запись создана');
       }
     } else {
-      errBox.textContent=apiErrorMessage(data, t('w_appt_create_failed','Не удалось создать запись'));
+      errBox.textContent=data.error || 'Не удалось создать запись';
       errBox.classList.remove('hidden');
     }
   } catch(e){
@@ -4533,10 +4341,10 @@ async function schedDrop(ev, time, docId){
       // Как и в submitNewAppt() — обновляем локально вместо полной перезагрузки страницы.
       appt.date=dateIso; appt.time=time; appt.docId=docId;
       renderSchedule();
-      showToast(t('w_appt_moved','Запись перенесена'));
+      showToast('Запись перенесена');
     }
-    else { showToast(apiErrorMessage(data, t('w_appt_move_failed','Не удалось перенести запись')), 'error'); }
-  } catch(e){ showToast(t('w_network_error_retry','Ошибка сети — попробуйте ещё раз'), 'error'); }
+    else { showToast(data.error || 'Не удалось перенести запись', 'error'); }
+  } catch(e){ showToast('Ошибка сети — попробуйте ещё раз', 'error'); }
 }
 
 /* ---- calendar settings modal ---- */
@@ -4695,27 +4503,27 @@ function renderDashboard(){
   const revDelta=document.getElementById('kpi-revenue-delta');
   if(d.revenueDeltaPct===null){ revDelta.textContent=''; }
   else { revDelta.textContent=(d.revenueDeltaPct>=0?'+':'')+d.revenueDeltaPct+'%'; revDelta.className='kpi-delta '+(d.revenueDeltaPct>=0?'up':'down'); }
-  document.getElementById('kpi-revenue-sub').textContent = t('w_yesterday_colon')+' '+fmtSom(d.revenueYesterday);
+  document.getElementById('kpi-revenue-sub').textContent = 'вчера: '+fmtSom(d.revenueYesterday);
 
   document.getElementById('kpi-patients-today').textContent = d.patientsToday;
-  document.getElementById('kpi-patients-sub').textContent = t('w_of_which_new', 'из них {n} новых').replace('{n}', d.newPatientsToday);
+  document.getElementById('kpi-patients-sub').textContent = `из них ${d.newPatientsToday} новых`;
 
   document.getElementById('kpi-new-patients-month').textContent = d.newPatientsMonth;
-  document.getElementById('kpi-new-patients-sub').textContent = t('w_since_month_start');
+  document.getElementById('kpi-new-patients-sub').textContent = 'с начала месяца';
 
   document.getElementById('kpi-lab-open').textContent = d.labOpenCount;
-  document.getElementById('kpi-lab-delta').textContent = d.labOverdueCount>0 ? `${d.labOverdueCount} ${t('w_overdue_short')}` : t('w_on_time');
+  document.getElementById('kpi-lab-delta').textContent = d.labOverdueCount>0 ? `${d.labOverdueCount} просроч.` : 'в срок';
 
   document.getElementById('week-revenue-bars').innerHTML = d.weekBars.map(b=>
     `<div class="col" title="${fmtSom(b.amount)}"><div class="bar${b.heightPct<25?' light':''}" style="height:${Math.max(b.heightPct,3)}%"></div><span class="lbl">${b.label}</span></div>`
   ).join('');
 
   document.getElementById('recent-patients-list').innerHTML = d.recentPatients.length===0
-    ? `<div style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;">${t('w_no_patients_yet')}</div>`
+    ? '<div style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;">Пока нет пациентов</div>'
     : d.recentPatients.map(p=>`<div class="row"><div class="row-main"><b>${p.name}</b><span>${p.phone||''} · ${p.when}</span></div></div>`).join('');
 
   document.getElementById('upcoming-appts-list').innerHTML = d.upcoming.length===0
-    ? `<div style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;">${t('w_no_more_visits_today')}</div>`
+    ? '<div style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;">На сегодня приёмов не осталось</div>'
     : d.upcoming.map(a=>`<div class="row"><div class="row-avatar">${(a.patient[0]||'?')}</div><div class="row-main"><b>${a.patient}${a.service?' — '+a.service:''}</b><span>${a.doctor}${a.cabinet?' · '+a.cabinet:''}</span></div><span class="pill cobalt">${a.time}</span></div>`).join('');
 }
 
@@ -4732,9 +4540,9 @@ function renderPatientChips(){
   const inTreatment=patientsList.filter(p=>p.hasActiveTreatment).length;
   const debtors=patientsList.filter(p=>p.hasDebt).length;
   const chips=[
-    {key:'all', label:`${t('w_all_f')} · ${total}`},
-    {key:'treatment', label:`${t('w_active_treatment')} · ${inTreatment}`},
-    {key:'debt', label:`${t('w_debtors')} · ${debtors}`},
+    {key:'all', label:`Все · ${total}`},
+    {key:'treatment', label:`Активное лечение · ${inTreatment}`},
+    {key:'debt', label:`Должники · ${debtors}`},
   ];
   wrap.innerHTML = chips.map(c=>`<button class="chip${patientChipFilter===c.key?' active':''}" onclick="patientChipFilter='${c.key}';renderPatientChips();renderPatientsTable();">${c.label}</button>`).join('');
 }
@@ -4747,7 +4555,7 @@ function renderPatientsTable(){
   if(patientChipFilter==='debt') list=list.filter(p=>p.hasDebt);
   if(q) list=list.filter(p=>p.fullName.toLowerCase().includes(q) || (p.phone||'').includes(q));
 
-  if(list.length===0){ body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; return; }
+  if(list.length===0){ body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Ничего не найдено</td></tr>'; return; }
   body.innerHTML = list.map(p=>
     `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono">${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td></tr>`
   ).join('');
@@ -4767,7 +4575,7 @@ function renderPatientCardTeeth(d){
 }
 function renderPatientCardHistory(d){
   const el=document.getElementById('pcPanelHistory');
-  if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_visits_yet')); return; }
+  if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Приёмов пока не было'); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
     <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
     <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
@@ -4781,7 +4589,7 @@ async function confirmQuickSale(id){
 }
 function renderPatientCardPlan(d){
   const el=document.getElementById('pcPanelPlan');
-  if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_plans_yet')); return; }
+  if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Планов лечения пока нет'); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3></div>
     <table><thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
     <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
@@ -4791,12 +4599,12 @@ function renderPatientCardFinance(d){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   const balance=p ? p.balance : 0;
   const kpi=`<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-    <div class="card kpi b-teal"><span class="lbl">${t('w_total_paid')}</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
-    <div class="card kpi b-cobalt"><span class="lbl">${t('w_balance')}</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
+    <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
+    <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
   </div>`;
   const rows=(!d.payments || d.payments.length===0)
-    ? PATIENT_TAB_EMPTY(t('w_no_payments_yet'))
-    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th></tr></thead>
+    ? PATIENT_TAB_EMPTY('Платежей пока не было')
+    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th>Дата</th><th>Назначение</th><th>Способ</th><th>Сумма</th></tr></thead>
        <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('')}</tbody></table></div>`;
   el.innerHTML=kpi+rows;
 }
@@ -4818,7 +4626,7 @@ function renderPatientCardDocs(d){
   const el=document.getElementById('pcPanelDocs');
   const docs=d.documents || [];
   if(docs.length===0){
-    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
+    el.innerHTML='<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">Пока нет загруженных документов</div><div style="font-size:11.5px;margin-top:4px;">Загрузка снимков/документов — в старом интерфейсе, на карточке приёма</div></div>';
     return;
   }
   const media=docs.map(f=>{
@@ -4974,7 +4782,7 @@ function renderRolesTable(){
   if(roles.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_roles')}</td></tr>`; return; }
   const check = v => v ? '<span class="pill teal">✓</span>' : '<span class="pill grey">—</span>';
   body.innerHTML = roles.map(r=>`
-    <tr class="clickable" onclick="openRoleDetail(${r.id})"><td><b>${r.name}</b></td><td>${r.isSystem?`<span class="pill grey">${t('w_role_system')}</span>`:`<span class="pill cobalt">${t('w_role_custom')}</span>`}</td><td>${check(r.perms.patients)}</td><td>${check(r.perms.finance)}</td><td>${check(r.perms.staff)}</td><td>${check(r.perms.reports)}</td><td class="mono">${r.staffCount}</td></tr>
+    <tr class="clickable" onclick="openRoleDetail(${r.id})"><td><b>${r.name}</b></td><td>${r.isSystem?'<span class="pill grey">Системная</span>':'<span class="pill cobalt">Своя</span>'}</td><td>${check(r.perms.patients)}</td><td>${check(r.perms.finance)}</td><td>${check(r.perms.staff)}</td><td>${check(r.perms.reports)}</td><td class="mono">${r.staffCount}</td></tr>
   `).join('');
 }
 
@@ -4998,8 +4806,8 @@ async function extractFormError(res){
   try{
     const doc=new DOMParser().parseFromString(await res.text(), 'text/html');
     const block=doc.querySelector('.bg-red-50');
-    return block ? block.textContent.trim().replace(/\s+/g,' ') : t('w_check_entered_data');
-  }catch(e){ return t('w_check_entered_data'); }
+    return block ? block.textContent.trim().replace(/\s+/g,' ') : 'Проверьте введённые данные';
+  }catch(e){ return 'Проверьте введённые данные'; }
 }
 function showModalError(id, msg){
   const box=document.getElementById(id);
@@ -5008,15 +4816,6 @@ function showModalError(id, msg){
 }
 
 /* ---- Тост об успехе + сохранение места после перезагрузки страницы ---- */
-// Сообщение из ответа API с учётом перевода: если бэкенд прислал error_key
-// (см. apps/*/views.py, JsonResponse({"error": "...", "error_key": "..."})),
-// показываем переведённый текст через t('err_'+key, <русский текст с бэка
-// как fallback>) — так работает даже для ключей, которых ещё нет в словаре.
-// Без error_key (старые/необновлённые эндпоинты) — просто сырой data.error.
-function apiErrorMessage(data, fallback){
-  if(data && data.error_key) return t('err_'+data.error_key, data.error || fallback);
-  return (data && data.error) || fallback || t('w_save_failed');
-}
 function showToast(msg, type){
   const bg = type==='error' ? '#e85d2d' : '#0e9c7d';
   const el=document.createElement('div');
@@ -5184,36 +4983,9 @@ async function saveRoleDetailReal(){
 async function deleteRoleReal(){
   const role=roles.find(r=>r.id===currentRoleId);
   if(!role) return;
-  if(!confirm(t('w_confirm_delete_role','Удалить роль «{name}»?').replace('{name}', role.name))) return;
+  if(!confirm(`Удалить роль «${role.name}»?`)) return;
   await postForm(`/users/roles/${currentRoleId}/delete/`, new FormData());
   flashAndReload('Роль удалена');
-}
-
-// ---- мобильное меню: sidebar как off-canvas панель ниже 900px (см. CSS) ----
-function toggleSidebar(){
-  document.querySelector('.sidebar').classList.toggle('sidebar-open');
-  document.getElementById('sidebarBackdrop').classList.toggle('open');
-}
-function closeSidebar(){
-  document.querySelector('.sidebar').classList.remove('sidebar-open');
-  document.getElementById('sidebarBackdrop').classList.remove('open');
-}
-// Закрывать меню при переходе по пункту навигации — без правок разметки
-// каждого из ~17 <a class="nav-item"> (делегирование одним слушателем).
-document.querySelectorAll('.sidebar .nav-item').forEach(el=>el.addEventListener('click', closeSidebar));
-
-// ---- общий безопасный расчёт позиции плавающей панели рядом с кнопкой ----
-// Не даёт панели вылезти за правый край экрана (в отличие от прежнего
-// Math.min(...,window.innerWidth-N), где N не совпадал с реальной max-width
-// панели) и переворачивает панель вверх, если снизу не хватает места —
-// актуально на невысоких экранах телефонов.
-function clampFloatingPanelPos(btnRect, width, estHeight){
-  const left = Math.max(8, Math.min(btnRect.left, window.innerWidth - width - 8));
-  let top = btnRect.bottom + 4;
-  if(top + estHeight > window.innerHeight - 8){
-    top = Math.max(8, btnRect.top - estHeight - 4);
-  }
-  return {top, left};
 }
 
 /* init */

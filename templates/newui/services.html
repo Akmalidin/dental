@@ -1,7 +1,7 @@
 {% extends "newui/base.html" %}
 {% block page_title %}Услуги{% endblock %}
 {% block content %}
-      <div class="topbar"><h1 data-i18n="title_services">Услуги и прайс-лист</h1><div class="topbar-right"><div class="search-box"><input type="text" id="svcSearchInput" placeholder="Название услуги…" data-i18n-placeholder="w_service_name" oninput="renderServicesTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div><button class="btn btn-cobalt" onclick="openNewService()">+ <span data-i18n="w_new_service">Новая услуга</span></button></div></div>
+      <div class="topbar"><h1 data-i18n="title_services">Услуги и прайс-лист</h1><div class="topbar-right"><div class="search-box"><input type="text" id="svcSearchInput" placeholder="Название услуги…" oninput="renderServicesTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div><button class="btn btn-cobalt" onclick="openNewService()">+ <span data-i18n="w_new_service">Новая услуга</span></button></div></div>
       <div class="page">
         <div class="toolbar"><div class="toolbar-left" id="svcCategoryChips"></div></div>
         <div class="card">

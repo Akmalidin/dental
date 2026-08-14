@@ -162,7 +162,7 @@ class Treatment(ClinicSoftDeleteModel):
         return "\n".join(lines)
 
     def recalculate_total(self):
-        total = sum(cure.subtotal for cure in self.cures.all())  # subtotal уже учитывает построчную скидку
+        total = sum(cure.price * cure.quantity for cure in self.cures.all())
         self.total_amount = total
         self.save(update_fields=["total_amount", "updated_at"])  # save() пересчитает баланс пациента
 
@@ -175,9 +175,6 @@ class TreatmentCure(models.Model):
     tooth_number = models.CharField(max_length=120, blank=True, verbose_name="Номер зуба")
     quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
     price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Цена")
-    discount = models.DecimalField(
-        max_digits=5, decimal_places=2, default=0, verbose_name="Скидка %"
-    )  # тот же формат, что и TreatmentPlanItem.discount — для консистентности
     doctor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -208,8 +205,7 @@ class TreatmentCure(models.Model):
 
     @property
     def subtotal(self):
-        gross = self.price * self.quantity
-        return gross - (gross * self.discount / Decimal(100))
+        return self.price * self.quantity
 
 
 class TreatmentFile(models.Model):

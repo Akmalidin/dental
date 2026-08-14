@@ -17,7 +17,7 @@
 
           <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
             <div style="padding:14px;border-bottom:1px solid var(--mist-line);">
-              <div class="search-box" style="width:100%;"><input type="text" id="msgSearchInput" placeholder="Поиск по имени, телефону…" data-i18n-placeholder="w_search_name_phone_dots" oninput="renderClientList()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+              <div class="search-box" style="width:100%;"><input type="text" id="msgSearchInput" placeholder="Поиск по имени, телефону…" oninput="renderClientList()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
             </div>
             <div id="clientListWrap" style="overflow-y:auto;flex:1;"></div>
           </div>
@@ -32,7 +32,7 @@
                 </select>
               </div>
               <div style="display:flex;gap:8px;">
-                <input type="text" id="chatInput" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage();">
+                <input type="text" id="chatInput" placeholder="Написать сообщение…" style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage();">
                 <button class="btn btn-cobalt" onclick="sendChatMessage()"><span data-i18n="w_send">Отправить</span></button>
               </div>
             </div>

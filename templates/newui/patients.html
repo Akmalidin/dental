@@ -4,7 +4,7 @@
       <div class="topbar">
         <h1 data-i18n="title_patients">Пациенты</h1>
         <div class="topbar-right">
-          <div class="search-box"><input type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" data-i18n-placeholder="w_search_fullname_phone" oninput="renderPatientsTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <div class="search-box"><input type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" oninput="renderPatientsTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           <button class="btn btn-ghost" onclick="location.href='/new/blacklist/'" style="position:relative;">🚫 <span data-i18n="nav_черный_список">Чёрный список</span><span class="nav-badge" id="blacklistNavBadge" style="margin-left:6px;">0</span></button>
           <button class="btn btn-cobalt" onclick="openNewPatient()">+ <span data-i18n="w_new_patient">Новый пациент</span></button>
         </div>

@@ -413,10 +413,10 @@ def lead_create(request):
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
-        return JsonResponse({"error": "bad json", "error_key": "generic_invalid_json"}, status=400)
+        return JsonResponse({"error": "bad json"}, status=400)
     name = (data.get("name") or "").strip()
     if not name:
-        return JsonResponse({"error": "Укажите имя", "error_key": "patient_name_required"}, status=400)
+        return JsonResponse({"error": "Укажите имя"}, status=400)
     lead = Lead.objects.create(
         name=name, phone=(data.get("phone") or "").strip(),
         source_id=data.get("source_id") or None,
@@ -439,12 +439,12 @@ def lead_update(request, pk):
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
-        return JsonResponse({"error": "bad json", "error_key": "generic_invalid_json"}, status=400)
+        return JsonResponse({"error": "bad json"}, status=400)
     fields = []
     if "name" in data:
         name = (data.get("name") or "").strip()
         if not name:
-            return JsonResponse({"error": "Укажите имя", "error_key": "patient_name_required"}, status=400)
+            return JsonResponse({"error": "Укажите имя"}, status=400)
         lead.name = name
         fields.append("name")
     if "phone" in data:
@@ -455,7 +455,7 @@ def lead_update(request, pk):
         fields.append("source")
     if "stage" in data:
         if data["stage"] not in dict(Lead.STAGE_CHOICES):
-            return JsonResponse({"error": "Некорректный этап", "error_key": "patient_invalid_stage"}, status=400)
+            return JsonResponse({"error": "Некорректный этап"}, status=400)
         lead.stage = data["stage"]
         fields.append("stage")
     if "comment" in data:

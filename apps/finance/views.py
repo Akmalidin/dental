@@ -313,19 +313,19 @@ def cashshift_open(request):
     from django.http import JsonResponse
     branch = _cashier_branch(request)
     if not branch:
-        return JsonResponse({"error": "Не удалось определить филиал", "error_key": "cashshift_no_branch"}, status=400)
+        return JsonResponse({"error": "Не удалось определить филиал"}, status=400)
     if CashShift.objects.filter(branch=branch, status=CashShift.STATUS_OPEN).exists():
-        return JsonResponse({"error": "Смена по этому филиалу уже открыта", "error_key": "cashshift_already_open"}, status=400)
+        return JsonResponse({"error": "Смена по этому филиалу уже открыта"}, status=400)
     try:
         opening_cash = Decimal(request.POST.get("opening_cash") or "0")
     except Exception:
-        return JsonResponse({"error": "Некорректная сумма", "error_key": "cashshift_invalid_amount"}, status=400)
+        return JsonResponse({"error": "Некорректная сумма"}, status=400)
     try:
         shift = CashShift.objects.create(branch=branch, opened_by=request.user, opening_cash=opening_cash)
     except IntegrityError:
         # Гонка: смену открыли параллельным запросом между проверкой .exists() и .create()
         # — ловим DB-constraint (one_open_cash_shift_per_branch), а не роняем 500.
-        return JsonResponse({"error": "Смена по этому филиалу уже открыта", "error_key": "cashshift_already_open"}, status=400)
+        return JsonResponse({"error": "Смена по этому филиалу уже открыта"}, status=400)
     return JsonResponse({"ok": True, "id": shift.pk})
 
 
@@ -339,7 +339,7 @@ def cashshift_close(request, pk):
     try:
         closing_cash_actual = Decimal(request.POST.get("closing_cash_actual") or "0")
     except Exception:
-        return JsonResponse({"error": "Некорректная сумма", "error_key": "cashshift_invalid_amount"}, status=400)
+        return JsonResponse({"error": "Некорректная сумма"}, status=400)
     shift.status = CashShift.STATUS_CLOSED
     shift.closed_by = request.user
     shift.closed_at = timezone.now()
@@ -410,7 +410,7 @@ def cashdesk_queue_dismiss(request, pk):
     n = get_object_or_404(Notification, pk=pk, type="payment")
     if n.clinic_id and getattr(request.user, "clinic_id", None) not in (None, n.clinic_id) \
             and not getattr(request.user, "is_superadmin", False):
-        return JsonResponse({"error": "Нет доступа", "error_key": "finance_no_access"}, status=403)
+        return JsonResponse({"error": "Нет доступа"}, status=403)
     Notification.objects.filter(clinic=n.clinic, type="payment", link=n.link, is_read=False).update(is_read=True)
     return JsonResponse({"ok": True})
 
