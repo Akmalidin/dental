@@ -819,6 +819,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group toggle hidden" id="svcSecondaryToggleRow"><input autocomplete="off" type="checkbox" id="svc-price2-toggle" onchange="svcToggleSecondaryPrice()"><span style="font-size:13px;margin-left:2px" id="svcSecondaryToggleLabel" data-i18n="w_also_set_price2">Указать цену и во второй валюте</span></div>
       <div class="form-group hidden" id="svcSecondaryPriceRow"><label><span data-i18n="w_price">Цена</span>, <span id="svcPrice2CurLabel"></span></label><input autocomplete="off" type="number" id="svc-price2" placeholder="0"></div>
       <div class="form-group toggle"><input autocomplete="off" type="checkbox" checked id="svc-active"><span style="font-size:13px;margin-left:2px" data-i18n="w_service_active">Услуга активна (доступна для записи)</span></div>
+      <!-- Лабораторная работа (коронки, протезы и т.д.) — при отметке «Выполнено
+           сегодня» в карточке приёма по такой услуге можно оформить заказ
+           зуботехнику (см. visitcard.html / apps.treatments.views_visit._create_lab_order). -->
+      <div class="form-group toggle"><input autocomplete="off" type="checkbox" id="svc-is-lab"><span style="font-size:13px;margin-left:2px" data-i18n="w_service_requires_technician">Требуется техник (лабораторная работа)</span></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-service')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="svcModalSaveBtn" onclick="saveService()">Добавить услугу</button></div>
   </div>
@@ -3122,6 +3126,7 @@ const translations={
   w_price: {ru:'Цена', ky:'Баасы', en:'Price', uz:'Narxi'},
   w_also_set_price2: {ru:'Указать цену и во второй валюте', ky:'Экинчи валютада да баа көрсөтүү', en:'Also set a price in the secondary currency', uz:'Ikkinchi valyutada ham narx belgilash'},
   w_service_active: {ru:'Услуга активна (доступна для записи)', ky:'Кызмат активдүү (жазылууга жеткиликтүү)', en:'Service is active (available for booking)', uz:'Xizmat faol (yozilish uchun mavjud)'},
+  w_service_requires_technician: {ru:'Требуется техник (лабораторная работа)', ky:'Техник керек (лаборатория иши)', en:'Requires technician (lab work)', uz:'Texnik kerak (laboratoriya ishi)'},
   w_active_f: {ru:'Активна', ky:'Активдүү', en:'Active', uz:'Faol'},
   btn_add_staff: {ru:'Добавить сотрудника', ky:'Кызматкер кошуу', en:'Add staff', uz:'Xodim qo\'shish'},
   w_staff: {ru:'Сотрудники', ky:'Кызматкерлер', en:'Staff', uz:'Xodimlar'},
@@ -3285,6 +3290,7 @@ function openNewService(){
   document.getElementById('svc-price2-toggle').checked=false;
   document.getElementById('svc-price2').value='';
   document.getElementById('svcSecondaryPriceRow').classList.add('hidden');
+  document.getElementById('svc-is-lab').checked=false;
   document.getElementById('svcModalError').classList.add('hidden');
   openModal('m-service');
 }
@@ -3304,6 +3310,7 @@ function editService(id){
   document.getElementById('svc-price2-toggle').checked=has2;
   document.getElementById('svc-price2').value=has2 ? s.priceSecondary : '';
   document.getElementById('svcSecondaryPriceRow').classList.toggle('hidden', !has2);
+  document.getElementById('svc-is-lab').checked=!!s.isLab;
   document.getElementById('svcModalError').classList.add('hidden');
   openModal('m-service');
 }
@@ -3323,6 +3330,7 @@ async function saveService(){
   fd.append('price_secondary', price2On ? document.getElementById('svc-price2').value : '');
   fd.append('duration', (s && s.duration) || 30);
   if(document.getElementById('svc-active').checked) fd.append('is_active', 'on');
+  if(document.getElementById('svc-is-lab').checked) fd.append('is_lab', 'on');
 
   const url = editingServiceId ? `/services/${editingServiceId}/edit/` : '/services/create/';
   const res=await postForm(url, fd);
@@ -4805,12 +4813,13 @@ function renderPatientsTable(){
   if(q) list=list.filter(p=>p.fullName.toLowerCase().includes(q) || (p.phone||'').includes(q));
 
   if(list.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; return; }
-  body.innerHTML = list.map(p=>
-    // Долг — баланс красным (как и везде в приложении, отрицательный
-    // баланс = coral), плюс кнопка «Отправить в кассу» прямо из списка —
-    // не только на вкладке «Должники», но у любого пациента с долгом.
-    `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:var(--coral);font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}</td></tr>`
-  ).join('');
+  body.innerHTML = list.map(p=>{
+    // Долг — вся строка подсвечена красным (не только сумма), плюс кнопка
+    // «Отправить в кассу» прямо из списка — не только на вкладке
+    // «Должники», но у любого пациента с долгом в общем списке тоже.
+    const debtStyle = p.hasDebt ? ' style="background:var(--coral-tint);color:var(--coral);"' : '';
+    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}</td></tr>`;
+  }).join('');
 }
 async function patientsSendToCashier(patientId, btn){
   if(btn) btn.disabled=true;

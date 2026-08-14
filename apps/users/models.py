@@ -115,6 +115,7 @@ class Role(models.Model):
     ADMIN = "admin"
     DOCTOR = "doctor"
     NURSE = "nurse"
+    TECHNICIAN = "technician"
 
     ROLE_CHOICES = [
         (SUPERADMIN, "Суперадмин AKM SOFT"),
@@ -122,6 +123,7 @@ class Role(models.Model):
         (ADMIN, "Администратор"),
         (DOCTOR, "Доктор"),
         (NURSE, "Медсестра"),
+        (TECHNICIAN, "Техник"),
     ]
 
     name = models.CharField(max_length=50, verbose_name="Роль")

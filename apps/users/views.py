@@ -345,6 +345,7 @@ def _newui_services_data():
         "categoryId": s.category_id, "categoryName": s.category.name if s.category else "",
         "price": float(s.price), "isActive": s.is_active, "duration": s.duration,
         "priceSecondary": float(s.price_secondary) if s.price_secondary is not None else None,
+        "isLab": s.is_lab,
     } for s in Service.objects.select_related("category").order_by("category__sort_order", "name")]
     return {
         "services": services,
