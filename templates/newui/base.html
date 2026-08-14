@@ -4318,7 +4318,10 @@ function attachScheduleScrollWatcher(){
     const hasOverflow = el.scrollWidth > el.clientWidth + 10;
     if(el.scrollLeft > 20) schedHasScrolledAway=true;
     const atEnd = hasOverflow && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
-    const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4;
+    // Скроллом назад можно долистать только до сегодня (currentDayOffset===0),
+    // не дальше в прошлое — иначе легко нечаянно укрутить в старые даты.
+    // В прошлое — только явной кнопкой ‹ в тулбаре.
+    const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4 && currentDayOffset > 0;
     if(atEnd){
       scrollAdvanceLock=true;
       changeDay(1);
