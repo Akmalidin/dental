@@ -11,6 +11,10 @@
           <h1 data-i18n="title_visitcard">Карточка лечения</h1>
         </div>
         <div class="topbar-right">
+          <div class="toggle" id="vwSimpleModeWrap">
+            <input type="checkbox" id="vwSimpleModeToggle" onchange="vwSetSimpleMode(this.checked)">
+            <span data-i18n="w_simple_mode">Простой режим</span>
+          </div>
           <button class="btn btn-ghost" id="vwBackBtn" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_card">Назад в карту</span></button>
         </div>
       </div>
@@ -27,6 +31,7 @@
 
         <!-- ---- ОПИСАНИЕ ---- -->
         <div id="vcPanelDesc">
+          <span id="vwCommitAnchor"></span>
           <button class="btn btn-cobalt" id="vwCommitBtn" style="width:100%;justify-content:center;padding:14px;font-size:14px;margin-bottom:16px;" onclick="vwCommitVisit()">✓ Завершить приём</button>
 
           <div class="card" style="margin-bottom:16px;">
@@ -66,7 +71,8 @@
 
           <div id="vwAccordion"></div>
 
-          <div class="card" style="margin-bottom:16px;">
+          <span id="vwProceduresAnchor"></span>
+          <div class="card" id="vwProceduresCard" style="margin-bottom:16px;">
             <div class="card-head"><h3 data-i18n="w_procedures_plan">Процедуры и план</h3><button class="btn btn-ghost btn-sm" onclick="vwAddPlanRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button></div>
             <div class="card-body">
               <table>
@@ -80,7 +86,8 @@
             </div>
           </div>
 
-          <div class="card" style="margin-top:4px;">
+          <span id="vwFooterAnchor"></span>
+          <div class="card" id="vwFooterCard" style="margin-top:4px;">
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;"><input type="checkbox" checked style="width:auto;"> <span data-i18n="w_include_043">Включить в форму 043</span></label>
               <button class="btn btn-cobalt" onclick="vwAutosave(true)" data-i18n="w_save">Сохранить</button>
@@ -110,6 +117,11 @@
               <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_no_teeth_selected">Зубы не выбраны — отметьте зуб галочкой выше</span></div>
             </div>
           </div>
+
+          <!-- В простом режиме сюда переезжают «Завершить приём» / «Процедуры и план» /
+               «Сохранить» с вкладки «Описание», чтобы приём можно было завершить,
+               не покидая вкладку «Зубы» (см. vwSetSimpleMode). -->
+          <div id="vwSimpleModeAnchor" style="margin-top:16px;"></div>
         </div>
 
         <!-- ---- РЕНТГЕН ---- -->
@@ -414,8 +426,17 @@
       const cond=getCondition(code);
       const style=toothStyle(cond);
       const iconHtml=toothIconSVG(style, null, pfx==='adult'?num:null);
-      const planItem=vwPlan.find(it=>String(it.tooth)===String(num));
-      const svcOptions=vw.services.map(s=>`<option value="${s.id}" ${planItem && String(planItem.service_id)===String(s.id)?'selected':''}>${s.name}</option>`).join('');
+      // Зубу можно назначить несколько услуг — все строки плана с этим зубом.
+      const toothItems=vwPlan.filter(it=>String(it.tooth)===String(num));
+      const chipsHtml = toothItems.length
+        ? toothItems.map(it=>{
+            const svc=vw.services.find(s=>String(s.id)===String(it.service_id));
+            const label=svc ? svc.name : '—';
+            const sum=Math.round((svc?svc.price:(it.price||0)) * (it.qty||1));
+            return `<span class="pill cobalt" style="display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;">${label} · ${sum} <span data-i18n="w_som">сом</span>
+              <button type="button" title="${t('w_remove','Убрать')}" onclick="vwToothServiceRemove(${num}, ${it.service_id})" ${readOnlyClosed?'disabled':''} style="border:none;background:none;color:inherit;opacity:.75;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button></span>`;
+          }).join('')
+        : `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:2px;" data-i18n="w_no_services_selected">${t('w_no_services_selected')}</div>`;
       return `<div class="selected-tooth-block">
         <div class="selected-tooth-side">
           <div class="tooth-num-cell">${num}</div>
@@ -424,9 +445,13 @@
         </div>
         <div>
           <div class="form-group"><label>Диагноз</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
-          <div class="form-row2">
-            <div class="form-group"><label>Услуги<div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">добавится в «Процедуры и план»</div></label><select onchange="vwTeethSetService(${num}, this.value)" ${readOnlyClosed?'disabled':''}><option value="">—</option>${svcOptions}</select></div>
-            <div class="form-group"><label>Комплексные услуги</label><select ${readOnlyClosed?'disabled':''}><option>—</option></select></div>
+          <div class="form-group" style="position:relative;">
+            <label><span data-i18n="w_services">Услуги</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">можно выбрать несколько — добавятся в «Процедуры и план»</div></label>
+            <div style="margin-bottom:6px;">${chipsHtml}</div>
+            <input type="text" id="toothSvcInput-${num}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
+                   oninput="vwToothServiceSearch(${num}, this.value)" onfocus="vwToothServiceSearch(${num}, this.value)"
+                   onblur="setTimeout(()=>{const b=document.getElementById('toothSvcSuggest-${num}'); if(b) b.classList.add('hidden');},200)">
+            <div id="toothSvcSuggest-${num}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
           </div>
           <div class="form-group"><label>План обследования</label><textarea rows="1" placeholder="План обследования" ${readOnlyClosed?'disabled':''}></textarea></div>
           <div class="form-group"><label>Лечение / Консультация</label><textarea rows="1" placeholder="Лечение / Консультация" ${readOnlyClosed?'disabled':''}></textarea></div>
@@ -435,18 +460,31 @@
       </div>`;
     }).join('');
   };
-  window.vwTeethSetService = function(num, serviceId){
+  window.vwToothServiceSearch = function(num, q){
+    const box=document.getElementById('toothSvcSuggest-'+num);
+    if(!box) return;
+    const query=(q||'').trim().toLowerCase();
+    const already=new Set(vwPlan.filter(it=>String(it.tooth)===String(num)).map(it=>String(it.service_id)));
+    const matches=(query ? vw.services.filter(s=>s.name.toLowerCase().includes(query)) : vw.services)
+      .filter(s=>!already.has(String(s.id))).slice(0,30);
+    box.innerHTML = matches.length
+      ? matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="vwToothServicePick(${num}, ${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('')
+      : `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
+    box.classList.remove('hidden');
+  };
+  window.vwToothServicePick = function(num, serviceId){
     if(readOnlyClosed) return;
-    const idx=vwPlan.findIndex(it=>String(it.tooth)===String(num));
-    if(!serviceId){
-      if(idx>-1){ vwPlan.splice(idx,1); vwRenderPlan(); vwAutosave(); }
-      return;
-    }
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
-    if(idx===-1) vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc?svc.price:0, done:false});
-    else { vwPlan[idx].service_id=serviceId; vwPlan[idx].price=svc?svc.price:vwPlan[idx].price; }
+    if(!svc) return;
+    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, done:false});
     vwRenderPlan();
+    window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
+  };
+  window.vwToothServiceRemove = function(num, serviceId){
+    if(readOnlyClosed) return;
+    const idx=vwPlan.findIndex(it=>String(it.tooth)===String(num) && String(it.service_id)===String(serviceId));
+    if(idx>-1){ vwPlan.splice(idx,1); vwRenderPlan(); window.vwRenderSelectedTeeth(selectedTeeth); vwAutosave(); }
   };
 
   // ---- файлы ----
@@ -606,6 +644,47 @@
     if(res.redirected){ showToast(t('w_sent_to_cashier')); }
     else { showToast(t('w_send_to_cashier_failed'), 'error'); }
   };
+
+  // ---- простой режим: только «Зубы» + «Рентген» (снимки), выбор услуги сразу
+  // при отметке зуба. Личная настройка браузера (как и настройка меню) — не
+  // привязана к приёму, применяется на любой карточке лечения. ----
+  const SIMPLE_MODE_KEY='vw_simple_mode';
+  window.vwSetSimpleMode = function(on){
+    localStorage.setItem(SIMPLE_MODE_KEY, on ? '1' : '0');
+    const toggle=document.getElementById('vwSimpleModeToggle');
+    if(toggle) toggle.checked=on;
+    const wrap=document.getElementById('vwSimpleModeWrap');
+    if(wrap) wrap.title=t('w_simple_mode_hint');
+    ['vcTabDesc','vcTabMsg','vcTabOther'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.classList.toggle('hidden', on);
+    });
+    const anchor=document.getElementById('vwSimpleModeAnchor');
+    const commitBtn=document.getElementById('vwCommitBtn');
+    const proceduresCard=document.getElementById('vwProceduresCard');
+    const footerCard=document.getElementById('vwFooterCard');
+    if(on){
+      if(anchor){
+        if(commitBtn) anchor.appendChild(commitBtn);
+        if(proceduresCard) anchor.appendChild(proceduresCard);
+        if(footerCard) anchor.appendChild(footerCard);
+      }
+    } else {
+      const commitAnchor=document.getElementById('vwCommitAnchor');
+      const proceduresAnchor=document.getElementById('vwProceduresAnchor');
+      const footerAnchor=document.getElementById('vwFooterAnchor');
+      if(commitAnchor && commitBtn) commitAnchor.after(commitBtn);
+      if(proceduresAnchor && proceduresCard) proceduresAnchor.after(proceduresCard);
+      if(footerAnchor && footerCard) footerAnchor.after(footerCard);
+    }
+    // Если сейчас открыта вкладка, которую простой режим прячет — переключаемся на «Зубы».
+    const activeHidden = on && ['vcTabDesc','vcTabMsg','vcTabOther'].some(id=>{
+      const el=document.getElementById(id);
+      return el && el.classList.contains('active');
+    });
+    if(activeHidden) vcTab('teeth');
+  };
+  vwSetSimpleMode(localStorage.getItem(SIMPLE_MODE_KEY)==='1');
 })();
 </script>
 {% endblock %}

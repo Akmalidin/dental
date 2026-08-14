@@ -47,7 +47,7 @@ def _newui_staff_data(request, clinic):
     from django.utils import timezone
     from apps.appointments.models import Appointment
 
-    users = User.objects.select_related("role").prefetch_related("branches")
+    users = User.objects.select_related("role").prefetch_related("branches", "roles")
     users = users.filter(clinic=clinic) if clinic else users
     if not request.user.is_superadmin:
         users = users.exclude(is_superuser=True).exclude(role__name=Role.SUPERADMIN)
@@ -80,6 +80,8 @@ def _newui_staff_data(request, clinic):
             "roleId": u.role_id,
             "roleName": u.role.display_name if u.role else "",
             "roleColor": color_by_role.get(u.role.name, "grey") if u.role else "grey",
+            "extraRoleIds": [r.pk for r in u.roles.all()],
+            "extraRoleNames": [r.display_name for r in u.roles.all()],
             "branchIds": branch_ids,
             "branch": branch_names,
             "load": load,

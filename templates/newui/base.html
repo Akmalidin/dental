@@ -971,11 +971,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_role">Роль</label><select id="staff-role"></select></div>
-        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input type="tel" id="staff-phone" placeholder="+996 ___ __ __ __"></div>
+        <div class="form-group"><label data-i18n="w_role2">Доп. роль<div class="hint" data-i18n="w_role2_hint">Необязательно — сотруднику можно назначить вторую роль</div></label><select id="staff-role2"></select></div>
       </div>
       <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input type="tel" id="staff-phone" placeholder="+996 ___ __ __ __"></div>
         <div class="form-group"><label data-i18n="w_email">Email</label><input type="text" id="staff-email" placeholder="doctor@odontis.kg"></div>
+      </div>
+      <div class="form-row2">
         <div class="form-group"><label id="staff-password-label">Пароль</label><input type="password" id="staff-password" placeholder=""></div>
+        <div class="form-group"></div>
       </div>
       <div class="form-group"><label data-i18n="w_branches">Филиалы</label><div id="staff-branches" style="display:flex;flex-wrap:wrap;gap:10px;"></div></div>
       <div class="form-group"><label data-i18n="w_staff_color">Цвет<div class="hint" data-i18n="w_staff_color_hint">Необязательно — для аватара и ячейки в расписании</div></label><input type="color" id="staff-color" value="#6366F1" style="width:64px;padding:2px;height:34px;"></div>
@@ -2551,6 +2555,8 @@ const translations={
   w_fullname: {ru:'ФИО', ky:'Аты-жөнү', en:'Full name', uz:'F.I.Sh.'},
   w_login: {ru:'Логин', ky:'Логин', en:'Login', uz:'Login'},
   w_role: {ru:'Роль', ky:'Роль', en:'Role', uz:'Rol'},
+  w_role2: {ru:'Доп. роль', ky:'Кошумча роль', en:'Extra role', uz:'Qo\'shimcha rol'},
+  w_role2_hint: {ru:'Необязательно — сотруднику можно назначить вторую роль', ky:'Милдеттүү эмес — кызматкерге экинчи ролду дайындоого болот', en:'Optional — a staff member can have a second role', uz:'Ixtiyoriy — xodimga ikkinchi rol tayinlash mumkin'},
   w_email: {ru:'Email', ky:'Email', en:'Email', uz:'Email'},
   w_branches: {ru:'Филиалы', ky:'Филиалдар', en:'Branches', uz:'Filiallar'},
   w_role_name: {ru:'Название роли', ky:'Ролдун аталышы', en:'Role name', uz:'Rol nomi'},
@@ -2632,6 +2638,11 @@ const translations={
   w_description: {ru:'Описание', ky:'Сүрөттөмө', en:'Description', uz:'Tavsif'},
   w_teeth: {ru:'Зубы', ky:'Тиштер', en:'Teeth', uz:'Tishlar'},
   w_xray: {ru:'Рентген', ky:'Рентген', en:'X-ray', uz:'Rentgen'},
+  w_simple_mode: {ru:'Простой режим', ky:'Жөнөкөй режим', en:'Simple mode', uz:'Oddiy rejim'},
+  w_simple_mode_hint: {ru:'Показывать только вкладки «Зубы» и «Рентген»', ky:'Уруш «Тиштер» жана «Рентген» гана көрсөтүлсүн', en:'Show only the "Teeth" and "X-ray" tabs', uz:'Faqat "Tishlar" va "Rentgen" bo\'limlarini ko\'rsatish'},
+  w_no_services_selected: {ru:'Услуги не выбраны', ky:'Кызматтар тандалган жок', en:'No services selected', uz:'Xizmatlar tanlanmagan'},
+  w_remove: {ru:'Убрать', ky:'Алып салуу', en:'Remove', uz:'O\'chirish'},
+  w_search_service_dots: {ru:'Поиск услуги…', ky:'Кызматты издөө…', en:'Search service…', uz:'Xizmat qidirish…'},
   w_messages: {ru:'Сообщения', ky:'Билдирүүлөр', en:'Messages', uz:'Xabarlar'},
   w_other: {ru:'Прочее', ky:'Башка', en:'Other', uz:'Boshqa'},
   w_visit_stages: {ru:'Этапы приёма', ky:'Кабыл алуу этаптары', en:'Visit stages', uz:'Qabul bosqichlari'},
@@ -4555,7 +4566,8 @@ function renderStaffTable(){
   if(!body) return;
   if(staffList.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_staff')}</td></tr>`; return; }
   body.innerHTML = staffList.map(s=>{
-    return `<tr><td><b>${s.name}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${s.roleName}</span>`:'—'}</td><td>${s.branch}</td><td>${s.load}</td><td class="mono">${s.phone||'—'}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
+    const extraRolesHtml = (s.extraRoleNames||[]).map(n=>`<span class="pill grey" style="margin-left:4px;">${n}</span>`).join('');
+    return `<tr><td><b>${s.name}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${s.roleName}</span>`:'—'}${extraRolesHtml}</td><td>${s.branch}</td><td>${s.load}</td><td class="mono">${s.phone||'—'}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
   }).join('');
 }
 function renderRolesTable(){
@@ -4623,6 +4635,10 @@ function populateStaffRoleSelect(selectedId){
   document.getElementById('staff-role').innerHTML =
     '<option value="">—</option>' + roleOptions.map(r=>`<option value="${r.id}" ${r.id===selectedId?'selected':''}>${r.name}</option>`).join('');
 }
+function populateStaffRole2Select(selectedId){
+  document.getElementById('staff-role2').innerHTML =
+    '<option value="">—</option>' + roleOptions.map(r=>`<option value="${r.id}" ${r.id===selectedId?'selected':''}>${r.name}</option>`).join('');
+}
 function populateStaffBranches(selectedIds){
   selectedIds = selectedIds || [];
   document.getElementById('staff-branches').innerHTML = branchOptions.map(b=>
@@ -4638,6 +4654,7 @@ function openNewStaff(){
   document.getElementById('staff-active').checked=true;
   document.getElementById('staff-color').value='#6366F1';
   populateStaffRoleSelect(null);
+  populateStaffRole2Select(null);
   populateStaffBranches([]);
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
@@ -4657,6 +4674,7 @@ function editStaff(id){
   document.getElementById('staff-active').checked=s.active;
   document.getElementById('staff-color').value=s.color || '#6366F1';
   populateStaffRoleSelect(s.roleId);
+  populateStaffRole2Select((s.extraRoleIds && s.extraRoleIds[0]) || null);
   populateStaffBranches(s.branchIds);
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
@@ -4671,6 +4689,8 @@ async function submitStaffModal(){
   fd.append('email', document.getElementById('staff-email').value.trim());
   fd.append('phone', document.getElementById('staff-phone').value.trim());
   fd.append('role', document.getElementById('staff-role').value);
+  const role2=document.getElementById('staff-role2').value;
+  if(role2) fd.append('roles', role2);
   fd.append('password', document.getElementById('staff-password').value);
   fd.append('color', document.getElementById('staff-color').value);
   if(document.getElementById('staff-active').checked) fd.append('is_active','on');
