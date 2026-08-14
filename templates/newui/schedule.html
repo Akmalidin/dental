@@ -17,6 +17,10 @@
             <button class="chip active" id="chipDay" onclick="calSetView('day')" data-i18n="w_day">День</button>
             <button class="chip" id="chipWeek" onclick="calSetView('week')" data-i18n="w_week">Неделя</button>
             <button class="chip" id="chipMonth" onclick="calSetView('month')" data-i18n="w_month">Месяц</button>
+            <button class="chip" id="chipDoctorFilter" onclick="openSchedDoctorFilterPanel(event)" title="Показать/скрыть врачей" style="position:relative;">
+              👥 <span data-i18n="w_sched_doctors">Врачи</span>
+              <span id="schedDoctorFilterBadge" class="nav-badge" style="display:none;margin-left:6px;"></span>
+            </button>
           </div>
           <div class="toolbar-right-nav" style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-soft)">
             <button class="icon-btn" onclick="changeDay(-1)">‹</button><span id="schedDateLabel">31.07.2026</span><button class="icon-btn" onclick="changeDay(1)">›</button>

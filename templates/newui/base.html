@@ -195,6 +195,12 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .ms-item.dragging{opacity:.4;}
 .ms-item-hidden{opacity:.45;}
 .ms-item-hidden .ms-item-label{text-decoration:line-through;}
+/* Панель «Врачи» на расписании — тот же формат строки-чекбокса, что и .ms-item */
+.sdf-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--mist-line);}
+.sdf-item:last-child{border-bottom:none;}
+.sdf-item-label{font-size:13px;flex:1;min-width:0;overflow-wrap:break-word;}
+.sdf-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid var(--mist-line);}
+.sdf-swatch-empty{background:var(--mist);}
 .ms-home-btn{flex-shrink:0;cursor:pointer;opacity:.25;filter:grayscale(1);font-size:14px;}
 .ms-home-btn:hover{opacity:.7;}
 .ms-home-btn.ms-home-active{opacity:1;filter:none;}
@@ -2599,6 +2605,10 @@ const translations={
   w_no_messages: {ru:'Нет сообщений', ky:'Билдирүү жок', en:'No messages', uz:'Xabar yo\'q'},
   w_no_data: {ru:'Нет данных', ky:'Маалымат жок', en:'No data', uz:'Ma\'lumot yo\'q'},
   w_no_doctors_clinic: {ru:'Нет врачей в клинике', ky:'Клиникада дарыгер жок', en:'No doctors in the clinic', uz:'Klinikada shifokor yo\'q'},
+  w_sched_all_doctors_hidden: {ru:'Все врачи скрыты фильтром. Нажмите «Показать всех», чтобы вернуть расписание.', ky:'Бардык дарыгерлер чыпка менен жашырылды. Расписаниени кайра көрсөтүү үчүн «Баарын көрсөтүү» баскычын басыңыз.', en:'All doctors are hidden by the filter. Click "Show all" to bring the schedule back.', uz:'Barcha shifokorlar filtr bilan yashirilgan. Jadvalni qaytarish uchun «Barchasini ko\'rsatish» tugmasini bosing.'},
+  w_sched_doctor_filter_title: {ru:'Врачи в расписании', ky:'Расписаниедеги дарыгерлер', en:'Doctors in schedule', uz:'Jadvaldagi shifokorlar'},
+  w_sched_show_all: {ru:'Показать всех', ky:'Баарын көрсөтүү', en:'Show all', uz:'Barchasini ko\'rsatish'},
+  w_sched_doctors: {ru:'Врачи', ky:'Дарыгерлер', en:'Doctors', uz:'Shifokorlar'},
   w_no_actions_available: {ru:'Нет доступных действий', ky:'Жеткиликтүү аракет жок', en:'No actions available', uz:'Mavjud amallar yo\'q'},
   w_no_doctors: {ru:'Нет врачей', ky:'Дарыгер жок', en:'No doctors', uz:'Shifokor yo\'q'},
   w_no_services: {ru:'Нет услуг', ky:'Кызмат жок', en:'No services', uz:'Xizmat yo\'q'},
@@ -3727,6 +3737,28 @@ function loadCalSettings(){
 }
 loadCalSettings();
 
+/* ================= Фильтр видимости врачей в расписании =================
+   Чисто локальный (localStorage), мгновенно применяемый рабочий фильтр —
+   НЕ путать с calSettings (там настройки часов/цветов с явным «Применить»).
+   ВАЖНО: не мутирует scheduleDoctors — тот массив используется и для выбора
+   врача в форме новой записи (apptFillDoctorAndServiceOptions), скрытый из
+   сетки врач должен оставаться доступен для записи к нему. */
+const SCHED_DOCTOR_FILTER_KEY='newui_sched_hidden_doctors';
+let hiddenDoctorIds=new Set();
+function loadScheduleDoctorFilter(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(SCHED_DOCTOR_FILTER_KEY)||'[]');
+    if(Array.isArray(raw)) hiddenDoctorIds=new Set(raw);
+  }catch(e){ hiddenDoctorIds=new Set(); }
+}
+loadScheduleDoctorFilter();
+function saveScheduleDoctorFilter(){
+  try{ localStorage.setItem(SCHED_DOCTOR_FILTER_KEY, JSON.stringify([...hiddenDoctorIds])); }catch(e){}
+}
+function visibleScheduleDoctors(){
+  return scheduleDoctors.filter(d=>!hiddenDoctorIds.has(d.id));
+}
+
 function dateAtOffset(days){
   const d=new Date(baseScheduleDate);
   d.setDate(d.getDate()+days);
@@ -3809,7 +3841,8 @@ function hexToRgba(hex, alpha){
 }
 function buildDayHTML(){
   const dateIso=isoDate(dateAtOffset(currentDayOffset));
-  const n=Math.max(scheduleDoctors.length,1);
+  const visibleDocs=visibleScheduleDoctors();
+  const n=Math.max(visibleDocs.length,1);
   // min-width явно, а не только через minmax() — при 10+ врачах колонки иначе
   // сжимались бы вместо горизонтального скролла (у .sched-wrap overflow-x:auto).
   let html=`<div class="sched-grid" id="schedGrid" style="grid-template-columns:60px repeat(${n},minmax(150px,1fr));min-width:${60+n*150}px;">`;
@@ -3817,9 +3850,12 @@ function buildDayHTML(){
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
+  if(visibleDocs.length===0){
+    return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</div>`;
+  }
   // Цвет врача (User.color, задаётся в карточке сотрудника) — красим весь его
   // столбец, не только аватар, чтобы визуально сразу отличать врачей в сетке.
-  scheduleDoctors.forEach(d=>{
+  visibleDocs.forEach(d=>{
     const headBg = d.color ? hexToRgba(d.color, .12) : '';
     const headStyle = d.color ? `style="border-top:3px solid ${d.color};background:${headBg};"` : '';
     const avStyle = d.color ? `style="background:${d.color};"` : '';
@@ -3829,7 +3865,7 @@ function buildDayHTML(){
   for(let t=startMin; t<endMin; t+=calSettings.interval){
     const label=minutesToTime(t);
     html+=`<div class="sched-time">${label}</div>`;
-    scheduleDoctors.forEach(d=>{
+    visibleDocs.forEach(d=>{
       const cellBg = d.color ? hexToRgba(d.color, .07) : null;
       const cellStyle = cellBg ? `style="--doc-tint:${cellBg};"` : '';
       const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
@@ -4003,6 +4039,67 @@ async function schedQuickSendToCashier(){
   else { showToast('Не удалось отправить в кассу', 'error'); }
 }
 
+/* ---- панель «Врачи»: показать/скрыть врача и его колонку/строку в
+   расписании. Та же плавающая-панель механика, что и у schedApptQuickMenu
+   выше, но список фиксированный (врачи клиники) и панель не закрывается
+   после каждого клика — фильтр можно отмечать сразу по нескольким врачам. ---- */
+function closeSchedDoctorFilterPanel(){
+  const el=document.getElementById('schedDoctorFilterPanel');
+  if(el) el.remove();
+  document.removeEventListener('click', closeSchedDoctorFilterPanel);
+}
+function schedDoctorFilterRowsHtml(){
+  if(scheduleDoctors.length===0){
+    return `<div style="padding:8px 4px;font-size:12.5px;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
+  }
+  return scheduleDoctors.map(d=>{
+    const checked=!hiddenDoctorIds.has(d.id);
+    const swatch = d.color
+      ? `<span class="sdf-swatch" style="background:${d.color};"></span>`
+      : `<span class="sdf-swatch sdf-swatch-empty"></span>`;
+    return `<label class="sdf-item">${swatch}<span class="sdf-item-label">${d.name}</span>
+      <div class="toggle"><input type="checkbox" ${checked?'checked':''} style="width:auto;" onchange="schedDoctorFilterToggle(${d.id}, this.checked)"></div></label>`;
+  }).join('');
+}
+function schedDoctorFilterPanelHtml(){
+  return `<div style="font-size:12.5px;font-weight:600;padding:2px 4px 6px;border-bottom:1px solid var(--mist-line);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span>${t('w_sched_doctor_filter_title','Врачи в расписании')}</span>
+      <button class="btn btn-ghost btn-sm" style="padding:2px 8px;" onclick="schedDoctorFilterShowAll()">${t('w_sched_show_all','Показать всех')}</button>
+    </div>
+    <div id="schedDoctorFilterList" style="max-height:280px;overflow-y:auto;">${schedDoctorFilterRowsHtml()}</div>`;
+}
+function openSchedDoctorFilterPanel(event){
+  if(document.getElementById('schedDoctorFilterPanel')){ closeSchedDoctorFilterPanel(); return; } // повторный клик по кнопке — закрыть
+  const btnRect=event.currentTarget.getBoundingClientRect();
+  const panel=document.createElement('div');
+  panel.id='schedDoctorFilterPanel';
+  panel.style.cssText=`position:fixed;top:${btnRect.bottom+4}px;left:${Math.min(btnRect.left,window.innerWidth-260)}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-width:280px;`;
+  panel.innerHTML=schedDoctorFilterPanelHtml();
+  panel.addEventListener('click', e=>e.stopPropagation());
+  document.body.appendChild(panel);
+  setTimeout(()=>document.addEventListener('click', closeSchedDoctorFilterPanel), 0);
+}
+function schedDoctorFilterToggle(docId, isVisible){
+  if(isVisible) hiddenDoctorIds.delete(docId); else hiddenDoctorIds.add(docId);
+  saveScheduleDoctorFilter();
+  renderSchedule();
+  updateSchedDoctorFilterBadge();
+}
+function schedDoctorFilterShowAll(){
+  hiddenDoctorIds.clear();
+  saveScheduleDoctorFilter();
+  renderSchedule();
+  updateSchedDoctorFilterBadge();
+  const list=document.getElementById('schedDoctorFilterList');
+  if(list) list.innerHTML=schedDoctorFilterRowsHtml();
+}
+function updateSchedDoctorFilterBadge(){
+  const badge=document.getElementById('schedDoctorFilterBadge');
+  if(!badge) return;
+  badge.textContent=String(hiddenDoctorIds.size);
+  badge.style.display = hiddenDoctorIds.size>0 ? '' : 'none';
+}
+
 /* ---- auto-advance/back a day when horizontal scroll reaches either edge ---- */
 let scrollAdvanceLock=false;
 let schedHasScrolledAway=false; // защита от срабатывания "влево" сразу при загрузке (когда scrollLeft и так 0)
@@ -4040,11 +4137,13 @@ function currentWeekDates(){
 }
 function buildWeekHTML(){
   const dates=currentWeekDates();
+  const visibleDocs=visibleScheduleDoctors();
   let html='<table class="week-table"><thead><tr><th style="text-align:left;">Врач</th>';
   dates.forEach(d=>{ html+=`<th>${weekdayShort[d.getDay()]} ${d.getDate()}</th>`; });
   html+='</tr></thead><tbody>';
   if(scheduleDoctors.length===0){ html+=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</td></tr>`; }
-  scheduleDoctors.forEach(d=>{
+  else if(visibleDocs.length===0){ html+=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</td></tr>`; }
+  visibleDocs.forEach(d=>{
     html+=`<tr><td class="week-doc-col">${d.name}<span>${d.role}</span></td>`;
     dates.forEach(dt=>{
       const appts=apptsFor(isoDate(dt), d.id);
@@ -4077,7 +4176,7 @@ function buildMonthHTML(){
     const isToday = !c.other && c.day===today.getDate();
     const dateIso = c.other ? null : isoDate(new Date(year,month,c.day));
     let count = 0;
-    if(dateIso){ scheduleDoctors.forEach(d=>{ count += apptsFor(dateIso, d.id).length; }); }
+    if(dateIso){ visibleScheduleDoctors().forEach(d=>{ count += apptsFor(dateIso, d.id).length; }); }
     html+=`<div class="month-cell ${c.other?'other':''} ${isToday?'today':''}">
       <span class="dnum">${c.day}</span>
       ${count>0 ? `<span class="month-badge">${count} записей</span>` : `<span class="month-badge zero">—</span>`}
@@ -4884,6 +4983,7 @@ async function deleteRoleReal(){
 
 /* init */
 calSetView('day');
+updateSchedDoctorFilterBadge();
 renderDashboard();
 renderPatientChips();
 renderPatientsTable();
