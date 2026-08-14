@@ -80,6 +80,11 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 #schedDateLabel{font-size:16px;font-weight:700;color:var(--ink);min-width:100px;display:inline-block;text-align:center;}
 @keyframes schedDatePulse{0%{opacity:0;transform:translateY(-4px);}100%{opacity:1;transform:translateY(0);}}
 #schedDateLabel.sched-date-anim{animation:schedDatePulse .25s ease-out;}
+/* Плавная смена дня (скроллом до края или стрелками ‹ ›): сетка расписания
+   гаснет, подменяется новым днём, и мягко проявляется обратно — вместо
+   резкой замены содержимого. */
+#scheduleContent{transition:opacity .16s ease, transform .16s ease;}
+#scheduleContent.sched-day-fading{opacity:0;transform:translateX(var(--sched-fade-shift,0));}
 .icon-btn .badge-dot{position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--coral);}
 .page{padding:24px 28px 64px;}
 
@@ -4015,12 +4020,21 @@ function changeDay(delta){
     document.getElementById('chipWeek').classList.remove('active');
     document.getElementById('chipMonth').classList.remove('active');
   }
-  renderSchedule();
   const c=document.getElementById('scheduleContent');
-  // Вперёд (delta>0) — начинаем с начала дня (слева). Назад (delta<0) —
-  // "приземляемся" у конца дня (справа), иначе продолжать скроллить влево
-  // от предыдущего дня, за который только что зашли, было бы странно.
-  if(c) c.scrollLeft = delta<0 ? c.scrollWidth : 0;
+  if(!c){ renderSchedule(); return; }
+  // Плавная смена дня: гасим текущую сетку (с лёгким сдвигом в сторону
+  // пролистывания), подменяем содержимое, пока оно невидимо, и мягко
+  // проявляем обратно — вместо резкой замены innerHTML.
+  c.style.setProperty('--sched-fade-shift', (delta<0 ? '10px' : '-10px'));
+  c.classList.add('sched-day-fading');
+  setTimeout(()=>{
+    renderSchedule();
+    // Вперёд (delta>0) — начинаем с начала дня (слева). Назад (delta<0) —
+    // "приземляемся" у конца дня (справа), иначе продолжать скроллить влево
+    // от предыдущего дня, за который только что зашли, было бы странно.
+    c.scrollLeft = delta<0 ? c.scrollWidth : 0;
+    requestAnimationFrame(()=>{ c.classList.remove('sched-day-fading'); });
+  }, 160);
 }
 
 function calSetView(v){
