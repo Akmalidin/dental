@@ -76,7 +76,7 @@
             <div class="card-head"><h3 data-i18n="w_procedures_plan">Процедуры и план</h3><button class="btn btn-ghost btn-sm" onclick="vwAddPlanRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button></div>
             <div class="card-body">
               <table>
-                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount_pct">Скидка %</th><th data-i18n="w_total">Итого</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
+                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount">Скидка</th><th data-i18n="w_total">Итого</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
                 <tbody id="vwPlanBody"></tbody>
               </table>
               <div id="vwPlanEmpty" style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;"><span data-i18n="w_no_procedures">Процедуры не добавлены</span></div>
@@ -357,14 +357,40 @@
   };
 
   // ---- план/процедуры ----
-  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, done:true}));
+  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, discountMode:'%', done:true}));
   // Единая точка правды для суммы строки плана с учётом скидки (%) — используется
   // и в таблице плана, и в чипах «Выбранные зубы», и при расчёте суммы к оплате.
+  // Скидка на бэкенде и в vwPlan хранится ВСЕГДА в процентах (0-100) — режим
+  // «сумма» (discountMode) чисто для удобства ввода, число на лету переводится
+  // в проценты и обратно, наружу (сохранение/итог) уходит только процент.
   function vwPlanRowTotal(it){
     const gross = (parseFloat(it.price)||0) * (parseFloat(it.qty)||1);
     const disc = Math.max(0, Math.min(100, parseFloat(it.discount)||0));
     return gross - gross*disc/100;
   }
+  function vwDiscountInputValue(it){
+    if(it.discountMode==='sum'){
+      const gross=(parseFloat(it.price)||0)*(parseFloat(it.qty)||1);
+      return Math.round(gross * (parseFloat(it.discount)||0) / 100);
+    }
+    return it.discount||0;
+  }
+  window.vwPlanSetDiscount = function(i, val){
+    const it=vwPlan[i];
+    const gross=(parseFloat(it.price)||0)*(parseFloat(it.qty)||1);
+    let num=parseFloat(val)||0;
+    if(it.discountMode==='sum'){
+      num=Math.max(0, num);
+      it.discount = gross>0 ? Math.max(0, Math.min(100, num/gross*100)) : 0;
+    } else {
+      it.discount = Math.max(0, Math.min(100, num));
+    }
+    vwRenderPlan();
+  };
+  window.vwToggleDiscountMode = function(i){
+    vwPlan[i].discountMode = vwPlan[i].discountMode==='sum' ? '%' : 'sum';
+    vwRenderPlan();
+  };
   // Общий datalist для поиска услуги в строке плана — нативная фильтрация
   // браузера по мере ввода, вместо длинного select со всеми услугами разом.
   if(!document.getElementById('vwServicesDatalist')){
@@ -389,7 +415,10 @@
         <td><input type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
         <td><input type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
         <td><input type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
-        <td><input type="number" min="0" max="100" step="1" value="${it.discount||0}" style="width:64px;" title="${t('w_discount_pct')}" onchange="vwPlanSetField(${i},'discount',this.value)"></td>
+        <td><div style="display:flex;gap:2px;align-items:center;">
+          <input type="number" min="0" ${it.discountMode==='sum'?'':'max="100"'} step="1" value="${vwDiscountInputValue(it)}" style="width:56px;" title="${it.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="vwPlanSetDiscount(${i},this.value)">
+          <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px;" title="${t('w_discount_toggle_mode')}" onclick="vwToggleDiscountMode(${i})">${it.discountMode==='sum'?CUR_SYM:'%'}</button>
+        </div></td>
         <td class="mono" style="white-space:nowrap;">${fmtSom(vwPlanRowTotal(it))}</td>
         <td style="text-align:center;"><input type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
@@ -398,14 +427,14 @@
   }
   window.vwAddPlanRow = function(){
     if(readOnlyClosed) return;
-    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, discount:0, done:false});
+    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, discount:0, discountMode:'%', done:false});
     vwRenderPlan();
   };
   window.vwAddServiceFromSelect = function(serviceId){
     if(readOnlyClosed || !serviceId) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, discount:0, done:false});
+    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, discount:0, discountMode:'%', done:false});
     vwRenderPlan();
     vwAutosave();
   };
@@ -487,7 +516,7 @@
     if(readOnlyClosed) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, done:false});
+    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, discountMode:'%', done:false});
     vwRenderPlan();
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();

@@ -338,6 +338,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .week-appt-chip .sched-appt-menu-btn{opacity:.55;}
 .week-appt-chip .sched-appt-menu-btn:hover{opacity:1;}
 .week-empty{font-size:10.5px;color:var(--ink-faint);}
+.week-cell-empty{cursor:pointer;}
+.week-cell-empty:hover{background:var(--cobalt-tint);}
+.week-cell-empty:hover .week-empty{color:var(--cobalt-dark);}
 
 /* minmax(90px,1fr)+min-width — как и у .sched-grid (день/неделя): на широком
    экране 7 колонок делят ширину поровну, на узком — не сжимаются до
@@ -457,7 +460,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   .qs-field-tooth{flex:1 1 64px;}
   .qs-field-qty{flex:1 1 56px;}
   .qs-field-price{flex:1 1 76px;}
-  .qs-field-discount{flex:1 1 64px;}
+  .qs-field-discount{flex:1 1 84px;}
   .qs-field-total{flex:1 1 76px;text-align:right;}
   .qs-field-remove{flex:0 0 auto;margin-left:auto;}
 }
@@ -2939,6 +2942,9 @@ const translations={
   w_open_shift: {ru:'Открыть смену', ky:'Смена ачуу', en:'Open shift', uz:'Smenani ochish'},
   w_total: {ru:'Итого', ky:'Жыйынтыгы', en:'Total', uz:'Jami'},
   w_discount_pct: {ru:'Скидка %', ky:'Арзандатуу %', en:'Discount %', uz:'Chegirma %'},
+  w_discount: {ru:'Скидка', ky:'Арзандатуу', en:'Discount', uz:'Chegirma'},
+  w_discount_sum: {ru:'Скидка (сумма)', ky:'Арзандатуу (сумма)', en:'Discount (amount)', uz:'Chegirma (summa)'},
+  w_discount_toggle_mode: {ru:'Переключить % / сумма', ky:'% / сумма которуу', en:'Toggle % / amount', uz:'% / summa almashtirish'},
   w_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
   w_add_at_least_one_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
   w_shift_opened: {ru:'Смена открыта', ky:'Смена ачылды', en:'Shift opened', uz:'Smena ochildi'},
@@ -4354,10 +4360,13 @@ function buildWeekHTML(){
     html+=`<tr><td class="week-doc-col">${d.name}<span>${d.role}</span></td>`;
     dates.forEach(dt=>{
       const appts=apptsFor(isoDate(dt), d.id);
-      html+='<td>';
-      if(appts.length===0){ html+='<span class="week-empty">—</span>'; }
-      else appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
-      html+='</td>';
+      if(appts.length===0){
+        html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}"><span class="week-empty">—</span></td>`;
+      } else {
+        html+='<td>';
+        appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
+        html+='</td>';
+      }
     });
     html+='</tr>';
   });
@@ -4421,6 +4430,12 @@ function openNewAppt(prefill){
 function schedCellClick(time, docId){
   const dateIso = isoDate(dateAtOffset(currentDayOffset));
   openNewAppt({time, docId, date: dateIso});
+}
+// Тот же клик-по-пустой-ячейке, что и в дневном виде, но для недельной сетки —
+// там ячейка это весь день (без разбивки по времени), поэтому время не
+// подставляем, openNewAppt() сам поставит время по умолчанию (09:00).
+function schedWeekCellClick(dateIso, docId){
+  openNewAppt({docId, date: dateIso});
 }
 function apptPatientSearch(q){
   const box=document.getElementById('appt-patient-suggestions');

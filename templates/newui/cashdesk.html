@@ -355,7 +355,7 @@ function qsSelectPatient(id){
   document.getElementById('qs-patient-suggestions').classList.add('hidden');
 }
 function qsAddRow(){
-  qsRows.push({idx: qsRowSeq++, service_id:'', service_name:'', tooth:'', qty:1, price:0, discount:0});
+  qsRows.push({idx: qsRowSeq++, service_id:'', service_name:'', tooth:'', qty:1, price:0, discount:0, discountMode:'%'});
   renderQsRows();
 }
 function qsRemoveRow(idx){
@@ -363,25 +363,52 @@ function qsRemoveRow(idx){
   if(qsRows.length===0){ qsAddRow(); } else { renderQsRows(); }
 }
 // Единая точка правды для суммы строки с учётом скидки (%) — используется и в
-// строке, и в общем итоге модалки, и при отправке платежа.
+// строке, и в общем итоге модалки, и при отправке платежа. Скидка хранится
+// ВСЕГДА в процентах (0-100) — режим «сумма» (discountMode) только для
+// удобства ввода, см. qsDiscountInputValue()/qsSetDiscount().
 function qsRowTotal(r){
   const gross=(parseFloat(r.price)||0)*(parseInt(r.qty)||1);
   const disc=Math.max(0, Math.min(100, parseFloat(r.discount)||0));
   return gross - gross*disc/100;
+}
+function qsDiscountInputValue(r){
+  if(r.discountMode==='sum'){
+    const gross=(parseFloat(r.price)||0)*(parseInt(r.qty)||1);
+    return Math.round(gross * (parseFloat(r.discount)||0) / 100);
+  }
+  return r.discount||0;
+}
+function qsSetDiscount(idx, val){
+  const row=qsRows.find(r=>r.idx===idx);
+  if(!row) return;
+  const gross=(parseFloat(row.price)||0)*(parseInt(row.qty)||1);
+  let num=parseFloat(val)||0;
+  if(row.discountMode==='sum'){
+    num=Math.max(0, num);
+    row.discount = gross>0 ? Math.max(0, Math.min(100, num/gross*100)) : 0;
+  } else {
+    row.discount = Math.max(0, Math.min(100, num));
+  }
+  renderQsRows();
+}
+function qsToggleDiscountMode(idx){
+  const row=qsRows.find(r=>r.idx===idx);
+  if(!row) return;
+  row.discountMode = row.discountMode==='sum' ? '%' : 'sum';
+  renderQsRows();
 }
 function qsSetRowField(idx, field, val){
   const row=qsRows.find(r=>r.idx===idx);
   if(!row) return;
   if(field==='qty') val=Math.max(1, parseInt(val)||1);
   if(field==='price') val=parseFloat(val)||0;
-  if(field==='discount') val=Math.max(0, Math.min(100, parseFloat(val)||0));
   row[field]=val;
-  if(field==='discount' || field==='price' || field==='qty') renderQsRows(); else qsUpdateTotal();
+  if(field==='price' || field==='qty') renderQsRows(); else qsUpdateTotal();
 }
 function renderQsRows(){
   const el=document.getElementById('qsRows');
   el.innerHTML=qsRows.map(r=>`
-    <div class="qs-row" style="display:grid;grid-template-columns:1fr 70px 60px 100px 64px 90px 28px;gap:8px;align-items:center;margin-bottom:8px;">
+    <div class="qs-row" style="display:grid;grid-template-columns:1fr 70px 60px 100px 84px 90px 28px;gap:8px;align-items:center;margin-bottom:8px;">
       <div class="qs-field-service" style="position:relative;">
         <input type="text" id="qsSvcInput-${r.idx}" value="${(r.service_name||'').replace(/"/g,'&quot;')}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off"
                oninput="qsServiceSearch(${r.idx}, this.value)" onfocus="qsServiceSearch(${r.idx}, this.value)"
@@ -391,7 +418,10 @@ function renderQsRows(){
       <input class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
       <input class="qs-field-qty" type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
       <input class="qs-field-price" type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
-      <input class="qs-field-discount" type="number" min="0" max="100" step="1" value="${r.discount||0}" title="${t('w_discount_pct')}" onchange="qsSetRowField(${r.idx},'discount',this.value)">
+      <div class="qs-field-discount" style="display:flex;gap:2px;align-items:center;">
+        <input type="number" min="0" ${r.discountMode==='sum'?'':'max="100"'} step="1" value="${qsDiscountInputValue(r)}" style="width:100%;min-width:0;" title="${r.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="qsSetDiscount(${r.idx},this.value)">
+        <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 5px;font-size:10px;flex-shrink:0;" title="${t('w_discount_toggle_mode')}" onclick="qsToggleDiscountMode(${r.idx})">${r.discountMode==='sum'?CUR_SYM:'%'}</button>
+      </div>
       <div class="qs-field-total mono" style="font-size:12.5px;white-space:nowrap;">${fmtSom(qsRowTotal(r))}</div>
       <button type="button" class="qs-field-remove btn btn-ghost btn-sm" onclick="qsRemoveRow(${r.idx})" style="padding:4px 6px;">✕</button>
     </div>`).join('');
