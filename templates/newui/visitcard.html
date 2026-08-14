@@ -90,7 +90,7 @@
           <div class="card" id="vwFooterCard" style="margin-top:4px;">
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;"><input autocomplete="off" type="checkbox" checked style="width:auto;"> <span data-i18n="w_include_043">Включить в форму 043</span></label>
-              <button class="btn btn-cobalt" onclick="vwAutosave(true)" data-i18n="w_save">Сохранить</button>
+              <button class="btn btn-cobalt" onclick="vwCommitVisit('/new/schedule/')" data-i18n="w_save">Сохранить</button>
             </div>
           </div>
         </div>
@@ -641,8 +641,19 @@
     await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {gums});
   }
 
-  window.vwCommitVisit = async function(){
-    if(commitLocked) return;
+  // redirectTo — куда уйти после завершения: кнопка «Завершить приём» ведёт
+  // в карточку пациента (как раньше), кнопка «Сохранить» внизу — в
+  // расписание (врач жмёт «Сохранить» и сразу возвращается к календарю,
+  // а не остаётся на карточке приёма).
+  window.vwCommitVisit = async function(redirectTo){
+    redirectTo = redirectTo || ('/new/patients/'+vw.patientId+'/');
+    if(commitLocked){
+      // Приём уже завершён — просто сохраняем правки в ЭМК (она остаётся
+      // редактируемой и после завершения) и уходим, не завершая повторно.
+      await vwAutosave();
+      location.href = redirectTo;
+      return;
+    }
     if(!confirm(t('w_confirm_finish_visit'))) return;
     await vwAutosave();
     const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan: vwPlan});
@@ -650,14 +661,14 @@
     if(res.ok && data.ok){
       // Долг за ЭТОТ приём уходит в кассу сразу же, без лишнего клика в
       // модалке — администратор увидит пациента в очереди кассы сразу
-      // после того, как врач нажал «Завершить приём».
+      // после того, как врач нажал «Завершить приём»/«Сохранить».
       const owed = vwPlan.reduce((s,it)=>s+vwPlanRowTotal(it),0);
       if(owed > 0) await vwSendToCashier();
       sessionStorage.setItem('newui_flash', JSON.stringify({
         msg: owed>0 ? t('w_visit_completed_sent_to_cashier','Приём завершён, долг отправлен в кассу') : t('w_visit_completed'),
         type:'success',
       }));
-      location.href='/new/patients/'+vw.patientId+'/';
+      location.href = redirectTo;
     } else {
       showToast(apiErrorMessage(data, t('w_finish_visit_failed')), 'error');
     }
