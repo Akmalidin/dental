@@ -131,14 +131,14 @@
             <div class="card-body">
               <div id="aiChatMessages" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;margin-bottom:12px;padding-right:4px;"></div>
               <div style="display:flex;gap:8px;">
-                <input type="text" id="aiChatInput" placeholder="Например: где мы теряем деньги?" onkeydown="if(event.key==='Enter')sendAIQuestion();">
+                <input type="text" id="aiChatInput" placeholder="Например: где мы теряем деньги?" data-i18n-placeholder="w_ai_input_placeholder" onkeydown="if(event.key==='Enter')sendAIQuestion();">
                 <button class="btn btn-cobalt" onclick="sendAIQuestion()" data-i18n="w_ask">Спросить</button>
               </div>
               <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-                <button class="chip" onclick="askAIPreset('выручка')">Как выручка?</button>
-                <button class="chip" onclick="askAIPreset('врачи')">Кого догрузить?</button>
-                <button class="chip" onclick="askAIPreset('отмены')">Почему отменяют?</button>
-                <button class="chip" onclick="askAIPreset('должники')">Кто должен оплатить?</button>
+                <button class="chip" onclick="askAIPreset('выручка')" data-i18n="w_ai_preset_revenue">Как выручка?</button>
+                <button class="chip" onclick="askAIPreset('врачи')" data-i18n="w_ai_preset_doctors">Кого догрузить?</button>
+                <button class="chip" onclick="askAIPreset('отмены')" data-i18n="w_ai_preset_cancels">Почему отменяют?</button>
+                <button class="chip" onclick="askAIPreset('должники')" data-i18n="w_ai_preset_debtors">Кто должен оплатить?</button>
               </div>
             </div>
           </div>
@@ -171,11 +171,11 @@
 
         <div id="rpRooms" class="hidden">
           <div class="card" style="margin-bottom:14px;">
-            <div class="card-head"><h3>Загрузка кабинетов</h3></div>
+            <div class="card-head"><h3 data-i18n="w_room_load">Загрузка кабинетов</h3></div>
             <div class="card-body" id="roomsChart"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Загрузка кабинетов · неделя</h3></div>
+            <div class="card-head"><h3 data-i18n="w_room_load_week">Загрузка кабинетов · неделя</h3></div>
             <table>
               <thead><tr><th data-i18n="w_room">Кабинет</th><th data-i18n="w_hours_busy">Часов занято</th><th data-i18n="w_utilization_short">Загрузка</th></tr></thead>
               <tbody>
@@ -195,7 +195,7 @@
             <div class="card-body" id="repeatChart"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Повторные визиты · квартал</h3></div>
+            <div class="card-head"><h3 data-i18n="w_repeat_visits_quarter">Повторные визиты · квартал</h3></div>
             <table>
               <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_visits">Визитов</th><th data-i18n="w_last_visit_full">Последний визит</th><th data-i18n="w_status">Статус</th></tr></thead>
               <tbody>

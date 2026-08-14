@@ -101,9 +101,9 @@
 
         <!-- ---- ИСТОРИЯ ПРИЁМОВ ---- -->
         <div id="pcPanelHistory" class="hidden card">
-          <div class="card-head"><h3>История приёмов</h3></div>
+          <div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
           <table>
-            <thead><tr><th>Дата</th><th>Услуга</th><th>Врач</th><th>Сумма</th><th>Статус</th></tr></thead>
+            <thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th></tr></thead>
             <tbody>
               <tr><td>28.07.2026</td><td>Пломбирование, зуб 26</td><td>Асанов Б.</td><td class="mono">3 200 сом</td><td><span class="pill teal">Завершён</span></td></tr>
               <tr><td>14.06.2026</td><td>Профессиональная чистка</td><td>Джумабекова А.</td><td class="mono">1 800 сом</td><td><span class="pill teal">Завершён</span></td></tr>
@@ -114,9 +114,9 @@
 
         <!-- ---- ПЛАН ЛЕЧЕНИЯ ---- -->
         <div id="pcPanelPlan" class="hidden card">
-          <div class="card-head"><h3>План лечения</h3><span class="link-btn" onclick="openModal('m-treatplan')">+ Добавить этап</span></div>
+          <div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3><span class="link-btn" onclick="openModal('m-treatplan')">+ <span data-i18n="w_add_stage">Добавить этап</span></span></div>
           <table>
-            <thead><tr><th>Этап</th><th>Зуб</th><th>Врач</th><th>Стоимость</th><th>Статус</th><th></th></tr></thead>
+            <thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
             <tbody>
               <tr><td>Пломбирование (композит)</td><td class="mono">26</td><td>Асанов Б.</td><td class="mono">3 200 сом</td><td><span class="pill teal">Оплачено</span></td><td></td></tr>
               <tr><td>Профессиональная чистка</td><td class="mono">—</td><td>Джумабекова А.</td><td class="mono">1 800 сом</td><td><span class="pill teal">Оплачено</span></td><td></td></tr>
@@ -128,14 +128,14 @@
         <!-- ---- ФИНАНСЫ ---- -->
         <div id="pcPanelFinance" class="hidden">
           <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
-            <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">5 500 сом</b></div>
-            <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">0 сом</b></div>
-            <div class="card kpi b-amber"><span class="lbl">На депозите</span><b style="font-size:20px">0 сом</b></div>
+            <div class="card kpi b-teal"><span class="lbl" data-i18n="w_total_paid">Всего оплачено</span><b style="font-size:20px">5 500 сом</b></div>
+            <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_balance">Баланс</span><b style="font-size:20px">0 сом</b></div>
+            <div class="card kpi b-amber"><span class="lbl" data-i18n="w_on_deposit">На депозите</span><b style="font-size:20px">0 сом</b></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Платежи</h3><button class="btn btn-cobalt btn-sm" onclick="openModal('m-payment')">+ Приём оплаты</button></div>
+            <div class="card-head"><h3 data-i18n="w_payments">Платежи</h3><button class="btn btn-cobalt btn-sm" onclick="openModal('m-payment')">+ <span data-i18n="w_accept_payment">Приём оплаты</span></button></div>
             <table>
-              <thead><tr><th>Дата</th><th>Назначение</th><th>Способ</th><th>Сумма</th></tr></thead>
+              <thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th></tr></thead>
               <tbody>
                 <tr><td>28.07.2026</td><td>Пломбирование, зуб 26</td><td>Карта</td><td class="mono" style="color:var(--teal)">+3 200 сом</td></tr>
                 <tr><td>14.06.2026</td><td>Проф. чистка</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+1 800 сом</td></tr>
@@ -147,10 +147,10 @@
 
         <!-- ---- ДОКУМЕНТЫ ---- -->
         <div id="pcPanelDocs" class="hidden card">
-          <div class="card-head"><h3>Документы</h3><button class="btn btn-cobalt btn-sm">+ Загрузить</button></div>
+          <div class="card-head"><h3 data-i18n="w_documents">Документы</h3><button class="btn btn-cobalt btn-sm">+ <span data-i18n="w_upload">Загрузить</span></button></div>
           <div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);">
-            <div style="font-size:13px;">Пока нет загруженных документов</div>
-            <div style="font-size:11.5px;margin-top:4px;">Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»</div>
+            <div style="font-size:13px;" data-i18n="w_no_docs_uploaded">Пока нет загруженных документов</div>
+            <div style="font-size:11.5px;margin-top:4px;" data-i18n="w_docs_dnd_hint">Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»</div>
           </div>
         </div>
       </div>

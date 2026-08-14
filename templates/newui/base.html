@@ -635,7 +635,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <span>Пациент</span>
           <button type="button" class="link-btn" style="font-weight:600;" onclick="openModal('m-patient')">+ Добавить пациента</button>
         </label>
-        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
+        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
         <input type="hidden" id="appt-patient-id">
         <div id="appt-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
@@ -647,7 +647,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_date">Дата</label><input type="date" id="appt-date"></div>
         <div class="form-group"><label data-i18n="w_time">Время</label><input type="time" id="appt-time" lang="ru"></div>
       </div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-appt')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="apptModalSaveBtn" onclick="submitNewAppt()">Создать запись</button></div>
   </div>
@@ -753,7 +753,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <option>Отказ от оплаты после лечения</option>
         </select>
       </div>
-      <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…"></textarea></div>
+      <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…" data-i18n-placeholder="w_describe_reason_own_words"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-blacklist-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="addToBlacklist()"><span data-i18n="btn_add_to_list">Добавить в список</span></button></div>
   </div>
@@ -848,7 +848,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label><select><option>Наличные</option><option>Карта</option><option>Перевод на карту</option><option>Депозит</option><option>Страховка</option><option>Рассрочка</option></select></div>
       </div>
       <div class="form-group"><label data-i18n="w_purpose">Назначение</label><select><option>Оплата лечения</option><option>Пополнение депозита</option><option>Взнос рассрочки</option></select></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="closeModal('m-payment')">Провести оплату</button></div>
   </div>
@@ -864,7 +864,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <div class="row" style="padding:4px 0;"><div class="row-main"><b id="vr-patient">—</b><span id="vr-meta">—</span></div></div>
         </div>
       </div>
-      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…"></textarea></div>
+      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…" data-i18n-placeholder="w_doctor_notes_placeholder"></textarea></div>
       <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Итог визита</label>
       <label class="reason-opt"><input type="radio" name="vr" value="Начал лечение · НЛ|cobalt" checked><div><b style="font-size:13px;display:block">Начал лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">НЛ</span></div></label>
       <label class="reason-opt"><input type="radio" name="vr" value="Продолжает лечение · ПЛ|amber"><div><b style="font-size:13px;display:block">Продолжает лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">ПЛ</span></div></label>
@@ -886,7 +886,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Не успевает</span></label>
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Не получается</span></label>
       <label class="reason-opt"><input type="radio" name="cr"><span style="font-size:13px">Забыл</span></label>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-cancel')">Назад</button><button class="btn btn-danger" onclick="closeModal('m-cancel')">Отменить визит</button></div>
   </div>
@@ -911,7 +911,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_laborder">Заказ лаборатории</h3><button class="modal-close" onclick="closeModal('m-labOrder')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input type="text" placeholder="Поиск пациента"></div>
+      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input type="text" placeholder="Поиск пациента" data-i18n-placeholder="w_search_patient"></div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_work_type">Тип работы</label><select><option>Коронка</option><option>Протез</option><option>Винир</option><option>Мостовидный протез</option></select></div>
         <div class="form-group"><label data-i18n="w_tooth_plural">Зуб(ы)</label><input type="text" placeholder="26"></div>
@@ -995,7 +995,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div style="border-top:1px solid var(--mist-line);padding-top:16px;">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Новый шаблон</label>
         <div class="form-group"><input type="text" id="tpl-title" placeholder="Название шаблона"></div>
-        <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…"></textarea></div>
+        <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
         <button class="btn btn-cobalt btn-sm" onclick="addTemplate()">+ Добавить шаблон</button>
       </div>
     </div>
@@ -2733,6 +2733,45 @@ const translations={
   w_remove: {ru:'Убрать', ky:'Алып салуу', en:'Remove', uz:'O\'chirish'},
   w_multi_service_hint: {ru:'можно выбрать несколько — добавятся в «Процедуры и план»', ky:'бир нечесин тандаса болот — «Процедуралар жана план» бөлүмүнө кошулат', en:'you can pick several — they will be added to “Procedures and plan”', uz:'bir nechtasini tanlash mumkin — «Muolajalar va reja» bo‘limiga qo‘shiladi'},
   w_open_file: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
+  w_no_visits_yet: {ru:'Приёмов пока не было', ky:'Кабылдоолор азырынча болгон эмес', en:'No visits yet', uz:'Hozircha qabullar bo‘lmagan'},
+  w_no_plans_yet: {ru:'Планов лечения пока нет', ky:'Дарылоо пландары азырынча жок', en:'No treatment plans yet', uz:'Hozircha davolash rejalari yo‘q'},
+  w_no_payments_yet: {ru:'Платежей пока не было', ky:'Төлөмдөр азырынча болгон эмес', en:'No payments yet', uz:'Hozircha to‘lovlar bo‘lmagan'},
+  w_total_paid: {ru:'Всего оплачено', ky:'Бардыгы төлөндү', en:'Total paid', uz:'Jami to‘langan'},
+  w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
+  w_docs_upload_old_ui_hint: {ru:'Загрузка снимков/документов — в старом интерфейсе, на карточке приёма', ky:'Сүрөттөрдү/документтерди жүктөө — эски интерфейсте, кабылдоо картасында', en:'Uploading images/documents is available in the old interface, on the visit card', uz:'Rasm/hujjat yuklash — eski interfeysda, qabul kartasida'},
+  w_add_stage: {ru:'Добавить этап', ky:'Этап кошуу', en:'Add stage', uz:'Bosqich qo‘shish'},
+  w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
+  w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
+  w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
+  w_access_restriction_hint: {ru:'Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)', ky:'Кызматкер боюнча жеке чектөөлөр — «Персонал» бетиндеги кызматкер картасында (эски интерфейс)', en:'Per-employee access restrictions — on the employee card in “Staff” (old interface)', uz:'Xodim bo‘yicha shaxsiy cheklovlar — «Xodimlar» sahifasidagi xodim kartasida (eski interfeys)'},
+  w_interface_language: {ru:'Язык интерфейса', ky:'Интерфейс тили', en:'Interface language', uz:'Interfeys tili'},
+  w_interface_language_hint: {ru:'Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже', ky:'Меню жазууларын дароо, кайра жүктөбөй өзгөртөт — төмөнкү баскыч менен сакталат', en:'Changes menu labels instantly, without reloading — saved with the button below', uz:'Menyu yozuvlarini darhol, qayta yuklamasdan o‘zgartiradi — pastdagi tugma bilan saqlanadi'},
+  w_phone_label: {ru:'Телефон', ky:'Телефон', en:'Phone', uz:'Telefon'},
+  w_address_label: {ru:'Адрес', ky:'Дарек', en:'Address', uz:'Manzil'},
+  w_wa_enabled: {ru:'🟢 Включён', ky:'🟢 Күйгүзүлгөн', en:'🟢 Enabled', uz:'🟢 Yoqilgan'},
+  w_wa_disabled: {ru:'⚪ Выключен', ky:'⚪ Өчүрүлгөн', en:'⚪ Disabled', uz:'⚪ O‘chirilgan'},
+  w_settings_not_wired: {ru:'Этот раздел настроек ещё не подключён к реальным данным', ky:'Бул орнотуулар бөлүмү дагы эле чыныгы маалыматтарга туташтырылган эмес', en:'This settings section is not connected to real data yet', uz:'Ushbu sozlamalar bo‘limi hali haqiqiy ma’lumotlarga ulanmagan'},
+  w_settings_saved: {ru:'Настройки сохранены', ky:'Орнотуулар сакталды', en:'Settings saved', uz:'Sozlamalar saqlandi'},
+  w_settings_save_failed: {ru:'Не удалось сохранить — проверьте поля', ky:'Сактоо мүмкүн болгон жок — талааларды текшериңиз', en:'Failed to save — please check the fields', uz:'Saqlab bo‘lmadi — maydonlarni tekshiring'},
+  w_reminder_settings_saved: {ru:'Настройки напоминаний сохранены', ky:'Эскертүү орнотуулары сакталды', en:'Reminder settings saved', uz:'Eslatma sozlamalari saqlandi'},
+  w_ai_input_placeholder: {ru:'Например: где мы теряем деньги?', ky:'Мисалы: акчаны кайда жоготуп жатабыз?', en:'E.g.: where are we losing money?', uz:'Masalan: qayerda pul yo‘qotyapmiz?'},
+  w_ai_preset_revenue: {ru:'Как выручка?', ky:'Түшүм кандай?', en:'How’s revenue?', uz:'Daromad qanday?'},
+  w_ai_preset_doctors: {ru:'Кого догрузить?', ky:'Кимди көбүрөөк жүктөө керек?', en:'Who has spare capacity?', uz:'Kimni ko‘proq band qilish kerak?'},
+  w_ai_preset_cancels: {ru:'Почему отменяют?', ky:'Эмне үчүн жокко чыгарылат?', en:'Why are visits cancelled?', uz:'Nega bekor qilinmoqda?'},
+  w_ai_preset_debtors: {ru:'Кто должен оплатить?', ky:'Ким төлөшү керек?', en:'Who needs to pay?', uz:'Kim to‘lashi kerak?'},
+  w_room_load_week: {ru:'Загрузка кабинетов · неделя', ky:'Кабинеттердин жүктөлүшү · жума', en:'Room utilization · week', uz:'Xonalar bandligi · hafta'},
+  w_repeat_visits_quarter: {ru:'Повторные визиты · квартал', ky:'Кайталанган визиттер · чейрек', en:'Repeat visits · quarter', uz:'Takroriy tashriflar · chorak'},
+  w_search_by_name_phone: {ru:'Поиск по имени или телефону', ky:'Аты же телефону боюнча издөө', en:'Search by name or phone', uz:'Ism yoki telefon bo‘yicha qidirish'},
+  w_from_short: {ru:'от', ky:'дан', en:'from', uz:'dan'},
+  w_search_name_phone_dots: {ru:'Поиск по имени, телефону…', ky:'Аты, телефону боюнча издөө…', en:'Search by name, phone…', uz:'Ism, telefon bo‘yicha qidirish…'},
+  w_write_message_dots: {ru:'Написать сообщение…', ky:'Билдирүү жазуу…', en:'Write a message…', uz:'Xabar yozish…'},
+  w_search_user_object: {ru:'Пользователь, объект…', ky:'Колдонуучу, объект…', en:'User, object…', uz:'Foydalanuvchi, obyekt…'},
+  w_search_patient_doctor: {ru:'Пациент, врач…', ky:'Бейтап, врач…', en:'Patient, doctor…', uz:'Bemor, shifokor…'},
+  w_search_fullname_phone: {ru:'ФИО, телефон…', ky:'Аты-жөнү, телефону…', en:'Full name, phone…', uz:'F.I.Sh., telefon…'},
+  w_optional_placeholder: {ru:'Необязательно', ky:'Милдеттүү эмес', en:'Optional', uz:'Ixtiyoriy'},
+  w_describe_reason_own_words: {ru:'Или опишите причину своими словами…', ky:'Же себебин өз сөзүңүз менен жазыңыз…', en:'Or describe the reason in your own words…', uz:'Yoki sababni o‘z so‘zlaringiz bilan yozing…'},
+  w_doctor_notes_placeholder: {ru:'Что сделано, жалобы, рекомендации…', ky:'Эмне жасалды, даттануулар, сунуштар…', en:'What was done, complaints, recommendations…', uz:'Nima qilindi, shikoyatlar, tavsiyalar…'},
+  w_search_patient: {ru:'Поиск пациента', ky:'Бейтапты издөө', en:'Search patient', uz:'Bemorni qidirish'},
   w_search_service_dots: {ru:'Поиск услуги…', ky:'Кызматты издөө…', en:'Search service…', uz:'Xizmat qidirish…'},
   w_messages: {ru:'Сообщения', ky:'Билдирүүлөр', en:'Messages', uz:'Xabarlar'},
   w_other: {ru:'Прочее', ky:'Башка', en:'Other', uz:'Boshqa'},
@@ -3072,6 +3111,16 @@ function applyI18nTo(root){
     const key=el.dataset.i18n;
     const entry=translations[key];
     if(entry && entry[currentLang]) el.textContent=entry[currentLang];
+  });
+  // data-i18n-title/data-i18n-placeholder — то же самое, но для атрибутов
+  // title/placeholder (обычный data-i18n меняет только textContent).
+  root.querySelectorAll('[data-i18n-title]').forEach(el=>{
+    const entry=translations[el.dataset.i18nTitle];
+    if(entry && entry[currentLang]) el.title=entry[currentLang];
+  });
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{
+    const entry=translations[el.dataset.i18nPlaceholder];
+    if(entry && entry[currentLang]) el.placeholder=entry[currentLang];
   });
 }
 function setLanguage(lang){
@@ -4678,7 +4727,7 @@ function renderPatientCardTeeth(d){
 }
 function renderPatientCardHistory(d){
   const el=document.getElementById('pcPanelHistory');
-  if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Приёмов пока не было'); return; }
+  if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_visits_yet')); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
     <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
     <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
@@ -4692,7 +4741,7 @@ async function confirmQuickSale(id){
 }
 function renderPatientCardPlan(d){
   const el=document.getElementById('pcPanelPlan');
-  if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Планов лечения пока нет'); return; }
+  if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_plans_yet')); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3></div>
     <table><thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
     <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
@@ -4702,12 +4751,12 @@ function renderPatientCardFinance(d){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   const balance=p ? p.balance : 0;
   const kpi=`<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-    <div class="card kpi b-teal"><span class="lbl">Всего оплачено</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
-    <div class="card kpi b-cobalt"><span class="lbl">Баланс</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
+    <div class="card kpi b-teal"><span class="lbl">${t('w_total_paid')}</span><b style="font-size:20px">${Math.round(d.totalPaid).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
+    <div class="card kpi b-cobalt"><span class="lbl">${t('w_balance')}</span><b style="font-size:20px">${Math.round(balance).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>
   </div>`;
   const rows=(!d.payments || d.payments.length===0)
-    ? PATIENT_TAB_EMPTY('Платежей пока не было')
-    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th>Дата</th><th>Назначение</th><th>Способ</th><th>Сумма</th></tr></thead>
+    ? PATIENT_TAB_EMPTY(t('w_no_payments_yet'))
+    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th></tr></thead>
        <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('')}</tbody></table></div>`;
   el.innerHTML=kpi+rows;
 }
@@ -4729,7 +4778,7 @@ function renderPatientCardDocs(d){
   const el=document.getElementById('pcPanelDocs');
   const docs=d.documents || [];
   if(docs.length===0){
-    el.innerHTML='<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">Пока нет загруженных документов</div><div style="font-size:11.5px;margin-top:4px;">Загрузка снимков/документов — в старом интерфейсе, на карточке приёма</div></div>';
+    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
     return;
   }
   const media=docs.map(f=>{

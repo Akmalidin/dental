@@ -107,7 +107,7 @@
             </div>
             <div class="form-group" style="position:relative;">
               <label data-i18n="w_patient">Пациент</label>
-              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" autocomplete="off"
+              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off"
                      oninput="qsPatientSearch(this.value)" onfocus="qsPatientSearch(this.value)"
                      onblur="setTimeout(()=>{const b=document.getElementById('qs-patient-suggestions'); if(b) b.classList.add('hidden');},200)">
               <input type="hidden" id="qs-patient-id">
@@ -147,7 +147,7 @@ function openCashAcceptModal(notifId){
   if(!item) return;
   cashAcceptItem=item;
   document.getElementById('cashAcceptError').classList.add('hidden');
-  document.getElementById('cashAcceptWho').textContent=item.body || ('от '+item.from);
+  document.getElementById('cashAcceptWho').textContent=item.body || (t('w_from_short')+' '+item.from);
   document.getElementById('cash-accept-amount').value=item.amount || '';
   document.getElementById('cash-accept-method').value='cash';
   openModal('m-cash-accept');
