@@ -76,7 +76,7 @@
             <div class="card-head"><h3 data-i18n="w_procedures_plan">Процедуры и план</h3><button class="btn btn-ghost btn-sm" onclick="vwAddPlanRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button></div>
             <div class="card-body">
               <table>
-                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
+                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount_pct">Скидка %</th><th data-i18n="w_total">Итого</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
                 <tbody id="vwPlanBody"></tbody>
               </table>
               <div id="vwPlanEmpty" style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;"><span data-i18n="w_no_procedures">Процедуры не добавлены</span></div>
@@ -357,7 +357,14 @@
   };
 
   // ---- план/процедуры ----
-  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, done:true}));
+  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, done:true}));
+  // Единая точка правды для суммы строки плана с учётом скидки (%) — используется
+  // и в таблице плана, и в чипах «Выбранные зубы», и при расчёте суммы к оплате.
+  function vwPlanRowTotal(it){
+    const gross = (parseFloat(it.price)||0) * (parseFloat(it.qty)||1);
+    const disc = Math.max(0, Math.min(100, parseFloat(it.discount)||0));
+    return gross - gross*disc/100;
+  }
   // Общий datalist для поиска услуги в строке плана — нативная фильтрация
   // браузера по мере ввода, вместо длинного select со всеми услугами разом.
   if(!document.getElementById('vwServicesDatalist')){
@@ -382,6 +389,8 @@
         <td><input type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
         <td><input type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
         <td><input type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
+        <td><input type="number" min="0" max="100" step="1" value="${it.discount||0}" style="width:64px;" title="${t('w_discount_pct')}" onchange="vwPlanSetField(${i},'discount',this.value)"></td>
+        <td class="mono" style="white-space:nowrap;">${fmtSom(vwPlanRowTotal(it))}</td>
         <td style="text-align:center;"><input type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
       </tr>`;
@@ -389,21 +398,23 @@
   }
   window.vwAddPlanRow = function(){
     if(readOnlyClosed) return;
-    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, done:false});
+    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, discount:0, done:false});
     vwRenderPlan();
   };
   window.vwAddServiceFromSelect = function(serviceId){
     if(readOnlyClosed || !serviceId) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, done:false});
+    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, discount:0, done:false});
     vwRenderPlan();
     vwAutosave();
   };
   window.vwPlanSetField = function(i, field, val){
     if(field==='qty') val=Math.max(1, parseInt(val)||1);
     if(field==='price') val=parseFloat(val)||0;
+    if(field==='discount') val=Math.max(0, Math.min(100, parseFloat(val)||0));
     vwPlan[i][field]=val;
+    if(field==='discount' || field==='price' || field==='qty') vwRenderPlan(); // обновить колонку «Итого» вживую
   };
   window.vwPlanFillPrice = function(i, serviceId){
     const svc = vw.services.find(s=>String(s.id)===String(serviceId));
@@ -432,7 +443,7 @@
         ? toothItems.map(it=>{
             const svc=vw.services.find(s=>String(s.id)===String(it.service_id));
             const label=svc ? svc.name : '—';
-            const sum=Math.round((svc?svc.price:(it.price||0)) * (it.qty||1));
+            const sum=Math.round(vwPlanRowTotal(it));
             return `<span class="pill cobalt" style="display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;">${label} · ${sum} <span data-i18n="w_som">сом</span>
               <button type="button" title="${t('w_remove','Убрать')}" onclick="vwToothServiceRemove(${num}, ${it.service_id})" ${readOnlyClosed?'disabled':''} style="border:none;background:none;color:inherit;opacity:.75;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button></span>`;
           }).join('')
@@ -441,21 +452,21 @@
         <div class="selected-tooth-side">
           <div class="tooth-num-cell">${num}</div>
           ${iconHtml}
-          <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>Убрать</button>
+          <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>${t('w_remove','Убрать')}</button>
         </div>
         <div>
-          <div class="form-group"><label>Диагноз</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
+          <div class="form-group"><label>${t('w_diagnosis')}</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
           <div class="form-group" style="position:relative;">
-            <label><span data-i18n="w_services">Услуги</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">можно выбрать несколько — добавятся в «Процедуры и план»</div></label>
+            <label><span data-i18n="w_services">Услуги</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">${t('w_multi_service_hint','можно выбрать несколько — добавятся в «Процедуры и план»')}</div></label>
             <div style="margin-bottom:6px;">${chipsHtml}</div>
             <input type="text" id="toothSvcInput-${num}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
                    oninput="vwToothServiceSearch(${num}, this.value)" onfocus="vwToothServiceSearch(${num}, this.value)"
                    onblur="setTimeout(()=>{const b=document.getElementById('toothSvcSuggest-${num}'); if(b) b.classList.add('hidden');},200)">
             <div id="toothSvcSuggest-${num}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
           </div>
-          <div class="form-group"><label>План обследования</label><textarea rows="1" placeholder="План обследования" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>Лечение / Консультация</label><textarea rows="1" placeholder="Лечение / Консультация" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>Рекомендации</label><textarea rows="1" placeholder="Рекомендации" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_exam_plan')}</label><textarea rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_recommendations')}</label><textarea rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
         </div>
       </div>`;
     }).join('');
@@ -476,7 +487,7 @@
     if(readOnlyClosed) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, done:false});
+    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, done:false});
     vwRenderPlan();
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
@@ -495,8 +506,8 @@
       return;
     }
     body.innerHTML = files.map(f=>`
-      <div class="row"><div class="row-main">${f.is_image?`<img src="${f.url}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle;">`:''}<b>${f.name}</b><span>${f.kind_label}${f.tooth?' · зуб '+f.tooth:''} · ${f.date} · ${f.by}</span></div>
-      <a class="btn btn-ghost btn-sm" href="${f.url}" target="_blank">Открыть</a></div>`).join('');
+      <div class="row"><div class="row-main">${f.is_image?`<img src="${f.url}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle;">`:''}<b>${f.name}</b><span>${f.kind_label}${f.tooth?' · '+t('w_tooth').toLowerCase()+' '+f.tooth:''} · ${f.date} · ${f.by}</span></div>
+      <a class="btn btn-ghost btn-sm" href="${f.url}" target="_blank">${t('w_open_file','Открыть')}</a></div>`).join('');
   }
   vwRenderFiles(vw.files);
   window.vwUploadFiles = async function(fileList){
@@ -588,7 +599,7 @@
         }
       } else {
         let msg=t('w_save_failed');
-        try{ const data=await res.json(); if(data && data.error) msg=data.error; }catch(e){}
+        try{ const data=await res.json(); if(data && data.error) msg=apiErrorMessage(data, msg); }catch(e){}
         showToast(msg, 'error');
       }
     } catch(e){
@@ -613,7 +624,7 @@
     const data = await res.json();
     if(res.ok && data.ok){
       sessionStorage.setItem('newui_flash', JSON.stringify({msg:t('w_visit_completed'), type:'success'}));
-      const owed = vwPlan.reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.qty)||1),0);
+      const owed = vwPlan.reduce((s,it)=>s+vwPlanRowTotal(it),0);
       if(owed > 0){
         document.getElementById('vwCashierModalAmount').textContent = Math.round(owed).toLocaleString('ru-RU');
         document.getElementById('m-vw-cashier').classList.add('open');
@@ -621,7 +632,7 @@
         location.href='/new/patients/'+vw.patientId+'/';
       }
     } else {
-      showToast(data.error || t('w_finish_visit_failed'), 'error');
+      showToast(apiErrorMessage(data, t('w_finish_visit_failed')), 'error');
     }
   };
   window.vwSkipCashierAndLeave = function(){
@@ -636,7 +647,7 @@
     // Сумма именно ЭТОГО приёма (план на экране), а не весь накопленный долг
     // пациента по всем визитам — иначе в кассу уходит не то число, которое
     // видел врач на карточке (напр. приём на 8000, а в кассе весь долг 23300).
-    const owed = vwPlan.reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.qty)||1),0);
+    const owed = vwPlan.reduce((s,it)=>s+vwPlanRowTotal(it),0);
     const fd = new FormData();
     fd.append('treatment', vw.treatmentId);
     if(owed > 0) fd.append('amount', String(Math.round(owed)));

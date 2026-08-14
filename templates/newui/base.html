@@ -46,6 +46,14 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 /* ===== APP SHELL ===== */
 .app-shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
 .sidebar{background:var(--ink);color:#fff;padding:20px 14px;display:flex;flex-direction:column;}
+/* Кнопка-гамбургер и подложка для мобильного меню — скрыты по умолчанию,
+   показываются только ниже брейкпоинта (см. @media(max-width:900px) ниже).
+   Кнопка зафиксирована в углу экрана независимо от разметки topbar конкретной
+   страницы (topbar у каждой страницы своя, в {% block content %}) — так не
+   нужно трогать разметку ни одного из ~20 шаблонов страниц. */
+.hamburger-btn{display:none;position:fixed;top:14px;left:14px;z-index:101;width:38px;height:38px;border-radius:9px;background:var(--ink);color:#fff;border:none;font-size:18px;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);cursor:pointer;}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.45);z-index:90;}
+.sidebar-backdrop.open{display:block;}
 .sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
 .sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
 .sidebar-clinic{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:12px;color:#B7BECB;display:flex;justify-content:space-between;align-items:center;}
@@ -161,10 +169,13 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .tab-strip button{padding:10px 0;font-size:13px;color:var(--ink-soft);border-bottom:2px solid transparent;margin-right:22px;font-weight:500;}
 .tab-strip button.active{color:var(--ink);border-color:var(--coral);font-weight:600;}
 
-.odontogram-lg{display:block;}
-.odonto-jaws{position:relative;display:flex;flex-direction:column;gap:22px;}
+/* overflow-x:auto — на узких экранах зубная карта скроллится по горизонтали
+   (тот же паттерн, что и у .sched-wrap), а не сжимает 16 зубов до нечитаемого
+   размера; min-width на .odonto-jaws задаёт минимальную ширину строки. */
+.odontogram-lg{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.odonto-jaws{position:relative;display:flex;flex-direction:column;gap:22px;min-width:480px;}
 .odonto-jaws::before{content:'';position:absolute;top:0;bottom:0;left:50%;border-left:1px dashed rgba(0,0,0,0.12);pointer-events:none;}
-.odonto-row{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;}
+.odonto-row{display:grid;grid-template-columns:repeat(16,minmax(28px,1fr));gap:4px;}
 .tooth-cell-outline{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:8px;cursor:pointer;position:relative;transition:transform .12s ease, background .12s ease;transform-origin:center;}
 .tooth-cell-outline:hover{background:#E23F63;transform:scale(1.15);z-index:5;box-shadow:0 8px 20px -8px rgba(226,63,99,.45);}
 .tooth-cell-outline:hover .tooth-num-cell{color:#fff;}
@@ -212,6 +223,10 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 
 /* ===== DOCTOR SCHEDULE (columns = doctors) ===== */
 .sched-wrap{border:1px solid var(--mist);border-radius:var(--radius);overflow-x:auto;overflow-y:hidden;background:var(--paper);}
+/* Только у месячного вида нужен ещё и вертикальный скролл — 5-6 строк по
+   88px+ на невысоком экране телефона легко превышают viewport, а в дне/неделе
+   overflow-y:hidden специально не мешает sticky-шапке времени. */
+.sched-wrap.sched-wrap-month{overflow-y:auto;max-height:76vh;}
 .sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;}
 .sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
 .sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
@@ -319,7 +334,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .week-appt-chip .sched-appt-menu-btn:hover{opacity:1;}
 .week-empty{font-size:10.5px;color:var(--ink-faint);}
 
-.month-grid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
+/* minmax(90px,1fr)+min-width — как и у .sched-grid (день/неделя): на широком
+   экране 7 колонок делят ширину поровну, на узком — не сжимаются до
+   нечитаемого размера, а .sched-wrap.sched-wrap-month скроллит по горизонтали. */
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));min-width:630px;border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
 .month-headrow{display:contents;}
 .month-head{padding:10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);background:var(--cloud);font-weight:600;}
 .month-cell{background:var(--paper);min-height:88px;padding:8px;display:flex;flex-direction:column;gap:6px;}
@@ -400,6 +418,45 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 
 @media(max-width:1100px){.kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr 1fr;}.funnel{grid-template-columns:repeat(4,1fr);overflow-x:auto;}.sched-grid{grid-template-columns:52px repeat(3,1fr);}}
 
+/* ===== АДАПТАЦИЯ ПОД ПЛАНШЕТЫ/ТЕЛЕФОНЫ =====
+   Ниже 900px sidebar (240px, обычно занимает грид-колонку) превращается в
+   выезжающую off-canvas панель (тот же приём, что уже используется в
+   @media print ниже — "спрятать sidebar, .app-shell → block", только теперь
+   через класс-переключатель вместо display:none, см. toggleSidebar()/JS).
+   Ниже 640px дополнительно схлопываем 2-колоночные сетки в 1 колонку и
+   уменьшаем паддинги — тесная, но полностью читаемая раскладка на телефоне. */
+@media(max-width:900px){
+  .hamburger-btn{display:flex;}
+  .app-shell{display:block;height:auto;}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;}
+  .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
+  .main{height:auto;min-height:100vh;overflow-x:hidden;}
+  .topbar{padding-left:62px;flex-wrap:wrap;row-gap:10px;}
+  .search-box{width:auto;flex:1;min-width:0;}
+  /* Любая таблица внутри карточки получает собственный горизонтальный скролл
+     вместо того, чтобы раздвигать всю страницу — тот же паттерн, что уже
+     годами работает у .sched-wrap (расписание). Не задевает карточки без
+     таблиц — overflow-x:auto на пустом месте не влияет на раскладку. */
+  .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+}
+@media(max-width:640px){
+  .kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr;}
+  .page{padding:16px 14px 48px;}
+  .topbar{padding:14px 14px 14px 58px;}
+  .kpi-grid{gap:10px;}
+  /* Ряд услуги в «Быстрой продаже» (7 колонок фиксированной ширины —
+     220px+ гарантированно) не влезает в модалку на телефоне (~320px) —
+     переключаем на перенос по строкам вместо горизонтального сжатия. */
+  .qs-row{display:flex !important;flex-wrap:wrap;gap:6px !important;}
+  .qs-field-service{flex:1 1 100%;}
+  .qs-field-tooth{flex:1 1 64px;}
+  .qs-field-qty{flex:1 1 56px;}
+  .qs-field-price{flex:1 1 76px;}
+  .qs-field-discount{flex:1 1 64px;}
+  .qs-field-total{flex:1 1 76px;text-align:right;}
+  .qs-field-remove{flex:0 0 auto;margin-left:auto;}
+}
+
 @media print{
   body{background:#fff;}
   .sidebar,.modal-backdrop,.topbar .search-box,.topbar .icon-btn,#schedPrintBtn,#finPrintBtn,.btn-cobalt,.toolbar-right-nav{display:none !important;}
@@ -450,6 +507,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 </head>
 <body>
 
+<button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Меню" title="Меню">☰</button>
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 <div class="app-shell">
   <aside class="sidebar">
     <div class="sidebar-logo">
@@ -1673,7 +1732,7 @@ async function addToBlacklist(){
   else { showToast('Не удалось добавить в список', 'error'); }
 }
 async function removeFromBlacklist(id){
-  if(!confirm('Убрать пациента из чёрного списка?')) return;
+  if(!confirm(t('w_confirm_unblacklist','Убрать пациента из чёрного списка?'))) return;
   const fd=new FormData();
   fd.append('action','remove'); fd.append('id', id);
   const res=await postForm('/patients/blacklist/', fd);
@@ -1692,7 +1751,7 @@ async function removeCurrentFromBlacklist(){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   const entry=p ? findBlacklistEntryByPhone(p.phone) : null;
   if(!entry) return;
-  if(!confirm('Убрать пациента из чёрного списка?')) return;
+  if(!confirm(t('w_confirm_unblacklist','Убрать пациента из чёрного списка?'))) return;
   const fd=new FormData();
   fd.append('action','remove'); fd.append('id', entry.id);
   const res=await postForm('/patients/blacklist/', fd);
@@ -2163,18 +2222,18 @@ async function cashOpenShift(){
   fd.append('opening_cash', (el?el.value:'0')||'0');
   const res=await postForm('/finance/cashshift/open/', fd);
   const data=await res.json();
-  if(res.ok && data.ok){ flashAndReload('Смена открыта'); }
-  else { showToast(data.error || 'Не удалось открыть смену', 'error'); }
+  if(res.ok && data.ok){ flashAndReload(t('w_shift_opened','Смена открыта')); }
+  else { showToast(apiErrorMessage(data, t('w_shift_open_failed','Не удалось открыть смену')), 'error'); }
 }
 async function cashCloseShift(shiftId){
-  if(!confirm('Закрыть смену? После закрытия Z-отчёт зафиксируется.')) return;
+  if(!confirm(t('w_confirm_close_shift','Закрыть смену? После закрытия Z-отчёт зафиксируется.'))) return;
   const el=document.getElementById('shiftClosingCash');
   const fd=new FormData();
   fd.append('closing_cash_actual', (el?el.value:'0')||'0');
   const res=await postForm('/finance/cashshift/'+shiftId+'/close/', fd);
   const data=await res.json();
-  if(res.ok && data.ok){ flashAndReload('Смена закрыта'); }
-  else { showToast(data.error || 'Не удалось закрыть смену', 'error'); }
+  if(res.ok && data.ok){ flashAndReload(t('w_shift_closed','Смена закрыта')); }
+  else { showToast(apiErrorMessage(data, t('w_shift_close_failed','Не удалось закрыть смену')), 'error'); }
 }
 function renderCashQueue(){
   const el=document.getElementById('cashQueueBody');
@@ -2672,6 +2731,8 @@ const translations={
   w_simple_mode_hint: {ru:'Показывать только вкладки «Зубы» и «Рентген»', ky:'Уруш «Тиштер» жана «Рентген» гана көрсөтүлсүн', en:'Show only the "Teeth" and "X-ray" tabs', uz:'Faqat "Tishlar" va "Rentgen" bo\'limlarini ko\'rsatish'},
   w_no_services_selected: {ru:'Услуги не выбраны', ky:'Кызматтар тандалган жок', en:'No services selected', uz:'Xizmatlar tanlanmagan'},
   w_remove: {ru:'Убрать', ky:'Алып салуу', en:'Remove', uz:'O\'chirish'},
+  w_multi_service_hint: {ru:'можно выбрать несколько — добавятся в «Процедуры и план»', ky:'бир нечесин тандаса болот — «Процедуралар жана план» бөлүмүнө кошулат', en:'you can pick several — they will be added to “Procedures and plan”', uz:'bir nechtasini tanlash mumkin — «Muolajalar va reja» bo‘limiga qo‘shiladi'},
+  w_open_file: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
   w_search_service_dots: {ru:'Поиск услуги…', ky:'Кызматты издөө…', en:'Search service…', uz:'Xizmat qidirish…'},
   w_messages: {ru:'Сообщения', ky:'Билдирүүлөр', en:'Messages', uz:'Xabarlar'},
   w_other: {ru:'Прочее', ky:'Башка', en:'Other', uz:'Boshqa'},
@@ -2793,6 +2854,45 @@ const translations={
   w_quick_sale: {ru:'Быстрая продажа', ky:'Тез сатуу', en:'Quick sale', uz:'Tezkor sotuv'},
   w_open_shift: {ru:'Открыть смену', ky:'Смена ачуу', en:'Open shift', uz:'Smenani ochish'},
   w_total: {ru:'Итого', ky:'Жыйынтыгы', en:'Total', uz:'Jami'},
+  w_discount_pct: {ru:'Скидка %', ky:'Арзандатуу %', en:'Discount %', uz:'Chegirma %'},
+  w_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
+  w_add_at_least_one_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
+  w_shift_opened: {ru:'Смена открыта', ky:'Смена ачылды', en:'Shift opened', uz:'Smena ochildi'},
+  w_shift_open_failed: {ru:'Не удалось открыть смену', ky:'Сменаны ачуу мүмкүн болгон жок', en:'Failed to open shift', uz:'Smenani ochib bo‘lmadi'},
+  w_shift_closed: {ru:'Смена закрыта', ky:'Смена жабылды', en:'Shift closed', uz:'Smena yopildi'},
+  w_shift_close_failed: {ru:'Не удалось закрыть смену', ky:'Сменаны жабуу мүмкүн болгон жок', en:'Failed to close shift', uz:'Smenani yopib bo‘lmadi'},
+  w_confirm_close_shift: {ru:'Закрыть смену? После закрытия Z-отчёт зафиксируется.', ky:'Сменаны жабасызбы? Жабылгандан кийин Z-отчёт бекитилет.', en:'Close the shift? The Z-report will be finalized after closing.', uz:'Smenani yopasizmi? Yopilgandan so‘ng Z-hisobot yakunlanadi.'},
+  w_lead_move_failed: {ru:'Не удалось перенести заявку', ky:'Арызды жылдыруу мүмкүн болгон жок', en:'Failed to move the lead', uz:'Arizani ko‘chirib bo‘lmadi'},
+  w_lead_save_failed: {ru:'Не удалось сохранить заявку', ky:'Арызды сактоо мүмкүн болгон жок', en:'Failed to save the lead', uz:'Arizani saqlab bo‘lmadi'},
+  w_network_error: {ru:'Ошибка сети', ky:'Тармак катасы', en:'Network error', uz:'Tarmoq xatosi'},
+  w_network_error_retry: {ru:'Ошибка сети — попробуйте ещё раз', ky:'Тармак катасы — кайра аракет кылыңыз', en:'Network error — please try again', uz:'Tarmoq xatosi — qayta urinib ko‘ring'},
+  w_appt_created: {ru:'Запись создана', ky:'Жазуу түзүлдү', en:'Appointment created', uz:'Yozuv yaratildi'},
+  w_appt_create_failed: {ru:'Не удалось создать запись', ky:'Жазууну түзүү мүмкүн болгон жок', en:'Failed to create the appointment', uz:'Yozuvni yaratib bo‘lmadi'},
+  w_appt_moved: {ru:'Запись перенесена', ky:'Жазуу жылдырылды', en:'Appointment moved', uz:'Yozuv ko‘chirildi'},
+  w_appt_move_failed: {ru:'Не удалось перенести запись', ky:'Жазууну жылдыруу мүмкүн болгон жок', en:'Failed to move the appointment', uz:'Yozuvni ko‘chirib bo‘lmadi'},
+  // — Переводы серверных ошибок (error_key из JsonResponse({"error":...,
+  // "error_key":...}), см. apps/*/views.py). apiErrorMessage() в base.html
+  // подставляет data.error как fallback, если ключа тут ещё нет. —
+  err_appt_overlap: {ru:'Пересечение с другой записью этого врача', ky:'Ушул врачтын башка жазуусу менен кагылышуу', en:'Overlaps with another appointment of this doctor', uz:'Shu shifokorning boshqa yozuvi bilan ustma-ust tushadi'},
+  err_appt_no_patient: {ru:'У записи нет пациента', ky:'Жазууда пациент жок', en:'The appointment has no patient', uz:'Yozuvda bemor yo‘q'},
+  err_appt_invalid_date: {ru:'Неверная дата', ky:'Туура эмес күн', en:'Invalid date', uz:'Noto‘g‘ri sana'},
+  err_treatment_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
+  err_treatment_no_branches: {ru:'Нет доступных филиалов', ky:'Жеткиликтүү филиалдар жок', en:'No branches available', uz:'Mavjud filiallar yo‘q'},
+  err_treatment_add_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
+  err_visit_no_file: {ru:'Файл не выбран', ky:'Файл тандалган жок', en:'No file selected', uz:'Fayl tanlanmagan'},
+  err_visit_max_10_files: {ru:'Максимум 10 файлов за раз', ky:'Бир жолу максимум 10 файл', en:'Up to 10 files at a time', uz:'Bir martada maksimal 10 ta fayl'},
+  err_visit_already_completed: {ru:'Приём уже завершён', ky:'Кабыл алуу аяктады', en:'The visit is already completed', uz:'Qabul allaqachon yakunlangan'},
+  err_menu_only_director: {ru:'Только директор может менять меню клиники', ky:'Менюну тек директор гана өзгөртө алат', en:'Only a director can change the clinic menu', uz:'Klinika menyusini faqat direktor o‘zgartira oladi'},
+  err_patient_name_required: {ru:'Укажите имя', ky:'Атын көрсөтүңүз', en:'Enter a name', uz:'Ismni kiriting'},
+  err_patient_invalid_stage: {ru:'Некорректный этап', ky:'Туура эмес этап', en:'Invalid stage', uz:'Noto‘g‘ri bosqich'},
+  err_cashshift_no_branch: {ru:'Не удалось определить филиал', ky:'Филиалды аныктоо мүмкүн болгон жок', en:'Could not determine the branch', uz:'Filialni aniqlab bo‘lmadi'},
+  err_cashshift_already_open: {ru:'Смена по этому филиалу уже открыта', ky:'Бул филиал боюнча смена ачык', en:'A shift for this branch is already open', uz:'Ushbu filial uchun smena allaqachon ochilgan'},
+  err_cashshift_invalid_amount: {ru:'Некорректная сумма', ky:'Туура эмес сумма', en:'Invalid amount', uz:'Noto‘g‘ri summa'},
+  err_finance_no_access: {ru:'Нет доступа', ky:'Мүмкүнчүлүк жок', en:'No access', uz:'Ruxsat yo‘q'},
+  w_confirm_unblacklist: {ru:'Убрать пациента из чёрного списка?', ky:'Пациентти кара тизмеден чыгарасызбы?', en:'Remove the patient from the blacklist?', uz:'Bemorni qora ro‘yxatdan chiqarasizmi?'},
+  w_confirm_delete_lead: {ru:'Удалить заявку?', ky:'Арызды өчүрөсүзбү?', en:'Delete the lead?', uz:'Arizani o‘chirasizmi?'},
+  w_confirm_cancel_appt: {ru:'Отменить запись?', ky:'Жазууну жокко чыгарасызбы?', en:'Cancel the appointment?', uz:'Yozuvni bekor qilasizmi?'},
+  w_confirm_delete_role: {ru:'Удалить роль «{name}»?', ky:'«{name}» ролун өчүрөсүзбү?', en:'Delete the role "{name}"?', uz:'"{name}" rolini o‘chirasizmi?'},
   w_needs_doctor_confirmation: {ru:'Ждёт подтверждения врача', ky:'Дарыгердин ырастоосун күтүүдө', en:'Awaiting doctor confirmation', uz:'Shifokor tasdig\'ini kutmoqda'},
   w_confirm: {ru:'Подтвердить', ky:'Ырастоо', en:'Confirm', uz:'Tasdiqlash'},
   w_cash: {ru:'Наличные', ky:'Накталай', en:'Cash', uz:'Naqd'},
@@ -3610,10 +3710,10 @@ function startLeadDrag(e, el){
         const data=await res.json();
         if(!res.ok || !data.ok){
           lead.stage=prevStage;
-          showToast(data.error || 'Не удалось перенести заявку', 'error');
+          showToast(apiErrorMessage(data, t('w_lead_move_failed','Не удалось перенести заявку')), 'error');
           renderFunnel();
         }
-      }).catch(()=>{ lead.stage=prevStage; showToast('Ошибка сети', 'error'); renderFunnel(); });
+      }).catch(()=>{ lead.stage=prevStage; showToast(t('w_network_error','Ошибка сети'), 'error'); renderFunnel(); });
     }
   }
   document.addEventListener('mousemove', onMove);
@@ -3688,13 +3788,13 @@ async function saveLeadCard(){
     closeModal('m-lead');
   } else {
     const box=document.getElementById('leadModalError');
-    box.textContent=data.error || 'Не удалось сохранить заявку';
+    box.textContent=apiErrorMessage(data, t('w_lead_save_failed','Не удалось сохранить заявку'));
     box.classList.remove('hidden');
   }
 }
 async function deleteLeadCard(){
   if(editingLeadId){
-    if(!confirm('Удалить заявку?')) { return; }
+    if(!confirm(t('w_confirm_delete_lead','Удалить заявку?'))) { return; }
     const res=await apiJson('/patients/leads/'+editingLeadId+'/delete/', {});
     if(res.ok){
       funnelData.leads=funnelData.leads.filter(l=>l.id!==editingLeadId);
@@ -3833,6 +3933,7 @@ function calSetView(v){
 function renderSchedule(){
   const c=document.getElementById('scheduleContent');
   if(!c) return;
+  c.classList.toggle('sched-wrap-month', calView==='month');
   if(calView==='day'){ updateDayDateLabel(); c.innerHTML = buildDayHTML(); }
   else if(calView==='week') c.innerHTML = buildWeekHTML();
   else c.innerHTML = buildMonthHTML();
@@ -3971,7 +4072,7 @@ function maybeOfferStartVisit(apptId, newStatus){
 }
 async function apptViewSetStatus(status){
   if(!apptViewData) return;
-  if(status==='cancelled' && !confirm('Отменить запись?')) return;
+  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
   const apptId=apptViewData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
@@ -4013,7 +4114,8 @@ async function schedApptQuickMenu(event, apptId){
     || `<div style="padding:6px 10px;font-size:12px;color:var(--ink-soft);">${t('w_no_actions_available')}</div>`;
   const menu=document.createElement('div');
   menu.id='schedApptQuickMenuEl';
-  menu.style.cssText=`position:fixed;top:${btnRect.bottom+4}px;left:${Math.min(btnRect.left,window.innerWidth-240)}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:200px;`;
+  const menuPos=clampFloatingPanelPos(btnRect, 240, 220);
+  menu.style.cssText=`position:fixed;top:${menuPos.top}px;left:${menuPos.left}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:200px;max-width:240px;`;
   menu.innerHTML = `<div style="font-size:12.5px;font-weight:600;padding:2px 4px 4px;border-bottom:1px solid var(--mist-line);margin-bottom:2px;">${a.time} · ${p.name||'—'}</div>`
     + actionsHtml
     + `<button class="btn btn-ghost btn-sm" onclick="closeSchedApptQuickMenu();openApptInfo(${apptId})">Открыть карточку</button>`;
@@ -4023,7 +4125,7 @@ async function schedApptQuickMenu(event, apptId){
 }
 async function schedQuickSetStatus(status){
   if(!schedQuickMenuData) return;
-  if(status==='cancelled' && !confirm('Отменить запись?')) return;
+  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
   const apptId=schedQuickMenuData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
@@ -4080,7 +4182,8 @@ function openSchedDoctorFilterPanel(event){
   const btnRect=event.currentTarget.getBoundingClientRect();
   const panel=document.createElement('div');
   panel.id='schedDoctorFilterPanel';
-  panel.style.cssText=`position:fixed;top:${btnRect.bottom+4}px;left:${Math.min(btnRect.left,window.innerWidth-260)}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-width:280px;`;
+  const panelPos=clampFloatingPanelPos(btnRect, 280, 320);
+  panel.style.cssText=`position:fixed;top:${panelPos.top}px;left:${panelPos.left}px;z-index:200;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:2px;min-width:220px;max-width:280px;`;
   panel.innerHTML=schedDoctorFilterPanelHtml();
   panel.addEventListener('click', e=>e.stopPropagation());
   document.body.appendChild(panel);
@@ -4288,12 +4391,12 @@ async function submitNewAppt(){
           status: 'cobalt', durationMin: (service && service.duration) || 30, movable: true,
         });
         renderSchedule();
-        showToast('Запись создана');
+        showToast(t('w_appt_created','Запись создана'));
       } else {
-        flashAndReload('Запись создана');
+        flashAndReload(t('w_appt_created','Запись создана'));
       }
     } else {
-      errBox.textContent=data.error || 'Не удалось создать запись';
+      errBox.textContent=apiErrorMessage(data, t('w_appt_create_failed','Не удалось создать запись'));
       errBox.classList.remove('hidden');
     }
   } catch(e){
@@ -4341,10 +4444,10 @@ async function schedDrop(ev, time, docId){
       // Как и в submitNewAppt() — обновляем локально вместо полной перезагрузки страницы.
       appt.date=dateIso; appt.time=time; appt.docId=docId;
       renderSchedule();
-      showToast('Запись перенесена');
+      showToast(t('w_appt_moved','Запись перенесена'));
     }
-    else { showToast(data.error || 'Не удалось перенести запись', 'error'); }
-  } catch(e){ showToast('Ошибка сети — попробуйте ещё раз', 'error'); }
+    else { showToast(apiErrorMessage(data, t('w_appt_move_failed','Не удалось перенести запись')), 'error'); }
+  } catch(e){ showToast(t('w_network_error_retry','Ошибка сети — попробуйте ещё раз'), 'error'); }
 }
 
 /* ---- calendar settings modal ---- */
@@ -4816,6 +4919,15 @@ function showModalError(id, msg){
 }
 
 /* ---- Тост об успехе + сохранение места после перезагрузки страницы ---- */
+// Сообщение из ответа API с учётом перевода: если бэкенд прислал error_key
+// (см. apps/*/views.py, JsonResponse({"error": "...", "error_key": "..."})),
+// показываем переведённый текст через t('err_'+key, <русский текст с бэка
+// как fallback>) — так работает даже для ключей, которых ещё нет в словаре.
+// Без error_key (старые/необновлённые эндпоинты) — просто сырой data.error.
+function apiErrorMessage(data, fallback){
+  if(data && data.error_key) return t('err_'+data.error_key, data.error || fallback);
+  return (data && data.error) || fallback || t('w_save_failed');
+}
 function showToast(msg, type){
   const bg = type==='error' ? '#e85d2d' : '#0e9c7d';
   const el=document.createElement('div');
@@ -4983,9 +5095,36 @@ async function saveRoleDetailReal(){
 async function deleteRoleReal(){
   const role=roles.find(r=>r.id===currentRoleId);
   if(!role) return;
-  if(!confirm(`Удалить роль «${role.name}»?`)) return;
+  if(!confirm(t('w_confirm_delete_role','Удалить роль «{name}»?').replace('{name}', role.name))) return;
   await postForm(`/users/roles/${currentRoleId}/delete/`, new FormData());
   flashAndReload('Роль удалена');
+}
+
+// ---- мобильное меню: sidebar как off-canvas панель ниже 900px (см. CSS) ----
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('sidebar-open');
+  document.getElementById('sidebarBackdrop').classList.toggle('open');
+}
+function closeSidebar(){
+  document.querySelector('.sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebarBackdrop').classList.remove('open');
+}
+// Закрывать меню при переходе по пункту навигации — без правок разметки
+// каждого из ~17 <a class="nav-item"> (делегирование одним слушателем).
+document.querySelectorAll('.sidebar .nav-item').forEach(el=>el.addEventListener('click', closeSidebar));
+
+// ---- общий безопасный расчёт позиции плавающей панели рядом с кнопкой ----
+// Не даёт панели вылезти за правый край экрана (в отличие от прежнего
+// Math.min(...,window.innerWidth-N), где N не совпадал с реальной max-width
+// панели) и переворачивает панель вверх, если снизу не хватает места —
+// актуально на невысоких экранах телефонов.
+function clampFloatingPanelPos(btnRect, width, estHeight){
+  const left = Math.max(8, Math.min(btnRect.left, window.innerWidth - width - 8));
+  let top = btnRect.bottom + 4;
+  if(top + estHeight > window.innerHeight - 8){
+    top = Math.max(8, btnRect.top - estHeight - 4);
+  }
+  return {top, left};
 }
 
 /* init */

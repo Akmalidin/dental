@@ -344,7 +344,7 @@ def treatment_create_quick(request):
         if doctor_id:
             doctor = clinic_doctors(clinic).filter(pk=doctor_id).first()
         if not doctor:
-            return JsonResponse({"error": "Выберите врача"}, status=400)
+            return JsonResponse({"error": "Выберите врача", "error_key": "treatment_choose_doctor"}, status=400)
 
         branch = None
         if branch_id:
@@ -352,9 +352,9 @@ def treatment_create_quick(request):
         if not branch:
             branch = request.user.branches.first() or Branch.objects.first()
         if not branch:
-            return JsonResponse({"error": "Нет доступных филиалов"}, status=400)
+            return JsonResponse({"error": "Нет доступных филиалов", "error_key": "treatment_no_branches"}, status=400)
         if not cures_data:
-            return JsonResponse({"error": "Добавьте хотя бы одну услугу"}, status=400)
+            return JsonResponse({"error": "Добавьте хотя бы одну услугу", "error_key": "treatment_add_service"}, status=400)
 
         with transaction.atomic():
             treatment = Treatment.objects.create(
@@ -364,16 +364,23 @@ def treatment_create_quick(request):
                 status=Treatment.STATUS_COMPLETED,
                 needs_doctor_confirmation=True,
             )
+            from decimal import Decimal
             for c in cures_data:
                 service = Service.objects.get(pk=c["service_id"])
                 qty = max(1, int(c.get("qty", 1)))
                 price = c.get("price", service.price)
+                try:
+                    discount = Decimal(str(c.get("discount") or 0))
+                except Exception:
+                    discount = Decimal(0)
+                discount = max(Decimal(0), min(Decimal(100), discount))
                 TreatmentCure.objects.create(
                     treatment=treatment,
                     service=service,
                     tooth_number=c.get("tooth", ""),
                     quantity=qty,
                     price=price,
+                    discount=discount,
                     doctor=doctor,
                 )
                 # Списание материалов — best-effort (глотает свои исключения),

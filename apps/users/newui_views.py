@@ -302,14 +302,14 @@ def newui_menu_prefs_save(request):
     import json
 
     if request.method != "POST":
-        return JsonResponse({"error": "POST only"}, status=405)
+        return JsonResponse({"error": "POST only", "error_key": "generic_post_only"}, status=405)
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
-        return JsonResponse({"error": "invalid JSON"}, status=400)
+        return JsonResponse({"error": "invalid JSON", "error_key": "generic_invalid_json"}, status=400)
     prefs = data.get("prefs")
     if not isinstance(prefs, dict):
-        return JsonResponse({"error": "prefs required"}, status=400)
+        return JsonResponse({"error": "prefs required", "error_key": "menu_prefs_required"}, status=400)
     scope = data.get("scope", "user")
     prefs = {
         "hidden": prefs.get("hidden") or [],
@@ -318,7 +318,7 @@ def newui_menu_prefs_save(request):
     }
     if scope == "clinic":
         if not (request.user.is_superadmin or request.user.has_role("admin_main")):
-            return JsonResponse({"error": "Только директор может менять меню клиники"}, status=403)
+            return JsonResponse({"error": "Только директор может менять меню клиники", "error_key": "menu_only_director"}, status=403)
         from apps.settings_clinic.models import ClinicSettings
         cs = ClinicSettings.get()
         cs.menu_prefs = prefs
