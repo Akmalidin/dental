@@ -172,21 +172,6 @@
         </div>
       </div>
 
-      <!-- Модалка «Отправить в кассу» — показывается сразу после завершения приёма,
-           если по плану есть что оплачивать (см. vwCommitVisit). -->
-      <div class="modal-backdrop" id="m-vw-cashier">
-        <div class="modal">
-          <div class="modal-head"><h3 data-i18n="w_visit_completed">Приём завершён</h3><button class="modal-close" onclick="vwSkipCashierAndLeave()">✕</button></div>
-          <div class="modal-body">
-            <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 4px;"><span data-i18n="w_amount_due_visit">К оплате по этому приёму:</span> <b id="vwCashierModalAmount" style="color:var(--ink);"></b> <span data-i18n="w_som">сом</span>.</p>
-            <p style="font-size:13.5px;color:var(--ink-soft);margin:0;" data-i18n="w_send_patient_to_cashier_q">Отправить пациента в кассу, чтобы администратор принял оплату и выдал чек?</p>
-          </div>
-          <div class="modal-foot">
-            <button class="btn btn-ghost" onclick="vwSkipCashierAndLeave()" data-i18n="w_not_now">Не сейчас</button>
-            <button class="btn btn-cobalt" onclick="vwConfirmSendToCashierAndLeave()"><span data-i18n="w_send_to_cashier">Отправить в кассу</span></button>
-          </div>
-        </div>
-      </div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -204,7 +189,18 @@
   document.getElementById('vw-appt-duration').value = vw.appointmentDurationMin != null ? vw.appointmentDurationMin : '';
 
   const docSel=document.getElementById('vw-doctor');
-  docSel.innerHTML = doctorOptions.map(d=>`<option value="${d.id}" ${String(d.id)===String(vw.doctorId)?'selected':''}>${d.name}</option>`).join('') || `<option>${vw.doctorName||'—'}</option>`;
+  // Гарантируем, что у <option> ВСЕГДА валидный числовой value (иначе .value
+  // молча возвращает текст опции — например «Debug Admin» вместо id — и
+  // автосохранение падает на бэкенде). Плюс: если текущий назначенный врач
+  // почему-то не попал в doctorOptions (деактивирован/сменил роль), не
+  // теряем его молча — добавляем первым пунктом списка.
+  let docOpts = doctorOptions.slice();
+  if(vw.doctorId && !docOpts.some(d=>String(d.id)===String(vw.doctorId))){
+    docOpts = [{id:vw.doctorId, name:vw.doctorName||'—'}, ...docOpts];
+  }
+  docSel.innerHTML = docOpts.length
+    ? docOpts.map(d=>`<option value="${d.id}" ${String(d.id)===String(vw.doctorId)?'selected':''}>${d.name}</option>`).join('')
+    : `<option value="${vw.doctorId||''}">${vw.doctorName||'—'}</option>`;
 
   window.vwPlanServiceSearch = function(q){
     const box=document.getElementById('vw-plan-suggestions');
@@ -427,14 +423,14 @@
   }
   window.vwAddPlanRow = function(){
     if(readOnlyClosed) return;
-    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, discount:0, discountMode:'%', done:false});
+    vwPlan.push({service_id:'', tooth:'', qty:1, price:0, discount:0, discountMode:'%', done:true});
     vwRenderPlan();
   };
   window.vwAddServiceFromSelect = function(serviceId){
     if(readOnlyClosed || !serviceId) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, discount:0, discountMode:'%', done:false});
+    vwPlan.push({service_id:serviceId, tooth:'', qty:1, price:svc.price, discount:0, discountMode:'%', done:true});
     vwRenderPlan();
     vwAutosave();
   };
@@ -516,7 +512,7 @@
     if(readOnlyClosed) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
-    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, discountMode:'%', done:false});
+    vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, discountMode:'%', done:true});
     vwRenderPlan();
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
@@ -652,24 +648,19 @@
     const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan: vwPlan});
     const data = await res.json();
     if(res.ok && data.ok){
-      sessionStorage.setItem('newui_flash', JSON.stringify({msg:t('w_visit_completed'), type:'success'}));
+      // Долг за ЭТОТ приём уходит в кассу сразу же, без лишнего клика в
+      // модалке — администратор увидит пациента в очереди кассы сразу
+      // после того, как врач нажал «Завершить приём».
       const owed = vwPlan.reduce((s,it)=>s+vwPlanRowTotal(it),0);
-      if(owed > 0){
-        document.getElementById('vwCashierModalAmount').textContent = Math.round(owed).toLocaleString('ru-RU');
-        document.getElementById('m-vw-cashier').classList.add('open');
-      } else {
-        location.href='/new/patients/'+vw.patientId+'/';
-      }
+      if(owed > 0) await vwSendToCashier();
+      sessionStorage.setItem('newui_flash', JSON.stringify({
+        msg: owed>0 ? t('w_visit_completed_sent_to_cashier','Приём завершён, долг отправлен в кассу') : t('w_visit_completed'),
+        type:'success',
+      }));
+      location.href='/new/patients/'+vw.patientId+'/';
     } else {
       showToast(apiErrorMessage(data, t('w_finish_visit_failed')), 'error');
     }
-  };
-  window.vwSkipCashierAndLeave = function(){
-    location.href='/new/patients/'+vw.patientId+'/';
-  };
-  window.vwConfirmSendToCashierAndLeave = async function(){
-    await vwSendToCashier();
-    location.href='/new/patients/'+vw.patientId+'/';
   };
 
   window.vwSendToCashier = async function(){

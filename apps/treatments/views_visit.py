@@ -312,10 +312,13 @@ def visit_save(request, pk):
     if "notes" in data:
         treatment.notes = data.get("notes") or ""
         update_fields.append("notes")
-    if data.get("doctor_id"):
+    # str(...).isdigit() — защита от нечисловых значений (напр. если на фронте
+    # <select> отрендерился без value и .value вернул текст опции, не id).
+    doctor_id = data.get("doctor_id")
+    if doctor_id and str(doctor_id).isdigit():
         from apps.users.models import clinic_doctors
         from apps.tenancy import get_current_clinic
-        doctor = clinic_doctors(get_current_clinic()).filter(pk=data["doctor_id"]).first()
+        doctor = clinic_doctors(get_current_clinic()).filter(pk=doctor_id).first()
         if doctor:
             treatment.doctor = doctor
             update_fields.append("doctor")
