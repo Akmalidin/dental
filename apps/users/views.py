@@ -336,6 +336,109 @@ def _newui_patients_data():
     return data
 
 
+def _newui_patients_page_data(request):
+    """Реальная серверная пагинация/поиск/фильтр для страницы «Пациенты» —
+    _newui_patients_data() выше ограничена последними 300 и используется как
+    компактный встроенный список для быстрого поиска пациента на ДРУГИХ
+    страницах (запись/касса/карточка приёма); в клинике может быть тысячи
+    пациентов (напр. 8000+), и рендерить/грузить их всех разом на саму
+    страницу списка не годится — здесь настоящий Paginator по queryset."""
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    from django.utils import timezone
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    from apps.appointments.models import Appointment
+
+    G = request.GET
+    q = (G.get("q") or "").strip()
+    chip = G.get("filter") or "all"
+    try:
+        per_page = int(G.get("per_page", 25))
+    except (TypeError, ValueError):
+        per_page = 25
+    per_page = max(10, min(per_page, 200))
+    try:
+        page_num = int(G.get("page", 1))
+    except (TypeError, ValueError):
+        page_num = 1
+
+    def _search(qs):
+        # Разбиваем на слова, как в старом /patients/ списке — "Иванов Аня"
+        # целиком нигде не совпадёт, а по словам находит и ФИО, и телефон.
+        for word in q.split():
+            qs = qs.filter(
+                Q(first_name__icontains=word) | Q(last_name__icontains=word)
+                | Q(middle_name__icontains=word) | Q(phone__icontains=word)
+            )
+        return qs
+
+    active_treatment_qs = Treatment.objects.filter(
+        status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
+    ).values_list("patient_id", flat=True)
+
+    base_qs = Patient.objects.all()
+    if q:
+        base_qs = _search(base_qs)
+    # Счётчики для чипов «Все/В лечении/Должники» — по queryset с учётом
+    # поиска, но БЕЗ учёта самого чипа (иначе счётчик текущего чипа не
+    # менялся бы при переключении на другой).
+    counts = {
+        "all": base_qs.count(),
+        "debt": base_qs.filter(balance__lt=0).count(),
+        "treatment": base_qs.filter(pk__in=active_treatment_qs).distinct().count(),
+    }
+
+    qs = base_qs.select_related("primary_doctor").order_by("-created_at")
+    if chip == "debt":
+        qs = qs.filter(balance__lt=0)
+    elif chip == "treatment":
+        qs = qs.filter(pk__in=active_treatment_qs)
+    qs = qs.distinct()
+
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(page_num)
+    ids = [p.pk for p in page_obj.object_list]
+
+    last_visit = {}
+    for a in Appointment.objects.filter(patient_id__in=ids, start_at__lte=timezone.now()).order_by("patient_id", "-start_at"):
+        last_visit.setdefault(a.patient_id, a.start_at)
+    active_treatment_ids = set(
+        Treatment.objects.filter(patient_id__in=ids, status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS])
+        .values_list("patient_id", flat=True)
+    )
+
+    results = []
+    for p in page_obj.object_list:
+        lv = last_visit.get(p.pk)
+        if p.pk in active_treatment_ids:
+            status_label, status_color = "В лечении", "amber"
+        elif p.balance < 0:
+            status_label, status_color = "Должник", "coral"
+        else:
+            status_label, status_color = ("Активен", "teal") if lv else ("Новый", "cobalt")
+        results.append({
+            "id": p.pk,
+            "fullName": p.full_name,
+            "phone": p.phone,
+            "doctorName": p.primary_doctor.name if p.primary_doctor else "",
+            "lastVisit": timezone.localtime(lv).strftime("%d.%m.%Y") if lv else "—",
+            "balance": float(p.balance),
+            "hasDebt": p.balance < 0,
+            "hasActiveTreatment": p.pk in active_treatment_ids,
+            "statusLabel": status_label,
+            "statusColor": status_color,
+        })
+    return {
+        "results": results,
+        "page": page_obj.number,
+        "perPage": per_page,
+        "totalCount": paginator.count,
+        "totalPages": paginator.num_pages,
+        "counts": counts,
+    }
+
+
 def _newui_services_data():
     """Услуги и категории для нового интерфейса — реальный прайс-лист."""
     from apps.services.models import Service, ServiceCategory

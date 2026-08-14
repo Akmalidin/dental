@@ -14,7 +14,7 @@ from django.shortcuts import render
 from .models import Role, Branch, Permission, clinic_doctors
 from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
-    _newui_patients_data, _newui_services_data, _newui_finance_data,
+    _newui_patients_data, _newui_patients_page_data, _newui_services_data, _newui_finance_data,
     _newui_lab_data, _newui_warehouse_data, _newui_reports_data,
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data,
@@ -107,6 +107,17 @@ def newui_staff(request):
 @login_required
 def newui_patients(request):
     return _render(request, "patients", "patients.html", {"patients": _newui_patients_data()})
+
+
+@login_required
+def newui_patients_data_json(request):
+    """AJAX: страница списка пациентов с реальной серверной пагинацией/
+    поиском/фильтром (в клинике может быть тысячи пациентов — компактный
+    встроенный patientsList (см. _newui_patients_data, лимит 300) годится
+    только для быстрого поиска в модалках на других страницах, не для самого
+    списка). Дергается из renderPatientsTable() в base.html."""
+    from django.http import JsonResponse
+    return JsonResponse(_newui_patients_page_data(request))
 
 
 @login_required

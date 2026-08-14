@@ -2741,6 +2741,13 @@ const translations={
   w_of: {ru:'из', ky:'ичинен', en:'of', uz:'dan'},
   w_done_plural: {ru:'выполнено', ky:'аткарылды', en:'done', uz:'bajarildi'},
   w_nothing_found: {ru:'Ничего не найдено', ky:'Эч нерсе табылган жок', en:'Nothing found', uz:'Hech narsa topilmadi'},
+  w_load_failed: {ru:'Не удалось загрузить', ky:'Жүктөө мүмкүн болгон жок', en:'Failed to load', uz:'Yuklab bo\'lmadi'},
+  w_of_total: {ru:'из', ky:'ичинен', en:'of', uz:'jami'},
+  w_of_total_short: {ru:'/', ky:'/', en:'/', uz:'/'},
+  w_page: {ru:'Стр.', ky:'Бет', en:'Page', uz:'Sahifa'},
+  w_prev: {ru:'Назад', ky:'Артка', en:'Prev', uz:'Orqaga'},
+  w_next: {ru:'Вперёд', ky:'Алдыга', en:'Next', uz:'Oldinga'},
+  w_per_page: {ru:'Показывать по', ky:'Ар бир бетте', en:'Show per page', uz:'Har sahifada'},
   w_back_to_card: {ru:'Назад в карту', ky:'Картага кайтуу', en:'Back to record', uz:'Kartaga qaytish'},
   w_saved_ok: {ru:'Сохранено ✓', ky:'Сакталды ✓', en:'Saved ✓', uz:'Saqlandi ✓'},
   w_description: {ru:'Описание', ky:'Сүрөттөмө', en:'Description', uz:'Tavsif'},
@@ -4785,7 +4792,16 @@ function renderDashboard(){
 }
 
 /* ================= PATIENTS (реальные данные клиники) ================= */
+// Список пациентов может исчисляться тысячами (напр. 8000+) — клиентский
+// patientsList (см. loadRealStaffData) ограничен последними 300 и годится
+// только для быстрого поиска пациента в модалках на других страницах
+// (запись/касса), НЕ для самого списка на /new/patients/ — там настоящая
+// серверная пагинация/поиск/фильтр через /new/patients/data/.
 let patientChipFilter='all';
+let patientsPage=1;
+let patientsPerPage=25;
+let patientsCounts={all:0, treatment:0, debt:0};
+let patientsSearchTimer=null;
 function initials(name){
   const parts=(name||'').trim().split(/\s+/);
   return ((parts[0]||'')[0]||'')+((parts[1]||'')[0]||'');
@@ -4793,33 +4809,69 @@ function initials(name){
 function renderPatientChips(){
   const wrap=document.getElementById('patientChips');
   if(!wrap) return;
-  const total=patientsList.length;
-  const inTreatment=patientsList.filter(p=>p.hasActiveTreatment).length;
-  const debtors=patientsList.filter(p=>p.hasDebt).length;
   const chips=[
-    {key:'all', label:`${t('w_all_f')} · ${total}`},
-    {key:'treatment', label:`${t('w_active_treatment')} · ${inTreatment}`},
-    {key:'debt', label:`${t('w_debtors')} · ${debtors}`},
+    {key:'all', label:`${t('w_all_f')} · ${patientsCounts.all}`},
+    {key:'treatment', label:`${t('w_active_treatment')} · ${patientsCounts.treatment}`},
+    {key:'debt', label:`${t('w_debtors')} · ${patientsCounts.debt}`},
   ];
-  wrap.innerHTML = chips.map(c=>`<button class="chip${patientChipFilter===c.key?' active':''}" onclick="patientChipFilter='${c.key}';renderPatientChips();renderPatientsTable();">${c.label}</button>`).join('');
+  wrap.innerHTML = chips.map(c=>`<button class="chip${patientChipFilter===c.key?' active':''}" onclick="patientChipFilter='${c.key}';patientsPage=1;renderPatientChips();renderPatientsTable();">${c.label}</button>`).join('');
 }
-function renderPatientsTable(){
+// Поиск — debounce 300мс, чтобы не слать запрос на каждый нажатый символ.
+function patientsSearchInput(){
+  patientsPage=1;
+  clearTimeout(patientsSearchTimer);
+  patientsSearchTimer=setTimeout(renderPatientsTable, 300);
+}
+function patientsSetPerPage(val){
+  patientsPerPage=parseInt(val)||25;
+  patientsPage=1;
+  renderPatientsTable();
+}
+function patientsGoToPage(p){
+  if(p<1) return;
+  patientsPage=p;
+  renderPatientsTable();
+}
+async function renderPatientsTable(){
   const body=document.getElementById('patientsTableBody');
   if(!body) return;
-  const q=(document.getElementById('patientSearchInput')?.value || '').trim().toLowerCase();
-  let list=patientsList;
-  if(patientChipFilter==='treatment') list=list.filter(p=>p.hasActiveTreatment);
-  if(patientChipFilter==='debt') list=list.filter(p=>p.hasDebt);
-  if(q) list=list.filter(p=>p.fullName.toLowerCase().includes(q) || (p.phone||'').includes(q));
+  const q=(document.getElementById('patientSearchInput')?.value || '').trim();
+  const params=new URLSearchParams({page:patientsPage, per_page:patientsPerPage, filter:patientChipFilter});
+  if(q) params.set('q', q);
+  let data;
+  try{
+    const res=await fetch('/new/patients/data/?'+params.toString());
+    data=await res.json();
+  }catch(e){
+    body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_load_failed','Не удалось загрузить')}</td></tr>`;
+    return;
+  }
+  patientsCounts=data.counts || patientsCounts;
+  renderPatientChips();
 
-  if(list.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; return; }
-  body.innerHTML = list.map(p=>{
+  if(data.results.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; renderPatientsPagination(data); return; }
+  body.innerHTML = data.results.map(p=>{
     // Долг — вся строка подсвечена красным (не только сумма), плюс кнопка
     // «Отправить в кассу» прямо из списка — не только на вкладке
     // «Должники», но у любого пациента с долгом в общем списке тоже.
     const debtStyle = p.hasDebt ? ' style="background:var(--coral-tint);color:var(--coral);"' : '';
     return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}</td></tr>`;
   }).join('');
+  renderPatientsPagination(data);
+}
+function renderPatientsPagination(data){
+  const el=document.getElementById('patientsPagination');
+  if(!el) return;
+  if(data.totalCount===0){ el.innerHTML=''; return; }
+  const from=(data.page-1)*data.perPage+1;
+  const to=Math.min(data.page*data.perPage, data.totalCount);
+  el.innerHTML=`
+    <span style="font-size:12.5px;color:var(--ink-soft);">${from}–${to} ${t('w_of_total','из')} ${data.totalCount}</span>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="btn btn-ghost btn-sm" ${data.page<=1?'disabled':''} onclick="patientsGoToPage(${data.page-1})">‹ ${t('w_prev','Назад')}</button>
+      <span style="font-size:12.5px;color:var(--ink-soft);">${t('w_page','Стр.')} ${data.page} ${t('w_of_total_short','/')} ${data.totalPages}</span>
+      <button class="btn btn-ghost btn-sm" ${data.page>=data.totalPages?'disabled':''} onclick="patientsGoToPage(${data.page+1})">${t('w_next','Вперёд')} ›</button>
+    </div>`;
 }
 async function patientsSendToCashier(patientId, btn){
   if(btn) btn.disabled=true;

@@ -6,6 +6,7 @@ urlpatterns = [
     path("funnel/", v.newui_funnel, name="newui_funnel"),
     path("marketing/", v.newui_marketing, name="newui_marketing"),
     path("patients/", v.newui_patients, name="newui_patients"),
+    path("patients/data/", v.newui_patients_data_json, name="newui_patients_data"),
     path("patients/<int:pk>/", v.newui_patientcard, name="newui_patientcard"),
     path("blacklist/", v.newui_blacklist, name="newui_blacklist"),
     path("visits/", v.newui_visits, name="newui_visits"),

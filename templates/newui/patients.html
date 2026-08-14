@@ -4,14 +4,23 @@
       <div class="topbar">
         <h1 data-i18n="title_patients">Пациенты</h1>
         <div class="topbar-right">
-          <div class="search-box"><input autocomplete="off" type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" data-i18n-placeholder="w_search_fullname_phone" oninput="renderPatientsTable()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <div class="search-box"><input autocomplete="off" type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" data-i18n-placeholder="w_search_fullname_phone" oninput="patientsSearchInput()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           <button class="btn btn-ghost" onclick="location.href='/new/blacklist/'" style="position:relative;">🚫 <span data-i18n="nav_черный_список">Чёрный список</span><span class="nav-badge" id="blacklistNavBadge" style="margin-left:6px;">0</span></button>
           <button class="btn btn-cobalt" onclick="openNewPatient()">+ <span data-i18n="w_new_patient">Новый пациент</span></button>
         </div>
       </div>
       <div class="page">
-        <div class="toolbar">
+        <div class="toolbar" style="justify-content:space-between;">
           <div class="toolbar-left" id="patientChips"></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);">
+            <span data-i18n="w_per_page">Показывать по</span>
+            <select id="patientsPerPageSelect" onchange="patientsSetPerPage(this.value)" style="width:auto;padding:6px 8px;">
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
         </div>
         <div class="card">
           <table>
@@ -19,5 +28,6 @@
             <tbody id="patientsTableBody"></tbody>
           </table>
         </div>
+        <div id="patientsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;"></div>
       </div>
 {% endblock %}
