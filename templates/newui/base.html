@@ -2945,6 +2945,14 @@ const translations={
   w_discount: {ru:'Скидка', ky:'Арзандатуу', en:'Discount', uz:'Chegirma'},
   w_discount_sum: {ru:'Скидка (сумма)', ky:'Арзандатуу (сумма)', en:'Discount (amount)', uz:'Chegirma (summa)'},
   w_discount_toggle_mode: {ru:'Переключить % / сумма', ky:'% / сумма которуу', en:'Toggle % / amount', uz:'% / summa almashtirish'},
+  w_weekday_sun: {ru:'Воскресенье', ky:'Жекшемби', en:'Sunday', uz:'Yakshanba'},
+  w_weekday_mon: {ru:'Понедельник', ky:'Дүйшөмбү', en:'Monday', uz:'Dushanba'},
+  w_weekday_tue: {ru:'Вторник', ky:'Шейшемби', en:'Tuesday', uz:'Seshanba'},
+  w_weekday_wed: {ru:'Среда', ky:'Шаршемби', en:'Wednesday', uz:'Chorshanba'},
+  w_weekday_thu: {ru:'Четверг', ky:'Бейшемби', en:'Thursday', uz:'Payshanba'},
+  w_weekday_fri: {ru:'Пятница', ky:'Жума', en:'Friday', uz:'Juma'},
+  w_weekday_sat: {ru:'Суббота', ky:'Ишемби', en:'Saturday', uz:'Shanba'},
+  w_view_one_day: {ru:'Вид: 1 день', ky:'Көрүнүш: 1 күн', en:'View: 1 day', uz:'Ko‘rinish: 1 kun'},
   w_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
   w_add_at_least_one_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
   w_shift_opened: {ru:'Смена открыта', ky:'Смена ачылды', en:'Shift opened', uz:'Smena ochildi'},
@@ -3988,11 +3996,13 @@ function animateDateLabel(){
   void el.offsetWidth; // форсируем reflow, чтобы анимация перезапустилась при повторных сменах даты подряд
   el.classList.add('sched-date-anim');
 }
+const weekdayFullKeys=['w_weekday_sun','w_weekday_mon','w_weekday_tue','w_weekday_wed','w_weekday_thu','w_weekday_fri','w_weekday_sat'];
+function weekdayFullName(d){ return t(weekdayFullKeys[d.getDay()]); }
 function updateDayDateLabel(){
   const d=new Date(baseScheduleDate);
   d.setDate(d.getDate()+currentDayOffset);
-  document.getElementById('schedDateLabel').textContent=formatDMY(d);
-  document.getElementById('schedViewLabel').textContent='Вид: 1 день · '+weekdayShort[d.getDay()];
+  document.getElementById('schedDateLabel').textContent=formatDMY(d)+', '+weekdayFullName(d);
+  document.getElementById('schedViewLabel').textContent=t('w_view_one_day','Вид: 1 день')+' · '+weekdayFullName(d);
   animateDateLabel();
 }
 
