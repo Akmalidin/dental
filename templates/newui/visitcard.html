@@ -12,7 +12,7 @@
         </div>
         <div class="topbar-right">
           <div class="toggle" id="vwSimpleModeWrap">
-            <input type="checkbox" id="vwSimpleModeToggle" onchange="vwSetSimpleMode(this.checked)">
+            <input autocomplete="off" type="checkbox" id="vwSimpleModeToggle" onchange="vwSetSimpleMode(this.checked)">
             <span data-i18n="w_simple_mode">Простой режим</span>
           </div>
           <button class="btn btn-ghost" id="vwBackBtn" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_card">Назад в карту</span></button>
@@ -42,13 +42,13 @@
           <div class="card" style="margin-bottom:16px;">
             <div class="card-body">
               <div class="form-row2">
-                <div class="form-group"><label data-i18n="w_visit_date">Дата визита</label><input type="date" id="vw-appt-date" disabled></div>
+                <div class="form-group"><label data-i18n="w_visit_date">Дата визита</label><input autocomplete="off" type="date" id="vw-appt-date" disabled></div>
                 <div class="form-group"></div>
               </div>
               <div class="form-row2" style="grid-template-columns:1fr 1fr 1fr;">
-                <div class="form-group"><label data-i18n="w_start">Начало</label><input type="text" id="vw-appt-start" disabled></div>
-                <div class="form-group"><label data-i18n="w_end">Окончание</label><input type="text" id="vw-appt-end" disabled></div>
-                <div class="form-group"><label data-i18n="w_duration_min">Длительность (мин)</label><input type="number" id="vw-appt-duration" disabled></div>
+                <div class="form-group"><label data-i18n="w_start">Начало</label><input autocomplete="off" type="text" id="vw-appt-start" disabled></div>
+                <div class="form-group"><label data-i18n="w_end">Окончание</label><input autocomplete="off" type="text" id="vw-appt-end" disabled></div>
+                <div class="form-group"><label data-i18n="w_duration_min">Длительность (мин)</label><input autocomplete="off" type="number" id="vw-appt-duration" disabled></div>
               </div>
               <div class="form-row2">
                 <div class="form-group"><label data-i18n="w_attending_doctor">Лечащий врач</label><select id="vw-doctor" onchange="vwAutosave()"></select></div>
@@ -89,7 +89,7 @@
           <span id="vwFooterAnchor"></span>
           <div class="card" id="vwFooterCard" style="margin-top:4px;">
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;"><input type="checkbox" checked style="width:auto;"> <span data-i18n="w_include_043">Включить в форму 043</span></label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;"><input autocomplete="off" type="checkbox" checked style="width:auto;"> <span data-i18n="w_include_043">Включить в форму 043</span></label>
               <button class="btn btn-cobalt" onclick="vwAutosave(true)" data-i18n="w_save">Сохранить</button>
             </div>
           </div>
@@ -101,9 +101,9 @@
             <button class="accordion-head open" onclick="toggleAccordion(this)"><span data-i18n="w_tooth_chart">Зубная карта</span><span class="chev">⌄</span></button>
             <div class="accordion-body open">
               <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
-                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsUpper" style="width:auto;" onchange="selectQuadrant('upper', this.checked)"> <span data-i18n="w_upper_jaw">Верхняя челюсть</span></label>
-                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsLower" style="width:auto;" onchange="selectQuadrant('lower', this.checked)"> <span data-i18n="w_lower_jaw">Нижняя челюсть</span></label>
-                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="qsAll" style="width:auto;" onchange="selectQuadrant('all', this.checked)"> <span data-i18n="w_oral_cavity">Ротовая полость</span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input autocomplete="off" type="checkbox" id="qsUpper" style="width:auto;" onchange="selectQuadrant('upper', this.checked)"> <span data-i18n="w_upper_jaw">Верхняя челюсть</span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input autocomplete="off" type="checkbox" id="qsLower" style="width:auto;" onchange="selectQuadrant('lower', this.checked)"> <span data-i18n="w_lower_jaw">Нижняя челюсть</span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input autocomplete="off" type="checkbox" id="qsAll" style="width:auto;" onchange="selectQuadrant('all', this.checked)"> <span data-i18n="w_oral_cavity">Ротовая полость</span></label>
               </div>
               <div class="odontogram-lg" id="vcOdontogram"></div>
               <div class="legend" style="margin-top:16px;" id="vcLegend"></div>
@@ -128,7 +128,7 @@
         <div id="vcPanelXray" class="hidden">
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_images_attachments">Снимки и вложения</h3>
-              <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload_image">Загрузить снимок</span><input type="file" id="vwFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="vwUploadFiles(this.files)"></label>
+              <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload_image">Загрузить снимок</span><input autocomplete="off" type="file" id="vwFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="vwUploadFiles(this.files)"></label>
             </div>
             <div class="card-body" id="vwFilesBody">
               <div style="text-align:center;padding:30px;color:var(--ink-soft);"><span data-i18n="w_no_images_yet">Пока нет загруженных снимков</span></div>
@@ -257,7 +257,7 @@
     document.getElementById('vwStageProgress').textContent=doneCount+' '+t('w_of')+' '+stages.length+' '+t('w_done_plural');
     document.getElementById('vwStageList').innerHTML=stages.map((s,i)=>`
       <div class="stage-row">
-        <input type="checkbox" ${s.done?'checked':''} ${readOnlyClosed?'disabled':''} onchange="vwToggleStage(${i})">
+        <input autocomplete="off" type="checkbox" ${s.done?'checked':''} ${readOnlyClosed?'disabled':''} onchange="vwToggleStage(${i})">
         <span class="${s.done?'done':''}" style="font-size:13px;" data-i18n="${s.labelKey}">${t(s.labelKey)}</span>
       </div>`).join('');
   }
@@ -411,16 +411,16 @@
       const svc = vw.services.find(s=>String(s.id)===String(it.service_id));
       const svcLabel = svc ? `${svc.name} · ${Math.round(svc.price)} сом` : '';
       return `<tr>
-        <td><input type="text" list="vwServicesDatalist" value="${svcLabel.replace(/"/g,'&quot;')}" placeholder="${t('w_search_service')}…" style="min-width:180px;" onchange="vwPlanServiceInputChange(${i},this.value)"></td>
-        <td><input type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
-        <td><input type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
-        <td><input type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
+        <td><input autocomplete="off" type="text" list="vwServicesDatalist" value="${svcLabel.replace(/"/g,'&quot;')}" placeholder="${t('w_search_service')}…" style="min-width:180px;" onchange="vwPlanServiceInputChange(${i},this.value)"></td>
+        <td><input autocomplete="off" type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
+        <td><input autocomplete="off" type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
+        <td><input autocomplete="off" type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
         <td><div style="display:flex;gap:2px;align-items:center;">
-          <input type="number" min="0" ${it.discountMode==='sum'?'':'max="100"'} step="1" value="${vwDiscountInputValue(it)}" style="width:56px;" title="${it.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="vwPlanSetDiscount(${i},this.value)">
+          <input autocomplete="off" type="number" min="0" ${it.discountMode==='sum'?'':'max="100"'} step="1" value="${vwDiscountInputValue(it)}" style="width:56px;" title="${it.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="vwPlanSetDiscount(${i},this.value)">
           <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px;" title="${t('w_discount_toggle_mode')}" onclick="vwToggleDiscountMode(${i})">${it.discountMode==='sum'?CUR_SYM:'%'}</button>
         </div></td>
         <td class="mono" style="white-space:nowrap;">${fmtSom(vwPlanRowTotal(it))}</td>
-        <td style="text-align:center;"><input type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
+        <td style="text-align:center;"><input autocomplete="off" type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
       </tr>`;
     }).join('');

@@ -38,7 +38,7 @@
               <div id="cv-item-list"></div>
             </div>
             <div class="form-row2" style="margin-top:4px;">
-              <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cv-amount" min="0"></div>
+              <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" id="cv-amount" min="0"></div>
               <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
                 <select id="cv-method">
                   <option value="cash" data-i18n="w_cash">Наличные</option>
@@ -63,7 +63,7 @@
           <div class="modal-body">
             <div id="cashAcceptError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
             <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;" id="cashAcceptWho"></p>
-            <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cash-accept-amount" min="0"></div>
+            <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" id="cash-accept-amount" min="0"></div>
             <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
               <select id="cash-accept-method">
                 <option value="cash" data-i18n="w_cash">Наличные</option>
@@ -110,7 +110,7 @@
               <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off"
                      oninput="qsPatientSearch(this.value)" onfocus="qsPatientSearch(this.value)"
                      onblur="setTimeout(()=>{const b=document.getElementById('qs-patient-suggestions'); if(b) b.classList.add('hidden');},200)">
-              <input type="hidden" id="qs-patient-id">
+              <input autocomplete="off" type="hidden" id="qs-patient-id">
               <div id="qs-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:6;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
             </div>
             <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="qs-doctor"></select></div>
@@ -254,7 +254,7 @@ function openCashVisitModal(patientId){
     document.getElementById('cv-item-list').innerHTML=client.items.map(i=>`
       <div class="cash-item-opt" id="cv-item-${i.id}">
         <label onclick="event.stopPropagation();toggleCashVisitItem(${i.id})">
-          <input type="checkbox" id="cv-check-${i.id}">
+          <input autocomplete="off" type="checkbox" id="cv-check-${i.id}">
           <span>${i.desc}</span>
         </label>
         <b class="mono">${fmtSom(i.amount)}</b>
@@ -415,11 +415,11 @@ function renderQsRows(){
                onblur="setTimeout(()=>{const b=document.getElementById('qsSvcSuggest-${r.idx}'); if(b) b.classList.add('hidden');},200)">
         <div id="qsSvcSuggest-${r.idx}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:7;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
       </div>
-      <input class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
-      <input class="qs-field-qty" type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
-      <input class="qs-field-price" type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
+      <input autocomplete="off" class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
+      <input autocomplete="off" class="qs-field-qty" type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
+      <input autocomplete="off" class="qs-field-price" type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
       <div class="qs-field-discount" style="display:flex;gap:2px;align-items:center;">
-        <input type="number" min="0" ${r.discountMode==='sum'?'':'max="100"'} step="1" value="${qsDiscountInputValue(r)}" style="width:100%;min-width:0;" title="${r.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="qsSetDiscount(${r.idx},this.value)">
+        <input autocomplete="off" type="number" min="0" ${r.discountMode==='sum'?'':'max="100"'} step="1" value="${qsDiscountInputValue(r)}" style="width:100%;min-width:0;" title="${r.discountMode==='sum'?t('w_discount_sum'):t('w_discount_pct')}" onchange="qsSetDiscount(${r.idx},this.value)">
         <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 5px;font-size:10px;flex-shrink:0;" title="${t('w_discount_toggle_mode')}" onclick="qsToggleDiscountMode(${r.idx})">${r.discountMode==='sum'?CUR_SYM:'%'}</button>
       </div>
       <div class="qs-field-total mono" style="font-size:12.5px;white-space:nowrap;">${fmtSom(qsRowTotal(r))}</div>

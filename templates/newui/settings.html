@@ -62,14 +62,14 @@
           <div id="setPanelContacts" class="card hidden">
             <div class="card-head"><h3 data-i18n="w_contacts_req">Контакты и реквизиты</h3></div>
             <div class="card-body" style="padding:4px 18px;">
-              <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input type="text" id="set-name"></div>
-              <div class="field-row"><label data-i18n="w_phone_label">Телефон</label><input type="text" id="set-phone"></div>
-              <div class="field-row"><label data-i18n="w_address_label">Адрес</label><input type="text" id="set-address"></div>
+              <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input autocomplete="off" type="text" id="set-name"></div>
+              <div class="field-row"><label data-i18n="w_phone_label">Телефон</label><input autocomplete="off" type="text" id="set-phone"></div>
+              <div class="field-row"><label data-i18n="w_address_label">Адрес</label><input autocomplete="off" type="text" id="set-address"></div>
               <div class="field-row"><label data-i18n="w_receipt_format">Формат чека</label><select id="set-receipt-format"></select></div>
-              <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input type="text" id="set-receipt-name"></div>
-              <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input type="text" id="set-receipt-legal"></div>
-              <div class="field-row"><label>ИНН/ИИН</label><input type="text" id="set-receipt-inn"></div>
-              <div class="field-row"><label data-i18n="w_receipt_address">Адрес в чеке</label><input type="text" id="set-receipt-address"></div>
+              <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input autocomplete="off" type="text" id="set-receipt-name"></div>
+              <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input autocomplete="off" type="text" id="set-receipt-legal"></div>
+              <div class="field-row"><label>ИНН/ИИН</label><input autocomplete="off" type="text" id="set-receipt-inn"></div>
+              <div class="field-row"><label data-i18n="w_receipt_address">Адрес в чеке</label><input autocomplete="off" type="text" id="set-receipt-address"></div>
               <div class="field-row"><label data-i18n="w_warranty_terms">Условия гарантии (лаб. работы)</label><textarea rows="3" id="set-warranty"></textarea></div>
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
@@ -91,15 +91,15 @@
               </div>
               <div class="field-row">
                 <label data-i18n="w_remind_day_before">Напоминать за день до приёма</label>
-                <div class="toggle"><input type="checkbox" id="set-remind-day"></div>
+                <div class="toggle"><input autocomplete="off" type="checkbox" id="set-remind-day"></div>
               </div>
               <div class="field-row">
                 <label data-i18n="w_remind_hour_before">Напоминать за час до приёма</label>
-                <div class="toggle"><input type="checkbox" id="set-remind-hour"></div>
+                <div class="toggle"><input autocomplete="off" type="checkbox" id="set-remind-hour"></div>
               </div>
               <div class="field-row">
                 <label><span data-i18n="w_remind_debtors">Напоминать должникам каждые N дней</span><div class="hint" data-i18n="w_zero_off">0 — выключено</div></label>
-                <input type="number" min="0" id="set-remind-debt-days" style="max-width:120px;">
+                <input autocomplete="off" type="number" min="0" id="set-remind-debt-days" style="max-width:120px;">
               </div>
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
