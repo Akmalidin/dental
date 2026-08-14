@@ -25,7 +25,7 @@
             <button onclick="openModal('m-insurance')" data-i18n="w_insurance_companies">Страховые компании</button>
             <div class="grp" data-i18n="w_grp_system">Система</div>
             <button onclick="settingsNotWired()" data-i18n="w_integrations">Интеграции</button>
-            <button onclick="settingsNotWired()" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
+            <button onclick="settingsNotWired()" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)" data-i18n-title="w_access_restriction_hint"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
           </div>
 
           <form id="settingsForm" onsubmit="return false;">
@@ -37,7 +37,7 @@
                 <select id="set-slot"><option value="15" data-i18n="w_15min">15 минут</option><option value="30" data-i18n="w_30min">30 минут</option><option value="60" data-i18n="w_60min">60 минут</option></select>
               </div>
               <div class="field-row">
-                <label>Язык интерфейса<div class="hint">Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже</div></label>
+                <label><span data-i18n="w_interface_language">Язык интерфейса</span><div class="hint" data-i18n="w_interface_language_hint">Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже</div></label>
                 <select id="set-language" onchange="setLanguage(this.value)"><option value="ru">Русский</option><option value="ky">Кыргызча</option><option value="uz">O'zbekcha</option><option value="en">English</option></select>
               </div>
               <div class="field-row">
@@ -63,8 +63,8 @@
             <div class="card-head"><h3 data-i18n="w_contacts_req">Контакты и реквизиты</h3></div>
             <div class="card-body" style="padding:4px 18px;">
               <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input type="text" id="set-name"></div>
-              <div class="field-row"><label>Телефон</label><input type="text" id="set-phone"></div>
-              <div class="field-row"><label>Адрес</label><input type="text" id="set-address"></div>
+              <div class="field-row"><label data-i18n="w_phone_label">Телефон</label><input type="text" id="set-phone"></div>
+              <div class="field-row"><label data-i18n="w_address_label">Адрес</label><input type="text" id="set-address"></div>
               <div class="field-row"><label data-i18n="w_receipt_format">Формат чека</label><select id="set-receipt-format"></select></div>
               <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input type="text" id="set-receipt-name"></div>
               <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input type="text" id="set-receipt-legal"></div>
@@ -134,8 +134,8 @@
   document.getElementById('set-receipt-address').value = s.receiptAddress;
   document.getElementById('set-warranty').value = s.warrantyTerms;
 
-  document.getElementById('setWaState').textContent = s.waEnabled ? '🟢 Включён' : '⚪ Выключен';
-  document.getElementById('setTgState').textContent = s.telegramEnabled ? ('🟢 ' + (s.telegramBotUsername ? '@'+s.telegramBotUsername : 'Включён')) : '⚪ Выключен';
+  document.getElementById('setWaState').textContent = s.waEnabled ? t('w_wa_enabled') : t('w_wa_disabled');
+  document.getElementById('setTgState').textContent = s.telegramEnabled ? ('🟢 ' + (s.telegramBotUsername ? '@'+s.telegramBotUsername : t('w_wa_enabled').replace('🟢 ',''))) : t('w_wa_disabled');
   document.getElementById('set-remind-day').checked = s.waRemindDay;
   document.getElementById('set-remind-hour').checked = s.waRemindHour;
   document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
@@ -149,7 +149,7 @@
   // Пункты без реального раздела (пока) — явная обратная связь вместо
   // молчаливого «ничего не произошло» при клике.
   window.settingsNotWired = function(){
-    showToast('Этот раздел настроек ещё не подключён к реальным данным', 'error');
+    showToast(t('w_settings_not_wired'), 'error');
   };
 
   // Поля формы ClinicSettingsForm без своего контрола в новом интерфейсе —
@@ -177,8 +177,8 @@
   }
   async function submitSettings(){
     const res = await postForm('/settings/', baseFormData());
-    if(res.redirected){ flashAndReload('Настройки сохранены'); }
-    else { showToast('Не удалось сохранить — проверьте поля', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
   }
   window.saveSettingsGeneral = submitSettings;
   window.saveSettingsContacts = submitSettings;
@@ -188,8 +188,8 @@
     if(document.getElementById('set-remind-hour').checked) fd.append('wa_remind_hour', 'on');
     fd.append('wa_remind_debt_days', document.getElementById('set-remind-debt-days').value || '0');
     const res = await postForm('/notifications/wa-settings/', fd);
-    if(res.redirected){ flashAndReload('Настройки напоминаний сохранены'); }
-    else { showToast('Не удалось сохранить', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_reminder_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
   };
 })();
 </script>

@@ -189,7 +189,7 @@ def _visit_wizard_context(treatment):
                       if gc.status}
     # уже добавленные сегодня процедуры
     cures = [{"service_id": c.service_id, "name": c.service.name, "tooth": c.tooth_number,
-              "qty": c.quantity, "price": float(c.price), "done": True}
+              "qty": c.quantity, "price": float(c.price), "discount": float(c.discount), "done": True}
              for c in treatment.cures.all()]
     # уже загруженные снимки/файлы этого приёма
     from django.utils import timezone as _tz
@@ -294,7 +294,7 @@ def visit_save(request, pk):
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
-        return JsonResponse({"error": "bad json"}, status=400)
+        return JsonResponse({"error": "bad json", "error_key": "generic_invalid_json"}, status=400)
 
     emr.complaints = data.get("complaints", emr.complaints) or ""
     emr.anamnesis = data.get("anamnesis", emr.anamnesis) or ""
@@ -377,9 +377,9 @@ def visit_file_upload(request, pk):
     treatment = get_object_or_404(Treatment, pk=pk)
     files = request.FILES.getlist("files") or request.FILES.getlist("file")
     if not files:
-        return JsonResponse({"error": "Файл не выбран"}, status=400)
+        return JsonResponse({"error": "Файл не выбран", "error_key": "visit_no_file"}, status=400)
     if len(files) > 10:
-        return JsonResponse({"error": "Максимум 10 файлов за раз"}, status=400)
+        return JsonResponse({"error": "Максимум 10 файлов за раз", "error_key": "visit_max_10_files"}, status=400)
     tooth = request.POST.get("tooth_number") or ""
     tooth_num = int(tooth) if str(tooth).isdigit() else None
     valid_kinds = {k for k, _ in TreatmentFile.KIND_CHOICES}
@@ -422,6 +422,13 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
         v = it.get("price")
         return Decimal(str(v if v not in (None, "") else svc.price))
 
+    def _discount(it):
+        try:
+            v = Decimal(str(it.get("discount") or 0))
+        except Exception:
+            return Decimal(0)
+        return max(Decimal(0), min(Decimal(100), v))
+
     # — Процедуры (выполнено сегодня) — перезаписываем набор —
     already = treatment.cures.exists()
     treatment.cures.all().delete()
@@ -432,7 +439,7 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
         qty = max(1, int(it.get("qty") or 1))
         cure = TreatmentCure.objects.create(
             treatment=treatment, service=svc, tooth_number=str(it.get("tooth") or ""),
-            quantity=qty, price=_price(it, svc), doctor=treatment.doctor,
+            quantity=qty, price=_price(it, svc), discount=_discount(it), doctor=treatment.doctor,
         )
         if do_writeoff and not already:
             _auto_writeoff_materials(svc, qty, treatment.branch, user)
@@ -458,7 +465,7 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
                 continue
             TreatmentPlanItem.objects.create(
                 plan=plan, stage=stage, service=svc, tooth_number=str(it.get("tooth") or ""),
-                price=_price(it, svc), quantity=max(1, int(it.get("qty") or 1)),
+                price=_price(it, svc), discount=_discount(it), quantity=max(1, int(it.get("qty") or 1)),
                 doctor=treatment.doctor, sort_order=i,
             )
     elif plan is not None:
@@ -507,11 +514,11 @@ def visit_commit(request, pk):
     from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
     treatment = get_object_or_404(Treatment.objects.select_related("patient", "doctor"), pk=pk)
     if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
-        return JsonResponse({"error": "Приём уже завершён"}, status=403)
+        return JsonResponse({"error": "Приём уже завершён", "error_key": "visit_already_completed"}, status=403)
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
-        return JsonResponse({"error": "bad json"}, status=400)
+        return JsonResponse({"error": "bad json", "error_key": "generic_invalid_json"}, status=400)
 
     items = data.get("plan", [])
     # применяем план + списываем материалы + создаём заказы технику (финальное сохранение)

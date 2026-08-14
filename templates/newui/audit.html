@@ -1,7 +1,7 @@
 {% extends "newui/base.html" %}
 {% block page_title %}Журнал аудита{% endblock %}
 {% block content %}
-      <div class="topbar"><h1 data-i18n="title_audit">Журнал аудита</h1><div class="topbar-right"><div class="search-box"><input type="text" id="auditSearchInput" placeholder="⌕ Пользователь, объект…" oninput="renderAudit()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div></div></div>
+      <div class="topbar"><h1 data-i18n="title_audit">Журнал аудита</h1><div class="topbar-right"><div class="search-box"><input type="text" id="auditSearchInput" placeholder="⌕ Пользователь, объект…" data-i18n-placeholder="w_search_user_object" oninput="renderAudit()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div></div></div>
       <div class="page">
         <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_audit_hint">Реальная история изменений карточек пациентов и приёмов (django-simple-history). Входы в систему и изменения в финансах отдельно пока не логируются.</span></div>
         <div class="card">
