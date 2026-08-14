@@ -4804,10 +4804,19 @@ function renderPatientsTable(){
   if(patientChipFilter==='debt') list=list.filter(p=>p.hasDebt);
   if(q) list=list.filter(p=>p.fullName.toLowerCase().includes(q) || (p.phone||'').includes(q));
 
-  if(list.length===0){ body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; return; }
+  if(list.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; return; }
   body.innerHTML = list.map(p=>
-    `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono">${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td></tr>`
+    // Долг — баланс красным (как и везде в приложении, отрицательный
+    // баланс = coral), плюс кнопка «Отправить в кассу» прямо из списка —
+    // не только на вкладке «Должники», но у любого пациента с долгом.
+    `<tr class="clickable" onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:var(--coral);font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}</td></tr>`
   ).join('');
+}
+async function patientsSendToCashier(patientId, btn){
+  if(btn) btn.disabled=true;
+  const res=await postForm('/finance/payments/send-to-cashier/'+patientId+'/', new FormData());
+  if(res.redirected){ showToast(t('w_sent_to_cashier')); }
+  else { showToast(t('w_send_to_cashier_failed'), 'error'); if(btn) btn.disabled=false; }
 }
 
 const PATIENT_TAB_EMPTY = msg => `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--ink-soft);">${msg}</div></div>`;
