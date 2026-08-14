@@ -60,6 +60,13 @@ def _shared_options(request, clinic):
         ],
         "doctorOptions": [{"id": u.pk, "name": u.name} for u in clinic_doctors(clinic).order_by("name")],
         "sourceOptions": [{"id": s.pk, "name": s.name} for s in LeadSource.objects.all().order_by("name")],
+        # Расписание: подсказка «начать приём» после отметки «Пришёл» должна
+        # предлагаться только врачу, не администратору/ресепшену.
+        "isDoctor": bool(request.user.is_doctor),
+        # Касса → «Быстрая продажа»: прячем кнопку у тех, у кого нет права
+        # (иначе клик просто упёрся бы в 403 без объяснения).
+        "canQuickSale": bool(request.user.is_superadmin or
+                             (request.user.role_id and request.user.role.has_perm("finance.quick_sale"))),
     }
 
 
@@ -248,7 +255,13 @@ def newui_treatplans(request):
 def newui_cashdesk(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
-    return _render(request, "cashdesk", "cashdesk.html", {"cashdeskData": _newui_cashdesk_data(request, clinic)})
+    return _render(request, "cashdesk", "cashdesk.html", {
+        "cashdeskData": _newui_cashdesk_data(request, clinic),
+        # «Быстрая продажа» нужны врачи/услуги/пациенты — эта страница их
+        # раньше не запрашивала (в отличие от visits/schedule/dashboard).
+        "servicesData": _newui_services_data(),
+        "patients": _newui_patients_data(),
+    })
 
 
 @login_required

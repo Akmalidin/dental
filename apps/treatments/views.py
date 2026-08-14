@@ -1,6 +1,7 @@
 import json
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.translation import gettext_lazy as _
 from django.http import HttpResponse, JsonResponse
@@ -10,6 +11,7 @@ from django.views.decorators.http import require_POST
 from .models import Treatment, TreatmentCure, TreatmentFile, TreatmentFollowUp
 from .forms import TreatmentForm, TreatmentCureFormSet
 from apps.patients.models import Patient
+from apps.users.decorators import require_permission, role_required
 
 
 def _get_own_treatment_or_404(pk, queryset=None):
@@ -315,9 +317,15 @@ def _auto_writeoff_materials(service, qty, branch, user):
 
 
 @login_required
+@require_permission("finance.quick_sale")
 @require_POST
 def treatment_create_quick(request):
-    """AJAX endpoint: create Treatment + TreatmentCures from patient detail page."""
+    """AJAX endpoint: «Быстрая продажа» — кассир создаёт Treatment + TreatmentCures
+    без предварительного визита врача (карточка пациента / касса). Врач ОБЯЗАТЕЛЕН
+    (никакого fallback на текущего пользователя — иначе продажа тихо приписалась бы
+    кассиру как врачу и сломала бы его отчёты/зарплату). Приём сразу помечается
+    завершённым и needs_doctor_confirmation=True — врач подтверждает его позже
+    (см. treatment_confirm)."""
     from apps.services.models import Service
     from apps.users.models import Branch
     try:
@@ -328,14 +336,15 @@ def treatment_create_quick(request):
         cures_data = data.get("cures", [])
 
         patient = Patient.objects.get(pk=patient_id)
-        # Изоляция клиник: врач — только из текущей клиники, иначе текущий пользователь.
+        # Изоляция клиник: врач — только из текущей клиники.
         from apps.users.models import clinic_doctors
         from apps.tenancy import get_current_clinic
         clinic = get_current_clinic()
         doctor = None
         if doctor_id:
             doctor = clinic_doctors(clinic).filter(pk=doctor_id).first()
-        doctor = doctor or request.user
+        if not doctor:
+            return JsonResponse({"error": "Выберите врача"}, status=400)
 
         branch = None
         if branch_id:
@@ -344,29 +353,49 @@ def treatment_create_quick(request):
             branch = request.user.branches.first() or Branch.objects.first()
         if not branch:
             return JsonResponse({"error": "Нет доступных филиалов"}, status=400)
+        if not cures_data:
+            return JsonResponse({"error": "Добавьте хотя бы одну услугу"}, status=400)
 
-        treatment = Treatment.objects.create(
-            patient=patient,
-            doctor=doctor,
-            branch=branch,
-            status=Treatment.STATUS_IN_PROGRESS,
-        )
-        for c in cures_data:
-            service = Service.objects.get(pk=c["service_id"])
-            qty = max(1, int(c.get("qty", 1)))
-            TreatmentCure.objects.create(
-                treatment=treatment,
-                service=service,
-                tooth_number=c.get("tooth", ""),
-                quantity=qty,
-                price=service.price,
+        with transaction.atomic():
+            treatment = Treatment.objects.create(
+                patient=patient,
                 doctor=doctor,
+                branch=branch,
+                status=Treatment.STATUS_COMPLETED,
+                needs_doctor_confirmation=True,
             )
-            _auto_writeoff_materials(service, qty, branch, request.user)
-        treatment.recalculate_total()
+            for c in cures_data:
+                service = Service.objects.get(pk=c["service_id"])
+                qty = max(1, int(c.get("qty", 1)))
+                price = c.get("price", service.price)
+                TreatmentCure.objects.create(
+                    treatment=treatment,
+                    service=service,
+                    tooth_number=c.get("tooth", ""),
+                    quantity=qty,
+                    price=price,
+                    doctor=doctor,
+                )
+                # Списание материалов — best-effort (глотает свои исключения),
+                # поэтому его сбой не должен откатывать саму продажу.
+                _auto_writeoff_materials(service, qty, branch, request.user)
+            treatment.recalculate_total()
         return JsonResponse({"ok": True, "treatment_id": treatment.pk})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@role_required("doctor", "admin_main", "superadmin")
+@require_POST
+def treatment_confirm(request, pk):
+    """Врач (или админ) подтверждает «Быструю продажу», созданную кассиром —
+    снимает флаг needs_doctor_confirmation. Само подтверждение видно в
+    Аудит-центре автоматически (Treatment.history)."""
+    treatment = get_object_or_404(Treatment, pk=pk)
+    treatment.needs_doctor_confirmation = False
+    treatment.save(update_fields=["needs_doctor_confirmation"])
+    return JsonResponse({"ok": True})
 
 
 @login_required

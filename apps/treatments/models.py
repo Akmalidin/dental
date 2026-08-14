@@ -56,6 +56,16 @@ class Treatment(ClinicSoftDeleteModel):
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Скидка")
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Оплачено")
     notes = models.TextField(blank=True, verbose_name="Заметки")
+    # Кассир создал приём через «Быструю продажу» (без предварительного
+    # визита врача) — пометка снимается врачом/админом одним кликом
+    # (apps.treatments.views.treatment_confirm). Отслеживается историей
+    # (HistoricalRecords ниже), поэтому создание и подтверждение видны
+    # в Аудит-центре без дополнительного кода.
+    needs_doctor_confirmation = models.BooleanField(
+        default=False, verbose_name="Требует подтверждения врача",
+        help_text="Создано кассиром через «Быструю продажу» — врач ещё не "
+                  "подтвердил, что услуга была оказана.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     # Публичный токен для QR (открывается без логина при сканировании чека).

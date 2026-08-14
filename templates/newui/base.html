@@ -223,6 +223,9 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-appt-menu-btn{position:absolute;top:2px;right:2px;width:16px;height:16px;line-height:14px;text-align:center;border-radius:4px;font-size:12px;font-weight:700;opacity:0;color:inherit;background:rgba(255,255,255,.6);}
 .sched-appt:hover .sched-appt-menu-btn{opacity:1;}
 .sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
+/* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка в
+   левом верхнем углу, сознательно не фон карточки (тот уже занят статусом). */
+.sched-appt-debt-dot{position:absolute;top:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
 .sched-appt.teal{background:var(--teal-tint);border-color:var(--teal);}
 .sched-appt.teal b,.sched-appt.teal span{color:var(--teal);}
 .sched-appt.coral{background:var(--coral-tint);border-color:var(--coral);}
@@ -895,6 +898,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
             <input type="color" id="cs-color-teal" value="#0e9c7d" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
         </div>
+      </div>
+      <div class="form-group toggle" style="margin-top:2px;">
+        <input type="checkbox" id="cs-offer-start-visit" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_offer_start_visit">Предлагать начать приём при отметке «Пришёл» (только для врача)</span>
+      </div>
+      <div class="form-group toggle" style="margin-top:10px;">
+        <input type="checkbox" id="cs-highlight-debt" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_highlight_debt">Подсвечивать пациентов с долгом</span>
       </div>
     </div>
     <div class="modal-foot">
@@ -2517,6 +2528,9 @@ const translations={
   title_m_insurance: {ru:'Страховая компания', ky:'Камсыздандыруу компаниясы', en:'Insurance company', uz:'Sug\'urta kompaniyasi'},
   title_m_laborder: {ru:'Заказ лаборатории', ky:'Лаборатория заказы', en:'Lab order', uz:'Laboratoriya buyurtmasi'},
   title_m_calsettings: {ru:'Настройки календаря', ky:'Календарь жөндөөлөрү', en:'Calendar settings', uz:'Kalendar sozlamalari'},
+  w_cs_offer_start_visit: {ru:'Предлагать начать приём при отметке «Пришёл» (только для врача)', ky:'«Келди» деп белгилегенде кабыл алууну баштоону сунуштоо (дарыгер үчүн гана)', en:'Offer to start the visit when marking "Arrived" (doctors only)', uz:'"Keldi" deb belgilaganda qabulni boshlashni taklif qilish (faqat shifokor uchun)'},
+  w_cs_highlight_debt: {ru:'Подсвечивать пациентов с долгом', ky:'Карызы бар бейтаптарды белгилөө', en:'Highlight patients with debt', uz:'Qarzi bor bemorlarni ajratib ko\'rsatish'},
+  w_offer_start_visit_now: {ru:'Пациент отмечен как пришедший. Начать приём сейчас?', ky:'Бейтап келди деп белгиленди. Кабыл алууну азыр баштайсызбы?', en:'Patient marked as arrived. Start the visit now?', uz:'Bemor keldi deb belgilandi. Qabulni hozir boshlaysizmi?'},
   title_m_templates: {ru:'Шаблоны сообщений', ky:'Билдирүү үлгүлөрү', en:'Message templates', uz:'Xabar shablonlari'},
   title_m_condition_edit: {ru:'Редактирование состояния', ky:'Абалды түзөтүү', en:'Edit condition', uz:'Holatni tahrirlash'},
   title_m_role: {ru:'Новая роль', ky:'Жаңы роль', en:'New role', uz:'Yangi rol'},
@@ -2760,6 +2774,11 @@ const translations={
   w_pick_treatment_to_pay: {ru:'Отметьте хотя бы один приём, за который принимаете оплату', ky:'Төлөм алып жаткан кеминде бир кабылдоону белгилеңиз', en:'Select at least one visit you are accepting payment for', uz:'To\'lovni qabul qilayotgan kamida bitta qabulni belgilang'},
   w_nothing_sent_cashier: {ru:'Пока ничего не отправлено в кассу', ky:'Азырынча кассага эч нерсе жиберилген жок', en:'Nothing sent to the cashier yet', uz:'Hozircha kassaga hech narsa yuborilmagan'},
   w_accept_payment: {ru:'Принять оплату', ky:'Төлөмдү кабыл алуу', en:'Accept payment', uz:'To\'lovni qabul qilish'},
+  w_quick_sale: {ru:'Быстрая продажа', ky:'Тез сатуу', en:'Quick sale', uz:'Tezkor sotuv'},
+  w_open_shift: {ru:'Открыть смену', ky:'Смена ачуу', en:'Open shift', uz:'Smenani ochish'},
+  w_total: {ru:'Итого', ky:'Жыйынтыгы', en:'Total', uz:'Jami'},
+  w_needs_doctor_confirmation: {ru:'Ждёт подтверждения врача', ky:'Дарыгердин ырастоосун күтүүдө', en:'Awaiting doctor confirmation', uz:'Shifokor tasdig\'ini kutmoqda'},
+  w_confirm: {ru:'Подтвердить', ky:'Ырастоо', en:'Confirm', uz:'Tasdiqlash'},
   w_cash: {ru:'Наличные', ky:'Накталай', en:'Cash', uz:'Naqd'},
   w_card: {ru:'Карта', ky:'Карта', en:'Card', uz:'Karta'},
   w_transfer: {ru:'Перевод', ky:'Которуу', en:'Transfer', uz:'O\'tkazma'},
@@ -3674,11 +3693,39 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0;
 const weekdayShort=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+
+/* Настройки календаря раньше нигде не сохранялись (сбрасывались на каждую
+   перезагрузку страницы, включая уже существующие начало/конец/интервал/цвета) —
+   персистируем через localStorage, по браузеру (не между устройствами одного
+   пользователя — полноценное серверное хранение, как у «Настройки меню»,
+   сознательно оставлено на потом). */
+const CALSETTINGS_KEY='newui_calsettings_prefs';
+function loadCalSettings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CALSETTINGS_KEY)||'null');
+    if(saved) Object.assign(calSettings, saved);
+  }catch(e){}
+  const byId=id=>document.getElementById(id);
+  if(byId('cs-start')) byId('cs-start').value=minutesToTime(calSettings.start*60);
+  if(byId('cs-end')) byId('cs-end').value=minutesToTime(calSettings.end*60);
+  if(byId('cs-interval')) byId('cs-interval').value=String(calSettings.interval);
+  if(byId('cs-defaultview') && calSettings.defaultView) byId('cs-defaultview').value=calSettings.defaultView;
+  if(byId('cs-offer-start-visit')) byId('cs-offer-start-visit').checked=calSettings.offerStartVisit!==false;
+  if(byId('cs-highlight-debt')) byId('cs-highlight-debt').checked=calSettings.highlightDebt!==false;
+  if(calSettings.colors){
+    if(byId('cs-color-cobalt')) byId('cs-color-cobalt').value=calSettings.colors.cobalt;
+    if(byId('cs-color-amber')) byId('cs-color-amber').value=calSettings.colors.amber;
+    if(byId('cs-color-coral')) byId('cs-color-coral').value=calSettings.colors.coral;
+    if(byId('cs-color-teal')) byId('cs-color-teal').value=calSettings.colors.teal;
+    applyCalColors(calSettings.colors);
+  }
+}
+loadCalSettings();
 
 function dateAtOffset(days){
   const d=new Date(baseScheduleDate);
@@ -3788,7 +3835,13 @@ function buildDayHTML(){
       const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
       if(appt){
         html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})">`;
-        html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span><b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
+        // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
+        // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
+        // для завершённых приёмов — сознательно другой визуальный сигнал,
+        // чтобы два разных смысла не сливались в один цвет).
+        const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
+          ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
+        html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
         html+='</div>';
       } else {
         html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" ${cellStyle} title="${label}" onclick="schedCellClick('${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})"></div>`;
@@ -3856,18 +3909,36 @@ function apptActionsHtml(a, p, setStatusFn, sendToCashierFn){
   } else if(a.status==='in_progress'){
     html+=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${a.id}'">Продолжить приём</button>`;
   }
-  if(a.status==='completed' && p.id && p.debt>0){
+  // Раньше показывалась только на завершённых приёмах — по факту у пациента
+  // может быть долг за прошлый визит и на записи в любом другом статусе,
+  // кассиру нужно отправить его в кассу независимо от статуса ЭТОЙ записи.
+  if(p.id && p.debt>0){
     html+=`<button class="btn btn-ghost btn-sm" onclick="${sendToCashierFn}()">Отправить в кассу (долг ${Math.round(p.debt).toLocaleString('ru-RU')} сом)</button>`;
   }
   return html;
 }
+/* Пациент отмечен «Пришёл» — предложить врачу сразу начать приём (не
+   администратору/ресепшену — им это неактуально). Настройка (тумблер в
+   «Настройках календаря») позволяет отключить подсказку. */
+function maybeOfferStartVisit(apptId, newStatus){
+  if(newStatus!=='arrived') return;
+  if(!IS_DOCTOR || calSettings.offerStartVisit===false) return;
+  if(confirm(t('w_offer_start_visit_now','Пациент отмечен как пришедший. Начать приём сейчас?'))){
+    location.href='/new/visit/start/?appointment='+apptId;
+  }
+}
 async function apptViewSetStatus(status){
   if(!apptViewData) return;
   if(status==='cancelled' && !confirm('Отменить запись?')) return;
+  const apptId=apptViewData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
-  const res=await postForm('/appointments/'+apptViewData.appointment.id+'/status/', fd);
-  if(res.redirected){ closeModal('m-appt-view'); flashAndReload('Статус записи обновлён'); }
+  const res=await postForm('/appointments/'+apptId+'/status/', fd);
+  if(res.redirected){
+    closeModal('m-appt-view');
+    maybeOfferStartVisit(apptId, status);
+    flashAndReload('Статус записи обновлён');
+  }
   else { document.getElementById('avError').textContent='Не удалось изменить статус'; document.getElementById('avError').classList.remove('hidden'); }
 }
 async function apptSendToCashier(){
@@ -3911,11 +3982,15 @@ async function schedApptQuickMenu(event, apptId){
 async function schedQuickSetStatus(status){
   if(!schedQuickMenuData) return;
   if(status==='cancelled' && !confirm('Отменить запись?')) return;
+  const apptId=schedQuickMenuData.appointment.id;
   const fd=new FormData();
   fd.append('status', status);
-  const res=await postForm('/appointments/'+schedQuickMenuData.appointment.id+'/status/', fd);
+  const res=await postForm('/appointments/'+apptId+'/status/', fd);
   closeSchedApptQuickMenu();
-  if(res.redirected){ flashAndReload('Статус записи обновлён'); }
+  if(res.redirected){
+    maybeOfferStartVisit(apptId, status);
+    flashAndReload('Статус записи обновлён');
+  }
   else { showToast('Не удалось изменить статус', 'error'); }
 }
 async function schedQuickSendToCashier(){
@@ -4176,6 +4251,8 @@ function applyCalSettings(){
   if(!isNaN(sh)) calSettings.start=sh;
   if(!isNaN(eh)) calSettings.end=eh;
   calSettings.interval=interval;
+  calSettings.offerStartVisit=document.getElementById('cs-offer-start-visit').checked;
+  calSettings.highlightDebt=document.getElementById('cs-highlight-debt').checked;
 
   const colorMap={
     cobalt: document.getElementById('cs-color-cobalt').value,
@@ -4183,23 +4260,34 @@ function applyCalSettings(){
     coral: document.getElementById('cs-color-coral').value,
     teal: document.getElementById('cs-color-teal').value,
   };
+  applyCalColors(colorMap);
+  calSettings.colors=colorMap;
+
+  calSettings.defaultView=document.getElementById('cs-defaultview').value;
+  localStorage.setItem(CALSETTINGS_KEY, JSON.stringify(calSettings));
+  calSetView(calSettings.defaultView);
+  closeModal('m-calsettings');
+  renderSchedule(); // перерисовать сетку — тумблер highlightDebt мог поменяться
+}
+function applyCalColors(colorMap){
   document.documentElement.style.setProperty('--cobalt', colorMap.cobalt);
   document.documentElement.style.setProperty('--amber', colorMap.amber);
   document.documentElement.style.setProperty('--coral', colorMap.coral);
   document.documentElement.style.setProperty('--teal', colorMap.teal);
-
-  const defaultView=document.getElementById('cs-defaultview').value;
-  calSetView(defaultView);
-  closeModal('m-calsettings');
 }
 function resetCalSettings(){
   document.getElementById('cs-start').value='09:00';
   document.getElementById('cs-end').value='18:00';
   document.getElementById('cs-interval').value='30';
+  document.getElementById('cs-offer-start-visit').checked=true;
+  document.getElementById('cs-highlight-debt').checked=true;
   document.getElementById('cs-color-cobalt').value='#2c4bea';
   document.getElementById('cs-color-amber').value='#b8862e';
   document.getElementById('cs-color-coral').value='#e85d2d';
   document.getElementById('cs-color-teal').value='#0e9c7d';
+  localStorage.removeItem(CALSETTINGS_KEY);
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true};
+  applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
 /* ================= ROLES & STAFF (реальные данные клиники, сохранение через fetch) ================= */
@@ -4233,6 +4321,9 @@ let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
 // умолчанию от директора), см. loadMenuPrefs() ниже. CAN_SET_CLINIC_MENU — может ли
 // текущий пользователь сохранить меню клиники (директор/суперадмин).
 let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_MENU=false;
+// Расписание: подсказка «начать приём» после «Пришёл» — только для врача (см.
+// maybeOfferStartVisit). Касса: кнопка «Быстрая продажа» — только у права finance.quick_sale.
+let IS_DOCTOR=false, CAN_QUICK_SALE=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -4286,6 +4377,8 @@ let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_M
     SERVER_USER_MENU_PREFS=data.userMenuPrefs || {};
     SERVER_CLINIC_MENU_PREFS=data.clinicMenuPrefs || {};
     CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
+    IS_DOCTOR=!!data.isDoctor;
+    CAN_QUICK_SALE=!!data.canQuickSale;
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();
@@ -4378,8 +4471,15 @@ function renderPatientCardHistory(d){
   const el=document.getElementById('pcPanelHistory');
   if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY('Приёмов пока не было'); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
-    <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th></tr></thead>
-    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td></tr>`).join('')}</tbody></table>`;
+    <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
+    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+}
+async function confirmQuickSale(id){
+  const res = await apiJson('/treatments/'+id+'/confirm/', {});
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(res.ok && payload && payload.ok){ flashAndReload(t('w_confirm')+' ✓'); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 function renderPatientCardPlan(d){
   const el=document.getElementById('pcPanelPlan');

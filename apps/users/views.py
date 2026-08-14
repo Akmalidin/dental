@@ -628,6 +628,9 @@ def _newui_schedule_data(clinic):
         ),
         "durationMin": max(int((a.end_at - a.start_at).total_seconds() // 60), 1),
         "movable": a.status not in (Appointment.STATUS_COMPLETED, Appointment.STATUS_NO_SHOW),
+        # Общий долг пациента (Patient.debt, а не долг конкретно ЭТОГО приёма) —
+        # для подсветки на сетке расписания, независимо от статуса приёма.
+        "debt": float(a.patient.debt) if a.patient_id else 0,
     } for a in appts_qs]
 
     return {
@@ -1076,6 +1079,7 @@ def _newui_patientcard_detail_data(patient):
             "amount": float(t.total_amount),
             "status": t.get_status_display(),
             "statusColor": status_pill.get(t.status, "cobalt"),
+            "needsConfirmation": t.needs_doctor_confirmation,
         })
 
     plan_status_pill = {"draft": "grey", "approved": "cobalt", "in_progress": "amber", "completed": "teal", "cancelled": "coral"}

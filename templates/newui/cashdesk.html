@@ -1,7 +1,9 @@
 {% extends "newui/base.html" %}
 {% block page_title %}Касса{% endblock %}
 {% block content %}
-      <div class="topbar"><h1 data-i18n="title_cashdesk">Касса</h1><div class="topbar-right"></div></div>
+      <div class="topbar"><h1 data-i18n="title_cashdesk">Касса</h1><div class="topbar-right">
+        <button class="btn btn-cobalt hidden" id="qsOpenBtn" onclick="openQuickSale()">⚡ <span data-i18n="w_quick_sale">Быстрая продажа</span></button>
+      </div></div>
       <div class="page">
         <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
 
@@ -86,6 +88,52 @@
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="cashReceiptNo()"><span data-i18n="w_not_now">Не сейчас</span></button>
             <button class="btn btn-cobalt" onclick="cashReceiptYes()"><span data-i18n="w_issue_receipt">Выдать чек</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Быстрая продажа: кассир регистрирует услугу(и) без предварительного
+           визита врача. Врач обязателен (см. apps.treatments.views.treatment_create_quick) —
+           приём создаётся сразу завершённым/оплачиваемым и помечается
+           needs_doctor_confirmation=True, врач подтверждает его позже из карточки пациента. -->
+      <div class="modal-backdrop" id="m-quick-sale">
+        <div class="modal wide">
+          <div class="modal-head"><h3 data-i18n="w_quick_sale">Быстрая продажа</h3><button class="modal-close" onclick="closeModal('m-quick-sale')">✕</button></div>
+          <div class="modal-body">
+            <div id="qsError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+            <div id="qsShiftBanner" class="hidden" style="background:var(--amber-tint);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+              <span style="font-size:12.5px;color:var(--ink);" data-i18n="w_shift_not_open">Смена не открыта</span>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="cashOpenShift()"><span data-i18n="w_open_shift">Открыть смену</span></button>
+            </div>
+            <div class="form-group" style="position:relative;">
+              <label data-i18n="w_patient">Пациент</label>
+              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" autocomplete="off"
+                     oninput="qsPatientSearch(this.value)" onfocus="qsPatientSearch(this.value)"
+                     onblur="setTimeout(()=>{const b=document.getElementById('qs-patient-suggestions'); if(b) b.classList.add('hidden');},200)">
+              <input type="hidden" id="qs-patient-id">
+              <div id="qs-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:6;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+            </div>
+            <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="qs-doctor"></select></div>
+            <div class="form-group">
+              <label data-i18n="w_services">Услуги</label>
+              <div id="qsRows"></div>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="qsAddRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button>
+            </div>
+            <div class="form-row2">
+              <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
+                <select id="qs-method">
+                  <option value="cash" data-i18n="w_cash">Наличные</option>
+                  <option value="card" data-i18n="w_card">Карта</option>
+                  <option value="transfer" data-i18n="w_transfer">Перевод</option>
+                  <option value="online" data-i18n="w_online">Онлайн</option>
+                </select>
+              </div>
+              <div class="form-group"><label data-i18n="w_total">Итого</label><div class="mono" id="qsTotal" style="font-size:16px;padding-top:8px;">0 сом</div></div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-quick-sale')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" id="qsSubmitBtn" onclick="submitQuickSale()" data-i18n="w_accept_payment">Принять оплату</button>
           </div>
         </div>
       </div>
@@ -272,5 +320,143 @@ async function submitCashVisitPayment(){
 // renderCashdesk() (base.html, общий скрипт) выполняется РАНЬШЕ этого extra_js-блока
 // и не может звать renderCashTodayRow — она определена только здесь. Дорисовываем сами.
 renderCashTodayRow();
+
+/* ================= «Быстрая продажа» ================= */
+if(document.getElementById('qsOpenBtn')) document.getElementById('qsOpenBtn').classList.toggle('hidden', !CAN_QUICK_SALE);
+
+let qsRows=[];
+let qsRowSeq=0;
+function openQuickSale(){
+  document.getElementById('qsError').classList.add('hidden');
+  document.getElementById('qs-patient-search').value='';
+  document.getElementById('qs-patient-id').value='';
+  document.getElementById('qs-doctor').innerHTML = (doctorOptions||[]).map(d=>`<option value="${d.id}">${d.name}</option>`).join('') || '<option value="">—</option>';
+  document.getElementById('qs-method').value='cash';
+  document.getElementById('qsShiftBanner').classList.toggle('hidden', !!(cashdeskData && cashdeskData.shift));
+  qsRows=[]; qsRowSeq=0;
+  qsAddRow();
+  openModal('m-quick-sale');
+}
+function qsPatientSearch(q){
+  const box=document.getElementById('qs-patient-suggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=(patientsList||[]).filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length
+    ? matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="qsSelectPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('')
+    : `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
+  box.classList.remove('hidden');
+}
+function qsSelectPatient(id){
+  const p=(patientsList||[]).find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('qs-patient-search').value=p.fullName;
+  document.getElementById('qs-patient-id').value=p.id;
+  document.getElementById('qs-patient-suggestions').classList.add('hidden');
+}
+function qsAddRow(){
+  qsRows.push({idx: qsRowSeq++, service_id:'', service_name:'', tooth:'', qty:1, price:0});
+  renderQsRows();
+}
+function qsRemoveRow(idx){
+  qsRows=qsRows.filter(r=>r.idx!==idx);
+  if(qsRows.length===0){ qsAddRow(); } else { renderQsRows(); }
+}
+function qsSetRowField(idx, field, val){
+  const row=qsRows.find(r=>r.idx===idx);
+  if(!row) return;
+  if(field==='qty') val=Math.max(1, parseInt(val)||1);
+  if(field==='price') val=parseFloat(val)||0;
+  row[field]=val;
+  qsUpdateTotal();
+}
+function renderQsRows(){
+  const el=document.getElementById('qsRows');
+  el.innerHTML=qsRows.map(r=>`
+    <div style="display:grid;grid-template-columns:1fr 70px 60px 100px 28px;gap:8px;align-items:center;margin-bottom:8px;">
+      <div style="position:relative;">
+        <input type="text" id="qsSvcInput-${r.idx}" value="${(r.service_name||'').replace(/"/g,'&quot;')}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off"
+               oninput="qsServiceSearch(${r.idx}, this.value)" onfocus="qsServiceSearch(${r.idx}, this.value)"
+               onblur="setTimeout(()=>{const b=document.getElementById('qsSvcSuggest-${r.idx}'); if(b) b.classList.add('hidden');},200)">
+        <div id="qsSvcSuggest-${r.idx}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:7;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
+      </div>
+      <input type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
+      <input type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
+      <input type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="qsRemoveRow(${r.idx})" style="padding:4px 6px;">✕</button>
+    </div>`).join('');
+  qsUpdateTotal();
+}
+function qsServiceSearch(idx, q){
+  const box=document.getElementById('qsSvcSuggest-'+idx);
+  if(!box) return;
+  const query=(q||'').trim().toLowerCase();
+  const matches=(query ? (servicesList||[]).filter(s=>s.name.toLowerCase().includes(query)) : (servicesList||[])).slice(0,30);
+  box.innerHTML = matches.length
+    ? matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="qsPickService(${idx}, ${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('')
+    : `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
+  box.classList.remove('hidden');
+}
+function qsPickService(idx, serviceId){
+  const svc=(servicesList||[]).find(s=>String(s.id)===String(serviceId));
+  if(!svc) return;
+  const row=qsRows.find(r=>r.idx===idx);
+  if(!row) return;
+  row.service_id=svc.id; row.service_name=svc.name; row.price=svc.price;
+  renderQsRows();
+}
+function qsUpdateTotal(){
+  const total=qsRows.reduce((s,r)=>s+(parseFloat(r.price)||0)*(parseInt(r.qty)||1), 0);
+  const el=document.getElementById('qsTotal');
+  if(el) el.textContent=fmtSom(total);
+}
+async function submitQuickSale(){
+  const err=document.getElementById('qsError');
+  err.classList.add('hidden');
+  const patientId=document.getElementById('qs-patient-id').value;
+  const doctorId=document.getElementById('qs-doctor').value;
+  const cures=qsRows.filter(r=>r.service_id).map(r=>({service_id:r.service_id, tooth:r.tooth||'', qty:r.qty||1, price:r.price}));
+  if(!patientId){ err.textContent=t('w_pick_patient','Выберите пациента'); err.classList.remove('hidden'); return; }
+  if(!doctorId){ err.textContent='Выберите врача'; err.classList.remove('hidden'); return; }
+  if(cures.length===0){ err.textContent='Добавьте хотя бы одну услугу'; err.classList.remove('hidden'); return; }
+  const btn=document.getElementById('qsSubmitBtn');
+  btn.disabled=true;
+  try{
+    const res1=await apiJson('/treatments/create-quick/', {patient_id: patientId, doctor_id: doctorId, cures});
+    let payload1=null;
+    try{ payload1=await res1.json(); }catch(e){}
+    if(!res1.ok || !payload1 || !payload1.ok){
+      err.textContent=(payload1 && payload1.error) || t('w_save_failed');
+      err.classList.remove('hidden');
+      return;
+    }
+    const total=qsRows.reduce((s,r)=>s+(parseFloat(r.price)||0)*(parseInt(r.qty)||1), 0);
+    const fd=new FormData();
+    fd.append('patient', patientId);
+    fd.append('treatment', payload1.treatment_id);
+    fd.append('amount', total);
+    fd.append('method', document.getElementById('qs-method').value);
+    fd.append('type', 'income');
+    fd.append('channel', 'cashier');
+    // X-Requested-With — как и в submitCashAccept/submitCashVisitPayment выше,
+    // без него payment_create() отдаёт redirect вместо JSON с payment_id.
+    const res2=await fetch('/finance/payments/create/', {
+      method:'POST', body:fd, credentials:'same-origin',
+      headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+    });
+    let payload2=null;
+    try{ payload2=await res2.json(); }catch(e){}
+    if(!res2.ok || !payload2 || !payload2.ok){
+      err.textContent=(payload2 && payload2.error) || t('w_save_failed');
+      err.classList.remove('hidden');
+      return;
+    }
+    lastAcceptedPaymentId = payload2.payment_id;
+    closeModal('m-quick-sale');
+    openModal('m-cash-receipt');
+  } finally {
+    btn.disabled=false;
+  }
+}
 </script>
 {% endblock %}
