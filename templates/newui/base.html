@@ -2807,6 +2807,7 @@ const translations={
   w_start_visit_btn: {ru:'Начать приём', ky:'Кабылдоону баштоо', en:'Start visit', uz:'Qabulni boshlash'},
   w_cancel_verb: {ru:'Отменить', ky:'Жокко чыгаруу', en:'Cancel', uz:'Bekor qilish'},
   w_continue_visit_btn: {ru:'Продолжить приём', ky:'Кабылдоону улантуу', en:'Continue visit', uz:'Qabulni davom ettirish'},
+  w_view_visit_btn: {ru:'Просмотр приёма', ky:'Кабылдоону көрүү', en:'View visit', uz:'Qabulni ko‘rish'},
   w_finish_verb: {ru:'Завершить', ky:'Аяктоо', en:'Finish', uz:'Yakunlash'},
   w_patients_short: {ru:'пациент(ов)', ky:'бейтап(тар)', en:'patient(s)', uz:'bemor(lar)'},
   w_no_transactions_yet: {ru:'Пока нет операций', ky:'Азырынча операциялар жок', en:'No transactions yet', uz:'Hozircha operatsiyalar yo‘q'},
@@ -4161,6 +4162,8 @@ function apptActionsHtml(a, p, setStatusFn, sendToCashierFn){
     html+=`<button class="btn btn-ghost btn-sm" onclick="${setStatusFn}('cancelled')">Отменить</button>`;
   } else if(a.status==='in_progress'){
     html+=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${a.id}'">Продолжить приём</button>`;
+  } else if(a.status==='completed'){
+    html+=`<button class="btn btn-ghost btn-sm" onclick="location.href='/new/visit/start/?appointment=${a.id}'">${t('w_view_visit_btn','Просмотр приёма')}</button>`;
   }
   // Раньше показывалась только на завершённых приёмах — по факту у пациента
   // может быть долг за прошлый визит и на записи в любом другом статусе,
