@@ -408,6 +408,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:52px;height:64px;font-size:38px;line-height:1;}
 .lb-prev{left:16px;}.lb-next{right:16px;}
 .lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e2e8f0;font-size:13px;padding:0 16px;}
+.cash-today-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+.cash-client-card{width:180px;border:1.5px solid var(--mist);border-radius:12px;padding:14px;cursor:pointer;background:var(--paper);transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease;}
+.cash-client-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px -10px rgba(20,23,31,.25);border-color:var(--cobalt);}
+.cash-client-card .cc-time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);}
+.cash-client-card .cc-name{font-size:13.5px;font-weight:600;margin:4px 0 8px;}
+.cash-client-card .cc-amount{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--coral);}
+.cash-client-card .cc-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+.cash-client-card.paid{opacity:.5;border-style:dashed;cursor:default;}
+.cash-client-card.paid:hover{transform:none;box-shadow:none;border-color:var(--mist);}
+.cash-item-opt{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border:1px solid var(--mist);border-radius:9px;margin-bottom:8px;cursor:pointer;}
+.cash-item-opt:hover{background:var(--cloud);}
+.cash-item-opt.selected{border-color:var(--cobalt);background:var(--cobalt-tint);}
+.cash-item-opt label{display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;}
+.cash-item-opt input[type=checkbox]{width:16px;height:16px;cursor:pointer;}
 .docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
 .docs-grid .doc-item{display:flex;flex-direction:column;cursor:pointer;}
 .docs-grid .doc-tile{border-radius:10px;overflow:hidden;background:var(--cloud);position:relative;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
@@ -2726,6 +2740,13 @@ const translations={
   w_zero_off: {ru:'0 — выключено', ky:'0 — өчүрүлгөн', en:'0 — off', uz:'0 — o\'chirilgan'},
   w_position_one: {ru:'позиция', ky:'позиция', en:'item', uz:'pozitsiya'},
   w_awaiting_payment_h: {ru:'Ожидают оплаты', ky:'Төлөмдү күтүүдө', en:'Awaiting payment', uz:'To\'lov kutilmoqda'},
+  w_todays_patients: {ru:'Пациенты на сегодня', ky:'Бүгүнкү бейтаптар', en:'Today\'s patients', uz:'Bugungi bemorlar'},
+  w_which_treatment_paying: {ru:'За какой приём принять оплату?', ky:'Кайсы кабылдоо үчүн төлөм алуу керек?', en:'Which visit is this payment for?', uz:'Qaysi qabul uchun to\'lov qabul qilinadi?'},
+  w_awaiting_payment_short: {ru:'ожидают оплаты', ky:'төлөмдү күтүүдө', en:'awaiting payment', uz:'to\'lovni kutmoqda'},
+  w_no_visits_today: {ru:'Сегодня приёмов с оплатой нет', ky:'Бүгүн төлөнүүчү кабылдоолор жок', en:'No billable visits today', uz:'Bugun to\'lanadigan qabullar yo\'q'},
+  w_paid_f: {ru:'Оплачено', ky:'Төлөндү', en:'Paid', uz:'To\'landi'},
+  w_visits_can_combine: {ru:'приёма — можно объединить', ky:'кабылдоо — бириктирүүгө болот', en:'visits — can be combined', uz:'qabul — birlashtirish mumkin'},
+  w_pick_treatment_to_pay: {ru:'Отметьте хотя бы один приём, за который принимаете оплату', ky:'Төлөм алып жаткан кеминде бир кабылдоону белгилеңиз', en:'Select at least one visit you are accepting payment for', uz:'To\'lovni qabul qilayotgan kamida bitta qabulni belgilang'},
   w_nothing_sent_cashier: {ru:'Пока ничего не отправлено в кассу', ky:'Азырынча кассага эч нерсе жиберилген жок', en:'Nothing sent to the cashier yet', uz:'Hozircha kassaga hech narsa yuborilmagan'},
   w_accept_payment: {ru:'Принять оплату', ky:'Төлөмдү кабыл алуу', en:'Accept payment', uz:'To\'lovni qabul qilish'},
   w_cash: {ru:'Наличные', ky:'Накталай', en:'Cash', uz:'Naqd'},

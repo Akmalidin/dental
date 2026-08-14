@@ -1058,6 +1058,73 @@ class NewUICashdeskTestCase(TestCase):
         self.assertEqual(shift.closing_cash_actual, 1500)
         self.assertIsNotNone(shift.closed_at)
 
+    def _make_today_appointment(self, patient=None, hour=10):
+        import datetime as dt
+        from django.utils import timezone
+        from apps.appointments.models import Appointment
+        from apps.services.models import Service
+
+        service = Service.objects.create(name="Приём", price=100, clinic=self.clinic)
+        today = timezone.localdate()
+        start = timezone.make_aware(dt.datetime.combine(today, dt.time(hour, 0)))
+        end = start + dt.timedelta(hours=1)
+        return Appointment.objects.create(
+            patient=patient or self.patient, doctor=self.director, branch=self.branch, service=service,
+            start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+
+    def test_today_patients_lists_appointment_with_unpaid_treatment(self):
+        from apps.treatments.models import Treatment
+
+        appt = self._make_today_appointment()
+        Treatment.objects.create(
+            patient=self.patient, doctor=self.director, branch=self.branch, appointment=appt,
+            status=Treatment.STATUS_PLANNED, total_amount=3000, clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
+        rows = data["cashdeskData"]["todayPatients"]
+        row = next(r for r in rows if r["patientId"] == self.patient.pk)
+        self.assertFalse(row["paid"])
+        self.assertEqual(row["items"][0]["amount"], 3000.0)
+
+    def test_today_patients_excludes_appointment_without_treatment(self):
+        self._make_today_appointment()
+        data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
+        rows = data["cashdeskData"]["todayPatients"]
+        self.assertFalse(any(r["patientId"] == self.patient.pk for r in rows))
+
+    def test_today_patients_marks_fully_paid_treatment_as_paid(self):
+        from apps.treatments.models import Treatment
+
+        appt = self._make_today_appointment()
+        Treatment.objects.create(
+            patient=self.patient, doctor=self.director, branch=self.branch, appointment=appt,
+            status=Treatment.STATUS_PAID, total_amount=3000, paid_amount=3000, clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
+        row = next(r for r in data["cashdeskData"]["todayPatients"] if r["patientId"] == self.patient.pk)
+        self.assertTrue(row["paid"])
+        self.assertEqual(row["items"], [])
+
+    def test_today_patients_combines_multiple_appointments_same_patient(self):
+        from apps.treatments.models import Treatment
+
+        appt1 = self._make_today_appointment(hour=9)
+        appt2 = self._make_today_appointment(hour=14)
+        Treatment.objects.create(
+            patient=self.patient, doctor=self.director, branch=self.branch, appointment=appt1,
+            status=Treatment.STATUS_PLANNED, total_amount=1000, clinic=self.clinic,
+        )
+        Treatment.objects.create(
+            patient=self.patient, doctor=self.director, branch=self.branch, appointment=appt2,
+            status=Treatment.STATUS_PLANNED, total_amount=2000, clinic=self.clinic,
+        )
+        data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
+        rows = [r for r in data["cashdeskData"]["todayPatients"] if r["patientId"] == self.patient.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(rows[0]["items"]), 2)
+        self.assertEqual(rows[0]["time"], "09:00")  # earliest of the two
+
     def test_cashdesk_queue_reflects_real_send_to_cashier_notification(self):
         resp = self.client.post(f"/finance/payments/send-to-cashier/{self.patient.pk}/", {"amount": "3000"})
         self.assertEqual(resp.status_code, 302)

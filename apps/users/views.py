@@ -960,7 +960,55 @@ def _newui_cashdesk_data(request, clinic):
         if len(queue) >= 30:
             break
 
-    return {"shift": shift_data, "queue": queue, "branchId": branch.pk if branch else None}
+    # ── «Пациенты на сегодня» — реальные приёмы сегодня с непогашенным долгом
+    # по приёму (Treatment.appointment), сгруппированные по пациенту (если у
+    # пациента сегодня несколько приёмов — все его неоплаченные позиции идут
+    # одной карточкой, кассир может отметить, за какие принимает оплату).
+    # Приём без привязанного Treatment (лечение ещё не начато/не заведено) —
+    # платить пока не за что, в список не попадает.
+    from collections import defaultdict
+    from apps.appointments.models import Appointment
+    from apps.treatments.models import Treatment
+
+    today = timezone.localdate()
+    today_appts = list(
+        Appointment.objects.filter(start_at__date=today)
+        .exclude(status=Appointment.STATUS_CANCELLED)
+        .select_related("patient").order_by("start_at")
+    )
+    appt_ids = [a.pk for a in today_appts]
+    treat_by_appt = defaultdict(list)
+    for tr in (Treatment.objects.filter(appointment_id__in=appt_ids)
+               .exclude(status__in=(Treatment.STATUS_CANCELLED, Treatment.STATUS_DRAFT))
+               .select_related("patient").prefetch_related("cures__service")):
+        treat_by_appt[tr.appointment_id].append(tr)
+
+    appts_by_patient = defaultdict(list)
+    for a in today_appts:
+        if a.patient_id:
+            appts_by_patient[a.patient_id].append(a)
+
+    today_patients = []
+    for patient_id, appts in appts_by_patient.items():
+        treatments = [tr for a in appts for tr in treat_by_appt.get(a.pk, [])]
+        if not treatments:
+            continue
+        items = []
+        for tr in treatments:
+            services = ", ".join(c.service.name for c in tr.cures.all())
+            debt = float(tr.debt)
+            if debt > 0:
+                items.append({"id": tr.pk, "desc": services or tr.get_status_display(), "amount": debt})
+        today_patients.append({
+            "patientId": patient_id,
+            "patient": appts[0].patient.full_name,
+            "time": timezone.localtime(min(a.start_at for a in appts)).strftime("%H:%M"),
+            "items": items,
+            "paid": len(items) == 0,
+        })
+    today_patients.sort(key=lambda p: p["time"])
+
+    return {"shift": shift_data, "queue": queue, "branchId": branch.pk if branch else None, "todayPatients": today_patients}
 
 
 def _newui_messages_data(clinic):

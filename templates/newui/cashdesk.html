@@ -4,10 +4,52 @@
       <div class="topbar"><h1 data-i18n="title_cashdesk">Касса</h1><div class="topbar-right"></div></div>
       <div class="page">
         <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
+
+        <!-- Пациенты сегодня с непогашенным долгом по приёму (Treatment.appointment) —
+             не нужно ждать, пока врач явно нажмёт «Отправить в кассу» ниже. -->
+        <div class="card-head" style="padding:0 0 10px;border:none;"><h3 data-i18n="w_todays_patients">Пациенты на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashTodayCount"></span></div>
+        <div id="cashTodayRow" class="cash-today-row"></div>
+
         <div class="card">
           <div class="card-head"><h3 data-i18n="w_awaiting_payment_h">Ожидают оплаты</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashQueueCount">0 позиций</span></div>
           <div class="card-body" id="cashQueueBody">
             <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_nothing_sent_cashier">Пока ничего не отправлено в кассу</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Оплата пациента (из карточки «Пациенты на сегодня»): один приём — сразу
+           видна сумма; несколько — можно отметить, за какие принимается оплата,
+           и провести их одним платежом (сумма распределится по приёмам автоматически,
+           см. payment_create → _allocate_income). -->
+      <div class="modal-backdrop" id="m-cash-visit">
+        <div class="modal">
+          <div class="modal-head"><h3><span data-i18n="w_accept_payment">Принять оплату</span> · <span id="cv-patient-name"></span></h3><button class="modal-close" onclick="closeModal('m-cash-visit')">✕</button></div>
+          <div class="modal-body">
+            <div id="cvError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+            <div id="cv-single-item" class="hidden" style="background:var(--cloud);border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+              <div style="font-size:13px;font-weight:600;" id="cv-single-desc"></div>
+              <div class="mono" style="font-size:16px;color:var(--ink);margin-top:4px;" id="cv-single-amount"></div>
+            </div>
+            <div id="cv-multi-wrap" class="hidden">
+              <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);" data-i18n="w_which_treatment_paying">За какой приём принять оплату?</label>
+              <div id="cv-item-list"></div>
+            </div>
+            <div class="form-row2" style="margin-top:4px;">
+              <div class="form-group"><label data-i18n="w_amount">Сумма</label><input type="number" id="cv-amount" min="0"></div>
+              <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
+                <select id="cv-method">
+                  <option value="cash" data-i18n="w_cash">Наличные</option>
+                  <option value="card" data-i18n="w_card">Карта</option>
+                  <option value="transfer" data-i18n="w_transfer">Перевод</option>
+                  <option value="online" data-i18n="w_online">Онлайн</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-cash-visit')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" id="cvSubmitBtn" onclick="submitCashVisitPayment()" data-i18n="w_accept_payment">Принять оплату</button>
           </div>
         </div>
       </div>
@@ -114,5 +156,121 @@ function cashReceiptNo(){
   closeModal('m-cash-receipt');
   flashAndReload(t('w_payment_accepted'));
 }
+
+/* ================= «Пациенты на сегодня» — приёмы сегодня с реальным долгом ================= */
+function renderCashTodayRow(){
+  const el=document.getElementById('cashTodayRow');
+  const countEl=document.getElementById('cashTodayCount');
+  if(!el || !cashdeskData) return;
+  const list=cashdeskData.todayPatients||[];
+  if(countEl) countEl.textContent = list.filter(c=>!c.paid).length+' '+t('w_awaiting_payment_short','ожидают оплаты');
+  if(list.length===0){
+    el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_no_visits_today','Сегодня приёмов с оплатой нет')}</div>`;
+    return;
+  }
+  el.innerHTML=list.map(c=>{
+    const total=c.items.reduce((s,i)=>s+i.amount,0);
+    const sub = c.paid ? t('w_paid_f','Оплачено') : (c.items.length>1 ? c.items.length+' '+t('w_visits_can_combine','приёма — можно объединить') : c.items[0].desc);
+    return `<div class="cash-client-card ${c.paid?'paid':''}" onclick="${c.paid?'':'openCashVisitModal('+c.patientId+')'}">
+      <div class="cc-time">${c.time}</div>
+      <div class="cc-name">${c.patient}</div>
+      <div class="cc-amount">${c.paid?'—':fmtSom(total)}</div>
+      <div class="cc-sub">${sub}</div>
+    </div>`;
+  }).join('');
+}
+let currentCashVisitPatientId=null;
+let currentCashVisitItemId=null;
+let cashVisitSelectedIds=new Set();
+function openCashVisitModal(patientId){
+  const client=(cashdeskData.todayPatients||[]).find(c=>c.patientId===patientId);
+  if(!client) return;
+  currentCashVisitPatientId=patientId;
+  currentCashVisitItemId=null;
+  cashVisitSelectedIds=new Set();
+  document.getElementById('cvError').classList.add('hidden');
+  document.getElementById('cv-patient-name').textContent=client.patient;
+  const singleWrap=document.getElementById('cv-single-item');
+  const multiWrap=document.getElementById('cv-multi-wrap');
+  if(client.items.length===1){
+    currentCashVisitItemId=client.items[0].id;
+    singleWrap.classList.remove('hidden');
+    multiWrap.classList.add('hidden');
+    document.getElementById('cv-single-desc').textContent=client.items[0].desc;
+    document.getElementById('cv-single-amount').textContent=fmtSom(client.items[0].amount);
+    document.getElementById('cv-amount').value=client.items[0].amount;
+  } else {
+    singleWrap.classList.add('hidden');
+    multiWrap.classList.remove('hidden');
+    document.getElementById('cv-amount').value='';
+    document.getElementById('cv-item-list').innerHTML=client.items.map(i=>`
+      <div class="cash-item-opt" id="cv-item-${i.id}">
+        <label onclick="event.stopPropagation();toggleCashVisitItem(${i.id})">
+          <input type="checkbox" id="cv-check-${i.id}">
+          <span>${i.desc}</span>
+        </label>
+        <b class="mono">${fmtSom(i.amount)}</b>
+      </div>`).join('');
+  }
+  document.getElementById('cv-method').value='cash';
+  openModal('m-cash-visit');
+}
+function toggleCashVisitItem(itemId){
+  if(cashVisitSelectedIds.has(itemId)) cashVisitSelectedIds.delete(itemId);
+  else cashVisitSelectedIds.add(itemId);
+  const row=document.getElementById('cv-item-'+itemId);
+  const checkbox=document.getElementById('cv-check-'+itemId);
+  const isSelected=cashVisitSelectedIds.has(itemId);
+  row.classList.toggle('selected', isSelected);
+  checkbox.checked=isSelected;
+  const client=(cashdeskData.todayPatients||[]).find(c=>c.patientId===currentCashVisitPatientId);
+  const total=[...cashVisitSelectedIds].reduce((s,id)=>s+client.items.find(i=>i.id===id).amount, 0);
+  document.getElementById('cv-amount').value = total || '';
+}
+async function submitCashVisitPayment(){
+  const client=(cashdeskData.todayPatients||[]).find(c=>c.patientId===currentCashVisitPatientId);
+  if(!client) return;
+  const err=document.getElementById('cvError');
+  err.classList.add('hidden');
+  if(!currentCashVisitItemId && cashVisitSelectedIds.size===0){
+    err.textContent=t('w_pick_treatment_to_pay','Отметьте хотя бы один приём, за который принимаете оплату');
+    err.classList.remove('hidden');
+    return;
+  }
+  const amount=document.getElementById('cv-amount').value;
+  if(amount===''  || Number(amount)<0){
+    err.textContent=t('w_specify_amount'); err.classList.remove('hidden');
+    return;
+  }
+  // treatment — первый выбранный (конкретный приём, за который отчитываемся), но
+  // итоговая сумма распределяется по всем неоплаченным приёмам пациента в порядке
+  // давности через payment_create → _allocate_income, а не только по этому одному —
+  // это тот же механизм, что и у остальной кассы (не дублируем бизнес-логику здесь).
+  const treatmentId = currentCashVisitItemId || [...cashVisitSelectedIds][0];
+  const fd=new FormData();
+  fd.append('patient', currentCashVisitPatientId);
+  fd.append('treatment', treatmentId);
+  fd.append('amount', amount);
+  fd.append('method', document.getElementById('cv-method').value);
+  fd.append('type', 'income');
+  fd.append('channel', 'cashier');
+  const res=await fetch('/finance/payments/create/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(!res.ok || !payload || !payload.ok){
+    err.textContent = (payload && payload.error) || t('w_save_failed');
+    err.classList.remove('hidden');
+    return;
+  }
+  lastAcceptedPaymentId = payload.payment_id;
+  closeModal('m-cash-visit');
+  openModal('m-cash-receipt');
+}
+// renderCashdesk() (base.html, общий скрипт) выполняется РАНЬШЕ этого extra_js-блока
+// и не может звать renderCashTodayRow — она определена только здесь. Дорисовываем сами.
+renderCashTodayRow();
 </script>
 {% endblock %}
