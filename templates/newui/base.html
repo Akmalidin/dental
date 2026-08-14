@@ -201,6 +201,8 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sdf-item-label{font-size:13px;flex:1;min-width:0;overflow-wrap:break-word;}
 .sdf-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid var(--mist-line);}
 .sdf-swatch-empty{background:var(--mist);}
+.sdf-item-hidden{opacity:.45;}
+.sdf-item-hidden .sdf-item-label{text-decoration:line-through;}
 .ms-home-btn{flex-shrink:0;cursor:pointer;opacity:.25;filter:grayscale(1);font-size:14px;}
 .ms-home-btn:hover{opacity:.7;}
 .ms-home-btn.ms-home-active{opacity:1;filter:none;}
@@ -306,11 +308,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .week-table td{padding:8px;vertical-align:top;border:1px solid var(--mist-line);min-width:118px;}
 .week-doc-col{font-size:12px;font-weight:600;white-space:nowrap;background:var(--cloud);}
 .week-doc-col span{display:block;font-size:10.5px;font-weight:400;color:var(--ink-soft);margin-top:2px;}
-.week-appt-chip{background:var(--cobalt-tint);color:var(--cobalt-dark);border-radius:6px;padding:3px 6px;margin-bottom:4px;font-size:10.5px;line-height:1.35;}
+.week-appt-chip{position:relative;background:var(--cobalt-tint);color:var(--cobalt-dark);border-radius:6px;padding:3px 20px 3px 6px;margin-bottom:4px;font-size:10.5px;line-height:1.35;}
 .week-appt-chip b{display:block;font-size:10.5px;}
 .week-appt-chip.amber{background:var(--amber-tint);color:var(--amber);}
 .week-appt-chip.coral{background:var(--coral-tint);color:var(--coral);}
 .week-appt-chip.teal{background:var(--teal-tint);color:var(--teal);}
+/* В недельном виде карточки мелкие и часто открываются с телефона — ⋮ виден
+   всегда (приглушённо), а не только по ховеру, как в дневном виде. */
+.week-appt-chip .sched-appt-menu-btn{opacity:.55;}
+.week-appt-chip .sched-appt-menu-btn:hover{opacity:1;}
 .week-empty{font-size:10.5px;color:var(--ink-faint);}
 
 .month-grid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
@@ -4057,8 +4063,9 @@ function schedDoctorFilterRowsHtml(){
     const swatch = d.color
       ? `<span class="sdf-swatch" style="background:${d.color};"></span>`
       : `<span class="sdf-swatch sdf-swatch-empty"></span>`;
-    return `<label class="sdf-item">${swatch}<span class="sdf-item-label">${d.name}</span>
-      <div class="toggle"><input type="checkbox" ${checked?'checked':''} style="width:auto;" onchange="schedDoctorFilterToggle(${d.id}, this.checked)"></div></label>`;
+    return `<label class="sdf-item${checked?'':' sdf-item-hidden'}">${swatch}<span class="sdf-item-label">${d.name}</span>
+      <div class="toggle"><input type="checkbox" ${checked?'checked':''} style="width:auto;"
+        onchange="this.closest('.sdf-item').classList.toggle('sdf-item-hidden', !this.checked); schedDoctorFilterToggle(${d.id}, this.checked)"></div></label>`;
   }).join('');
 }
 function schedDoctorFilterPanelHtml(){
@@ -4149,7 +4156,7 @@ function buildWeekHTML(){
       const appts=apptsFor(isoDate(dt), d.id);
       html+='<td>';
       if(appts.length===0){ html+='<span class="week-empty">—</span>'; }
-      else appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="openApptInfo(${a.id})"><b>${a.time}</b>${a.patient}</div>`; });
+      else appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
       html+='</td>';
     });
     html+='</tr>';
