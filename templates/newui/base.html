@@ -252,19 +252,28 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    когда доскроллил ровно до центра его группы. */
 .sched-day-group-label span{position:sticky;left:66px;right:6px;display:inline-block;padding:8px 4px;}
 .sched-head-corner{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
-.sched-doc{display:flex;flex-direction:column;align-items:center;gap:6px;}
-.sched-doc .av{width:30px;height:30px;border-radius:9px;background:var(--cobalt-tint);color:var(--cobalt-dark);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
-.sched-doc b{font-size:12.5px;}
-.sched-doc span{font-size:10.5px;color:var(--ink-soft);}
-.sched-time{padding:0 8px;font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;text-align:right;border-top:1px solid var(--mist-line);display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px;height:56px;position:sticky;left:0;background:var(--paper);z-index:2;min-width:60px;}
-.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);height:56px;padding:3px;position:relative;background:var(--doc-tint,transparent);}
+/* Цвет врача (выбирается в карточке сотрудника) — теперь сплошная плашка на
+   всю шапку колонки (как просили: «цвета для сотрудников — выше»), а не
+   тонкая полоска сверху. Текст/аватар красятся инлайн через contrastTextColor
+   (см. buildDayRibbonHTML) под конкретный фон, статикой в CSS это не выразить. */
+.sched-doc{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.sched-doc .av{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.sched-doc b{font-size:13px;}
+.sched-doc span{font-size:10.5px;}
+/* Ячейки крупнее (56px→76px) — имя и время записи должны читаться сразу,
+   без прищуривания. */
+.sched-time{padding:0 8px;font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;text-align:right;border-top:1px solid var(--mist-line);display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px;height:76px;position:sticky;left:0;background:var(--paper);z-index:2;min-width:60px;}
+.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);height:76px;padding:3px;position:relative;background:var(--doc-tint,transparent);}
 .sched-cell-empty{cursor:pointer;}
 .sched-cell-empty:hover{background:var(--cobalt-tint);}
 .sched-cell-empty:hover::after{content:'+ Записать';position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--cobalt-dark);font-weight:600;pointer-events:none;}
 .sched-cell.drop-target{background:var(--cobalt-tint);}
-.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:6px;padding:5px 7px;font-size:10.5px;height:100%;cursor:pointer;position:relative;}
-.sched-appt b{display:block;color:var(--cobalt-dark);font-size:11px;padding-right:14px;}
-.sched-appt span{color:var(--cobalt-dark);opacity:.75;font-size:10px;}
+.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
+/* Имя пациента и время приёма — главное, что должно бросаться в глаза на
+   карточке (жалоба: «имена, время записи должны явно выделяться»). */
+.sched-appt-name{display:block;color:var(--cobalt-dark);font-size:12.5px;font-weight:700;line-height:1.25;padding-right:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sched-appt-time{color:var(--cobalt-dark);font-size:11px;font-weight:600;opacity:.85;white-space:nowrap;}
+.sched-appt-service{color:var(--cobalt-dark);opacity:.6;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sched-appt-menu-btn{position:absolute;top:2px;right:2px;width:16px;height:16px;line-height:14px;text-align:center;border-radius:4px;font-size:12px;font-weight:700;opacity:0;color:inherit;background:rgba(255,255,255,.6);}
 .sched-appt:hover .sched-appt-menu-btn{opacity:1;}
 .sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
@@ -272,11 +281,11 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    левом верхнем углу, сознательно не фон карточки (тот уже занят статусом). */
 .sched-appt-debt-dot{position:absolute;top:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
 .sched-appt.teal{background:var(--teal-tint);border-color:var(--teal);}
-.sched-appt.teal b,.sched-appt.teal span{color:var(--teal);}
+.sched-appt.teal .sched-appt-name,.sched-appt.teal .sched-appt-time,.sched-appt.teal .sched-appt-service{color:var(--teal);}
 .sched-appt.coral{background:var(--coral-tint);border-color:var(--coral);}
-.sched-appt.coral b,.sched-appt.coral span{color:var(--coral);}
+.sched-appt.coral .sched-appt-name,.sched-appt.coral .sched-appt-time,.sched-appt.coral .sched-appt-service{color:var(--coral);}
 .sched-appt.amber{background:var(--amber-tint);border-color:var(--amber);}
-.sched-appt.amber b,.sched-appt.amber span{color:var(--amber);}
+.sched-appt.amber .sched-appt-name,.sched-appt.amber .sched-appt-time,.sched-appt.amber .sched-appt-service{color:var(--amber);}
 
 /* kanban lab */
 .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
@@ -4215,6 +4224,16 @@ function hexToRgba(hex, alpha){
   const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+// Белый или тёмный текст поверх сплошной плашки цвета врача — по
+// перцептивной яркости фона (иначе тёмно-жёлтый/светло-зелёный цвет врача
+// делает белый текст нечитаемым).
+function contrastTextColor(hex){
+  const h=(hex||'').replace('#','');
+  if(!/^[0-9a-fA-F]{6}$/.test(h)) return '#ffffff';
+  const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  const luminance=(0.299*r+0.587*g+0.114*b)/255;
+  return luminance>0.6 ? '#1c2430' : '#ffffff';
+}
 // Первые RIBBON_INITIAL_DAYS дней ленты от якорного (currentDayOffset).
 function ribbonInitialDates(){
   const out=[];
@@ -4225,6 +4244,11 @@ function ribbonInitialDates(){
 // датой сверху, дни идут подряд слева направо в ОДНОЙ CSS grid-сетке (не
 // отдельные подсетки на день) — колонка времени слева и так sticky (.sched-time),
 // поэтому остаётся видна при любом горизонтальном скролле по ленте.
+// Резервная палитра — если врач ещё не выбрал себе цвет в карточке
+// сотрудника, колонка всё равно получает сплошной цвет (по индексу врача,
+// детерминированно), а не остаётся серой — как в референсе, где у каждого
+// врача своя плашка сверху.
+const SCHED_FALLBACK_DOC_COLORS=['#2C4BEA','#0E9C7D','#B8862E','#E85D2D','#7C3AED','#0EA5E9','#DB2777','#65A30D'];
 function buildDayRibbonHTML(){
   if(scheduleRibbonDates.length===0) scheduleRibbonDates=ribbonInitialDates();
   const visibleDocs=visibleScheduleDoctors();
@@ -4240,21 +4264,25 @@ function buildDayRibbonHTML(){
   if(visibleDocs.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</div>`;
   }
+  // Цвет на врача — считаем один раз (по id), используется и в шапке, и в
+  // подсветке ячеек его колонки ниже.
+  const docColorOf={};
+  visibleDocs.forEach((d,idx)=>{ docColorOf[d.id]=d.color || SCHED_FALLBACK_DOC_COLORS[idx % SCHED_FALLBACK_DOC_COLORS.length]; });
   // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
   scheduleRibbonDates.forEach(dateIso=>{
     const d=new Date(dateIso+'T00:00:00');
     html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:span ${n};"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
   });
-  // Шапка врачей — повторяется под каждым днём ленты.
+  // Шапка врачей — повторяется под каждым днём ленты. Сплошная плашка цвета
+  // врача (не тонкая полоска) — цвет из карточки сотрудника виден сразу,
+  // текст/аватар подстраиваются под контраст (contrastTextColor).
   html+='<div class="sched-head sched-head-corner"></div>';
   scheduleRibbonDates.forEach(()=>{
     visibleDocs.forEach(d=>{
-      // Цвет врача (User.color, задаётся в карточке сотрудника) — красим весь его
-      // столбец, не только аватар, чтобы визуально сразу отличать врачей в сетке.
-      const headBg = d.color ? hexToRgba(d.color, .12) : '';
-      const headStyle = d.color ? `style="border-top:3px solid ${d.color};background:${headBg};"` : '';
-      const avStyle = d.color ? `style="background:${d.color};"` : '';
-      html+=`<div class="sched-head" ${headStyle}><div class="sched-doc"><div class="av" ${avStyle}>${d.init}</div><b>${d.name}</b><span>${d.role}</span></div></div>`;
+      const docColor=docColorOf[d.id];
+      const txt=contrastTextColor(docColor);
+      const avBg=txt==='#ffffff' ? 'rgba(255,255,255,.24)' : 'rgba(0,0,0,.12)';
+      html+=`<div class="sched-head" style="background:${docColor};"><div class="sched-doc" style="color:${txt};"><div class="av" style="background:${avBg};color:${txt};">${d.init}</div><b style="color:${txt};">${d.name}</b><span style="color:${txt};opacity:.85;">${d.role}</span></div></div>`;
     });
   });
   const startMin=calSettings.start*60, endMin=calSettings.end*60;
@@ -4263,8 +4291,7 @@ function buildDayRibbonHTML(){
     html+=`<div class="sched-time">${label}</div>`;
     scheduleRibbonDates.forEach(dateIso=>{
       visibleDocs.forEach(d=>{
-        const cellBg = d.color ? hexToRgba(d.color, .07) : null;
-        const cellStyle = cellBg ? `style="--doc-tint:${cellBg};"` : '';
+        const cellStyle=`style="--doc-tint:${hexToRgba(docColorOf[d.id], .08)};"`;
         const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
         if(appt){
           html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
@@ -4274,7 +4301,11 @@ function buildDayRibbonHTML(){
           // чтобы два разных смысла не сливались в один цвет).
           const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
             ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
-          html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
+          // Время конца приёма — из durationMin, чтобы на карточке сразу было
+          // видно «с — до», а не только время начала (жалоба: «время записи
+          // должно явно выделяться»).
+          const endLabel=minutesToTime(Math.min(timeToMinutes(appt.time)+(appt.durationMin||30), 24*60-1));
+          html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name">${appt.patient}</b><span class="sched-appt-time">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service">${appt.service}</span>`:''}</div>`;
           html+='</div>';
         } else {
           html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} title="${label}" onclick="schedCellClick('${dateIso}','${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})"></div>`;
