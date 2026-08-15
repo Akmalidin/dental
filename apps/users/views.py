@@ -858,21 +858,16 @@ def _newui_visits_data(clinic):
           )
           .select_related("patient", "doctor", "service").order_by("-start_at")[:500])
 
-    # Чек печатается по Payment.pk — находим, есть ли у завершённого визита
-    # оплаченный приём (Appointment → Treatment → Payment), чтобы дать кнопку
-    # «Печать чека» в списке визитов, не только на карточке приёма.
+    # Чек приёма (apps.treatments.views.treatment_print) печатается по
+    # Treatment.pk и работает БЕЗ оплаты (QR ведёт на публичную страницу
+    # приёма) — находим приём, привязанный к визиту, чтобы дать кнопку
+    # «Печать чека» в списке визитов не дожидаясь платежа.
     from apps.treatments.models import Treatment
-    from apps.finance.models import Payment
     appt_ids = [a.pk for a in appts]
     latest_treatment_by_appt = {}
     for tr_id, appt_id in (Treatment.objects.filter(appointment_id__in=appt_ids)
                             .order_by("appointment_id", "-created_at").values_list("id", "appointment_id")):
         latest_treatment_by_appt.setdefault(appt_id, tr_id)
-    treatment_ids = list(latest_treatment_by_appt.values())
-    latest_payment_by_treatment = {}
-    for pm_id, tr_id in (Payment.objects.filter(treatment_id__in=treatment_ids)
-                          .order_by("treatment_id", "-created_at").values_list("id", "treatment_id")):
-        latest_payment_by_treatment.setdefault(tr_id, pm_id)
 
     status_label = dict(Appointment.STATUS_CHOICES)
     status_pill = {
@@ -893,7 +888,7 @@ def _newui_visits_data(clinic):
         "status": a.status,
         "statusLabel": status_label.get(a.status, a.status),
         "statusColor": status_pill.get(a.status, "cobalt"),
-        "paymentId": latest_payment_by_treatment.get(latest_treatment_by_appt.get(a.pk)),
+        "treatmentId": latest_treatment_by_appt.get(a.pk),
     } for a in appts]
     today_iso = today.strftime("%Y-%m-%d")
     today_visits = [v for v in visits if v["date"] == today_iso]
@@ -1240,14 +1235,6 @@ def _newui_patientcard_detail_data(patient):
         Treatment.all_objects.filter(patient=patient, is_deleted=False)
         .select_related("doctor").prefetch_related("cures__service").order_by("-created_at")[:100]
     )
-    # Чек печатается по Payment.pk (payment_receipt), не по Treatment — берём
-    # последний платёж, привязанный к приёму (частичная оплата в несколько
-    # платежей — печатаем чек самого свежего из них).
-    latest_payment_id = {}
-    for pm in (Payment.objects.filter(treatment_id__in=[t.pk for t in treatments])
-               .order_by("treatment_id", "-created_at").values("treatment_id", "id")):
-        latest_payment_id.setdefault(pm["treatment_id"], pm["id"])
-
     history = []
     for t in treatments:
         services = ", ".join(c.service.name for c in t.cures.all()) or "—"
@@ -1260,7 +1247,6 @@ def _newui_patientcard_detail_data(patient):
             "status": t.get_status_display(),
             "statusColor": status_pill.get(t.status, "cobalt"),
             "needsConfirmation": t.needs_doctor_confirmation,
-            "paymentId": latest_payment_id.get(t.pk),
         })
 
     plan_status_pill = {"draft": "grey", "approved": "cobalt", "in_progress": "amber", "completed": "teal", "cancelled": "coral"}
