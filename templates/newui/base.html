@@ -263,7 +263,11 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 /* Ячейки крупнее (56px→76px) — имя и время записи должны читаться сразу,
    без прищуривания. */
 .sched-time{padding:0 8px;font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;text-align:right;border-top:1px solid var(--mist-line);display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px;height:76px;position:sticky;left:0;background:var(--paper);z-index:2;min-width:60px;}
-.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);height:76px;padding:3px;position:relative;background:var(--doc-tint,transparent);}
+/* height НЕ фиксируем — ячейка приёма теперь может занимать несколько строк
+   сетки (grid-row: span N, по длительности приёма) и должна растянуться на
+   всю высоту своей области; для обычных (1 строка) ячеек высота и так равна
+   76px за счёт grid-template-rows на самой сетке. */
+.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);padding:3px;position:relative;background:var(--doc-tint,transparent);}
 .sched-cell-empty{cursor:pointer;}
 .sched-cell-empty:hover{background:var(--cobalt-tint);}
 .sched-cell-empty:hover::after{content:'+ Записать';position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--cobalt-dark);font-weight:600;pointer-events:none;}
@@ -4254,10 +4258,19 @@ function buildDayRibbonHTML(){
   const visibleDocs=visibleScheduleDoctors();
   const n=Math.max(visibleDocs.length,1);
   const totalCols=n*scheduleRibbonDates.length;
-  // min-width явно, а не только через minmax() — при 10+ врачах колонки иначе
-  // сжимались бы вместо горизонтального скролла (у .sched-wrap overflow-x:auto).
-  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(150px,1fr));min-width:${60+totalCols*150}px;">`;
-  html+='<div class="sched-head sched-head-corner"></div>';
+  const startMin=calSettings.start*60, endMin=calSettings.end*60;
+  const interval=calSettings.interval;
+  const numSlots=Math.max(Math.ceil((endMin-startMin)/interval), 1);
+  // Явная раскладка по grid-row/grid-column для КАЖДОЙ ячейки (а не порядок
+  // в потоке HTML) — нужна, чтобы карточка записи могла занимать несколько
+  // строк подряд (grid-row: span N) по реальной длительности приёма, как в
+  // референсе (было: каждая запись — ровно один слот высотой, независимо от
+  // длительности, и получасовой слот ПОСЛЕ начала часового приёма рисовался
+  // пустым и кликабельным — можно было записать второго пациента поверх уже
+  // идущего приёма). Строка 1 — подписи дат, строка 2 — шапка врачей, строки
+  // 3..(2+numSlots) — слоты времени.
+  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(150px,1fr));grid-template-rows:auto auto repeat(${numSlots},76px);min-width:${60+totalCols*150}px;">`;
+  html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>';
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
@@ -4269,50 +4282,69 @@ function buildDayRibbonHTML(){
   const docColorOf={};
   visibleDocs.forEach((d,idx)=>{ docColorOf[d.id]=d.color || SCHED_FALLBACK_DOC_COLORS[idx % SCHED_FALLBACK_DOC_COLORS.length]; });
   // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
-  scheduleRibbonDates.forEach(dateIso=>{
+  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
     const d=new Date(dateIso+'T00:00:00');
-    html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:span ${n};"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
+    const colStart=2+dayIdx*n;
+    html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:${colStart} / span ${n};grid-row:1;"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
   });
   // Шапка врачей — повторяется под каждым днём ленты. Сплошная плашка цвета
   // врача (не тонкая полоска) — цвет из карточки сотрудника виден сразу,
   // текст/аватар подстраиваются под контраст (contrastTextColor).
-  html+='<div class="sched-head sched-head-corner"></div>';
-  scheduleRibbonDates.forEach(()=>{
-    visibleDocs.forEach(d=>{
+  html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:2;"></div>';
+  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
+    visibleDocs.forEach((d, docIdx)=>{
+      const col=2+dayIdx*n+docIdx;
       const docColor=docColorOf[d.id];
       const txt=contrastTextColor(docColor);
       const avBg=txt==='#ffffff' ? 'rgba(255,255,255,.24)' : 'rgba(0,0,0,.12)';
-      html+=`<div class="sched-head" style="background:${docColor};"><div class="sched-doc" style="color:${txt};"><div class="av" style="background:${avBg};color:${txt};">${d.init}</div><b style="color:${txt};">${d.name}</b><span style="color:${txt};opacity:.85;">${d.role}</span></div></div>`;
+      html+=`<div class="sched-head" style="grid-column:${col};grid-row:2;background:${docColor};"><div class="sched-doc" style="color:${txt};"><div class="av" style="background:${avBg};color:${txt};">${d.init}</div><b style="color:${txt};">${d.name}</b><span style="color:${txt};opacity:.85;">${d.role}</span></div></div>`;
     });
   });
-  const startMin=calSettings.start*60, endMin=calSettings.end*60;
-  for(let t=startMin; t<endMin; t+=calSettings.interval){
-    const label=minutesToTime(t);
-    html+=`<div class="sched-time">${label}</div>`;
-    scheduleRibbonDates.forEach(dateIso=>{
-      visibleDocs.forEach(d=>{
-        const cellStyle=`style="--doc-tint:${hexToRgba(docColorOf[d.id], .08)};"`;
-        const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
-        if(appt){
-          html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
-          // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
-          // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
-          // для завершённых приёмов — сознательно другой визуальный сигнал,
-          // чтобы два разных смысла не сливались в один цвет).
-          const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
-            ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
-          // Время конца приёма — из durationMin, чтобы на карточке сразу было
-          // видно «с — до», а не только время начала (жалоба: «время записи
-          // должно явно выделяться»).
-          const endLabel=minutesToTime(Math.min(timeToMinutes(appt.time)+(appt.durationMin||30), 24*60-1));
-          html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name">${appt.patient}</b><span class="sched-appt-time">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service">${appt.service}</span>`:''}</div>`;
-          html+='</div>';
-        } else {
-          html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} title="${label}" onclick="schedCellClick('${dateIso}','${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})"></div>`;
-        }
-      });
-    });
+  // Колонка времени слева — по одной ячейке на слот, всегда одна строка высотой.
+  for(let s=0;s<numSlots;s++){
+    html+=`<div class="sched-time" style="grid-column:1;grid-row:${3+s};">${minutesToTime(startMin+s*interval)}</div>`;
   }
+  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
+    visibleDocs.forEach((d, docIdx)=>{
+      const col=2+dayIdx*n+docIdx;
+      const docTint=hexToRgba(docColorOf[d.id], .08);
+      // Раскладываем записи этого врача на этот день по слотам: старт-слот +
+      // сколько слотов занимает (по durationMin, округление вверх, зажато
+      // границами видимого диапазона часов работы). slotCovered отмечает
+      // все занятые слоты — под ними НЕ рисуем пустую кликабельную ячейку.
+      const slotCovered=new Array(numSlots).fill(false);
+      const placements=[];
+      apptsFor(dateIso, d.id).forEach(appt=>{
+        const startSlot=Math.round((timeToMinutes(appt.time)-startMin)/interval);
+        if(startSlot<0 || startSlot>=numSlots) return; // приём вне видимого диапазона часов — не показываем (как и раньше)
+        const span=Math.min(Math.max(Math.ceil((appt.durationMin||interval)/interval), 1), numSlots-startSlot);
+        placements.push({appt, startSlot, span});
+        for(let s=startSlot; s<startSlot+span; s++) slotCovered[s]=true;
+      });
+      placements.forEach(({appt, startSlot, span})=>{
+        const label=minutesToTime(startMin+startSlot*interval);
+        html+=`<div class="sched-cell" style="grid-column:${col};grid-row:${3+startSlot} / span ${span};--doc-tint:${docTint};" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
+        // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
+        // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
+        // для завершённых приёмов — сознательно другой визуальный сигнал,
+        // чтобы два разных смысла не сливались в один цвет).
+        const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
+          ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
+        // Время конца приёма — из durationMin, чтобы на карточке сразу было
+        // видно «с — до», а не только время начала (жалоба: «время записи
+        // должно явно выделяться»); сама карточка теперь ещё и растянута по
+        // высоте на реальную длительность (grid-row span выше).
+        const endLabel=minutesToTime(Math.min(timeToMinutes(appt.time)+(appt.durationMin||interval), 24*60-1));
+        html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name">${appt.patient}</b><span class="sched-appt-time">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service">${appt.service}</span>`:''}</div>`;
+        html+='</div>';
+      });
+      for(let s=0;s<numSlots;s++){
+        if(slotCovered[s]) continue; // слот занят приёмом, начавшимся раньше — не даём кликом «записать» поверх идущего приёма
+        const label=minutesToTime(startMin+s*interval);
+        html+=`<div class="sched-cell sched-cell-empty" style="grid-column:${col};grid-row:${3+s};--doc-tint:${docTint};" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" title="${label}" onclick="schedCellClick('${dateIso}','${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})"></div>`;
+      }
+    });
+  });
   html+='</div>';
   return html;
 }
