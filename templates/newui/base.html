@@ -225,6 +225,11 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sdf-swatch-empty{background:var(--mist);}
 .sdf-item-hidden{opacity:.45;}
 .sdf-item-hidden .sdf-item-label{text-decoration:line-through;}
+.sdf-drag-handle{flex-shrink:0;cursor:grab;color:var(--ink-faint);font-size:14px;line-height:1;user-select:none;}
+.sdf-item:active .sdf-drag-handle{cursor:grabbing;}
+/* Индикатор места вставки при перетаскивании строки врача — верхняя граница
+   ячейки-цели, куда попадёт перетаскиваемый врач при отпускании. */
+.sdf-drop-target{border-top:2px solid var(--cobalt);}
 .ms-home-btn{flex-shrink:0;cursor:pointer;opacity:.25;filter:grayscale(1);font-size:14px;}
 .ms-home-btn:hover{opacity:.7;}
 .ms-home-btn.ms-home-active{opacity:1;filter:none;}
@@ -2753,6 +2758,7 @@ const translations={
   w_sched_all_doctors_hidden: {ru:'Все врачи скрыты фильтром. Нажмите «Показать всех», чтобы вернуть расписание.', ky:'Бардык дарыгерлер чыпка менен жашырылды. Расписаниени кайра көрсөтүү үчүн «Баарын көрсөтүү» баскычын басыңыз.', en:'All doctors are hidden by the filter. Click "Show all" to bring the schedule back.', uz:'Barcha shifokorlar filtr bilan yashirilgan. Jadvalni qaytarish uchun «Barchasini ko\'rsatish» tugmasini bosing.'},
   w_sched_doctor_filter_title: {ru:'Врачи в расписании', ky:'Расписаниедеги дарыгерлер', en:'Doctors in schedule', uz:'Jadvaldagi shifokorlar'},
   w_sched_show_all: {ru:'Показать всех', ky:'Баарын көрсөтүү', en:'Show all', uz:'Barchasini ko\'rsatish'},
+  w_drag_to_reorder: {ru:'Перетащите, чтобы изменить порядок', ky:'Иретин өзгөртүү үчүн сүйрөңүз', en:'Drag to reorder', uz:'Tartibni o\'zgartirish uchun torting'},
   w_sched_doctors: {ru:'Врачи', ky:'Дарыгерлер', en:'Doctors', uz:'Shifokorlar'},
   w_no_actions_available: {ru:'Нет доступных действий', ky:'Жеткиликтүү аракет жок', en:'No actions available', uz:'Mavjud amallar yo\'q'},
   w_no_doctors: {ru:'Нет врачей', ky:'Дарыгер жок', en:'No doctors', uz:'Shifokor yo\'q'},
@@ -4084,8 +4090,39 @@ loadScheduleDoctorFilter();
 function saveScheduleDoctorFilter(){
   try{ localStorage.setItem(SCHED_DOCTOR_FILTER_KEY, JSON.stringify([...hiddenDoctorIds])); }catch(e){}
 }
+// Порядок врачей в сетке — отдельно от фильтра видимости (hiddenDoctorIds
+// выше), но так же чисто локально (localStorage), меняется перетаскиванием
+// строк в панели «Врачи» (schedDoctorFilterRowsHtml). Хранится как массив id
+// в нужном порядке; врачи, ещё не встречавшиеся в сохранённом порядке (новый
+// сотрудник, или первый визит на страницу), дописываются в конец в их
+// естественном серверном порядке — так добавление врача в клинике не
+// «прыгает» на случайное место.
+const SCHED_DOCTOR_ORDER_KEY='newui_sched_doctor_order';
+let scheduleDoctorOrder=[];
+function loadScheduleDoctorOrder(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(SCHED_DOCTOR_ORDER_KEY)||'[]');
+    if(Array.isArray(raw)) scheduleDoctorOrder=raw;
+  }catch(e){ scheduleDoctorOrder=[]; }
+}
+loadScheduleDoctorOrder();
+function saveScheduleDoctorOrder(){
+  try{ localStorage.setItem(SCHED_DOCTOR_ORDER_KEY, JSON.stringify(scheduleDoctorOrder)); }catch(e){}
+}
+function orderedScheduleDoctors(){
+  if(scheduleDoctorOrder.length===0) return scheduleDoctors;
+  const byId={};
+  scheduleDoctors.forEach(d=>{ byId[d.id]=d; });
+  const seen=new Set();
+  const ordered=[];
+  scheduleDoctorOrder.forEach(id=>{
+    if(byId[id] && !seen.has(id)){ ordered.push(byId[id]); seen.add(id); }
+  });
+  scheduleDoctors.forEach(d=>{ if(!seen.has(d.id)) ordered.push(d); });
+  return ordered;
+}
 function visibleScheduleDoctors(){
-  return scheduleDoctors.filter(d=>!hiddenDoctorIds.has(d.id));
+  return orderedScheduleDoctors().filter(d=>!hiddenDoctorIds.has(d.id));
 }
 
 function dateAtOffset(days){
@@ -4534,12 +4571,20 @@ function schedDoctorFilterRowsHtml(){
   if(scheduleDoctors.length===0){
     return `<div style="padding:8px 4px;font-size:12.5px;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
-  return scheduleDoctors.map(d=>{
+  // Порядок строк = orderedScheduleDoctors() — тот же порядок, в котором
+  // врачи идут колонками в сетке расписания; перетаскивание строки здесь
+  // меняет и то, и другое (schedDoctorRowDrop → saveScheduleDoctorOrder + renderSchedule).
+  return orderedScheduleDoctors().map(d=>{
     const checked=!hiddenDoctorIds.has(d.id);
     const swatch = d.color
       ? `<span class="sdf-swatch" style="background:${d.color};"></span>`
       : `<span class="sdf-swatch sdf-swatch-empty"></span>`;
-    return `<label class="sdf-item${checked?'':' sdf-item-hidden'}">${swatch}<span class="sdf-item-label">${d.name}</span>
+    return `<label class="sdf-item${checked?'':' sdf-item-hidden'}" draggable="true" data-doc-id="${d.id}"
+        ondragstart="schedDoctorRowDragStart(event,${d.id})"
+        ondragover="event.preventDefault();this.classList.add('sdf-drop-target')"
+        ondragleave="this.classList.remove('sdf-drop-target')"
+        ondrop="schedDoctorRowDrop(event,${d.id})" ondragend="schedDoctorRowDragEnd()">
+      <span class="sdf-drag-handle" title="${t('w_drag_to_reorder','Перетащите, чтобы изменить порядок')}">⠿</span>${swatch}<span class="sdf-item-label">${d.name}</span>
       <div class="toggle"><input autocomplete="off" type="checkbox" ${checked?'checked':''} style="width:auto;"
         onchange="this.closest('.sdf-item').classList.toggle('sdf-item-hidden', !this.checked); schedDoctorFilterToggle(${d.id}, this.checked)"></div></label>`;
   }).join('');
@@ -4576,6 +4621,37 @@ function schedDoctorFilterShowAll(){
   updateSchedDoctorFilterBadge();
   const list=document.getElementById('schedDoctorFilterList');
   if(list) list.innerHTML=schedDoctorFilterRowsHtml();
+}
+// Перетаскивание строк в панели «Врачи» — меняет порядок колонок врачей в
+// самой сетке расписания (не только порядок в этой панели). Тот же паттерн
+// drag&drop, что и у записей (schedDragStart/schedDrop), но список — строки
+// панели, а не ячейки календаря.
+let schedDoctorDragId=null;
+function schedDoctorRowDragStart(ev, docId){
+  schedDoctorDragId=docId;
+  ev.dataTransfer.effectAllowed='move';
+  ev.dataTransfer.setData('text/plain', String(docId));
+}
+function schedDoctorRowDragEnd(){
+  schedDoctorDragId=null;
+  document.querySelectorAll('#schedDoctorFilterList .sdf-drop-target').forEach(el=>el.classList.remove('sdf-drop-target'));
+}
+function schedDoctorRowDrop(ev, targetDocId){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('sdf-drop-target');
+  const draggedId=schedDoctorDragId;
+  schedDoctorDragId=null;
+  if(!draggedId || draggedId===targetDocId) return;
+  const order=orderedScheduleDoctors().map(d=>d.id);
+  const fromIdx=order.indexOf(draggedId), toIdx=order.indexOf(targetDocId);
+  if(fromIdx<0 || toIdx<0) return;
+  order.splice(fromIdx,1);
+  order.splice(toIdx,0,draggedId);
+  scheduleDoctorOrder=order;
+  saveScheduleDoctorOrder();
+  const list=document.getElementById('schedDoctorFilterList');
+  if(list) list.innerHTML=schedDoctorFilterRowsHtml();
+  renderSchedule();
 }
 function updateSchedDoctorFilterBadge(){
   const badge=document.getElementById('schedDoctorFilterBadge');
