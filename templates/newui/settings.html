@@ -3,14 +3,14 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_settings">Настройки клиники</h1></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты» и напоминания WhatsApp/Telegram ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). Остальные пункты слева (кабинеты, результаты визита, причины отмены, способы оплаты, страховые и т.д.) пока демонстрационные.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram и «Кабинеты и график» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). Остальные пункты слева (результаты визита, причины отмены, способы оплаты, страховые и т.д.) пока демонстрационные.</span></div>
         <div class="settings-grid">
           <div class="settings-nav">
             <div class="grp" data-i18n="w_grp_clinic">Клиника</div>
             <button class="active" id="setNavGeneral" onclick="setSettingsTab('general')" data-i18n="w_general">Общие</button>
             <button id="setNavContacts" onclick="setSettingsTab('contacts')" data-i18n="w_contacts_req">Контакты и реквизиты</button>
             <button id="setNavWa" onclick="setSettingsTab('wa')">WhatsApp / Telegram</button>
-            <button onclick="settingsNotWired()" data-i18n="w_cabinets_sched">Кабинеты и график</button>
+            <button id="setNavCabinets" onclick="setSettingsTab('cabinets')" data-i18n="w_cabinets_sched">Кабинеты и график</button>
             <!-- Только директор/суперадмин (CAN_SET_CLINIC_MENU) — общее меню для всех
                  сотрудников без личной настройки. Открывает тот же редактор, что и
                  «Настроить меню» в сайдбаре, но сохраняет в ClinicSettings.menu_prefs. -->
@@ -107,7 +107,27 @@
               </div>
             </div>
           </div>
+
+          <div id="setPanelCabinets" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_cabinets_sched">Кабинеты и график</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div id="setCabinetsList"></div>
+              <div style="font-weight:600;font-size:13px;margin:22px 0 10px;color:var(--ink);" data-i18n="w_doctor_schedule">График работы врачей</div>
+              <div id="setScheduleList" style="overflow-x:auto;"></div>
+            </div>
+          </div>
           </form>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-doctorSchedule">
+        <div class="modal">
+          <div class="modal-head"><h3 id="dsModalTitle" data-i18n="w_doctor_schedule">График работы врачей</h3><button class="modal-close" onclick="closeModal('m-doctorSchedule')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label data-i18n="w_branch">Филиал</label><select id="ds-branch"></select></div>
+            <div id="ds-days"></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-doctorSchedule')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" type="button" onclick="submitDoctorSchedule()"><span data-i18n="w_save">Сохранить</span></button></div>
         </div>
       </div>
 {% endblock %}
@@ -141,16 +161,139 @@
   document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
 
   window.setSettingsTab = function(tab){
-    ['general','contacts','wa'].forEach(t=>{
+    ['general','contacts','wa','cabinets'].forEach(t=>{
       document.getElementById('setPanel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden', t!==tab);
       document.getElementById('setNav'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
     });
+    // Запоминаем открытую вкладку — после flashAndReload (сохранение
+    // кабинета/графика перезагружает страницу целиком) возвращаемся сюда же,
+    // а не на «Общие» по умолчанию.
+    sessionStorage.setItem('newui_settings_tab', tab);
   };
   // Пункты без реального раздела (пока) — явная обратная связь вместо
   // молчаливого «ничего не произошло» при клике.
   window.settingsNotWired = function(){
     showToast(t('w_settings_not_wired'), 'error');
   };
+
+  // ── Кабинеты и график ──────────────────────────────────────────────────
+  // Своих JSON-эндпоинтов нет — переиспользуем рабочие POST-эндпоинты
+  // старого интерфейса (apps.users.views: cabinet_create/cabinet_delete/
+  // schedule_edit, см. apps/users/staff_urls.py). Они гарантированно
+  // отвечают редиректом при успехе — postForm() это ловит через
+  // res.redirected, как и остальные сохранения на этой странице; сам HTML
+  // редиректа не используется, страницу просто перерисовываем заново
+  // (flashAndReload) свежими данными из _newui_settings_data.
+  // Доступ к добавлению/удалению — тот же круг ролей, что требует и
+  // backend (role_required("superadmin","admin_main")) — CAN_SET_CLINIC_MENU
+  // уже вычислен по этому же правилу в base.html.
+  const CAN_EDIT_CABINETS = CAN_SET_CLINIC_MENU;
+
+  function renderCabinetsList(){
+    const el = document.getElementById('setCabinetsList');
+    const branches = s.branches || [];
+    if(!branches.length){ el.innerHTML = `<p class="hint">${t('w_no_branches')}</p>`; return; }
+    el.innerHTML = branches.map(b => `
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:600;font-size:12.5px;margin-bottom:8px;">${b.name}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          ${b.cabinets.length ? b.cabinets.map(c => `
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;background:${c.color}1a;border:1px solid ${c.color};color:${c.color};">
+              ${c.name}${CAN_EDIT_CABINETS ? `<button type="button" onclick="deleteCabinet(${c.id},'${String(c.name).replace(/'/g,"\\'")}')" style="border:none;background:none;cursor:pointer;color:inherit;font-size:13px;line-height:1;padding:0;">✕</button>` : ''}
+            </span>
+          `).join('') : `<span class="hint">${t('w_no_cabinets_yet')}</span>`}
+        </div>
+        ${CAN_EDIT_CABINETS ? `
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input autocomplete="off" type="text" placeholder="${t('w_cabinet_name_ph')}" id="cab-name-${b.id}" style="max-width:200px;">
+          <input autocomplete="off" type="color" value="#10B981" id="cab-color-${b.id}" style="width:40px;height:34px;padding:2px;">
+          <button class="btn btn-ghost btn-sm" type="button" onclick="addCabinet(${b.id})">+ ${t('w_add')}</button>
+        </div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  window.addCabinet = async function(branchId){
+    const nameEl = document.getElementById('cab-name-'+branchId);
+    const name = nameEl.value.trim();
+    if(!name) return;
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('color', document.getElementById('cab-color-'+branchId).value);
+    const res = await postForm('/users/branches/'+branchId+'/cabinets/add/', fd);
+    if(res.redirected){ flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+
+  window.deleteCabinet = async function(id, name){
+    if(!confirm(t('w_confirm_delete_cabinet').replace('{name}', name))) return;
+    const res = await postForm('/users/cabinets/'+id+'/delete/', new FormData());
+    if(res.redirected){ flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+
+  function renderScheduleList(){
+    const el = document.getElementById('setScheduleList');
+    const rows = s.doctorSchedules || [];
+    if(!rows.length){ el.innerHTML = `<p class="hint">${t('w_no_doctors')}</p>`; return; }
+    el.innerHTML = `<table><thead><tr><th style="text-align:left;">${t('w_doctor')}</th>${s.scheduleDays.map(d=>`<th style="text-align:center;font-size:11px;">${d.label.slice(0,2)}</th>`).join('')}<th></th></tr></thead><tbody>
+      ${rows.map(doc => `<tr>
+        <td style="font-weight:600;">${doc.name}</td>
+        ${doc.days.map(d => d.working ? `<td style="text-align:center;font-size:11px;white-space:nowrap;">${d.start}–${d.end}</td>` : `<td style="text-align:center;color:var(--ink-faint);">—</td>`).join('')}
+        <td style="text-align:right;">${CAN_EDIT_CABINETS ? `<button class="btn btn-ghost btn-sm" type="button" onclick="openDoctorSchedule(${doc.id})">${t('w_edit')}</button>` : ''}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+  }
+
+  let dsEditingDoctorId = null;
+  window.openDoctorSchedule = function(docId){
+    const doc = (s.doctorSchedules||[]).find(d => d.id===docId);
+    if(!doc) return;
+    dsEditingDoctorId = docId;
+    document.getElementById('dsModalTitle').textContent = doc.name;
+    document.getElementById('ds-branch').innerHTML = (s.branches||[]).map(b=>`<option value="${b.id}" ${b.id===doc.branchId?'selected':''}>${b.name}</option>`).join('');
+    document.getElementById('ds-days').innerHTML = doc.days.map(d => `
+      <div class="field-row" style="grid-template-columns:150px 1fr;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
+          <input type="checkbox" id="ds-work-${d.num}" ${d.working?'checked':''} onchange="dsToggleDay(${d.num})">
+          ${s.scheduleDays.find(x=>x.num===d.num).label}
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input autocomplete="off" type="time" id="ds-start-${d.num}" value="${d.start}" ${d.working?'':'disabled'}>
+          <span class="hint">—</span>
+          <input autocomplete="off" type="time" id="ds-end-${d.num}" value="${d.end}" ${d.working?'':'disabled'}>
+        </div>
+      </div>
+    `).join('');
+    openModal('m-doctorSchedule');
+  };
+  window.dsToggleDay = function(num){
+    const on = document.getElementById('ds-work-'+num).checked;
+    document.getElementById('ds-start-'+num).disabled = !on;
+    document.getElementById('ds-end-'+num).disabled = !on;
+  };
+  window.submitDoctorSchedule = async function(){
+    if(dsEditingDoctorId==null) return;
+    const fd = new FormData();
+    fd.append('branch', document.getElementById('ds-branch').value);
+    (s.scheduleDays||[]).forEach(d => {
+      if(document.getElementById('ds-work-'+d.num).checked){
+        fd.append('work_'+d.num, 'on');
+        fd.append('start_'+d.num, document.getElementById('ds-start-'+d.num).value || '09:00');
+        fd.append('end_'+d.num, document.getElementById('ds-end-'+d.num).value || '18:00');
+      }
+    });
+    const res = await postForm('/users/schedule/'+dsEditingDoctorId+'/edit/', fd);
+    if(res.redirected){ closeModal('m-doctorSchedule'); flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+
+  renderCabinetsList();
+  renderScheduleList();
+  const savedSettingsTab = sessionStorage.getItem('newui_settings_tab');
+  if(savedSettingsTab && document.getElementById('setNav'+savedSettingsTab.charAt(0).toUpperCase()+savedSettingsTab.slice(1))){
+    setSettingsTab(savedSettingsTab);
+  }
 
   // Поля формы ClinicSettingsForm без своего контрола в новом интерфейсе —
   // отправляем текущими значениями, чтобы частичное сохранение их не стёрло.

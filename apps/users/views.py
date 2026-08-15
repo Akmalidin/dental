@@ -1015,6 +1015,7 @@ def _newui_settings_data(clinic):
     туда же, что и старый интерфейс (/notifications/wa-connect/, /tg-connect/)."""
     from apps.settings_clinic.models import ClinicSettings
     from apps.users.models import TIMEZONE_CHOICES
+    from .models_salary import DoctorSchedule
 
     cs = ClinicSettings.get()
     return {
@@ -1048,7 +1049,52 @@ def _newui_settings_data(clinic):
         "waRemindDebtDays": cs.wa_remind_debt_days,
         "telegramEnabled": cs.telegram_enabled,
         "telegramBotUsername": cs.telegram_bot_username,
+        # «Кабинеты и график» (вкладка настроек) — реальные данные, сохранение
+        # идёт через уже существующие эндпоинты старого интерфейса
+        # (/users/branches/.../cabinets/add/, /users/cabinets/.../delete/,
+        # /users/schedule/.../edit/ — см. apps.users.views.cabinet_create и
+        # соседние), просто вызываются через fetch() и перерисовывают эту же
+        # страницу (см. postForm/flashAndReload в base.html), а не уводят на
+        # старый интерфейс.
+        "branches": [
+            {
+                "id": b.pk, "name": b.name,
+                "cabinets": [
+                    {"id": c.pk, "name": c.name, "color": c.color}
+                    for c in b.cabinets.filter(is_active=True).order_by("name")
+                ],
+            }
+            for b in Branch.objects.all()
+        ],
+        "scheduleDays": [{"num": num, "label": label} for num, label in DoctorSchedule.DAY_CHOICES],
+        "doctorSchedules": _newui_doctor_schedules(clinic),
     }
+
+
+def _newui_doctor_schedules(clinic):
+    """Врачи клиники + их рабочий график по дням недели, для вкладки
+    «Кабинеты и график» в Настройках нового интерфейса."""
+    from .models import clinic_doctors
+    from .models_salary import DoctorSchedule
+
+    doctors = clinic_doctors(clinic).order_by("name").prefetch_related("schedules")
+    rows = []
+    for doc in doctors:
+        by_day = {s.day_of_week: s for s in doc.schedules.all()}
+        rows.append({
+            "id": doc.pk, "name": doc.name,
+            "branchId": next((s.branch_id for s in by_day.values()), None),
+            "days": [
+                {
+                    "num": num,
+                    "working": num in by_day,
+                    "start": by_day[num].start_time.strftime("%H:%M") if num in by_day else "09:00",
+                    "end": by_day[num].end_time.strftime("%H:%M") if num in by_day else "18:00",
+                }
+                for num, _label in DoctorSchedule.DAY_CHOICES
+            ],
+        })
+    return rows
 
 
 def _newui_funnel_data(clinic):
