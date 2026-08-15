@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_settings">Настройки клиники</h1></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram и «Кабинеты и график» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). Остальные пункты слева (результаты визита, причины отмены, способы оплаты, страховые и т.д.) пока демонстрационные.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника (старый интерфейс) — там же, где и раньше. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.</span></div>
         <div class="settings-grid">
           <div class="settings-nav">
             <div class="grp" data-i18n="w_grp_clinic">Клиника</div>
@@ -17,15 +17,15 @@
             <button id="setNavClinicMenu" class="hidden" onclick="openMenuSettings('clinic')" data-i18n="w_clinic_menu_settings">Меню клиники</button>
             <div class="grp" data-i18n="w_grp_reception">Приём пациентов</div>
             <button onclick="openModal('m-visitresult')" data-i18n="w_visit_results">Результаты визита</button>
-            <button onclick="openModal('m-cancel')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
+            <button id="setNavCancelreasons" onclick="setSettingsTab('cancelreasons')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
             <button onclick="settingsNotWired()" data-i18n="title_m_treatplan_stage_card">Карточка лечения</button>
             <div class="grp" data-i18n="w_grp_money">Деньги</div>
             <button onclick="settingsNotWired()" data-i18n="w_payment_methods">Способы оплаты</button>
             <button onclick="settingsNotWired()" data-i18n="w_deposit_accounts">Депозитные счета</button>
-            <button onclick="openModal('m-insurance')" data-i18n="w_insurance_companies">Страховые компании</button>
+            <button id="setNavInsurance" onclick="setSettingsTab('insurance')" data-i18n="w_insurance_companies">Страховые компании</button>
             <div class="grp" data-i18n="w_grp_system">Система</div>
             <button onclick="settingsNotWired()" data-i18n="w_integrations">Интеграции</button>
-            <button onclick="settingsNotWired()" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)" data-i18n-title="w_access_restriction_hint"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
+            <button onclick="location.href='/users/'" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)" data-i18n-title="w_access_restriction_hint"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
           </div>
 
           <form id="settingsForm" onsubmit="return false;">
@@ -62,14 +62,14 @@
           <div id="setPanelContacts" class="card hidden">
             <div class="card-head"><h3 data-i18n="w_contacts_req">Контакты и реквизиты</h3></div>
             <div class="card-body" style="padding:4px 18px;">
-              <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input autocomplete="off" type="text" id="set-name"></div>
-              <div class="field-row"><label data-i18n="w_phone_label">Телефон</label><input autocomplete="off" type="text" id="set-phone"></div>
-              <div class="field-row"><label data-i18n="w_address_label">Адрес</label><input autocomplete="off" type="text" id="set-address"></div>
+              <div class="field-row"><label data-i18n="w_clinic_name">Название клиники</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-name"></div>
+              <div class="field-row"><label data-i18n="w_phone_label">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-phone"></div>
+              <div class="field-row"><label data-i18n="w_address_label">Адрес</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-address"></div>
               <div class="field-row"><label data-i18n="w_receipt_format">Формат чека</label><select id="set-receipt-format"></select></div>
-              <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input autocomplete="off" type="text" id="set-receipt-name"></div>
-              <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input autocomplete="off" type="text" id="set-receipt-legal"></div>
-              <div class="field-row"><label>ИНН/ИИН</label><input autocomplete="off" type="text" id="set-receipt-inn"></div>
-              <div class="field-row"><label data-i18n="w_receipt_address">Адрес в чеке</label><input autocomplete="off" type="text" id="set-receipt-address"></div>
+              <div class="field-row"><label><span data-i18n="w_receipt_clinic_name">Название клиники в чеке</span><div class="hint" data-i18n="w_if_empty_use_above">Если пусто — используется название выше</div></label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-receipt-name"></div>
+              <div class="field-row"><label data-i18n="w_legal_entity">ИП / юр. лицо</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-receipt-legal"></div>
+              <div class="field-row"><label>ИНН/ИИН</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-receipt-inn"></div>
+              <div class="field-row"><label data-i18n="w_receipt_address">Адрес в чеке</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="set-receipt-address"></div>
               <div class="field-row"><label data-i18n="w_warranty_terms">Условия гарантии (лаб. работы)</label><textarea rows="3" id="set-warranty"></textarea></div>
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
@@ -114,6 +114,20 @@
               <div id="setCabinetsList"></div>
               <div style="font-weight:600;font-size:13px;margin:22px 0 10px;color:var(--ink);" data-i18n="w_doctor_schedule">График работы врачей</div>
               <div id="setScheduleList" style="overflow-x:auto;"></div>
+            </div>
+          </div>
+
+          <div id="setPanelCancelreasons" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_cancel_reasons_settings">Причины отмены</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div id="setCancelReasonsList"></div>
+            </div>
+          </div>
+
+          <div id="setPanelInsurance" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_insurance_companies">Страховые компании</h3></div>
+            <div class="card-body" style="padding:4px 18px;">
+              <div id="setInsuranceList"></div>
             </div>
           </div>
           </form>
@@ -161,7 +175,7 @@
   document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
 
   window.setSettingsTab = function(tab){
-    ['general','contacts','wa','cabinets'].forEach(t=>{
+    ['general','contacts','wa','cabinets','cancelreasons','insurance'].forEach(t=>{
       document.getElementById('setPanel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden', t!==tab);
       document.getElementById('setNav'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
     });
@@ -205,7 +219,7 @@
         </div>
         ${CAN_EDIT_CABINETS ? `
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input autocomplete="off" type="text" placeholder="${t('w_cabinet_name_ph')}" id="cab-name-${b.id}" style="max-width:200px;">
+          <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="${t('w_cabinet_name_ph')}" id="cab-name-${b.id}" style="max-width:200px;">
           <input autocomplete="off" type="color" value="#10B981" id="cab-color-${b.id}" style="width:40px;height:34px;padding:2px;">
           <button class="btn btn-ghost btn-sm" type="button" onclick="addCabinet(${b.id})">+ ${t('w_add')}</button>
         </div>` : ''}
@@ -288,8 +302,51 @@
     else { showToast(t('w_settings_save_failed'), 'error'); }
   };
 
+  // ── Причины отмены / Страховые компании ────────────────────────────────
+  // Оба — плоские именованные справочники с одинаковым общим backend'ом
+  // старого интерфейса (apps.settings_clinic.views: references/reference_add/
+  // reference_delete, /settings/references/<kind>/...) — один и тот же рендер
+  // и одни и те же POST-эндпоинты, просто разный kind и разные данные.
+  function renderRefList(kind, containerId, items){
+    const el = document.getElementById(containerId);
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        ${items.length ? items.map(it => `
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;background:var(--cloud);border:1px solid var(--mist-line);color:var(--ink);">
+            ${it.name}${CAN_EDIT_CABINETS ? `<button type="button" onclick="deleteRefItem('${kind}',${it.id},'${String(it.name).replace(/'/g,"\\'")}')" style="border:none;background:none;cursor:pointer;color:inherit;font-size:13px;line-height:1;padding:0;">✕</button>` : ''}
+          </span>
+        `).join('') : `<span class="hint">${t('w_no_cabinets_yet')}</span>`}
+      </div>
+      ${CAN_EDIT_CABINETS ? `
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" placeholder="${t('w_name')}" id="ref-name-${kind}" style="max-width:220px;">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="addRefItem('${kind}')">+ ${t('w_add')}</button>
+      </div>` : ''}
+    `;
+  }
+
+  window.addRefItem = async function(kind){
+    const nameEl = document.getElementById('ref-name-'+kind);
+    const name = nameEl.value.trim();
+    if(!name) return;
+    const fd = new FormData();
+    fd.append('name', name);
+    const res = await postForm('/settings/references/'+kind+'/add/', fd);
+    if(res.redirected){ flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+
+  window.deleteRefItem = async function(kind, id, name){
+    if(!confirm(t('w_confirm_delete_item').replace('{name}', name))) return;
+    const res = await postForm('/settings/references/'+kind+'/'+id+'/delete/', new FormData());
+    if(res.redirected){ flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+
   renderCabinetsList();
   renderScheduleList();
+  renderRefList('cancel_reasons', 'setCancelReasonsList', s.cancelReasons || []);
+  renderRefList('insurance', 'setInsuranceList', s.insuranceCompanies || []);
   const savedSettingsTab = sessionStorage.getItem('newui_settings_tab');
   if(savedSettingsTab && document.getElementById('setNav'+savedSettingsTab.charAt(0).toUpperCase()+savedSettingsTab.slice(1))){
     setSettingsTab(savedSettingsTab);

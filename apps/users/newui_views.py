@@ -77,6 +77,16 @@ def _shared_options(request, clinic):
 def _render(request, page, template, extra_data=None):
     from apps.tenancy import get_current_clinic
     get_token(request)  # cookie csrftoken для fetch()-запросов из модалок
+    # Запоминаем «пользователь сейчас на новом интерфейсе» — чтобы при следующем
+    # входе login_view сразу вёл в /new/, а не на старый дашборд (см.
+    # User.use_new_interface). update() вместо save() — не гонять историю/сигналы
+    # ради одного поля на каждой странице, и пишем только если значение меняется.
+    if not request.user.use_new_interface:
+        from .models import User
+        # request.user — SimpleLazyObject (type() вернул бы сам враппер, не модель),
+        # поэтому используем импортированный User напрямую.
+        User.objects.filter(pk=request.user.pk).update(use_new_interface=True)
+        request.user.use_new_interface = True
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     real_data = _shared_options(request, clinic)
     real_data.update(extra_data or {})
@@ -359,3 +369,15 @@ def newui_menu_prefs_save(request):
         request.user.menu_prefs = prefs
         request.user.save(update_fields=["menu_prefs"])
     return JsonResponse({"ok": True})
+
+
+@login_required
+def newui_use_old_interface(request):
+    """Ссылка «Старый интерфейс» в сайдбаре — явный выбор пользователя вернуться
+    к старому UI, поэтому здесь (в отличие от _render выше) снимаем флажок
+    use_new_interface, чтобы следующий вход снова вёл на старый дашборд."""
+    if request.user.use_new_interface:
+        from .models import User
+        User.objects.filter(pk=request.user.pk).update(use_new_interface=False)
+    from django.shortcuts import redirect
+    return redirect("/")

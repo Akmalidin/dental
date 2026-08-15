@@ -1068,7 +1068,21 @@ def _newui_settings_data(clinic):
         ],
         "scheduleDays": [{"num": num, "label": label} for num, label in DoctorSchedule.DAY_CHOICES],
         "doctorSchedules": _newui_doctor_schedules(clinic),
+        # «Причины отмены» и «Страховые компании» — тоже реальные справочники
+        # (apps.appointments.models.CancellationReason, apps.patients.models_insurance.
+        # InsuranceCompany), уже управляемые в старом интерфейсе через общий
+        # /settings/references/<kind>/... (apps.settings_clinic.views.reference_add/
+        # reference_delete) — переиспользуем те же эндпоинты, просто с плоским
+        # списком «имя» вместо всей карточки старого интерфейса.
+        "cancelReasons": _newui_reference_list("cancel_reasons"),
+        "insuranceCompanies": _newui_reference_list("insurance"),
     }
+
+
+def _newui_reference_list(kind):
+    from apps.settings_clinic.views import _ref_models
+    Model, _label, _icon = _ref_models()[kind]
+    return [{"id": obj.pk, "name": str(obj)} for obj in Model.objects.all()]
 
 
 def _newui_doctor_schedules(clinic):
@@ -2146,12 +2160,17 @@ def google_calendar_disconnect(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect("/")
+        return redirect("/new/" if request.user.use_new_interface else "/")
     form = LoginForm(request=request, data=request.POST or None)
     if request.method == "POST" and form.is_valid():
         user = form.get_user()
         login(request, user)
-        next_url = request.GET.get("next", "/")
+        # Помним, каким интерфейсом пользователь пользовался в прошлый раз
+        # (User.use_new_interface — переключается заходом на /new/* или
+        # ссылкой «Старый интерфейс», см. apps.users.newui_views), чтобы не
+        # приходилось при каждом входе заново нажимать «Новый интерфейс».
+        default_next = "/new/" if user.use_new_interface else "/"
+        next_url = request.GET.get("next") or default_next
         return redirect(next_url)
 
     # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники

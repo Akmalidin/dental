@@ -131,7 +131,7 @@
             <div class="card-body">
               <div id="aiChatMessages" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;margin-bottom:12px;padding-right:4px;"></div>
               <div style="display:flex;gap:8px;">
-                <input autocomplete="off" type="text" id="aiChatInput" placeholder="Например: где мы теряем деньги?" data-i18n-placeholder="w_ai_input_placeholder" onkeydown="if(event.key==='Enter')sendAIQuestion();">
+                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="aiChatInput" placeholder="Например: где мы теряем деньги?" data-i18n-placeholder="w_ai_input_placeholder" onkeydown="if(event.key==='Enter')sendAIQuestion();">
                 <button class="btn btn-cobalt" onclick="sendAIQuestion()" data-i18n="w_ask">Спросить</button>
               </div>
               <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">

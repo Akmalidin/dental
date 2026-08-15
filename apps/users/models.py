@@ -265,6 +265,12 @@ class User(AbstractUser):
         null=True, blank=True, verbose_name="Стаж (лет)")
     show_on_site = models.BooleanField(default=True, verbose_name="Показывать на сайте")
     is_active = models.BooleanField(default=True)
+    # Какой интерфейс открывать после входа — запоминаем последний, которым
+    # пользователь реально пользовался (переключается сам: заход на любую
+    # страницу /new/* включает, ссылка «Старый интерфейс» в сайдбаре нового
+    # выключает — см. apps.users.newui_views._render и newui_use_old_interface),
+    # чтобы не приходилось каждый раз при входе заново нажимать «Новый интерфейс».
+    use_new_interface = models.BooleanField(default=False, verbose_name="Использует новый интерфейс")
 
     USERNAME_FIELD = "login"
     REQUIRED_FIELDS = ["email", "name"]

@@ -655,7 +655,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div><b>{{ request.user.name|truncatechars:18 }}</b><span>{{ request.user.role }}</span></div>
     </div>
 
-    <a href="/" class="nav-item" style="margin-top:6px;">
+    <a href="/new/use-old-interface/" class="nav-item" style="margin-top:6px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       <span>Старый интерфейс</span>
     </a>
@@ -683,7 +683,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <span>Пациент</span>
           <button type="button" class="link-btn" style="font-weight:600;" onclick="openNewPatient(true)">+ Добавить пациента</button>
         </label>
-        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
+        <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" readonly oninput="apptPatientSearch(this.value)" onfocus="this.removeAttribute('readonly');apptPatientSearch(this.value)">
         <input autocomplete="off" type="hidden" id="appt-patient-id">
         <div id="appt-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
@@ -746,11 +746,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-body">
       <div id="patientModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input autocomplete="off" type="text" id="np-first" placeholder="Толгонай"></div>
-        <div class="form-group"><label data-i18n="w_lastname">Фамилия</label><input autocomplete="off" type="text" id="np-last" placeholder="Молдалиева"></div>
+        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="np-first" placeholder="Толгонай"></div>
+        <div class="form-group"><label data-i18n="w_lastname">Фамилия</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="np-last" placeholder="Молдалиева"></div>
       </div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input autocomplete="off" type="tel" id="np-phone" placeholder="+996 ___ __ __ __"></div>
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="tel" id="np-phone" placeholder="+996 ___ __ __ __"></div>
         <div class="form-group"><label data-i18n="w_birthdate">Дата рождения</label><input autocomplete="off" type="date" id="np-birthdate"></div>
       </div>
       <div class="form-row2">
@@ -770,16 +770,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-body">
       <div id="patientEditError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input autocomplete="off" type="text" id="pe-first" placeholder="Толгонай"></div>
-        <div class="form-group"><label data-i18n="w_lastname">Фамилия</label><input autocomplete="off" type="text" id="pe-last" placeholder="Молдалиева"></div>
+        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="pe-first" placeholder="Толгонай"></div>
+        <div class="form-group"><label data-i18n="w_lastname">Фамилия</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="pe-last" placeholder="Молдалиева"></div>
       </div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input autocomplete="off" type="tel" id="pe-phone" placeholder="+996 ___ __ __ __"></div>
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="tel" id="pe-phone" placeholder="+996 ___ __ __ __"></div>
         <div class="form-group"><label data-i18n="w_birthdate">Дата рождения</label><input autocomplete="off" type="date" id="pe-birthdate"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_gender">Пол</label><select id="pe-gender"><option value="">—</option><option value="female">Женский</option><option value="male">Мужской</option></select></div>
-        <div class="form-group"><label data-i18n="w_address">Адрес</label><input autocomplete="off" type="text" id="pe-address" placeholder="г. Бишкек, ул. …"></div>
+        <div class="form-group"><label data-i18n="w_address">Адрес</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="pe-address" placeholder="г. Бишкек, ул. …"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_source">Источник</label><select id="pe-source"></select></div>
@@ -796,8 +796,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_blacklist">Добавить в чёрный список</h3><button class="modal-close" onclick="closeModal('m-blacklist-add')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input autocomplete="off" type="text" id="bl-name" placeholder="ФИО пациента"></div>
-      <div class="form-group"><label data-i18n="w_phone">Телефон</label><input autocomplete="off" type="tel" id="bl-phone" placeholder="+996 ___ __ __ __"></div>
+      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="bl-name" placeholder="ФИО пациента"></div>
+      <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="tel" id="bl-phone" placeholder="+996 ___ __ __ __"></div>
       <div class="form-group"><label data-i18n="w_reason">Причина</label>
         <select id="bl-reason-select" onchange="if(this.value)document.getElementById('bl-reason').value=this.value;">
           <option value="">— выбрать типовую причину —</option>
@@ -848,9 +848,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-head"><h3 id="svcModalTitle">Новая услуга</h3><button class="modal-close" onclick="closeModal('m-service')">✕</button></div>
     <div class="modal-body">
       <div id="svcModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
-      <div class="form-group"><label data-i18n="w_service_name">Название услуги</label><input autocomplete="off" type="text" id="svc-name" placeholder="Например, Пломбирование (композит)"></div>
+      <div class="form-group"><label data-i18n="w_service_name">Название услуги</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="svc-name" placeholder="Например, Пломбирование (композит)"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_code">Код</label><input autocomplete="off" type="text" id="svc-code" placeholder="T-014"></div>
+        <div class="form-group"><label data-i18n="w_code">Код</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="svc-code" placeholder="T-014"></div>
         <div class="form-group"><label data-i18n="w_category">Категория</label><select id="svc-category"></select></div>
       </div>
       <div class="form-group"><label><span data-i18n="w_price">Цена</span>, <span id="svcPriceCurLabel">сом</span></label><input autocomplete="off" type="number" id="svc-price" placeholder="0"></div>
@@ -878,7 +878,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-body">
       <div class="form-group" style="position:relative;">
         <label data-i18n="w_add_service">Добавить услугу</label>
-        <input type="text" id="svcCalcSearch" placeholder="Поиск по названию…" data-i18n-placeholder="w_service_name" autocomplete="off" oninput="svcCalcSearch(this.value)" onfocus="svcCalcSearch(this.value)">
+        <input type="text" id="svcCalcSearch" placeholder="Поиск по названию…" data-i18n-placeholder="w_service_name" autocomplete="off" readonly oninput="svcCalcSearch(this.value)" onfocus="this.removeAttribute('readonly');svcCalcSearch(this.value)">
         <div id="svcCalcSuggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
       <table>
@@ -914,8 +914,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-body">
       <div id="leadModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input autocomplete="off" type="text" id="lead-name" placeholder="Азизбекова М."></div>
-        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input autocomplete="off" type="text" id="lead-phone" placeholder="+996 555 22 11 09"></div>
+        <div class="form-group"><label data-i18n="w_firstname">Имя</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="lead-name" placeholder="Азизбекова М."></div>
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="lead-phone" placeholder="+996 555 22 11 09"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_source">Источник</label><select id="lead-source"></select></div>
@@ -994,7 +994,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_insurance">Страховая компания</h3><button class="modal-close" onclick="closeModal('m-insurance')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_name">Название</label><input autocomplete="off" type="text" placeholder="АО «Кыргызстан Иншуранс»"></div>
+      <div class="form-group"><label data-i18n="w_name">Название</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="АО «Кыргызстан Иншуранс»"></div>
       <div class="form-group"><label data-i18n="w_pricelist">Прайс-лист</label><select><option>— выбрать —</option><option>Базовый прайс</option><option>VIP прайс</option></select></div>
       <div class="form-group"><label data-i18n="w_sort_order">Порядок отображения</label><input autocomplete="off" type="number" value="1"></div>
       <div class="form-group toggle"><input autocomplete="off" type="checkbox" checked><span style="font-size:13px;margin-left:2px">Опубликовано</span></div>
@@ -1008,10 +1008,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_laborder">Заказ лаборатории</h3><button class="modal-close" onclick="closeModal('m-labOrder')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input autocomplete="off" type="text" placeholder="Поиск пациента" data-i18n-placeholder="w_search_patient"></div>
+      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="Поиск пациента" data-i18n-placeholder="w_search_patient"></div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_work_type">Тип работы</label><select><option>Коронка</option><option>Протез</option><option>Винир</option><option>Мостовидный протез</option></select></div>
-        <div class="form-group"><label data-i18n="w_tooth_plural">Зуб(ы)</label><input autocomplete="off" type="text" placeholder="26"></div>
+        <div class="form-group"><label data-i18n="w_tooth_plural">Зуб(ы)</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="26"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_material">Материал</label><select><option>Керамика</option><option>Диоксид циркония</option><option>Металлокерамика</option><option>e.max</option></select></div>
@@ -1032,8 +1032,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-head"><h3 data-i18n="title_m_calsettings">Настройки календаря</h3><button class="modal-close" onclick="closeModal('m-calsettings')">✕</button></div>
     <div class="modal-body">
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_day_start">Начало дня</label><input autocomplete="off" type="text" id="cs-start" value="09:00"></div>
-        <div class="form-group"><label data-i18n="w_day_end">Конец дня</label><input autocomplete="off" type="text" id="cs-end" value="18:00"></div>
+        <div class="form-group"><label data-i18n="w_day_start">Начало дня</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="cs-start" value="09:00"></div>
+        <div class="form-group"><label data-i18n="w_day_end">Конец дня</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="cs-end" value="18:00"></div>
       </div>
       <div class="form-group"><label data-i18n="w_grid_step">Шаг сетки</label>
         <select id="cs-interval">
@@ -1103,7 +1103,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div id="templatesList" style="margin-bottom:16px;"></div>
       <div style="border-top:1px solid var(--mist-line);padding-top:16px;">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Новый шаблон</label>
-        <div class="form-group"><input autocomplete="off" type="text" id="tpl-title" placeholder="Название шаблона"></div>
+        <div class="form-group"><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tpl-title" placeholder="Название шаблона"></div>
         <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
         <button class="btn btn-cobalt btn-sm" onclick="addTemplate()">+ Добавить шаблон</button>
       </div>
@@ -1124,8 +1124,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div style="border-top:1px solid var(--mist-line);margin-top:16px;padding-top:16px;">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Своё состояние</label>
         <div class="form-row2">
-          <input autocomplete="off" type="text" id="ts-custom-name" placeholder="Название">
-          <input autocomplete="off" type="text" id="ts-custom-color" placeholder="#RRGGBB, необязательно">
+          <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="ts-custom-name" placeholder="Название">
+          <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="ts-custom-color" placeholder="#RRGGBB, необязательно">
         </div>
       </div>
     </div>
@@ -1138,11 +1138,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_condition_edit">Редактирование состояния</h3><button class="modal-close" onclick="closeModal('m-condition-edit')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_name">Название</label><input autocomplete="off" type="text" id="ce-name" placeholder="Название"></div>
+      <div class="form-group"><label data-i18n="w_name">Название</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="ce-name" placeholder="Название"></div>
       <div class="form-group"><label data-i18n="w_color">Цвет</label>
         <div style="display:flex;gap:10px;align-items:center;">
           <input autocomplete="off" type="color" id="ce-color-picker" style="width:44px;height:38px;border:none;border-radius:8px;padding:0;cursor:pointer;" oninput="document.getElementById('ce-color-hex').value=this.value.toUpperCase()">
-          <input autocomplete="off" type="text" id="ce-color-hex" placeholder="#RRGGBB" style="flex:1;" oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value)) document.getElementById('ce-color-picker').value=this.value">
+          <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="ce-color-hex" placeholder="#RRGGBB" style="flex:1;" oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value)) document.getElementById('ce-color-picker').value=this.value">
         </div>
       </div>
     </div>
@@ -1157,16 +1157,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-body">
       <div id="staffModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_fullname">ФИО</label><input autocomplete="off" type="text" id="staff-name" placeholder="Асанов Бекзат"></div>
-        <div class="form-group"><label data-i18n="w_login">Логин</label><input autocomplete="off" type="text" id="staff-login" placeholder="bekzat"></div>
+        <div class="form-group"><label data-i18n="w_fullname">ФИО</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="staff-name" placeholder="Асанов Бекзат"></div>
+        <div class="form-group"><label data-i18n="w_login">Логин</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="staff-login" placeholder="bekzat"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_role">Роль</label><select id="staff-role"></select></div>
         <div class="form-group"><label data-i18n="w_role2">Доп. роль<div class="hint" data-i18n="w_role2_hint">Необязательно — сотруднику можно назначить вторую роль</div></label><select id="staff-role2"></select></div>
       </div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input autocomplete="off" type="tel" id="staff-phone" placeholder="+996 ___ __ __ __"></div>
-        <div class="form-group"><label data-i18n="w_email">Email</label><input autocomplete="off" type="text" id="staff-email" placeholder="doctor@odontis.kg"></div>
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="tel" id="staff-phone" placeholder="+996 ___ __ __ __"></div>
+        <div class="form-group"><label data-i18n="w_email">Email</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="staff-email" placeholder="doctor@odontis.kg"></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label id="staff-password-label">Пароль</label><input autocomplete="off" type="password" id="staff-password" placeholder=""></div>
@@ -1186,7 +1186,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-head"><h3 data-i18n="title_m_role">Новая роль</h3><button class="modal-close" onclick="closeModal('m-role')">✕</button></div>
     <div class="modal-body">
       <div id="roleModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
-      <div class="form-group"><label data-i18n="w_role_name">Название роли</label><input autocomplete="off" type="text" id="role-name" placeholder="Например, «Ассистент врача»"></div>
+      <div class="form-group"><label data-i18n="w_role_name">Название роли</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="role-name" placeholder="Например, «Ассистент врача»"></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-role')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitNewRole()">Создать роль</button></div>
   </div>
@@ -1198,7 +1198,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-head"><h3>Роль · <span id="rd-title"></span></h3><button class="modal-close" onclick="closeModal('m-roleDetail')">✕</button></div>
     <div class="modal-body">
       <div id="roleDetailError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
-      <div class="form-group"><label data-i18n="w_role_name">Название роли</label><input autocomplete="off" type="text" id="rd-name"></div>
+      <div class="form-group"><label data-i18n="w_role_name">Название роли</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="rd-name"></div>
       <div class="form-group"><label data-i18n="w_permissions">Права доступа</label><div id="rd-perms" style="border:1px solid var(--mist);border-radius:10px;overflow:hidden;margin-top:6px;"></div></div>
       <div class="form-group"><label id="rd-staff-label">Сотрудники с этой ролью</label><div id="rd-staff-list"></div></div>
     </div>
@@ -1217,9 +1217,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_treatplan_stage">Этап плана лечения</h3><button class="modal-close" onclick="closeModal('m-treatplan')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_stage_name">Название этапа</label><input autocomplete="off" type="text" placeholder="Установка коронки"></div>
+      <div class="form-group"><label data-i18n="w_stage_name">Название этапа</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="Установка коронки"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_tooth">Зуб</label><input autocomplete="off" type="text" placeholder="26"></div>
+        <div class="form-group"><label data-i18n="w_tooth">Зуб</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="26"></div>
         <div class="form-group"><label data-i18n="w_doctor">Врач</label><select><option>Асанов Б.</option><option>Нурбекова С.</option></select></div>
       </div>
       <div class="form-row2">
@@ -2924,6 +2924,7 @@ const translations={
   w_cabinet_name_ph: {ru:'Название кабинета', ky:'Кабинеттин аталышы', en:'Cabinet name', uz:'Kabinet nomi'},
   w_confirm_delete_cabinet: {ru:'Удалить кабинет «{name}»?', ky:'«{name}» кабинетин өчүрөсүзбү?', en:'Delete cabinet "{name}"?', uz:'"{name}" kabinetini o‘chirasizmi?'},
   w_no_branches: {ru:'Филиалов пока нет', ky:'Азырынча филиалдар жок', en:'No branches yet', uz:'Hozircha filiallar yo‘q'},
+  w_confirm_delete_item: {ru:'Удалить «{name}»?', ky:'«{name}» өчүрүлсүнбү?', en:'Delete "{name}"?', uz:'"{name}" o‘chirilsinmi?'},
   w_ai_input_placeholder: {ru:'Например: где мы теряем деньги?', ky:'Мисалы: акчаны кайда жоготуп жатабыз?', en:'E.g.: where are we losing money?', uz:'Masalan: qayerda pul yo‘qotyapmiz?'},
   w_ai_preset_revenue: {ru:'Как выручка?', ky:'Түшүм кандай?', en:'How’s revenue?', uz:'Daromad qanday?'},
   w_ai_preset_doctors: {ru:'Кого догрузить?', ky:'Кимди көбүрөөк жүктөө керек?', en:'Who has spare capacity?', uz:'Kimni ko‘proq band qilish kerak?'},
@@ -3056,7 +3057,7 @@ const translations={
   w_click_tooth_hint: {ru:'Нажмите на зуб, чтобы указать его состояние', ky:'Абалын көрсөтүү үчүн тишти басыңыз', en:'Click a tooth to set its condition', uz:'Holatini belgilash uchun tishni bosing'},
   w_current_tooth_states: {ru:'Текущие состояния зубов', ky:'Тиштердин учурдагы абалы', en:'Current tooth states', uz:'Tishlarning joriy holati'},
   w_patient_not_found: {ru:'Пациент не найден.', ky:'Бейтап табылган жок.', en:'Patient not found.', uz:'Bemor topilmadi.'},
-  w_settings_hint: {ru:'«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram и «Кабинеты и график» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). Остальные пункты слева (результаты визита, причины отмены, способы оплаты, страховые и т.д.) пока демонстрационные.', ky:'Төмөндөгү «Жалпы», «Байланыш жана реквизиттер», WhatsApp/Telegram эскертүүлөрү жана «Кабинеттер жана график» — клиниканын реалдуу жөндөөлөрү (эски интерфейс менен бирдей backend). Сол жактагы калган пункттар (визит натыйжалары, жокко чыгаруу себептери, төлөм ыкмалары, камсыздандыруу ж.б.) азырынча демонстрациялык.', en:'"General", "Contacts & details", the WhatsApp/Telegram reminders and "Cabinets & schedule" below are real clinic settings (same backend as the old interface). The other items on the left (visit results, cancellation reasons, payment methods, insurers, etc.) are still demo-only.', uz:'Quyidagi "Umumiy", "Kontaktlar va rekvizitlar", WhatsApp/Telegram eslatmalari va "Kabinetlar va jadval" — klinikaning haqiqiy sozlamalari (eski interfeys bilan bir xil backend). Chapdagi qolgan bandlar (tashrif natijalari, bekor qilish sabablari, to\'lov usullari, sug\'urta va h.k.) hali namoyish uchun.'},
+  w_settings_hint: {ru:'«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника (старый интерфейс) — там же, где и раньше. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.', ky:'Төмөндөгү «Жалпы», «Байланыш жана реквизиттер», WhatsApp/Telegram эскертүүлөрү, «Кабинеттер жана график», «Жокко чыгаруу себептери» жана «Камсыздандыруу компаниялары» — клиниканын реалдуу жөндөөлөрү (эски интерфейс менен бирдей backend). «Кирүү чектөө» кызматкердин картасына алып барат (эски интерфейс). Сол жактагы калган пункттар (визит натыйжалары, дарылоо картасы, төлөм ыкмалары, депозиттик эсептер, интеграциялар) азырынча демонстрациялык.', en:'"General", "Contacts & details", the WhatsApp/Telegram reminders, "Cabinets & schedule", "Cancellation reasons" and "Insurers" below are real clinic settings (same backend as the old interface). "Access restriction" opens the employee card (old interface) — same place as before. The other items on the left (visit results, treatment card, payment methods, deposit accounts, integrations) are still demo-only.', uz:'Quyidagi "Umumiy", "Kontaktlar va rekvizitlar", WhatsApp/Telegram eslatmalari, "Kabinetlar va jadval", "Bekor qilish sabablari" va "Sug\'urta kompaniyalari" — klinikaning haqiqiy sozlamalari (eski interfeys bilan bir xil backend). "Kirishni cheklash" xodim kartasiga olib boradi (eski interfeys). Chapdagi qolgan bandlar (tashrif natijalari, davolash kartasi, to\'lov usullari, depozit hisoblari, integratsiyalar) hali namoyish uchun.'},
   w_grp_clinic: {ru:'Клиника', ky:'Клиника', en:'Clinic', uz:'Klinika'},
   w_general: {ru:'Общие', ky:'Жалпы', en:'General', uz:'Umumiy'},
   w_contacts_req: {ru:'Контакты и реквизиты', ky:'Байланыш жана реквизиттер', en:'Contacts & details', uz:'Kontaktlar va rekvizitlar'},
