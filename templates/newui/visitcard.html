@@ -129,7 +129,10 @@
         <div id="vcPanelXray" class="hidden">
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_images_attachments">Снимки и вложения</h3>
-              <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload_image">Загрузить снимок</span><input autocomplete="off" type="file" id="vwFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="vwUploadFiles(this.files)"></label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="vwFileKind" style="width:auto;"></select>
+                <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload_image">Загрузить снимок</span><input autocomplete="off" type="file" id="vwFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="vwUploadFiles(this.files)"></label>
+              </div>
             </div>
             <div class="card-body" id="vwFilesBody">
               <div style="text-align:center;padding:30px;color:var(--ink-soft);"><span data-i18n="w_no_images_yet">Пока нет загруженных снимков</span></div>
@@ -536,9 +539,15 @@
       <a class="btn btn-ghost btn-sm" href="${f.url}" target="_blank">${t('w_open_file','Открыть')}</a></div>`).join('');
   }
   vwRenderFiles(vw.files);
+  // Тип снимка выбирается ДО загрузки (до/после/рентген и т.д. — полный
+  // список категорий уже есть на бэкенде, TreatmentFile.KIND_CHOICES) —
+  // применяется ко всем файлам, выбранным в одном заходе.
+  const fileKindSel=document.getElementById('vwFileKind');
+  fileKindSel.innerHTML = (vw.fileKinds||[]).map(k=>`<option value="${k.code}" ${k.code==='intraoral'?'selected':''}>${k.label}</option>`).join('');
   window.vwUploadFiles = async function(fileList){
     if(!fileList || fileList.length===0) return;
     const fd=new FormData();
+    fd.append('kind', fileKindSel.value);
     for(const f of fileList) fd.append('files', f);
     const res = await postForm('/treatments/visit/'+vw.treatmentId+'/upload/', fd);
     if(res.ok){
