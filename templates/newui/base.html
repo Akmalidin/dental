@@ -3505,6 +3505,8 @@ function renderVisits(){
     } else if(['arrived','in_progress'].includes(v.status)){
       action=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/visit/start/?appointment=${v.id}'">${t('w_continue_visit_btn')}</button>
         <button class="btn btn-ghost btn-sm" onclick="visitSetStatus(${v.id},'completed')">${t('w_finish_verb')}</button>`;
+    } else if(v.status==='completed' && v.paymentId){
+      action=`<button class="btn btn-ghost btn-sm" onclick="printReceipt(${v.paymentId})">🖨 ${t('w_print_receipt')}</button>`;
     }
     return `<tr class="clickable" onclick="location.href='/new/patients/${v.patientId||''}/'">
       <td class="mono">${v.dateLabel||v.date||''}</td><td class="mono">${v.time}</td><td>${v.patient}</td><td>${v.doctor}</td><td>${v.service}</td>

@@ -851,12 +851,28 @@ def _newui_visits_data(clinic):
 
     doctor_ids = list(clinic_doctors(clinic).values_list("pk", flat=True)) if clinic else []
     today = timezone.localdate()
-    qs = (Appointment.objects.filter(
+    appts = list(Appointment.objects.filter(
               doctor_id__in=doctor_ids,
               start_at__date__gte=today - timedelta(days=30),
               start_at__date__lte=today + timedelta(days=30),
           )
           .select_related("patient", "doctor", "service").order_by("-start_at")[:500])
+
+    # Чек печатается по Payment.pk — находим, есть ли у завершённого визита
+    # оплаченный приём (Appointment → Treatment → Payment), чтобы дать кнопку
+    # «Печать чека» в списке визитов, не только на карточке приёма.
+    from apps.treatments.models import Treatment
+    from apps.finance.models import Payment
+    appt_ids = [a.pk for a in appts]
+    latest_treatment_by_appt = {}
+    for tr_id, appt_id in (Treatment.objects.filter(appointment_id__in=appt_ids)
+                            .order_by("appointment_id", "-created_at").values_list("id", "appointment_id")):
+        latest_treatment_by_appt.setdefault(appt_id, tr_id)
+    treatment_ids = list(latest_treatment_by_appt.values())
+    latest_payment_by_treatment = {}
+    for pm_id, tr_id in (Payment.objects.filter(treatment_id__in=treatment_ids)
+                          .order_by("treatment_id", "-created_at").values_list("id", "treatment_id")):
+        latest_payment_by_treatment.setdefault(tr_id, pm_id)
 
     status_label = dict(Appointment.STATUS_CHOICES)
     status_pill = {
@@ -877,7 +893,8 @@ def _newui_visits_data(clinic):
         "status": a.status,
         "statusLabel": status_label.get(a.status, a.status),
         "statusColor": status_pill.get(a.status, "cobalt"),
-    } for a in qs]
+        "paymentId": latest_payment_by_treatment.get(latest_treatment_by_appt.get(a.pk)),
+    } for a in appts]
     today_iso = today.strftime("%Y-%m-%d")
     today_visits = [v for v in visits if v["date"] == today_iso]
 
