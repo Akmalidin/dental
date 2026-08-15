@@ -153,6 +153,21 @@ def newui_schedule(request):
 
 
 @login_required
+def newui_schedule_data_json(request):
+    """AJAX: те же данные расписания, что и на /new/schedule/ (_newui_schedule_data) —
+    для страниц, которым эти данные нужны лишь ситуативно (напр. кнопка
+    «Новая запись» на карточке пациента подбирает реально свободное время у
+    врача — см. openNewApptForCurrentPatient/findNextFreeSlot в base.html).
+    Грузить полное расписание на каждый заход на такие страницы (карту
+    пациента открывают на порядок чаще календаря) было бы расточительно —
+    подгружаем по требованию и кэшируем на клиенте на время сессии страницы."""
+    from django.http import JsonResponse
+    from apps.tenancy import get_current_clinic
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    return JsonResponse(_newui_schedule_data(clinic))
+
+
+@login_required
 def newui_services(request):
     return _render(request, "services", "services.html", {"servicesData": _newui_services_data()})
 

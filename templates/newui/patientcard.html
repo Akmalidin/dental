@@ -64,7 +64,10 @@
           <div class="card" style="margin-bottom:14px;">
             <div class="card-head">
               <h3 data-i18n="w_tooth_formula">Зубная формула</h3>
-              <span style="font-size:11px;color:var(--ink-soft)">Обновлено 28.07.2026</span>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:11px;color:var(--ink-soft)">Обновлено 28.07.2026</span>
+                <button class="btn btn-cobalt btn-sm" onclick="openNewApptForCurrentPatient(event)">+ <span data-i18n="w_new_appt">Новая запись</span></button>
+              </div>
             </div>
             <div class="card-body">
               <div style="display:flex;gap:8px;margin-bottom:16px;">

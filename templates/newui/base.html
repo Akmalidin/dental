@@ -255,7 +255,12 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    горизонтальном скролле (но не вылезает за её границы — не пересекается с
    соседним днём) — чтобы всегда было видно, какой это день, а не только
    когда доскроллил ровно до центра его группы. */
-.sched-day-group-label span{position:sticky;left:66px;right:6px;display:inline-block;padding:8px 4px;}
+.sched-day-group-label span{position:sticky;left:66px;right:6px;display:inline-block;padding:8px 4px;border-radius:6px;transition:background-color .15s,color .15s;}
+/* День, сейчас находящийся в фокусе прокрутки ленты (см. updateVisibleDayLabelFromScroll) —
+   единственная подсветка на всю ленту одновременно, чтобы всегда было
+   однозначно видно, какой день сейчас смотрит пользователь. */
+.sched-day-group-label.sched-day-group-current{background:var(--cobalt-tint);}
+.sched-day-group-label.sched-day-group-current span{background:var(--cobalt);color:#fff;}
 .sched-head-corner{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
 /* Цвет врача (выбирается в карточке сотрудника) — теперь сплошная плашка на
    всю шапку колонки (как просили: «цвета для сотрудников — выше»), а не
@@ -683,13 +688,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div id="appt-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor"></select></div>
+        <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
         <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service"></select></div>
       </div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date"></div>
-        <div class="form-group"><label data-i18n="w_time">Время</label><input autocomplete="off" type="time" id="appt-time" lang="ru"></div>
+        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
+        <div class="form-group"><label data-i18n="w_time">Время</label><input autocomplete="off" type="time" id="appt-time" lang="ru" onchange="updateApptAvailabilityHint()"></div>
       </div>
+      <!-- Живая подсказка о занятости выбранного слота у выбранного врача —
+           см. updateApptAvailabilityHint()/schedSlotFree(). Пересчитывается
+           при смене врача/даты/времени; при открытии из «Новая запись» на
+           карточке пациента (openNewApptForCurrentPatient) слот уже подобран
+           автоматически — ближайший свободный от «сейчас», см. findNextFreeSlot(). -->
+      <div id="apptAvailabilityHint" class="hidden" style="font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;"></div>
       <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-appt')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="apptModalSaveBtn" onclick="submitNewAppt()">Создать запись</button></div>
@@ -2735,6 +2746,10 @@ const translations={
   w_cs_highlight_debt: {ru:'Подсвечивать пациентов с долгом', ky:'Карызы бар бейтаптарды белгилөө', en:'Highlight patients with debt', uz:'Qarzi bor bemorlarni ajratib ko\'rsatish'},
   w_cs_column_width: {ru:'Ширина колонки врача', ky:'Дарыгер тилкесинин туурасы', en:'Doctor column width', uz:'Shifokor ustunining kengligi'},
   w_offer_start_visit_now: {ru:'Пациент отмечен как пришедший. Начать приём сейчас?', ky:'Бейтап келди деп белгиленди. Кабыл алууну азыр баштайсызбы?', en:'Patient marked as arrived. Start the visit now?', uz:'Bemor keldi deb belgilandi. Qabulni hozir boshlaysizmi?'},
+  w_start_visit_after_create: {ru:'Запись создана. Начать приём сейчас?', ky:'Жазуу түзүлдү. Кабыл алууну азыр баштайсызбы?', en:'Appointment created. Start the visit now?', uz:'Yozuv yaratildi. Qabulni hozir boshlaysizmi?'},
+  w_appt_slot_free: {ru:'Время свободно — запись будет создана успешно.', ky:'Убакыт бош — жазуу ийгиликтүү түзүлөт.', en:'Time is free — the appointment will be created successfully.', uz:'Vaqt bo\'sh — yozuv muvaffaqiyatli yaratiladi.'},
+  w_appt_slot_busy: {ru:'Это время у врача занято.', ky:'Бул убакытта дарыгер бош эмес.', en:'This time is already booked for this doctor.', uz:'Bu vaqtda shifokor band.'},
+  w_appt_slot_suggest: {ru:'Ближайшее свободное — ', ky:'Эң жакын бош убакыт — ', en:'Nearest free slot — ', uz:'Eng yaqin bo\'sh vaqt — '},
   title_m_templates: {ru:'Шаблоны сообщений', ky:'Билдирүү үлгүлөрү', en:'Message templates', uz:'Xabar shablonlari'},
   title_m_condition_edit: {ru:'Редактирование состояния', ky:'Абалды түзөтүү', en:'Edit condition', uz:'Holatni tahrirlash'},
   title_m_role: {ru:'Новая роль', ky:'Жаңы роль', en:'New role', uz:'Yangi rol'},
@@ -4355,6 +4370,11 @@ function updateVisibleDayLabelFromScroll(){
   if(!iso) return;
   const d=new Date(iso+'T00:00:00');
   label.textContent=formatDMY(d)+', '+weekdayFullName(d);
+  // Подсвечиваем в самой ленте ровно ту группу дня, что сейчас «под»
+  // подписью сверху — иначе при прокрутке ленты не видно, какой из дней в
+  // ней сейчас в фокусе (все подписи выглядели одинаково). Снимаем класс со
+  // всех, кроме найденной — на всю ленту одновременно активен только один день.
+  groups.forEach(g=>{ g.classList.toggle('sched-day-group-current', g===current); });
 }
 
 // Кнопка «Сегодня» — возвращает ленту на текущую дату (currentDayOffset=0),
@@ -4372,7 +4392,16 @@ function goToScheduleToday(){
   }
   changeDay(delta);
 }
+// Пока идёт слайд-переход (см. ниже), повторные клики по ‹ › игнорируем —
+// раньше при быстром многократном клике новый переход стартовал поверх ещё
+// не доигравшего предыдущего (сброс --sched-slide и повторный setTimeout
+// друг на друга), из-за чего дата визуально «дёргалась»: текущий день не
+// успевал доехать до своего места, а следующий уже начинал ехать поверх
+// него. Теперь один переход всегда доигрывает до конца, прежде чем можно
+// начать следующий.
+let schedDayTransitionBusy=false;
 function changeDay(delta){
+  if(schedDayTransitionBusy) return;
   currentDayOffset+=delta;
   if(calView!=='day'){
     calView='day';
@@ -4387,6 +4416,7 @@ function changeDay(delta){
   scheduleRibbonDates=[];
   const c=document.getElementById('scheduleContent');
   if(!c){ renderSchedule(); return; }
+  schedDayTransitionBusy=true;
   // Плавный переход: текущая лента уезжает целиком в сторону пролистывания
   // (вперёд — влево, назад — вправо, то же направление, в котором и так
   // жали стрелку), новая лента (уже с нового якоря) въезжает с
@@ -4400,7 +4430,14 @@ function changeDay(delta){
     c.style.setProperty('--sched-slide', delta>0 ? '100%' : '-100%');
     void c.offsetWidth; // reflow — зафиксировать стартовую позицию новой ленты без анимации
     c.classList.remove('sched-day-notransition');
-    requestAnimationFrame(()=>{ c.style.setProperty('--sched-slide','0%'); });
+    requestAnimationFrame(()=>{
+      c.style.setProperty('--sched-slide','0%');
+      // Разрешаем следующий переход только когда этот действительно доехал
+      // (длительность transition — .2s, см. #scheduleContent в CSS) — небольшой
+      // запас (60мс) на случай просевшего кадра, не влияет на воспринимаемую
+      // отзывчивость (пользователь всё равно смотрит на анимацию 200мс).
+      setTimeout(()=>{ schedDayTransitionBusy=false; }, 260);
+    });
   }, 200);
 }
 
@@ -4426,7 +4463,14 @@ function renderSchedule(){
   const c=document.getElementById('scheduleContent');
   if(!c) return;
   c.classList.toggle('sched-wrap-month', calView==='month');
-  if(calView==='day'){ updateDayDateLabel(); c.innerHTML = buildDayRibbonHTML(); }
+  if(calView==='day'){
+    updateDayDateLabel();
+    c.innerHTML = buildDayRibbonHTML();
+    // Подсветить якорный (первый) день сразу, не дожидаясь скролла —
+    // иначе после каждой перерисовки (смена дня/фильтра врачей) лента на
+    // мгновение оставалась без активной подсветки.
+    updateVisibleDayLabelFromScroll();
+  }
   else if(calView==='week') c.innerHTML = buildWeekHTML();
   else c.innerHTML = buildMonthHTML();
   attachScheduleScrollWatcher();
@@ -4986,7 +5030,130 @@ function openNewAppt(prefill){
   if(prefill && prefill.docId!==undefined && prefill.docId!==null){
     document.getElementById('appt-doctor').value=String(prefill.docId);
   }
+  if(prefill && prefill.patientId){
+    document.getElementById('appt-patient-search').value=prefill.patientName||'';
+    document.getElementById('appt-patient-id').value=prefill.patientId;
+  }
   openModal('m-appt');
+  // Открываем модалку сразу (не ждём сеть) — подсказка о занятости слота
+  // просто появится чуть позже, как только (и если) данные расписания
+  // подгрузятся: на самой странице /new/schedule/ они уже есть мгновенно,
+  // на остальных страницах (карта пациента, дашборд, визиты) — см.
+  // ensureScheduleDataLoaded() ниже.
+  document.getElementById('apptAvailabilityHint').classList.add('hidden');
+  ensureScheduleDataLoaded().then(updateApptAvailabilityHint);
+}
+// Страница расписания уже приходит с полными данными приёмов
+// (scheduleRealData, см. loadRealStaffData). Остальные страницы, где есть
+// «+ Новая запись» (карта пациента, дашборд, визиты), их не грузят — иначе
+// самая частая страница приложения (карта пациента) тяжелела бы ради
+// функции, которой не всегда пользуются. Подгружаем по требованию и кэшируем
+// на время жизни страницы (повторные клики уже не ходят на сервер).
+let scheduleDataLoadPromise=null;
+function ensureScheduleDataLoaded(){
+  if(scheduleRealData && scheduleRealData.appointments) return Promise.resolve();
+  if(scheduleDataLoadPromise) return scheduleDataLoadPromise;
+  scheduleDataLoadPromise=fetch('/new/schedule/data/', {credentials:'same-origin'})
+    .then(r=>r.json())
+    .then(data=>{
+      scheduleRealData=data;
+      rebuildApptsByDateDoc();
+      if(!scheduleDoctors.length) scheduleDoctors=data.doctors||[];
+    })
+    .catch(()=>{ scheduleDataLoadPromise=null; });
+  return scheduleDataLoadPromise;
+}
+/* ---- Живая проверка занятости слота в модалке «Новая запись» ----
+   Использует уже загруженные на клиенте приёмы (apptsFor/apptsByDateDoc, то
+   же окно ±30 дней, что и сама сетка расписания) — без похода на сервер,
+   мгновенно при каждой смене врача/даты/времени. Финальную защиту от
+   двойной записи всё равно делает бэкенд (appointment_create_quick) — это
+   только подсказка, не блокировка отправки формы. */
+function schedSlotFree(dateIso, docId, timeLabel, durationMin){
+  const dur=durationMin||calSettings.interval;
+  const startMin=timeToMinutes(timeLabel), endMin=startMin+dur;
+  return !apptsFor(dateIso, Number(docId)).some(a=>{
+    const aStart=timeToMinutes(a.time), aEnd=aStart+(a.durationMin||calSettings.interval);
+    return startMin<aEnd && aStart<endMin;
+  });
+}
+// Ближайший свободный слот у врача, начиная с текущего момента (сегодня, от
+// «сейчас», округлённого вверх до шага сетки; если сегодня уже не влезает в
+// рабочие часы или всё занято — следующие дни, до RIBBON_MAX_DAYS вперёд,
+// то же окно, в котором вообще загружены приёмы).
+function findNextFreeSlot(docId, durationMin){
+  const dur=durationMin||calSettings.interval;
+  const interval=calSettings.interval;
+  const startBoundMin=calSettings.start*60, endBoundMin=calSettings.end*60;
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const idealMin=Math.min(Math.max(Math.ceil(nowMin/interval)*interval, startBoundMin), Math.max(startBoundMin, endBoundMin-dur));
+  for(let dayOffset=0; dayOffset<=RIBBON_MAX_DAYS; dayOffset++){
+    const d=new Date(now); d.setDate(d.getDate()+dayOffset);
+    const dateIso=isoDate(d);
+    const dayStartMin = dayOffset===0 ? idealMin : startBoundMin;
+    for(let t=dayStartMin; t+dur<=endBoundMin; t+=interval){
+      const timeLabel=minutesToTime(t);
+      if(schedSlotFree(dateIso, docId, timeLabel, dur)){
+        return {date:dateIso, time:timeLabel, isNow: dayOffset===0 && t===idealMin};
+      }
+    }
+  }
+  // Не нашли вообще ничего свободного в пределах загруженного окна (маловероятно) —
+  // возвращаем «идеальное» время как есть, пусть проверят и подправят сами.
+  return {date:isoDate(now), time:minutesToTime(idealMin), isNow:false, notFound:true};
+}
+function updateApptAvailabilityHint(){
+  const hint=document.getElementById('apptAvailabilityHint');
+  if(!hint) return;
+  const docId=document.getElementById('appt-doctor').value;
+  const dateIso=document.getElementById('appt-date').value;
+  const timeLabel=document.getElementById('appt-time').value;
+  if(!docId || !dateIso || !timeLabel){ hint.classList.add('hidden'); return; }
+  const free=schedSlotFree(dateIso, docId, timeLabel);
+  if(free){
+    hint.className='';
+    hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--teal-tint);color:var(--teal);';
+    hint.textContent='✓ '+t('w_appt_slot_free','Время свободно — запись будет создана успешно.');
+  } else {
+    const suggestion=findNextFreeSlot(docId);
+    hint.className='';
+    hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--amber-tint);color:var(--amber);';
+    const suggDate=new Date(suggestion.date+'T00:00:00');
+    const sameDay=suggestion.date===dateIso;
+    const suggLabel=sameDay ? suggestion.time : formatDMY(suggDate)+', '+suggestion.time;
+    hint.innerHTML=`⚠ ${t('w_appt_slot_busy','Это время у врача занято.')} <a href="#" style="font-weight:600;color:inherit;text-decoration:underline;" onclick="event.preventDefault();apptApplySuggestedSlot('${suggestion.date}','${suggestion.time}')">${t('w_appt_slot_suggest','Ближайшее свободное — ')}${suggLabel}</a>`;
+  }
+  hint.classList.remove('hidden');
+}
+function apptApplySuggestedSlot(dateIso, timeLabel){
+  document.getElementById('appt-date').value=dateIso;
+  document.getElementById('appt-time').value=timeLabel;
+  updateApptAvailabilityHint();
+}
+// «+ Новая запись» на вкладке «Зубная формула» карты пациента — тот же
+// m-appt, что и везде, но врач и дата/время подобраны заранее: врач —
+// основной лечащий (p.doctorId), время — ближайшее свободное у него начиная
+// с текущего момента (см. findNextFreeSlot). Хинт сразу объясняет, что это
+// «сейчас» (свободно) или уже перенесённое на другое время/день.
+async function openNewApptForCurrentPatient(ev){
+  const p=patientsList.find(x=>x.id===currentPatientCardId);
+  if(!p) return;
+  // Нужно дождаться данных расписания (на карте пациента их нет по
+  // умолчанию, см. ensureScheduleDataLoaded) ДО подбора времени — иначе
+  // findNextFreeSlot ничего не будет знать о занятых слотах и всегда
+  // предложит «сейчас», даже если у врача уже кто-то есть.
+  const btn=ev && ev.currentTarget;
+  if(btn) btn.disabled=true;
+  try{
+    await ensureScheduleDataLoaded();
+    const docId=p.doctorId || (scheduleDoctors[0] && scheduleDoctors[0].id) || (doctorOptions[0] && doctorOptions[0].id);
+    if(!docId){ showToast(t('w_no_doctors_clinic'), 'error'); return; }
+    const suggestion=findNextFreeSlot(docId);
+    openNewAppt({docId, date:suggestion.date, time:suggestion.time, patientId:p.id, patientName:p.fullName});
+  } finally {
+    if(btn) btn.disabled=false;
+  }
 }
 function schedCellClick(dateIso, time, docId){
   openNewAppt({time, docId, date: dateIso});
@@ -5047,6 +5214,15 @@ async function submitNewAppt(){
     const data=await res.json();
     if(res.ok && data.ok){
       closeModal('m-appt');
+      // Запись на сегодня — предлагаем сразу перейти к приёму (актуально для
+      // «Новая запись» с карточки пациента: подобрали ближайшее свободное
+      // время и тут же начинают приём, без похода обратно в календарь).
+      // Проверяем ДО локального обновления сетки/перезагрузки — при
+      // подтверждении просто уходим на страницу приёма, остальное не нужно.
+      if(date===isoDate(new Date()) && confirm(t('w_start_visit_after_create','Запись создана. Начать приём сейчас?'))){
+        location.href='/new/visit/start/?appointment='+data.id;
+        return;
+      }
       // Без полной перезагрузки страницы (location.reload() заново гоняет весь
       // Django-рендер + ±30-дневную выборку приёмов — заметная задержка на
       // календаре с большим числом записей). Собираем запись из уже известных
