@@ -1220,6 +1220,7 @@ def _newui_patientcard_detail_data(patient):
     apps.patients.views.patient_detail (apps/patients/views.py:393+), просто
     сериализованы в JSON вместо серверного рендера в шаблон."""
     from decimal import Decimal
+    from django.db.models import Q
     from django.utils import timezone
     from apps.finance.models import Payment
     from apps.treatments.models import Treatment, TreatmentFile
@@ -1293,12 +1294,16 @@ def _newui_patientcard_detail_data(patient):
             tooth_gum_conditions[f"{prefix}-{gc.tooth_number}"] = gc.status.code
 
     kind_labels = dict(TreatmentFile.KIND_CHOICES)
+    # Файлы приёмов (treatment__patient=patient) + загруженные напрямую из
+    # вкладки «Документы» карты пациента, вне контекста конкретного визита
+    # (patient=patient, treatment пуст — см. apps.patients.views.patient_file_upload).
     documents = [{
+        "id": f.pk,
         "name": f.name,
         "kind": kind_labels.get(f.kind, f.kind),
         "url": f.file.url,
         "date": timezone.localtime(f.uploaded_at).strftime("%d.%m.%Y"),
-    } for f in (TreatmentFile.objects.filter(treatment__patient=patient)
+    } for f in (TreatmentFile.objects.filter(Q(treatment__patient=patient) | Q(patient=patient))
                 .select_related("treatment").order_by("-uploaded_at")[:100])]
 
     return {
@@ -1310,6 +1315,7 @@ def _newui_patientcard_detail_data(patient):
         "toothSurfaceConditions": tooth_surface_conditions,
         "toothGumConditions": tooth_gum_conditions,
         "documents": documents,
+        "fileKinds": [{"code": k, "label": lbl} for k, lbl in TreatmentFile.KIND_CHOICES],
     }
 
 

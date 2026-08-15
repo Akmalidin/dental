@@ -213,7 +213,12 @@ class TreatmentCure(models.Model):
 
 
 class TreatmentFile(models.Model):
-    """X-rays, documents, and other files attached to a treatment."""
+    """X-rays, documents, and other files attached to a treatment — or,
+    when uploaded directly from the patient card's «Документы» tab (not tied
+    to any specific visit), attached straight to the patient instead.
+    Ровно одно из (treatment, patient) должно быть заполнено — это
+    проверяется в view при создании, не на уровне БД (оба поля nullable,
+    чтобы не плодить отдельную модель под, по сути, тот же набор полей)."""
 
     KIND_CHOICES = [
         ("intraoral", "Прицельный снимок"),
@@ -228,7 +233,13 @@ class TreatmentFile(models.Model):
         ("other", "Другое"),
     ]
 
-    treatment = models.ForeignKey(Treatment, on_delete=models.CASCADE, related_name="files")
+    treatment = models.ForeignKey(
+        Treatment, on_delete=models.CASCADE, related_name="files", null=True, blank=True,
+    )
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="files", null=True, blank=True,
+        verbose_name="Пациент",
+    )
     file = models.FileField(upload_to="treatments/%Y/%m/")
     tooth_number = models.IntegerField(null=True, blank=True, verbose_name="Зуб (FDI)")
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="intraoral", verbose_name="Тип")

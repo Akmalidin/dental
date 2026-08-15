@@ -646,6 +646,41 @@ def patient_notify(request, pk):
 
 
 @login_required
+@require_POST
+def patient_file_upload(request, pk):
+    """Загрузка документов/снимков прямо из вкладки «Документы» карты
+    пациента — вне контекста конкретного приёма (в отличие от
+    apps.treatments.views_visit.visit_file_upload, который требует treatment).
+    Тот же TreatmentFile, но с patient вместо treatment (оба поля nullable —
+    см. миграцию 0022 в apps/treatments)."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from apps.treatments.models import TreatmentFile
+    patient = get_object_or_404(Patient, pk=pk)
+    files = request.FILES.getlist("files") or request.FILES.getlist("file")
+    if not files:
+        return JsonResponse({"error": "Файл не выбран", "error_key": "visit_no_file"}, status=400)
+    if len(files) > 10:
+        return JsonResponse({"error": "Максимум 10 файлов за раз", "error_key": "visit_max_10_files"}, status=400)
+    valid_kinds = {k for k, _ in TreatmentFile.KIND_CHOICES}
+    kind = request.POST.get("kind") or "document"
+    if kind not in valid_kinds:
+        kind = "document"
+    created = []
+    for f in files:
+        obj = TreatmentFile.objects.create(
+            patient=patient, file=f, kind=kind, name=f.name, uploaded_by=request.user,
+        )
+        created.append({
+            "name": obj.name,
+            "kind": obj.get_kind_display(),
+            "url": obj.file.url,
+            "date": timezone.localtime(obj.uploaded_at).strftime("%d.%m.%Y"),
+        })
+    return JsonResponse({"files": created})
+
+
+@login_required
 def patient_wa_messages(request, pk):
     """JSON сообщений чата. ?after=<id> (как шлёт старый интерфейс,
     patients/notify.html, всегда с явным id — даже 0) — новые сообщения для

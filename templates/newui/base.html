@@ -2813,7 +2813,7 @@ const translations={
   w_no_payments_yet: {ru:'Платежей пока не было', ky:'Төлөмдөр азырынча болгон эмес', en:'No payments yet', uz:'Hozircha to‘lovlar bo‘lmagan'},
   w_total_paid: {ru:'Всего оплачено', ky:'Бардыгы төлөндү', en:'Total paid', uz:'Jami to‘langan'},
   w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
-  w_docs_upload_old_ui_hint: {ru:'Загрузка снимков/документов — в старом интерфейсе, на карточке приёма', ky:'Сүрөттөрдү/документтерди жүктөө — эски интерфейсте, кабылдоо картасында', en:'Uploading images/documents is available in the old interface, on the visit card', uz:'Rasm/hujjat yuklash — eski interfeysda, qabul kartasida'},
+  w_docs_upload_old_ui_hint: {ru:'Договор, согласие на лечение, снимки — нажмите «Загрузить» выше', ky:'Келишим, дарылоого макулдук, сүрөттөр — жогорудагы «Жүктөө» баскычын басыңыз', en:'Contract, treatment consent, images — click «Upload» above', uz:'Shartnoma, davolashga rozilik, rasmlar — yuqoridagi «Yuklash» tugmasini bosing'},
   w_add_stage: {ru:'Добавить этап', ky:'Этап кошуу', en:'Add stage', uz:'Bosqich qo‘shish'},
   w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
   w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
@@ -5096,11 +5096,23 @@ function docFileIcon(ext){
 // с переключением, как в старом интерфейсе (templates/base.html #lightbox);
 // файлы, которые нельзя показать инлайн (PDF/документы) — просто открываются
 // в новой вкладке по клику, в слайдер не попадают.
+// Кнопка «Загрузить» + выбор категории (до/после/рентген и т.д. — тот же
+// TreatmentFile.KIND_CHOICES, что и на карточке приёма, см. vwFileKind в
+// visitcard.html) — здесь файл цепляется прямо к пациенту (patient=), а не к
+// конкретному приёму, см. apps.patients.views.patient_file_upload.
+function pcDocsUploadControlsHtml(kinds){
+  const opts=(kinds&&kinds.length?kinds:[{code:'document',label:'Документ'}]);
+  return `<div style="display:flex;gap:8px;align-items:center;">
+    <select id="pcFileKind" style="width:auto;">${opts.map(k=>`<option value="${k.code}" ${k.code==='document'?'selected':''}>${k.label}</option>`).join('')}</select>
+    <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload">Загрузить</span><input autocomplete="off" type="file" id="pcFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="pcUploadFiles(this.files)"></label>
+  </div>`;
+}
 function renderPatientCardDocs(d){
   const el=document.getElementById('pcPanelDocs');
   const docs=d.documents || [];
+  const uploadControls=pcDocsUploadControlsHtml(d.fileKinds);
   if(docs.length===0){
-    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
+    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${uploadControls}</div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
     return;
   }
   const media=docs.map(f=>{
@@ -5110,7 +5122,7 @@ function renderPatientCardDocs(d){
   // Индексы для лайтбокса считаются ТОЛЬКО по фото/видео (файлы вроде PDF в
   // слайдер не входят — у них своя логика открытия в новой вкладке).
   const lbList=media.filter(f=>f.isImage||f.isVideo);
-  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3></div>
+  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${uploadControls}</div>
     <div class="card-body"><div class="docs-grid">${media.map(f=>{
       const lbIdx=lbList.indexOf(f);
       const onclick = lbIdx>=0 ? `openDocLightbox(${lbIdx})` : `window.open('${f.url}','_blank')`;
@@ -5121,6 +5133,23 @@ function renderPatientCardDocs(d){
       return `<div class="doc-item" onclick="${onclick}"><div class="doc-tile">${tile}</div><div class="doc-name" title="${f.name}">${f.name}</div></div>`;
     }).join('')}</div></div>`;
   window.patientCardLightboxItems=lbList;
+}
+async function pcUploadFiles(fileList){
+  if(!fileList || fileList.length===0 || !currentPatientCardId) return;
+  const kindSel=document.getElementById('pcFileKind');
+  const fd=new FormData();
+  fd.append('kind', kindSel ? kindSel.value : 'document');
+  for(const f of fileList) fd.append('files', f);
+  const res=await postForm(`/patients/${currentPatientCardId}/upload-file/`, fd);
+  if(res.ok){
+    const data=await res.json();
+    if(!patientCardDetail) patientCardDetail={history:[],plans:[],payments:[],totalPaid:0,toothConditions:{},documents:[],fileKinds:[]};
+    patientCardDetail.documents=(data.files||[]).concat(patientCardDetail.documents||[]);
+    renderPatientCardDocs(patientCardDetail);
+    showToast(t('w_file_uploaded'));
+  } else {
+    showToast(t('w_file_upload_failed'), 'error');
+  }
 }
 let lbItems=[], lbIdx=0;
 function lbShow(){
@@ -5199,13 +5228,12 @@ function openPatientCard(id){
   balPill.textContent=Math.round(p.balance).toLocaleString('ru-RU')+' '+CUR_SYM;
   balPill.className='pill '+(p.balance<0?'coral':'teal');
 
-  const detail=patientCardDetail || {history:[], plans:[], payments:[], totalPaid:0, toothConditions:{}, documents:[]};
+  const detail=patientCardDetail || {history:[], plans:[], payments:[], totalPaid:0, toothConditions:{}, documents:[], fileKinds:[]};
   renderPatientCardTeeth(detail);
   renderPatientCardHistory(detail);
   renderPatientCardPlan(detail);
   renderPatientCardFinance(detail);
   renderPatientCardDocs(detail);
-  document.getElementById('pcNotWired').classList.add('hidden');
 
   pcTab('info');
 }

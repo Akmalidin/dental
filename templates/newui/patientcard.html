@@ -8,7 +8,6 @@
         </div>
       </div>
       <div class="page">
-        <div id="pcNotWired" class="hidden" style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_upload_not_avail">Загрузка новых документов/снимков из этого раздела пока недоступна — для этого используйте старый интерфейс.</span></div>
         <div class="patient-header">
           <div class="patient-id">
             <div class="patient-avatar" id="pc-avatar">МТ</div>
@@ -145,14 +144,8 @@
           </div>
         </div>
 
-        <!-- ---- ДОКУМЕНТЫ ---- -->
-        <div id="pcPanelDocs" class="hidden card">
-          <div class="card-head"><h3 data-i18n="w_documents">Документы</h3><button class="btn btn-cobalt btn-sm">+ <span data-i18n="w_upload">Загрузить</span></button></div>
-          <div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);">
-            <div style="font-size:13px;" data-i18n="w_no_docs_uploaded">Пока нет загруженных документов</div>
-            <div style="font-size:11.5px;margin-top:4px;" data-i18n="w_docs_dnd_hint">Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»</div>
-          </div>
-        </div>
+        <!-- ---- ДОКУМЕНТЫ ---- (содержимое всегда перерисовывается renderPatientCardDocs) -->
+        <div id="pcPanelDocs" class="hidden card"></div>
       </div>
 {% endblock %}
 {% block extra_js %}
