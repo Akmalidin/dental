@@ -368,8 +368,9 @@ def _newui_patients_page_data(request):
     страницах (запись/касса/карточка приёма); в клинике может быть тысячи
     пациентов (напр. 8000+), и рендерить/грузить их всех разом на саму
     страницу списка не годится — здесь настоящий Paginator по queryset."""
+    from datetime import timedelta
     from django.core.paginator import Paginator
-    from django.db.models import Q
+    from django.db.models import Q, Sum
     from django.utils import timezone
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
@@ -412,6 +413,33 @@ def _newui_patients_page_data(request):
         "all": base_qs.count(),
         "debt": base_qs.filter(balance__lt=0).count(),
         "treatment": base_qs.filter(pk__in=active_treatment_qs).distinct().count(),
+    }
+
+    # KPI-блоки сверху страницы (как в старом интерфейсе, templates/patients/list.html)
+    # — намеренно от ПОЛНОГО Patient.objects.all() клиники, а не от base_qs
+    # (поиск/фильтры их не трогают, как и в старом UI: это общая сводка по
+    # клинике, а не по текущей выборке).
+    today = timezone.localdate()
+    week_ago = today - timedelta(days=7)
+    week_ahead = today + timedelta(days=7)
+    all_patients_qs = Patient.objects.all()
+    new_count = all_patients_qs.filter(created_at__date__gte=week_ago).count()
+    birthday_count = 0
+    for bd in all_patients_qs.exclude(birth_date=None).values_list("birth_date", flat=True):
+        try:
+            bd_this_year = bd.replace(year=today.year)
+        except ValueError:
+            bd_this_year = bd.replace(year=today.year, day=28)  # 29 февраля не в високосный год
+        if today <= bd_this_year <= week_ahead:
+            birthday_count += 1
+    debtors_qs = all_patients_qs.filter(balance__lt=0)
+    debtors_total = debtors_qs.aggregate(s=Sum("balance"))["s"] or 0
+    stats = {
+        "allCount": all_patients_qs.count(),
+        "newCount": new_count,
+        "birthdayCount": birthday_count,
+        "debtorsCount": debtors_qs.count(),
+        "debtorsTotal": abs(float(debtors_total)),
     }
 
     qs = base_qs.select_related("primary_doctor").order_by("-created_at")
@@ -461,6 +489,7 @@ def _newui_patients_page_data(request):
         "totalCount": paginator.count,
         "totalPages": paginator.num_pages,
         "counts": counts,
+        "stats": stats,
     }
 
 

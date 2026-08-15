@@ -658,7 +658,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group" style="position:relative;">
         <label style="display:flex;justify-content:space-between;align-items:center;">
           <span>Пациент</span>
-          <button type="button" class="link-btn" style="font-weight:600;" onclick="openModal('m-patient')">+ Добавить пациента</button>
+          <button type="button" class="link-btn" style="font-weight:600;" onclick="openNewPatient(true)">+ Добавить пациента</button>
         </label>
         <input type="text" id="appt-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" oninput="apptPatientSearch(this.value)" onfocus="apptPatientSearch(this.value)">
         <input autocomplete="off" type="hidden" id="appt-patient-id">
@@ -2859,6 +2859,11 @@ const translations={
   w_no_more_visits_today: {ru:'На сегодня приёмов не осталось', ky:'Бүгүнгө кабылдоолор калган жок', en:'No more visits scheduled for today', uz:'Bugungi kunga qabullar qolmadi'},
   w_all_f: {ru:'Все', ky:'Баары', en:'All', uz:'Barchasi'},
   w_active_treatment: {ru:'Активное лечение', ky:'Активдүү дарылоо', en:'Active treatment', uz:'Faol davolash'},
+  w_all_patients_kpi: {ru:'Все пациенты', ky:'Бардык бейтаптар', en:'All patients', uz:'Barcha bemorlar'},
+  w_new_patients_7d: {ru:'Новые (7 дней)', ky:'Жаңылар (7 күн)', en:'New (7 days)', uz:'Yangilar (7 kun)'},
+  w_birthdays_kpi: {ru:'Дни рождения', ky:'Туулган күндөр', en:'Birthdays', uz:'Tug‘ilgan kunlar'},
+  w_debtors_kpi: {ru:'С долгами', ky:'Карызы барлар', en:'With debt', uz:'Qarzi borlar'},
+  w_show_debtors: {ru:'Показать пациентов с долгом', ky:'Карызы бар бейтаптарды көрсөтүү', en:'Show patients with debt', uz:'Qarzi bor bemorlarni ko‘rsatish'},
   w_active_one: {ru:'активная', ky:'активдүү', en:'active', uz:'faol'},
   w_active_many: {ru:'активных', ky:'активдүү', en:'active', uz:'faol'},
   w_no_expenses_month: {ru:'Расходов за месяц не заведено', ky:'Ай ичинде чыгашалар киргизилген эмес', en:'No expenses recorded for the month', uz:'Oy uchun xarajatlar kiritilmagan'},
@@ -4707,6 +4712,7 @@ async function submitNewAppt(){
           service: service ? service.name : '',
           status: 'cobalt', durationMin: (service && service.duration) || 30, movable: true,
         });
+        rebuildApptsByDateDoc();
         renderSchedule();
         showToast(t('w_appt_created','Запись создана'));
       } else {
@@ -4758,7 +4764,11 @@ async function schedDrop(ev, dateIso, time, docId){
     const data=await res.json();
     if(res.ok && data.ok){
       // Как и в submitNewAppt() — обновляем локально вместо полной перезагрузки страницы.
+      // rebuildApptsByDateDoc() обязателен: индекс сгруппирован по старым
+      // date/docId, простая мутация полей объекта не переносит его в новую
+      // группу (запись «зависала» бы в старой ячейке до перезагрузки).
       appt.date=dateIso; appt.time=time; appt.docId=docId;
+      rebuildApptsByDateDoc();
       renderSchedule();
       showToast(t('w_appt_moved','Запись перенесена'));
     }
@@ -4828,6 +4838,22 @@ let sourceOptions=[];
 let currentPatientCardId=null;
 let scheduleRealData=null;
 let apptsByDateDoc={};
+// apptsByDateDoc — производный индекс по scheduleRealData.appointments (для
+// быстрого apptsFor(date, docId) в рендере сетки). Раньше строился один раз
+// при первой загрузке страницы и больше не обновлялся — из-за этого только
+// что созданная (submitNewAppt) или перетащенная в другую ячейку (schedDrop)
+// запись не появлялась в сетке до полной перезагрузки страницы (она есть в
+// scheduleRealData.appointments, но не в устаревшем индексе). Дёшево
+// пересобрать целиком при каждой такой мутации, чем аккуратно патчить индекс
+// в двух местах и рисковать снова разойтись.
+function rebuildApptsByDateDoc(){
+  apptsByDateDoc={};
+  (scheduleRealData && scheduleRealData.appointments || []).forEach(a=>{
+    apptsByDateDoc[a.date]=apptsByDateDoc[a.date]||{};
+    apptsByDateDoc[a.date][a.docId]=apptsByDateDoc[a.date][a.docId]||[];
+    apptsByDateDoc[a.date][a.docId].push(a);
+  });
+}
 let financeRealData=null;
 let labRealData=null;
 let warehouseRealData=null;
@@ -4837,6 +4863,11 @@ let visitsData=null;
 let accountingData=null;
 let auditEvents=[];
 let patientCardDetail=null;
+// «+ Добавить пациента» открыто изнутри модалки «Новая запись» (m-appt) —
+// значит после создания пациента НЕ перезагружаем страницу (это стирало бы
+// уже выбранные там дату/время/врача), а просто подставляем нового пациента
+// в поле поиска этой же модалки и продолжаем. См. openNewPatient/submitNewPatient.
+let apptModalPendingPatientContext=false;
 let cashdeskData=null;
 // Валюта клиники (Настройки → Общие → Основная/Дополнительная валюта) — реальная
 // настройка ClinicSettings.currency[_secondary], прокинута через _shared_options
@@ -4864,13 +4895,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false;
     doctorOptions=data.doctorOptions || [];
     sourceOptions=data.sourceOptions || [];
     scheduleRealData=data.schedule || null;
-    if(scheduleRealData){
-      (scheduleRealData.appointments||[]).forEach(a=>{
-        apptsByDateDoc[a.date]=apptsByDateDoc[a.date]||{};
-        apptsByDateDoc[a.date][a.docId]=apptsByDateDoc[a.date][a.docId]||[];
-        apptsByDateDoc[a.date][a.docId].push(a);
-      });
-    }
+    rebuildApptsByDateDoc();
     scheduleDoctors=(scheduleRealData && scheduleRealData.doctors) || [];
     servicesList=(data.servicesData && data.servicesData.services) || [];
     serviceCategories=(data.servicesData && data.servicesData.categories) || [];
@@ -4956,7 +4981,24 @@ let patientChipFilter='all';
 let patientsPage=1;
 let patientsPerPage=25;
 let patientsCounts={all:0, treatment:0, debt:0};
+let patientsStats={allCount:0, newCount:0, birthdayCount:0, debtorsCount:0, debtorsTotal:0};
 let patientsSearchTimer=null;
+// KPI-блоки сверху страницы «Пациенты» — те же 4 показателя, что и в старом
+// интерфейсе (templates/patients/list.html: Все пациенты/Новые (7 дней)/
+// Дни рождения/С долгами), в стиле kpi-grid, уже принятом в проекте
+// (касса/финансы/карточка пациента) вместо иконок-кружков старого UI.
+// Считаются на бэкенде по ВСЕЙ клинике (_newui_patients_page_data), без учёта
+// поиска/фильтра текущей таблицы — как и в старом интерфейсе.
+function renderPatientsKpi(){
+  const el=document.getElementById('patientsKpiRow');
+  if(!el) return;
+  const s=patientsStats;
+  el.innerHTML=
+    `<div class="card kpi b-cobalt"><span class="lbl">${t('w_all_patients_kpi','Все пациенты')}</span><b style="font-size:20px">${s.allCount.toLocaleString('ru-RU')}</b></div>`
+  + `<div class="card kpi b-amber"><span class="lbl">${t('w_new_patients_7d','Новые (7 дней)')}</span><b style="font-size:20px">${s.newCount.toLocaleString('ru-RU')}</b></div>`
+  + `<div class="card kpi b-teal"><span class="lbl">${t('w_birthdays_kpi','Дни рождения')}</span><b style="font-size:20px">${s.birthdayCount.toLocaleString('ru-RU')}</b></div>`
+  + `<div class="card kpi b-coral" style="cursor:pointer;" onclick="patientChipFilter='debt';patientsPage=1;renderPatientChips();renderPatientsTable();" title="${t('w_show_debtors','Показать пациентов с долгом')}"><span class="lbl">${t('w_debtors_kpi','С долгами')}</span><b style="font-size:20px">${s.debtorsCount.toLocaleString('ru-RU')}</b>${s.debtorsTotal>0?`<span style="display:block;font-size:11.5px;color:var(--coral);font-weight:600;">${Math.round(s.debtorsTotal).toLocaleString('ru-RU')} ${CUR_SYM}</span>`:''}</div>`;
+}
 function initials(name){
   const parts=(name||'').trim().split(/\s+/);
   return ((parts[0]||'')[0]||'')+((parts[1]||'')[0]||'');
@@ -5002,7 +5044,9 @@ async function renderPatientsTable(){
     return;
   }
   patientsCounts=data.counts || patientsCounts;
+  patientsStats=data.stats || patientsStats;
   renderPatientChips();
+  renderPatientsKpi();
 
   if(data.results.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_nothing_found')}</td></tr>`; renderPatientsPagination(data); return; }
   body.innerHTML = data.results.map(p=>{
@@ -5238,7 +5282,8 @@ function openPatientCard(id){
   pcTab('info');
 }
 
-function openNewPatient(){
+function openNewPatient(fromApptModal){
+  apptModalPendingPatientContext=!!fromApptModal;
   ['np-first','np-last','np-phone','np-birthdate','np-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('np-source').innerHTML='<option value="">—</option>'+sourceOptions.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   document.getElementById('np-doctor').innerHTML='<option value="">Не назначен</option>'+doctorOptions.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
@@ -5263,7 +5308,20 @@ async function submitNewPatient(){
   try{ payload=await res.json(); }catch(e){}
   if(res.ok && payload && payload.ok){
     closeModal('m-patient');
-    flashAndReload('Пациент добавлен');
+    if(apptModalPendingPatientContext){
+      // Создано изнутри «Новая запись» — модалка m-appt всё ещё открыта под
+      // m-patient (openModal/closeModal не закрывают друг друга), дата/время/
+      // врач там не тронуты. Просто дописываем пациента в локальный
+      // patientsList (для поиска/подстановки — тех же полей, что читают
+      // apptPatientSearch/selectApptPatient, достаточно) и сразу выбираем его —
+      // без перезагрузки страницы, которая стёрла бы весь прогресс записи.
+      apptModalPendingPatientContext=false;
+      patientsList.push({id: payload.id, fullName: payload.name, phone: payload.phone});
+      selectApptPatient(payload.id);
+      showToast('Пациент добавлен');
+    } else {
+      flashAndReload('Пациент добавлен');
+    }
   } else {
     showModalError('patientModalError', (payload && payload.error) || 'Не удалось создать пациента');
   }
