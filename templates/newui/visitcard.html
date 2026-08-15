@@ -15,6 +15,7 @@
             <input autocomplete="off" type="checkbox" id="vwSimpleModeToggle" onchange="vwSetSimpleMode(this.checked)">
             <span data-i18n="w_simple_mode">Простой режим</span>
           </div>
+          <button class="btn btn-ghost hidden" id="vwPrintReceiptBtn" onclick="printReceipt(vw.paymentId)">🖨 <span data-i18n="w_print_receipt">Печать чека</span></button>
           <button class="btn btn-ghost" id="vwBackBtn" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_card">Назад в карту</span></button>
         </div>
       </div>
@@ -182,6 +183,9 @@
   document.getElementById('vwPatientLink').textContent = vw.patientName;
   document.getElementById('vwPatientLink').href = '/new/patients/'+vw.patientId+'/';
   document.getElementById('vwBackBtn').onclick = () => location.href='/new/patients/'+vw.patientId+'/';
+  // Кнопка появляется, только если по приёму уже принята оплата (Payment
+  // привязан к этому Treatment) — печатать нечего, пока платежа нет.
+  if(vw.paymentId) document.getElementById('vwPrintReceiptBtn').classList.remove('hidden');
 
   document.getElementById('vw-appt-date').value = vw.appointmentDate || '';
   document.getElementById('vw-appt-start').value = vw.appointmentStart || '—';

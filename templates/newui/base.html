@@ -2209,6 +2209,37 @@ function renderCashdesk(){
   if(!cashdeskData) return;
   renderCashShift();
   renderCashQueue();
+  renderCashPayments();
+}
+function cashdeskTab(which){
+  if(!document.getElementById('cashMainPanel')) return; // элементы есть только на /new/cashdesk/
+  document.getElementById('cashMainPanel').classList.toggle('hidden', which!=='main');
+  document.getElementById('cashPaymentsPanel').classList.toggle('hidden', which!=='payments');
+  document.getElementById('cashTabBtnMain').classList.toggle('active', which==='main');
+  document.getElementById('cashTabBtnPayments').classList.toggle('active', which==='payments');
+  sessionStorage.setItem('newui_cashdesk_subtab', which);
+}
+// «Оплаты» — просмотр последних платежей + повторная печать/выдача чека
+// (см. printReceipt(), общий хелпер на payment_receipt по Payment.pk).
+function renderCashPayments(){
+  const body=document.getElementById('cashPaymentsBody');
+  if(!body || !cashdeskData) return;
+  const q=(document.getElementById('cashPaymentsSearch')?.value || '').trim().toLowerCase();
+  let list=cashdeskData.payments || [];
+  if(q) list=list.filter(p=>(p.patientName||'').toLowerCase().includes(q));
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_payments_yet_cashdesk','Платежей пока нет')}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(p=>`<tr>
+    <td>${p.time}</td>
+    <td>${p.patientId?`<a href="/new/patients/${p.patientId}/" style="color:var(--cobalt);">${p.patientName}</a>`:p.patientName}</td>
+    <td>${p.type}</td>
+    <td>${p.method}</td>
+    <td class="mono" style="color:${p.isRefund?'var(--coral)':'var(--teal)'}">${p.isRefund?'−':'+'}${fmtSom(p.amount)}</td>
+    <td>${p.receivedBy}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="printReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button></td>
+  </tr>`).join('');
 }
 function renderCashShift(){
   const el=document.getElementById('shiftCard');
@@ -3152,6 +3183,12 @@ const translations={
   w_progress: {ru:'Прогресс', ky:'Прогресс', en:'Progress', uz:'Progress'},
   w_new_visit: {ru:'Новый визит', ky:'Жаңы визит', en:'New visit', uz:'Yangi tashrif'},
   w_print: {ru:'Печать', ky:'Басып чыгаруу', en:'Print', uz:'Chop etish'},
+  w_print_receipt: {ru:'Печать чека', ky:'Чекти басып чыгаруу', en:'Print receipt', uz:'Chekni chop etish'},
+  w_cashdesk_payments_tab: {ru:'Оплаты', ky:'Төлөмдөр', en:'Payments', uz:'To\'lovlar'},
+  w_cashdesk_tab: {ru:'Касса', ky:'Касса', en:'Cashdesk', uz:'Kassa'},
+  w_no_payments_yet_cashdesk: {ru:'Платежей пока нет', ky:'Азырынча төлөмдөр жок', en:'No payments yet', uz:'Hozircha to\'lovlar yo\'q'},
+  w_search_payments_hint: {ru:'⌕ Пациент, телефон…', ky:'⌕ Бейтап, телефон…', en:'⌕ Patient, phone…', uz:'⌕ Bemor, telefon…'},
+  w_received_by: {ru:'Принял', ky:'Кабыл алды', en:'Received by', uz:'Qabul qildi'},
   w_day: {ru:'День', ky:'Күн', en:'Day', uz:'Kun'},
   w_week: {ru:'Неделя', ky:'Жума', en:'Week', uz:'Hafta'},
   w_month: {ru:'Месяц', ky:'Ай', en:'Month', uz:'Oy'},
@@ -3357,8 +3394,8 @@ function renderFinance(){
   const body=document.getElementById('fin-transactions');
   if(!body) return;
   body.innerHTML = d.transactions.length===0
-    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_transactions_yet')}</td></tr>`
-    : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td></tr>`).join('');
+    ? `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_transactions_yet')}</td></tr>`
+    : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td><td>${tx.paymentId?`<button class="btn btn-ghost btn-sm" onclick="printReceipt(${tx.paymentId})">🖨</button>`:''}</td></tr>`).join('');
 }
 
 const LAB_COL_KEY={'Принят':'w_lab_col_accepted','В работе':'w_lab_col_progress','Готово':'w_lab_col_ready','Выдано · гарантия':'w_lab_col_issued'};
@@ -4897,7 +4934,7 @@ function renderPatientCardHistory(d){
   if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_visits_yet')); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
     <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
-    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}${h.paymentId ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printReceipt(${h.paymentId})" title="${t('w_print_receipt')}">🖨</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
 }
 async function confirmQuickSale(id){
   const res = await apiJson('/treatments/'+id+'/confirm/', {});
@@ -4923,8 +4960,8 @@ function renderPatientCardFinance(d){
   </div>`;
   const rows=(!d.payments || d.payments.length===0)
     ? PATIENT_TAB_EMPTY(t('w_no_payments_yet'))
-    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th></tr></thead>
-       <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`).join('')}</tbody></table></div>`;
+    : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th><th></th></tr></thead>
+       <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td>${pm.id?`<button class="btn btn-ghost btn-sm" onclick="printReceipt(${pm.id})">🖨</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
   el.innerHTML=kpi+rows;
 }
 const DOC_IMG_EXT=['jpg','jpeg','png','gif','webp','bmp','svg'];
@@ -5120,6 +5157,14 @@ function getCookie(name){
 }
 async function postForm(url, formData){
   return fetch(url, {method:'POST', body:formData, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+}
+// Печать/повторная выдача чека — общий хелпер для кассы, финансов, карточки
+// пациента и карточки приёма. apps.finance.views.payment_receipt сам решает
+// печатать (страница печатает автоматически при загрузке, есть кнопка
+// «Печать» на случай если браузер заблокировал auto-print).
+function printReceipt(paymentId){
+  if(!paymentId) return;
+  window.open('/finance/payments/'+paymentId+'/receipt/', '_blank');
 }
 async function extractFormError(res){
   try{
@@ -5380,6 +5425,10 @@ renderAudit();
 if(document.getElementById('rolesTabBtn')){
   const subtab=sessionStorage.getItem('newui_staff_subtab');
   if(subtab==='roles') staffTab('roles');
+}
+if(document.getElementById('cashTabBtnPayments')){
+  const cashSubtab=sessionStorage.getItem('newui_cashdesk_subtab');
+  if(cashSubtab==='payments') cashdeskTab('payments');
 }
 
 /* ---- показать тост об успехе, если он был отложен перед перезагрузкой ---- */

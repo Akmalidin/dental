@@ -14,7 +14,7 @@ from django.shortcuts import render
 from .models import Role, Branch, Permission, clinic_doctors
 from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
-    _newui_patients_data, _newui_patients_page_data, _newui_services_data, _newui_finance_data,
+    _newui_patients_data, _newui_patients_page_data, _newui_patient_by_pk, _newui_services_data, _newui_finance_data,
     _newui_lab_data, _newui_warehouse_data, _newui_reports_data,
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data,
@@ -124,13 +124,15 @@ def newui_patients_data_json(request):
 def newui_patientcard(request, pk):
     """Карта одного пациента. JS-логика (openPatientCard) написана под поиск
     по массиву patientsList — отдаём список из одного элемента и открываем
-    его автоматически при загрузке, не переписывая рабочий фронтенд-код."""
+    его автоматически при загрузке, не переписывая рабочий фронтенд-код.
+    _newui_patient_by_pk ищет пациента напрямую по pk (не через капнутый на
+    300 _newui_patients_data) — иначе карточка «старого» пациента (не из
+    последних 300 созданных) не открывалась бы вовсе."""
     from apps.patients.models import Patient
-    all_patients = _newui_patients_data()
-    patient = next((p for p in all_patients if p["id"] == pk), None)
+    patient = _newui_patient_by_pk(pk)
     extra = {"patients": [patient] if patient else [], "openPatientId": pk if patient else None}
     if patient:
-        patient_obj = Patient.all_objects.filter(pk=pk).first()
+        patient_obj = Patient.objects.filter(pk=pk).first()
         if patient_obj:
             extra["patientCardDetail"] = _newui_patientcard_detail_data(patient_obj)
     return _render(request, "patientcard", "patientcard.html", extra)

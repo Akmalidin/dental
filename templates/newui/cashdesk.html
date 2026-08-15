@@ -5,17 +5,39 @@
         <button class="btn btn-cobalt hidden" id="qsOpenBtn" onclick="openQuickSale()">⚡ <span data-i18n="w_quick_sale">Быстрая продажа</span></button>
       </div></div>
       <div class="page">
-        <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
+        <div class="tab-strip">
+          <button class="active" id="cashTabBtnMain" onclick="cashdeskTab('main')" data-i18n="w_cashdesk_tab">Касса</button>
+          <button id="cashTabBtnPayments" onclick="cashdeskTab('payments')" data-i18n="w_cashdesk_payments_tab">Оплаты</button>
+        </div>
 
-        <!-- Пациенты сегодня с непогашенным долгом по приёму (Treatment.appointment) —
-             не нужно ждать, пока врач явно нажмёт «Отправить в кассу» ниже. -->
-        <div class="card-head" style="padding:0 0 10px;border:none;"><h3 data-i18n="w_todays_patients">Пациенты на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashTodayCount"></span></div>
-        <div id="cashTodayRow" class="cash-today-row"></div>
+        <div id="cashMainPanel">
+          <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
 
-        <div class="card">
-          <div class="card-head"><h3 data-i18n="w_awaiting_payment_h">Ожидают оплаты</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashQueueCount">0 позиций</span></div>
-          <div class="card-body" id="cashQueueBody">
-            <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_nothing_sent_cashier">Пока ничего не отправлено в кассу</span></div>
+          <!-- Пациенты сегодня с непогашенным долгом по приёму (Treatment.appointment) —
+               не нужно ждать, пока врач явно нажмёт «Отправить в кассу» ниже. -->
+          <div class="card-head" style="padding:0 0 10px;border:none;"><h3 data-i18n="w_todays_patients">Пациенты на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashTodayCount"></span></div>
+          <div id="cashTodayRow" class="cash-today-row"></div>
+
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_awaiting_payment_h">Ожидают оплаты</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashQueueCount">0 позиций</span></div>
+            <div class="card-body" id="cashQueueBody">
+              <div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_nothing_sent_cashier">Пока ничего не отправлено в кассу</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Оплаты — просмотр последних платежей и повторная печать/выдача чека
+             (payment_receipt уже умеет открывать чек по Payment.pk в любой
+             момент, не только сразу после приёма оплаты). -->
+        <div id="cashPaymentsPanel" class="hidden">
+          <div class="toolbar">
+            <div class="search-box" style="max-width:320px;"><input autocomplete="off" type="text" id="cashPaymentsSearch" placeholder="⌕ Пациент, телефон…" data-i18n-placeholder="w_search_payments_hint" oninput="renderCashPayments()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th data-i18n="w_time">Время</th><th data-i18n="w_patient">Пациент</th><th data-i18n="w_type">Тип</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_received_by">Принял</th><th></th></tr></thead>
+              <tbody id="cashPaymentsBody"></tbody>
+            </table>
           </div>
         </div>
       </div>

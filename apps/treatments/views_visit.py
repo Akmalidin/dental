@@ -225,8 +225,15 @@ def _visit_wizard_context(treatment):
             "exam_data": prev_emr.exam_data or {},
         }
     appt = treatment.appointment
+    # Чек печатается по Payment.pk (apps.finance.views.payment_receipt), не
+    # по Treatment — если по приёму уже принята оплата (обычно из кассы),
+    # даём кнопку «Печать чека» прямо на карточке приёма; берём самый
+    # свежий платёж (частичная оплата в несколько раз — печатаем последний).
+    from apps.finance.models import Payment
+    latest_payment = Payment.objects.filter(treatment=treatment).order_by("-created_at").first()
     ctx = {
         "treatmentId": treatment.pk,
+        "paymentId": latest_payment.pk if latest_payment else None,
         "status": treatment.status,
         "statusLabel": treatment.get_status_display(),
         "patientId": treatment.patient_id,

@@ -274,16 +274,17 @@ def _dashboard_funnel_new(clinic, limit=10):
     } for lead in leads]
 
 
-def _newui_patients_data():
-    """Пациенты клиники для нового интерфейса. Ограничено последними 300 —
-    полноценные серверные поиск/пагинация/фильтры старого /patients/ списка
-    сюда пока не перенесены (это отдельная, более крупная задача)."""
+def _patient_summary_dicts(patients_qs):
+    """Общий сериализатор карточки-строки пациента — вынесен из
+    _newui_patients_data(), чтобы им же мог пользоваться _newui_patient_by_pk
+    (один конкретный пациент по pk, БЕЗ лимита 300 — иначе карточка любого
+    пациента "старше" последних 300 созданных не открывалась бы вовсе, см.
+    newui_patientcard)."""
     from django.utils import timezone
-    from apps.patients.models import Patient
     from apps.treatments.models import Treatment
     from apps.appointments.models import Appointment
 
-    patients_qs = list(Patient.objects.select_related("primary_doctor", "source", "branch").order_by("-created_at")[:300])
+    patients_qs = list(patients_qs)
     ids = [p.pk for p in patients_qs]
 
     last_visit = {}
@@ -334,6 +335,30 @@ def _newui_patients_data():
             "statusColor": status_color,
         })
     return data
+
+
+def _newui_patients_data():
+    """Пациенты клиники для нового интерфейса. Ограничено последними 300 —
+    компактный встроенный список для быстрого поиска пациента в модалках
+    (запись/касса), НЕ для самого списка (см. _newui_patients_page_data —
+    настоящая серверная пагинация на /new/patients/) и НЕ для открытия
+    карточки конкретного пациента (см. _newui_patient_by_pk)."""
+    from apps.patients.models import Patient
+
+    patients_qs = Patient.objects.select_related("primary_doctor", "source", "branch").order_by("-created_at")[:300]
+    return _patient_summary_dicts(patients_qs)
+
+
+def _newui_patient_by_pk(pk):
+    """Один пациент по pk, независимо от лимита 300 в _newui_patients_data —
+    используется newui_patientcard, чтобы карточка ЛЮБОГО пациента (не
+    только из последних 300 созданных) открывалась корректно."""
+    from apps.patients.models import Patient
+
+    p = Patient.objects.select_related("primary_doctor", "source", "branch").filter(pk=pk).first()
+    if not p:
+        return None
+    return _patient_summary_dicts([p])[0]
 
 
 def _newui_patients_page_data(request):
@@ -490,12 +515,14 @@ def _newui_finance_data(clinic):
             "method": p.get_method_display(),
             "amount": float(p.amount) * (-1 if p.type == Payment.TYPE_REFUND else 1),
             "time": timezone.localtime(p.created_at).strftime("%d.%m %H:%M"),
+            "paymentId": p.pk,
         })
     for e in Expense.objects.select_related("category").order_by("-created_at")[:10]:
         txns.append({
             "who": "Клиника", "type": f"Расход · {e.category.name if e.category else '—'}",
             "method": "—", "amount": -float(e.amount),
             "time": timezone.localtime(e.created_at).strftime("%d.%m %H:%M"),
+            "paymentId": None,
         })
     txns.sort(key=lambda t: t["time"], reverse=True)
 
@@ -1117,7 +1144,28 @@ def _newui_cashdesk_data(request, clinic):
         })
     today_patients.sort(key=lambda p: p["time"])
 
-    return {"shift": shift_data, "queue": queue, "branchId": branch.pk if branch else None, "todayPatients": today_patients}
+    # ── «Оплаты» — вкладка для просмотра и повторной выдачи чека (payment_receipt,
+    # apps.finance.views уже умеет печать/переоткрытие чека по Payment.pk — тут
+    # просто список последних платежей, без нового бэкенда для самой печати). ──
+    payments_qs = Payment.objects.select_related("patient", "received_by").order_by("-created_at")
+    if branch:
+        payments_qs = payments_qs.filter(branch=branch)
+    recent_payments = [{
+        "id": pm.pk,
+        "patientId": pm.patient_id,
+        "patientName": pm.patient.full_name if pm.patient_id else "—",
+        "amount": float(pm.amount),
+        "method": pm.get_method_display(),
+        "type": pm.get_type_display(),
+        "isRefund": pm.type == Payment.TYPE_REFUND,
+        "receivedBy": pm.received_by.name if pm.received_by else "—",
+        "time": timezone.localtime(pm.created_at).strftime("%d.%m.%Y %H:%M"),
+    } for pm in payments_qs[:200]]
+
+    return {
+        "shift": shift_data, "queue": queue, "branchId": branch.pk if branch else None,
+        "todayPatients": today_patients, "payments": recent_payments,
+    }
 
 
 def _newui_messages_data(clinic):
@@ -1171,9 +1219,20 @@ def _newui_patientcard_detail_data(patient):
         Treatment.STATUS_IN_PROGRESS: "amber", Treatment.STATUS_COMPLETED: "teal",
         Treatment.STATUS_CANCELLED: "coral", Treatment.STATUS_PAID: "teal",
     }
+    treatments = list(
+        Treatment.all_objects.filter(patient=patient, is_deleted=False)
+        .select_related("doctor").prefetch_related("cures__service").order_by("-created_at")[:100]
+    )
+    # Чек печатается по Payment.pk (payment_receipt), не по Treatment — берём
+    # последний платёж, привязанный к приёму (частичная оплата в несколько
+    # платежей — печатаем чек самого свежего из них).
+    latest_payment_id = {}
+    for pm in (Payment.objects.filter(treatment_id__in=[t.pk for t in treatments])
+               .order_by("treatment_id", "-created_at").values("treatment_id", "id")):
+        latest_payment_id.setdefault(pm["treatment_id"], pm["id"])
+
     history = []
-    for t in (Treatment.all_objects.filter(patient=patient, is_deleted=False)
-              .select_related("doctor").prefetch_related("cures__service").order_by("-created_at")[:100]):
+    for t in treatments:
         services = ", ".join(c.service.name for c in t.cures.all()) or "—"
         history.append({
             "id": t.pk,
@@ -1184,6 +1243,7 @@ def _newui_patientcard_detail_data(patient):
             "status": t.get_status_display(),
             "statusColor": status_pill.get(t.status, "cobalt"),
             "needsConfirmation": t.needs_doctor_confirmation,
+            "paymentId": latest_payment_id.get(t.pk),
         })
 
     plan_status_pill = {"draft": "grey", "approved": "cobalt", "in_progress": "amber", "completed": "teal", "cancelled": "coral"}
@@ -1203,6 +1263,7 @@ def _newui_patientcard_detail_data(patient):
 
     payments_qs = Payment.all_clinics.filter(patient=patient).select_related("received_by").order_by("-created_at")
     payments = [{
+        "id": pm.pk,
         "date": timezone.localtime(pm.created_at).strftime("%d.%m.%Y"),
         "purpose": "Возврат" if pm.type == Payment.TYPE_REFUND else "Оплата",
         "method": pm.get_method_display(),
