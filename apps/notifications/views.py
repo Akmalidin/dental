@@ -817,7 +817,23 @@ def tg_connect(request):
                 else:
                     messages.warning(request, "Токен сохранён, но не удалось настроить webhook: %s" % res.get("description", ""))
             else:
-                messages.error(request, "Не удалось проверить токен — убедитесь, что он верный (от @BotFather)")
+                # Раньше здесь была общая фраза без причины — не отличить
+                # опечатку в токене от сетевой проблемы до api.telegram.org
+                # (а такая уже была на проде, см. _HTTPSConnectionIPv6 в
+                # telegram.py). Показываем реальный ответ Telegram/ошибку сети.
+                detail = me.get("error")
+                if isinstance(detail, bytes):
+                    detail = detail.decode("utf-8", "replace")
+                if isinstance(detail, str):
+                    try:
+                        detail = json.loads(detail).get("description", detail)
+                    except Exception:
+                        pass
+                messages.error(
+                    request,
+                    "Не удалось проверить токен — убедитесь, что он верный (от @BotFather). "
+                    "Причина: %s" % (detail or "нет ответа от Telegram (проверьте токен ещё раз)"),
+                )
         else:
             messages.success(request, "Настройки Telegram сохранены")
         return redirect("tg_connect")
