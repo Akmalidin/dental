@@ -4450,11 +4450,15 @@ function buildWeekHTML(){
     html+=`<tr><td class="week-doc-col">${d.name}<span>${d.role}</span></td>`;
     dates.forEach(dt=>{
       const appts=apptsFor(isoDate(dt), d.id);
+      // Клик по свободному месту ячейки — новая запись, даже если на этот
+      // день у врача уже есть приёмы (напр. 9:00–15:00 занято, но после
+      // 15:00 ещё свободно) — раньше клик работал только когда день был
+      // ПОЛНОСТЬЮ пуст, т.к. onclick вешался лишь на пустую ветку.
       if(appts.length===0){
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}"><span class="week-empty">—</span></td>`;
       } else {
-        html+='<td>';
-        appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
+        html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}">`;
+        appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="event.stopPropagation();openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
         html+='</td>';
       }
     });
