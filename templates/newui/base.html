@@ -1083,6 +1083,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <input autocomplete="off" type="checkbox" id="cs-highlight-debt" checked>
         <span style="font-size:13px;" data-i18n="w_cs_highlight_debt">Подсвечивать пациентов с долгом</span>
       </div>
+      <div class="form-group toggle" style="margin-top:10px;">
+        <input autocomplete="off" type="checkbox" id="cs-ribbon-scroll" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_ribbon_scroll">Прокрутка ленты дней колёсиком/свайпом на следующий день</span>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="resetCalSettings()">Сбросить</button>
@@ -2744,12 +2748,16 @@ const translations={
   title_m_calsettings: {ru:'Настройки календаря', ky:'Календарь жөндөөлөрү', en:'Calendar settings', uz:'Kalendar sozlamalari'},
   w_cs_offer_start_visit: {ru:'Предлагать начать приём при отметке «Пришёл» (только для врача)', ky:'«Келди» деп белгилегенде кабыл алууну баштоону сунуштоо (дарыгер үчүн гана)', en:'Offer to start the visit when marking "Arrived" (doctors only)', uz:'"Keldi" deb belgilaganda qabulni boshlashni taklif qilish (faqat shifokor uchun)'},
   w_cs_highlight_debt: {ru:'Подсвечивать пациентов с долгом', ky:'Карызы бар бейтаптарды белгилөө', en:'Highlight patients with debt', uz:'Qarzi bor bemorlarni ajratib ko\'rsatish'},
+  w_cs_ribbon_scroll: {ru:'Прокрутка ленты дней колёсиком/свайпом на следующий день', ky:'Күндөр лентасын дөңгөлөк/свайп менен кийинки күнгө сыдыруу', en:'Scroll/swipe the day ribbon to the next day', uz:'Kunlar lentasini g\'ildirak/svayp bilan keyingi kunga aylantirish'},
   w_cs_column_width: {ru:'Ширина колонки врача', ky:'Дарыгер тилкесинин туурасы', en:'Doctor column width', uz:'Shifokor ustunining kengligi'},
   w_offer_start_visit_now: {ru:'Пациент отмечен как пришедший. Начать приём сейчас?', ky:'Бейтап келди деп белгиленди. Кабыл алууну азыр баштайсызбы?', en:'Patient marked as arrived. Start the visit now?', uz:'Bemor keldi deb belgilandi. Qabulni hozir boshlaysizmi?'},
   w_start_visit_after_create: {ru:'Запись создана. Начать приём сейчас?', ky:'Жазуу түзүлдү. Кабыл алууну азыр баштайсызбы?', en:'Appointment created. Start the visit now?', uz:'Yozuv yaratildi. Qabulni hozir boshlaysizmi?'},
   w_appt_slot_free: {ru:'Время свободно — запись будет создана успешно.', ky:'Убакыт бош — жазуу ийгиликтүү түзүлөт.', en:'Time is free — the appointment will be created successfully.', uz:'Vaqt bo\'sh — yozuv muvaffaqiyatli yaratiladi.'},
   w_appt_slot_busy: {ru:'Это время у врача занято.', ky:'Бул убакытта дарыгер бош эмес.', en:'This time is already booked for this doctor.', uz:'Bu vaqtda shifokor band.'},
   w_appt_slot_suggest: {ru:'Ближайшее свободное — ', ky:'Эң жакын бош убакыт — ', en:'Nearest free slot — ', uz:'Eng yaqin bo\'sh vaqt — '},
+  w_delete_history_confirm: {ru:'Удалить эту запись из истории приёмов? Действие можно отменить только через корзину.', ky:'Бул жазууну кабыл алуулар тарыхынан өчүрөсүзбү? Аракетти себеттен гана артка кайтарууга болот.', en:'Delete this entry from the visit history? This can only be undone from the trash.', uz:'Bu yozuvni qabullar tarixidan o\'chirasizmi? Amalni faqat savatdan qaytarish mumkin.'},
+  w_no_permission: {ru:'У вас нет прав на это действие', ky:'Бул аракетке укугуңуз жок', en:'You do not have permission for this action', uz:'Bu amal uchun ruxsatingiz yo\'q'},
+  w_deleted: {ru:'Запись удалена', ky:'Жазуу өчүрүлдү', en:'Entry deleted', uz:'Yozuv o\'chirildi'},
   title_m_templates: {ru:'Шаблоны сообщений', ky:'Билдирүү үлгүлөрү', en:'Message templates', uz:'Xabar shablonlari'},
   title_m_condition_edit: {ru:'Редактирование состояния', ky:'Абалды түзөтүү', en:'Edit condition', uz:'Holatni tahrirlash'},
   title_m_role: {ru:'Новая роль', ky:'Жаңы роль', en:'New role', uz:'Yangi rol'},
@@ -3113,6 +3121,8 @@ const translations={
   w_weekday_fri: {ru:'Пятница', ky:'Жума', en:'Friday', uz:'Juma'},
   w_weekday_sat: {ru:'Суббота', ky:'Ишемби', en:'Saturday', uz:'Shanba'},
   w_view_one_day: {ru:'Вид: 1 день', ky:'Көрүнүш: 1 күн', en:'View: 1 day', uz:'Ko‘rinish: 1 kun'},
+  w_view_week: {ru:'Вид: неделя', ky:'Көрүнүш: жума', en:'View: week', uz:'Ko‘rinish: hafta'},
+  w_view_month: {ru:'Вид: месяц', ky:'Көрүнүш: ай', en:'View: month', uz:'Ko‘rinish: oy'},
   w_choose_doctor: {ru:'Выберите врача', ky:'Врачты тандаңыз', en:'Choose a doctor', uz:'Shifokorni tanlang'},
   w_add_at_least_one_service: {ru:'Добавьте хотя бы одну услугу', ky:'Жок дегенде бир кызматты кошуңуз', en:'Add at least one service', uz:'Kamida bitta xizmat qoʻshing'},
   w_shift_opened: {ru:'Смена открыта', ky:'Смена ачылды', en:'Shift opened', uz:'Smena ochildi'},
@@ -4211,11 +4221,21 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
+// Недельный/месячный вид раньше вообще не умели листаться (всегда показывали
+// текущую неделю/месяц) — теперь у каждого свой якорь, меняется кнопкой
+// «перейти к дате» (см. openSchedDatePicker/schedJumpToDate). При переходе
+// из дневного вида якорь недели/месяца подставляется от текущего дня ленты
+// (calSetView) — так смена вкладки «День»→«Неделя» не «откатывает» на сегодня,
+// если до этого уже пролистали/перепрыгнули на другую дату.
+let calWeekAnchor=new Date();
+let calMonthAnchor=new Date();
 const weekdayShort=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const monthGenitive=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const monthNominative=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 // Дневной вид — непрерывная лента дней (каждый следующий день дорисовывается
 // сразу за предыдущим, со своей подписью-датой над группой врачей), а не
 // постраничная смена одного дня. scheduleRibbonDates — ISO-даты, уже
@@ -4245,6 +4265,7 @@ function loadCalSettings(){
   if(byId('cs-defaultview') && calSettings.defaultView) byId('cs-defaultview').value=calSettings.defaultView;
   if(byId('cs-offer-start-visit')) byId('cs-offer-start-visit').checked=calSettings.offerStartVisit!==false;
   if(byId('cs-highlight-debt')) byId('cs-highlight-debt').checked=calSettings.highlightDebt!==false;
+  if(byId('cs-ribbon-scroll')) byId('cs-ribbon-scroll').checked=calSettings.ribbonScroll!==false;
   if(byId('cs-col-width')){
     const w=calSettings.colWidth||150;
     byId('cs-col-width').value=String(w);
@@ -4447,15 +4468,8 @@ function calSetView(v){
   document.getElementById('chipDay').classList.toggle('active', v==='day');
   document.getElementById('chipWeek').classList.toggle('active', v==='week');
   document.getElementById('chipMonth').classList.toggle('active', v==='month');
-  if(v==='day'){
-    updateDayDateLabel();
-  } else {
-    const labels={week:'Вид: неделя', month:'Вид: месяц'};
-    document.getElementById('schedViewLabel').textContent=labels[v];
-    const dateLabels={week:'27 июля – 2 августа 2026', month:'Июль 2026'};
-    document.getElementById('schedDateLabel').textContent=dateLabels[v];
-    animateDateLabel();
-  }
+  if(v==='week') calWeekAnchor=dateAtOffset(currentDayOffset);
+  if(v==='month') calMonthAnchor=dateAtOffset(currentDayOffset);
   renderSchedule();
 }
 
@@ -4471,9 +4485,75 @@ function renderSchedule(){
     // мгновение оставалась без активной подсветки.
     updateVisibleDayLabelFromScroll();
   }
-  else if(calView==='week') c.innerHTML = buildWeekHTML();
-  else c.innerHTML = buildMonthHTML();
+  else if(calView==='week'){
+    updateWeekDateLabel();
+    c.innerHTML = buildWeekHTML();
+  }
+  else{
+    updateMonthDateLabel();
+    c.innerHTML = buildMonthHTML();
+  }
   attachScheduleScrollWatcher();
+}
+function updateWeekDateLabel(){
+  document.getElementById('schedViewLabel').textContent=t('w_view_week','Вид: неделя');
+  const dates=currentWeekDates();
+  const start=dates[0], end=dates[6];
+  const sameMonth=start.getMonth()===end.getMonth();
+  const label = sameMonth
+    ? `${start.getDate()}–${end.getDate()} ${monthGenitive[start.getMonth()]} ${end.getFullYear()}`
+    : `${start.getDate()} ${monthGenitive[start.getMonth()]} – ${end.getDate()} ${monthGenitive[end.getMonth()]} ${end.getFullYear()}`;
+  document.getElementById('schedDateLabel').textContent=label;
+  animateDateLabel();
+}
+function updateMonthDateLabel(){
+  document.getElementById('schedViewLabel').textContent=t('w_view_month','Вид: месяц');
+  document.getElementById('schedDateLabel').textContent=`${monthNominative[calMonthAnchor.getMonth()]} ${calMonthAnchor.getFullYear()}`;
+  animateDateLabel();
+}
+// Число целых календарных дней между двумя датами (игнорируя время суток) —
+// нужно, чтобы «перейти к дате» из пикера могло посчитать правильный
+// currentDayOffset (целое число дней от baseScheduleDate), а не только
+// листаться на ±1 днём, как кнопки ‹ ›.
+function daysBetween(a, b){
+  const da=new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const db=new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((db-da)/86400000);
+}
+// Клик по подписи даты (#schedDateLabel, рядом с переключателями Дня/Недели/
+// Месяца) — открывает нативный календарь браузера (тот же виджет, что и у
+// обычных полей даты в приложении) для быстрого перехода на любое число и
+// месяц, без необходимости листать стрелками ‹ › по одному дню.
+function openSchedDatePicker(){
+  const input=document.getElementById('schedDatePickerInput');
+  if(!input) return;
+  let anchor;
+  if(calView==='day') anchor=dateAtOffset(currentDayOffset);
+  else if(calView==='week') anchor=calWeekAnchor;
+  else anchor=calMonthAnchor;
+  input.value=isoDate(anchor);
+  if(input.showPicker){ input.showPicker(); } else { input.focus(); input.click(); }
+}
+function schedDatePickerChanged(dateIso){
+  if(!dateIso) return;
+  schedJumpToDate(dateIso);
+}
+function schedJumpToDate(dateIso){
+  const d=new Date(dateIso+'T00:00:00');
+  if(calView==='day'){
+    if(schedDayTransitionBusy) return;
+    currentDayOffset=daysBetween(baseScheduleDate, d);
+    scheduleRibbonDates=[];
+    renderSchedule();
+    const c=document.getElementById('scheduleContent');
+    if(c) c.scrollLeft=0;
+  } else if(calView==='week'){
+    calWeekAnchor=d;
+    renderSchedule();
+  } else {
+    calMonthAnchor=d;
+    renderSchedule();
+  }
 }
 
 function hexToRgba(hex, alpha){
@@ -4513,8 +4593,15 @@ const SCHED_STATUS_DEFAULT_COLORS={cobalt:'#2c4bea', amber:'#b8862e', coral:'#e8
 function schedStatusColor(status){
   return (calSettings.colors && calSettings.colors[status]) || SCHED_STATUS_DEFAULT_COLORS[status] || SCHED_STATUS_DEFAULT_COLORS.cobalt;
 }
-// Первые RIBBON_INITIAL_DAYS дней ленты от якорного (currentDayOffset).
+// Первые RIBBON_INITIAL_DAYS дней ленты от якорного (currentDayOffset) —
+// если в «Настройках календаря» включена прокрутка ленты на следующий день
+// (calSettings.ribbonScroll, по умолчанию true). Если выключена — лента
+// показывает только сам якорный день, без соседних (переход на следующий/
+// предыдущий день — только кнопками ‹ ›, см. также attachScheduleScrollWatcher,
+// где при выключенном ribbonScroll дозагрузка новых дней по скроллу тоже
+// отключена).
 function ribbonInitialDates(){
+  if(calSettings.ribbonScroll===false) return [isoDate(dateAtOffset(currentDayOffset))];
   const out=[];
   for(let i=0;i<RIBBON_INITIAL_DAYS;i++) out.push(isoDate(dateAtOffset(currentDayOffset+i)));
   return out;
@@ -4930,7 +5017,11 @@ function attachScheduleScrollWatcher(){
     // дозагрузка успевает отрисоваться до того, как пользователь реально
     // докрутит до пустоты.
     const nearEnd = hasOverflow && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 400);
-    if(nearEnd && scheduleRibbonDates.length < RIBBON_MAX_DAYS) appendRibbonDays(RIBBON_APPEND_DAYS);
+    // При выключенной «прокрутке на след. день» (calSettings.ribbonScroll)
+    // лента не подгружает новые дни — колонки одного дня по-прежнему можно
+    // проскроллить по горизонтали, если они не помещаются в ширину экрана,
+    // но следующий день скроллом не «выезжает»: только кнопками ‹ ›.
+    if(nearEnd && calSettings.ribbonScroll!==false && scheduleRibbonDates.length < RIBBON_MAX_DAYS) appendRibbonDays(RIBBON_APPEND_DAYS);
     if(!labelTicking){
       labelTicking=true;
       requestAnimationFrame(()=>{ updateVisibleDayLabelFromScroll(); labelTicking=false; });
@@ -4939,9 +5030,9 @@ function attachScheduleScrollWatcher(){
 }
 
 function currentWeekDates(){
-  const today=new Date();
-  const monday=new Date(today);
-  monday.setDate(today.getDate() - ((today.getDay()+6)%7));
+  const anchor=calWeekAnchor||new Date();
+  const monday=new Date(anchor);
+  monday.setDate(anchor.getDate() - ((anchor.getDay()+6)%7));
   const out=[];
   for(let i=0;i<7;i++){ const d=new Date(monday); d.setDate(monday.getDate()+i); out.push(d); }
   return out;
@@ -4980,8 +5071,9 @@ function buildWeekHTML(){
 }
 
 function buildMonthHTML(){
-  const today=new Date();
-  const year=today.getFullYear(), month=today.getMonth();
+  const anchor=calMonthAnchor||new Date();
+  const realToday=new Date();
+  const year=anchor.getFullYear(), month=anchor.getMonth();
   const firstDay=new Date(year,month,1);
   const startOffset=(firstDay.getDay()+6)%7; // Monday=0
   const daysInMonth=new Date(year,month+1,0).getDate();
@@ -4994,7 +5086,10 @@ function buildMonthHTML(){
   let html='<div class="month-grid">';
   ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(d=>{ html+=`<div class="month-head">${d}</div>`; });
   cells.forEach(c=>{
-    const isToday = !c.other && c.day===today.getDate();
+    // «Сегодня» — сравниваем с РЕАЛЬНЫМ текущим днём (не с якорем месяца):
+    // подсветка нужна, только если открытый месяц — это фактически текущий
+    // месяц, а не любой месяц, в который перепрыгнули через дата-пикер.
+    const isToday = !c.other && c.day===realToday.getDate() && month===realToday.getMonth() && year===realToday.getFullYear();
     const dateIso = c.other ? null : isoDate(new Date(year,month,c.day));
     let count = 0;
     if(dateIso){ visibleScheduleDoctors().forEach(d=>{ count += apptsFor(dateIso, d.id).length; }); }
@@ -5314,6 +5409,7 @@ function applyCalSettings(){
   calSettings.interval=interval;
   calSettings.offerStartVisit=document.getElementById('cs-offer-start-visit').checked;
   calSettings.highlightDebt=document.getElementById('cs-highlight-debt').checked;
+  calSettings.ribbonScroll=document.getElementById('cs-ribbon-scroll').checked;
   calSettings.colWidth=Number(document.getElementById('cs-col-width').value)||150;
 
   const colorMap={
@@ -5327,6 +5423,10 @@ function applyCalSettings(){
 
   calSettings.defaultView=document.getElementById('cs-defaultview').value;
   localStorage.setItem(CALSETTINGS_KEY, JSON.stringify(calSettings));
+  // Сброс уже отрисованных дней ленты — если тумблер «прокрутка на след.
+  // день» поменялся, лента должна перестроиться заново (с 1 днём вместо
+  // нескольких, или наоборот), а не молча остаться с уже загруженными днями.
+  scheduleRibbonDates=[];
   calSetView(calSettings.defaultView);
   closeModal('m-calsettings');
   renderSchedule(); // перерисовать сетку — тумблер highlightDebt мог поменяться
@@ -5343,6 +5443,7 @@ function resetCalSettings(){
   document.getElementById('cs-interval').value='30';
   document.getElementById('cs-offer-start-visit').checked=true;
   document.getElementById('cs-highlight-debt').checked=true;
+  document.getElementById('cs-ribbon-scroll').checked=true;
   document.getElementById('cs-color-cobalt').value='#2c4bea';
   document.getElementById('cs-color-amber').value='#b8862e';
   document.getElementById('cs-color-coral').value='#e85d2d';
@@ -5350,7 +5451,7 @@ function resetCalSettings(){
   document.getElementById('cs-col-width').value='150';
   document.getElementById('cs-col-width-value').textContent='150 px';
   localStorage.removeItem(CALSETTINGS_KEY);
-  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150};
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true};
   applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
@@ -5408,7 +5509,7 @@ let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
 let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_MENU=false;
 // Расписание: подсказка «начать приём» после «Пришёл» — только для врача (см.
 // maybeOfferStartVisit). Касса: кнопка «Быстрая продажа» — только у права finance.quick_sale.
-let IS_DOCTOR=false, CAN_QUICK_SALE=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -5458,6 +5559,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false;
     CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
+    CAN_DELETE_HISTORY=!!data.canDeleteHistory;
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();
@@ -5625,13 +5727,26 @@ function renderPatientCardHistory(d){
   if(!d.history || d.history.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_visits_yet')); return; }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_visit_history">История приёмов</h3></div>
     <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_service">Услуга</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_sum">Сумма</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
-    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printTreatmentReceipt(${h.id})" title="${t('w_print_receipt')}">🖨</button></td></tr>`).join('')}</tbody></table>`;
+    <tbody>${d.history.map(h=>`<tr class="clickable" onclick="location.href='/new/visitcard/${h.id}/'"><td>${h.date}</td><td>${h.service}</td><td>${h.doctor}</td><td class="mono">${Math.round(h.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${h.statusColor}">${h.status}</span></td><td>${h.needsConfirmation ? `<span class="pill amber">⏳ ${t('w_needs_doctor_confirmation')}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmQuickSale(${h.id})">${t('w_confirm')}</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printTreatmentReceipt(${h.id})" title="${t('w_print_receipt')}">🖨</button>${CAN_DELETE_HISTORY ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deleteTreatmentHistory(${h.id})" title="${t('w_delete')}">🗑</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
 }
 async function confirmQuickSale(id){
   const res = await apiJson('/treatments/'+id+'/confirm/', {});
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(res.ok && payload && payload.ok){ flashAndReload(t('w_confirm')+' ✓'); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+// Удаление записи из истории приёмов — кнопка видна только тем, у кого есть
+// право patients.delete_history (по умолчанию только у директора клиники,
+// см. 0026_seed_delete_history_permission); сервер проверяет право повторно
+// (403, если кнопку каким-то образом всё же нажали без права).
+async function deleteTreatmentHistory(id){
+  if(!confirm(t('w_delete_history_confirm'))) return;
+  const res = await apiJson('/treatments/'+id+'/delete/', {});
+  if(res.status===403){ showToast(t('w_no_permission'), 'error'); return; }
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(res.ok && payload && payload.ok){ flashAndReload(t('w_deleted')); }
   else { showToast(t('w_save_failed'), 'error'); }
 }
 function renderPatientCardPlan(d){

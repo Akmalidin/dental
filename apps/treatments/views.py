@@ -215,13 +215,19 @@ def treatment_detail(request, pk):
 
 
 @login_required
+@require_permission("patients.delete_history")
 @require_POST
 def treatment_delete(request, pk):
+    """Удаление записи из истории приёмов пациента (карта пациента → «История
+    приёмов» в новом интерфейсе). По умолчанию право есть только у директора
+    клиники/суперадмина — остальным ролям выдаётся вручную через «Персонал →
+    Роли» (см. patients.delete_history, 0026_seed_delete_history_permission).
+    Мягкое удаление — в корзину (ClinicSoftDeleteModel.soft_delete), не
+    физическое DELETE: можно восстановить, изменение видно в HistoricalRecords/
+    аудите, как и любое другое изменение приёма."""
     treatment = _get_own_treatment_or_404(pk)
-    patient_pk = treatment.patient_id
-    treatment.soft_delete(request.user)   # в корзину
-    messages.success(request, _("Приём перемещён в корзину"))
-    return redirect("patient_detail", pk=patient_pk)
+    treatment.soft_delete(request.user)
+    return JsonResponse({"ok": True})
 
 
 @login_required
