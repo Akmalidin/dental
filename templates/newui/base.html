@@ -4423,17 +4423,26 @@ function updateSchedDoctorFilterBadge(){
 /* ---- auto-advance/back a day when horizontal scroll reaches either edge ---- */
 let scrollAdvanceLock=false;
 let schedHasScrolledAway=false; // защита от срабатывания "влево" сразу при загрузке (когда scrollLeft и так 0)
+// Симметричная защита для правого края: переход НАЗАД (atStart) "приземляется"
+// именно у правого края нового дня (см. changeDay) — без этого флага та же
+// самая позиция сразу же снова читалась бы как "докрутили до конца" и
+// обработчик тут же листал вперёд, откатывая только что сделанный переход
+// назад. Для перехода ВПЕРЁД (atEnd) аналогичной проблемы нет — там
+// приземление всегда в scrollLeft=0, что и так требует schedHasScrolledAway.
+let schedHasScrolledAwayFromEnd=false;
 function attachScheduleScrollWatcher(){
   const el=document.getElementById('scheduleContent');
   if(!el) return;
   schedHasScrolledAway=false; // сбрасываем на каждый новый рендер сетки (новый день и т.д.)
+  schedHasScrolledAwayFromEnd=false;
   if(el.dataset.scrollWatcher) return;
   el.dataset.scrollWatcher='1';
   el.addEventListener('scroll', ()=>{
     if(calView!=='day' || scrollAdvanceLock) return;
     const hasOverflow = el.scrollWidth > el.clientWidth + 10;
     if(el.scrollLeft > 20) schedHasScrolledAway=true;
-    const atEnd = hasOverflow && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
+    if(hasOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 20) schedHasScrolledAwayFromEnd=true;
+    const atEnd = hasOverflow && schedHasScrolledAwayFromEnd && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
     // Скроллом назад можно долистать только до сегодня (currentDayOffset===0),
     // не дальше в прошлое — иначе легко нечаянно укрутить в старые даты.
     // В прошлое — только явной кнопкой ‹ в тулбаре.
