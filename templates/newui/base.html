@@ -2253,14 +2253,21 @@ function renderCashShift(){
       </div>`;
     return;
   }
-  const methodLabel={cash:'Наличные', card:'Карта', transfer:'Перевод', online:'Онлайн'};
-  const rows=Object.keys(methodLabel).map(k=>`<div class="row"><div class="row-main"><b>${methodLabel[k]}</b></div><span class="mono">${Math.round(s.byMethod[k]||0).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>`).join('');
+  // Суммы по смене — блоками (kpi-grid), тот же паттерн, что и на «Финансы»/
+  // карточке пациента, вместо плоского списка строк.
+  const methodKeys=[
+    ['cash','w_cash','b-cobalt'], ['card','w_card','b-cobalt'],
+    ['transfer','w_transfer','b-cobalt'], ['online','w_online','b-cobalt'],
+  ];
+  const kpis=methodKeys.map(([k,label,cls])=>
+    `<div class="card kpi ${cls}"><span class="lbl">${t(label)}</span><b style="font-size:18px">${Math.round(s.byMethod[k]||0).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`
+  ).join('')
+  + `<div class="card kpi b-teal"><span class="lbl">${t('w_income')}</span><b style="font-size:18px;color:var(--teal)">+${Math.round(s.incomeTotal).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`
+  + `<div class="card kpi b-coral"><span class="lbl">${t('w_refunds')}</span><b style="font-size:18px;color:var(--coral)">−${Math.round(s.refundTotal).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`
+  + `<div class="card kpi b-amber"><span class="lbl">${t('w_expected_cash')}</span><b style="font-size:18px">${Math.round(s.expectedCash).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`;
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_shift_open">Смена открыта</h3><span style="font-size:11px;color:var(--ink-soft);">с ${s.openedAt} · ${s.openedBy}</span></div>
     <div class="card-body">
-      ${rows}
-      <div class="row"><div class="row-main"><b>Приход</b></div><span class="mono" style="color:var(--teal)">+${Math.round(s.incomeTotal).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
-      <div class="row"><div class="row-main"><b>Возвраты</b></div><span class="mono" style="color:var(--coral)">−${Math.round(s.refundTotal).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
-      <div class="row"><div class="row-main"><b>Ожидаемые наличные (Z-отчёт)</b></div><span class="mono">${Math.round(s.expectedCash).toLocaleString('ru-RU')} ${CUR_SYM}</span></div>
+      <div class="kpi-grid" style="margin-bottom:4px;">${kpis}</div>
       <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input autocomplete="off" type="number" id="shiftClosingCash" value="${Math.round(s.expectedCash)}" min="0"></div>
       <button class="btn btn-ghost btn-sm" onclick="cashCloseShift(${s.id})">Закрыть смену</button>
     </div>`;
@@ -3047,6 +3054,11 @@ const translations={
   w_card: {ru:'Карта', ky:'Карта', en:'Card', uz:'Karta'},
   w_transfer: {ru:'Перевод', ky:'Которуу', en:'Transfer', uz:'O\'tkazma'},
   w_online: {ru:'Онлайн', ky:'Онлайн', en:'Online', uz:'Onlayn'},
+  w_income: {ru:'Приход', ky:'Кирим', en:'Income', uz:'Kirim'},
+  w_refunds: {ru:'Возвраты', ky:'Кайтарым', en:'Refunds', uz:'Qaytarilganlar'},
+  w_expected_cash: {ru:'Ожидаемые наличные (Z-отчёт)', ky:'Күтүлгөн накталай (Z-отчёт)', en:'Expected cash (Z-report)', uz:'Kutilayotgan naqd (Z-hisobot)'},
+  w_patient_debt_note: {ru:'Долг пациента:', ky:'Бейтаптын карызы:', en:'Patient debt:', uz:'Bemor qarzi:'},
+  w_select_patient: {ru:'Выберите пациента', ky:'Бейтапты тандаңыз', en:'Select a patient', uz:'Bemorni tanlang'},
   w_payment_accepted: {ru:'Оплата принята', ky:'Төлөм кабыл алынды', en:'Payment accepted', uz:'To\'lov qabul qilindi'},
   w_issue_receipt_q: {ru:'Выдать пациенту чек?', ky:'Бейтапка чек берилсинби?', en:'Issue a receipt to the patient?', uz:'Bemorga chek berilsinmi?'},
   w_not_now: {ru:'Не сейчас', ky:'Азыр эмес', en:'Not now', uz:'Hozir emas'},

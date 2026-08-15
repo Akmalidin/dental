@@ -2,7 +2,8 @@
 {% block page_title %}Касса{% endblock %}
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_cashdesk">Касса</h1><div class="topbar-right">
-        <button class="btn btn-cobalt hidden" id="qsOpenBtn" onclick="openQuickSale()">⚡ <span data-i18n="w_quick_sale">Быстрая продажа</span></button>
+        <button class="btn btn-cobalt" onclick="openCashAcceptGeneral()">💳 <span data-i18n="w_accept_payment">Принять оплату</span></button>
+        <button class="btn btn-ghost hidden" id="qsOpenBtn" onclick="openQuickSale()">⚡ <span data-i18n="w_quick_sale">Быстрая продажа</span></button>
       </div></div>
       <div class="page">
         <div class="tab-strip">
@@ -98,6 +99,42 @@
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-accept')" data-i18n="w_cancel">Отмена</button>
             <button class="btn btn-cobalt" onclick="submitCashAccept()" data-i18n="w_accept_payment">Принять оплату</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Принять оплату (общая кнопка в шапке) — без привязки к очереди/
+           «Пациенты на сегодня»: кассир сам ищет пациента и принимает оплату
+           напрямую, например когда пациент подошёл сразу к кассе. -->
+      <div class="modal-backdrop" id="m-cash-accept-general">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_accept_payment">Принять оплату</h3><button class="modal-close" onclick="closeModal('m-cash-accept-general')">✕</button></div>
+          <div class="modal-body">
+            <div id="agError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+            <div class="form-group" style="position:relative;">
+              <label data-i18n="w_patient">Пациент</label>
+              <input autocomplete="off" type="text" id="ag-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone"
+                     oninput="agPatientSearch(this.value)" onfocus="agPatientSearch(this.value)"
+                     onblur="setTimeout(()=>document.getElementById('ag-patient-suggestions').classList.add('hidden'),200)">
+              <input autocomplete="off" type="hidden" id="ag-patient-id">
+              <div id="ag-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow-y:auto;"></div>
+            </div>
+            <div id="ag-debt-note" class="hidden" style="font-size:12.5px;color:var(--coral);margin:-4px 0 12px;"></div>
+            <div class="form-row2">
+              <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" id="ag-amount" min="0"></div>
+              <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
+                <select id="ag-method">
+                  <option value="cash" data-i18n="w_cash">Наличные</option>
+                  <option value="card" data-i18n="w_card">Карта</option>
+                  <option value="transfer" data-i18n="w_transfer">Перевод</option>
+                  <option value="online" data-i18n="w_online">Онлайн</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-cash-accept-general')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" onclick="submitCashAcceptGeneral()" data-i18n="w_accept_payment">Принять оплату</button>
           </div>
         </div>
       </div>
@@ -213,6 +250,75 @@ async function submitCashAccept(){
   await fetch('/finance/cashdesk/queue/'+cashAcceptItem.id+'/dismiss/', {headers:{'X-Requested-With':'XMLHttpRequest'}});
   removeFromCashQueue(cashAcceptItem.id);
   closeModal('m-cash-accept');
+  openModal('m-cash-receipt');
+}
+
+// «Принять оплату» из шапки — без привязки к очереди/«Пациенты на сегодня»:
+// кассир сам ищет пациента (тот же паттерн поиска, что и в «Быстрой продаже»,
+// см. qsPatientSearch/qsSelectPatient выше) и вводит сумму/способ вручную.
+function openCashAcceptGeneral(){
+  document.getElementById('agError').classList.add('hidden');
+  document.getElementById('ag-patient-search').value='';
+  document.getElementById('ag-patient-id').value='';
+  document.getElementById('ag-amount').value='';
+  document.getElementById('ag-method').value='cash';
+  document.getElementById('ag-debt-note').classList.add('hidden');
+  openModal('m-cash-accept-general');
+}
+function agPatientSearch(q){
+  const box=document.getElementById('ag-patient-suggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=patientsList.filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="agSelectPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
+function agSelectPatient(id){
+  const p=patientsList.find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('ag-patient-search').value=p.fullName;
+  document.getElementById('ag-patient-id').value=p.id;
+  document.getElementById('ag-patient-suggestions').classList.add('hidden');
+  const note=document.getElementById('ag-debt-note');
+  // Долг пациента (если есть) — сразу подставляем в сумму (можно поправить
+  // вручную), чтобы кассиру не приходилось идти в карточку пациента за цифрой.
+  if(p.hasDebt){
+    const debt=Math.round(-p.balance);
+    document.getElementById('ag-amount').value=debt;
+    note.textContent=t('w_patient_debt_note','Долг пациента:')+' '+debt.toLocaleString('ru-RU')+' '+CUR_SYM;
+    note.classList.remove('hidden');
+  } else {
+    note.classList.add('hidden');
+  }
+}
+async function submitCashAcceptGeneral(){
+  const errEl=document.getElementById('agError');
+  errEl.classList.add('hidden');
+  const patientId=document.getElementById('ag-patient-id').value;
+  if(!patientId){ errEl.textContent=t('w_select_patient','Выберите пациента'); errEl.classList.remove('hidden'); return; }
+  const amount=document.getElementById('ag-amount').value;
+  if(amount==='' || Number(amount)<0){ errEl.textContent=t('w_specify_amount'); errEl.classList.remove('hidden'); return; }
+  const fd=new FormData();
+  fd.append('patient', patientId);
+  fd.append('amount', amount);
+  fd.append('method', document.getElementById('ag-method').value);
+  fd.append('type', 'income');
+  fd.append('channel', 'cashier');
+  const res=await fetch('/finance/payments/create/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(!res.ok || !payload || !payload.ok){
+    errEl.textContent = apiErrorMessage(payload, t('w_save_failed'));
+    errEl.classList.remove('hidden');
+    return;
+  }
+  lastAcceptedPaymentId = payload.payment_id;
+  closeModal('m-cash-accept-general');
   openModal('m-cash-receipt');
 }
 function cashReceiptYes(){
