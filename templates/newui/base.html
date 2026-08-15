@@ -241,6 +241,17 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;}
 .sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
 .sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
+/* Лента дней (дневной вид): подпись-дата над каждой группой врачей одного
+   дня, и угловая ячейка колонки времени — теперь их ДВЕ (над строкой дат и
+   над строкой врачей), :first-child уже не покрывает вторую. */
+.sched-day-group-label{text-align:center;font-size:12.5px;font-weight:700;color:var(--ink);background:var(--cloud);border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);}
+.sched-day-group-label:first-of-type{border-left:none;}
+/* Подпись даты «прилипает» к видимой части своей группы колонок при
+   горизонтальном скролле (но не вылезает за её границы — не пересекается с
+   соседним днём) — чтобы всегда было видно, какой это день, а не только
+   когда доскроллил ровно до центра его группы. */
+.sched-day-group-label span{position:sticky;left:66px;right:6px;display:inline-block;padding:8px 4px;}
+.sched-head-corner{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
 .sched-doc{display:flex;flex-direction:column;align-items:center;gap:6px;}
 .sched-doc .av{width:30px;height:30px;border-radius:9px;background:var(--cobalt-tint);color:var(--cobalt-dark);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
 .sched-doc b{font-size:12.5px;}
@@ -3996,8 +4007,18 @@ let scheduleDoctors=[];
 let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
-let currentDayOffset=0;
+let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
 const weekdayShort=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+// Дневной вид — непрерывная лента дней (каждый следующий день дорисовывается
+// сразу за предыдущим, со своей подписью-датой над группой врачей), а не
+// постраничная смена одного дня. scheduleRibbonDates — ISO-даты, уже
+// отрисованные в ленте, по порядку от якорного дня; пополняется при
+// приближении скролла к правому краю (см. appendRibbonDays), сбрасывается
+// только явной сменой якоря (changeDay — кнопки ‹ ›).
+let scheduleRibbonDates=[];
+const RIBBON_INITIAL_DAYS=4;
+const RIBBON_APPEND_DAYS=3;
+const RIBBON_MAX_DAYS=30; // совпадает с окном загруженных приёмов (±30 дней от сегодня)
 
 /* Настройки календаря раньше нигде не сохранялись (сбрасывались на каждую
    перезагрузку страницы, включая уже существующие начало/конец/интервал/цвета) —
@@ -4090,33 +4111,27 @@ function changeDay(delta){
     document.getElementById('chipWeek').classList.remove('active');
     document.getElementById('chipMonth').classList.remove('active');
   }
+  // Смена якорного дня кнопкой ‹ › — лента строится заново отсюда (см.
+  // buildDayRibbonHTML). Автопрокрутки/отката через скролл больше нет —
+  // лента только дозагружается вправо (appendRibbonDays), назад в прошлое
+  // можно только этой явной кнопкой.
+  scheduleRibbonDates=[];
   const c=document.getElementById('scheduleContent');
   if(!c){ renderSchedule(); return; }
-  // Плавная смена дня: текущая сетка уезжает целиком в сторону пролистывания
+  // Плавный переход: текущая лента уезжает целиком в сторону пролистывания
   // (вперёд — влево, назад — вправо, то же направление, в котором и так
-  // крутили/жали стрелку), затем новый день подставляется сразу за краем
-  // экрана с противоположной стороны и въезжает на место — визуально это
-  // непрерывное движение дальше по календарю, а не подмена/«обновление».
-  //
-  // scrollAdvanceLock блокирует обработчик scroll на всё время программной
-  // перемотки ниже — иначе c.scrollLeft=c.scrollWidth (переход НАЗАД
-  // "приземляется" у конца дня) сам выглядит как докрут до правого края и
-  // watcher тут же снова листает ВПЕРЁД, откатывая только что сделанный
-  // клик по ‹ (кнопка не была частью watcher'а и раньше лок не ставила).
-  scrollAdvanceLock=true;
+  // жали стрелку), новая лента (уже с нового якоря) въезжает с
+  // противоположной стороны — визуально непрерывное движение, а не
+  // подмена/«обновление».
   c.style.setProperty('--sched-slide', delta>0 ? '-100%' : '100%');
   setTimeout(()=>{
     renderSchedule();
-    // Вперёд (delta>0) — начинаем с начала дня (слева). Назад (delta<0) —
-    // "приземляемся" у конца дня (справа), иначе продолжать скроллить влево
-    // от предыдущего дня, за который только что зашли, было бы странно.
-    c.scrollLeft = delta<0 ? c.scrollWidth : 0;
+    c.scrollLeft = 0; // лента всегда начинается с якорного дня слева
     c.classList.add('sched-day-notransition');
     c.style.setProperty('--sched-slide', delta>0 ? '100%' : '-100%');
-    void c.offsetWidth; // reflow — зафиксировать стартовую позицию новой сетки без анимации
+    void c.offsetWidth; // reflow — зафиксировать стартовую позицию новой ленты без анимации
     c.classList.remove('sched-day-notransition');
     requestAnimationFrame(()=>{ c.style.setProperty('--sched-slide','0%'); });
-    setTimeout(()=>{ scrollAdvanceLock=false; }, 150);
   }, 200);
 }
 
@@ -4142,7 +4157,7 @@ function renderSchedule(){
   const c=document.getElementById('scheduleContent');
   if(!c) return;
   c.classList.toggle('sched-wrap-month', calView==='month');
-  if(calView==='day'){ updateDayDateLabel(); c.innerHTML = buildDayHTML(); }
+  if(calView==='day'){ updateDayDateLabel(); c.innerHTML = buildDayRibbonHTML(); }
   else if(calView==='week') c.innerHTML = buildWeekHTML();
   else c.innerHTML = buildMonthHTML();
   attachScheduleScrollWatcher();
@@ -4154,53 +4169,93 @@ function hexToRgba(hex, alpha){
   const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
-function buildDayHTML(){
-  const dateIso=isoDate(dateAtOffset(currentDayOffset));
+// Первые RIBBON_INITIAL_DAYS дней ленты от якорного (currentDayOffset).
+function ribbonInitialDates(){
+  const out=[];
+  for(let i=0;i<RIBBON_INITIAL_DAYS;i++) out.push(isoDate(dateAtOffset(currentDayOffset+i)));
+  return out;
+}
+// Непрерывная лента дней: каждый день — своя группа врачей-колонок, подписанная
+// датой сверху, дни идут подряд слева направо в ОДНОЙ CSS grid-сетке (не
+// отдельные подсетки на день) — колонка времени слева и так sticky (.sched-time),
+// поэтому остаётся видна при любом горизонтальном скролле по ленте.
+function buildDayRibbonHTML(){
+  if(scheduleRibbonDates.length===0) scheduleRibbonDates=ribbonInitialDates();
   const visibleDocs=visibleScheduleDoctors();
   const n=Math.max(visibleDocs.length,1);
+  const totalCols=n*scheduleRibbonDates.length;
   // min-width явно, а не только через minmax() — при 10+ врачах колонки иначе
   // сжимались бы вместо горизонтального скролла (у .sched-wrap overflow-x:auto).
-  let html=`<div class="sched-grid" id="schedGrid" style="grid-template-columns:60px repeat(${n},minmax(150px,1fr));min-width:${60+n*150}px;">`;
-  html+='<div class="sched-head"></div>';
+  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(150px,1fr));min-width:${60+totalCols*150}px;">`;
+  html+='<div class="sched-head sched-head-corner"></div>';
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
   if(visibleDocs.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</div>`;
   }
-  // Цвет врача (User.color, задаётся в карточке сотрудника) — красим весь его
-  // столбец, не только аватар, чтобы визуально сразу отличать врачей в сетке.
-  visibleDocs.forEach(d=>{
-    const headBg = d.color ? hexToRgba(d.color, .12) : '';
-    const headStyle = d.color ? `style="border-top:3px solid ${d.color};background:${headBg};"` : '';
-    const avStyle = d.color ? `style="background:${d.color};"` : '';
-    html+=`<div class="sched-head" ${headStyle}><div class="sched-doc"><div class="av" ${avStyle}>${d.init}</div><b>${d.name}</b><span>${d.role}</span></div></div>`;
+  // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
+  scheduleRibbonDates.forEach(dateIso=>{
+    const d=new Date(dateIso+'T00:00:00');
+    html+=`<div class="sched-day-group-label" style="grid-column:span ${n};"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
+  });
+  // Шапка врачей — повторяется под каждым днём ленты.
+  html+='<div class="sched-head sched-head-corner"></div>';
+  scheduleRibbonDates.forEach(()=>{
+    visibleDocs.forEach(d=>{
+      // Цвет врача (User.color, задаётся в карточке сотрудника) — красим весь его
+      // столбец, не только аватар, чтобы визуально сразу отличать врачей в сетке.
+      const headBg = d.color ? hexToRgba(d.color, .12) : '';
+      const headStyle = d.color ? `style="border-top:3px solid ${d.color};background:${headBg};"` : '';
+      const avStyle = d.color ? `style="background:${d.color};"` : '';
+      html+=`<div class="sched-head" ${headStyle}><div class="sched-doc"><div class="av" ${avStyle}>${d.init}</div><b>${d.name}</b><span>${d.role}</span></div></div>`;
+    });
   });
   const startMin=calSettings.start*60, endMin=calSettings.end*60;
   for(let t=startMin; t<endMin; t+=calSettings.interval){
     const label=minutesToTime(t);
     html+=`<div class="sched-time">${label}</div>`;
-    visibleDocs.forEach(d=>{
-      const cellBg = d.color ? hexToRgba(d.color, .07) : null;
-      const cellStyle = cellBg ? `style="--doc-tint:${cellBg};"` : '';
-      const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
-      if(appt){
-        html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})">`;
-        // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
-        // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
-        // для завершённых приёмов — сознательно другой визуальный сигнал,
-        // чтобы два разных смысла не сливались в один цвет).
-        const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
-          ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
-        html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
-        html+='</div>';
-      } else {
-        html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" ${cellStyle} title="${label}" onclick="schedCellClick('${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${label}',${d.id})"></div>`;
-      }
+    scheduleRibbonDates.forEach(dateIso=>{
+      visibleDocs.forEach(d=>{
+        const cellBg = d.color ? hexToRgba(d.color, .07) : null;
+        const cellStyle = cellBg ? `style="--doc-tint:${cellBg};"` : '';
+        const appt=apptsFor(dateIso, d.id).find(a=>Math.abs(timeToMinutes(a.time)-t) < calSettings.interval);
+        if(appt){
+          html+=`<div class="sched-cell" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
+          // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
+          // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
+          // для завершённых приёмов — сознательно другой визуальный сигнал,
+          // чтобы два разных смысла не сливались в один цвет).
+          const debtDot = (appt.debt>0 && calSettings.highlightDebt!==false)
+            ? `<span class="sched-appt-debt-dot" title="У пациента есть долг">●</span>` : '';
+          html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b>${appt.patient}</b><span>${appt.service||'приём'}</span></div>`;
+          html+='</div>';
+        } else {
+          html+=`<div class="sched-cell sched-cell-empty" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ${cellStyle} title="${label}" onclick="schedCellClick('${dateIso}','${label}',${d.id})" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})"></div>`;
+        }
+      });
     });
   }
   html+='</div>';
   return html;
+}
+// Дозагрузка дней в ленту при приближении скролла к правому краю. Полная
+// пересборка innerHTML вместо точечной вставки колонок (CSS grid с одним
+// потоком ячеек не позволяет чисто «дописать» новые колонки в середину уже
+// отрисованных строк), но синхронно восстанавливаем scrollLeft сразу после —
+// уже видимая часть ленты не меняется, поэтому визуально скачка нет.
+function appendRibbonDays(count){
+  const el=document.getElementById('scheduleContent');
+  if(!el || scheduleRibbonDates.length===0) return;
+  const lastDate=new Date(scheduleRibbonDates[scheduleRibbonDates.length-1]+'T00:00:00');
+  for(let i=1;i<=count;i++){
+    const d=new Date(lastDate);
+    d.setDate(d.getDate()+i);
+    scheduleRibbonDates.push(isoDate(d));
+  }
+  const prevScrollLeft=el.scrollLeft;
+  el.innerHTML=buildDayRibbonHTML();
+  el.scrollLeft=prevScrollLeft;
 }
 
 /* ---- Запись: просмотр + действия (та же логика, что в старом интерфейсе:
@@ -4420,38 +4475,24 @@ function updateSchedDoctorFilterBadge(){
   badge.style.display = hiddenDoctorIds.size>0 ? '' : 'none';
 }
 
-/* ---- auto-advance/back a day when horizontal scroll reaches either edge ---- */
-let scrollAdvanceLock=false;
-let schedHasScrolledAway=false; // защита от срабатывания "влево" сразу при загрузке (когда scrollLeft и так 0)
-// Симметричная защита для правого края: переход НАЗАД (atStart) "приземляется"
-// именно у правого края нового дня (см. changeDay) — без этого флага та же
-// самая позиция сразу же снова читалась бы как "докрутили до конца" и
-// обработчик тут же листал вперёд, откатывая только что сделанный переход
-// назад. Для перехода ВПЕРЁД (atEnd) аналогичной проблемы нет — там
-// приземление всегда в scrollLeft=0, что и так требует schedHasScrolledAway.
-let schedHasScrolledAwayFromEnd=false;
+/* ---- непрерывная лента дней: при приближении скролла к правому краю
+   дозагружаем ещё дней (appendRibbonDays) — без сброса/скачка scrollLeft.
+   Никакого автоперехода/отката по скроллу больше нет (раньше здесь была
+   постраничная смена дня atEnd/atStart — источник неоднократных багов с
+   самооткатом); назад в прошлое — только явной кнопкой ‹ (changeDay). ---- */
 function attachScheduleScrollWatcher(){
   const el=document.getElementById('scheduleContent');
   if(!el) return;
-  schedHasScrolledAway=false; // сбрасываем на каждый новый рендер сетки (новый день и т.д.)
-  schedHasScrolledAwayFromEnd=false;
   if(el.dataset.scrollWatcher) return;
   el.dataset.scrollWatcher='1';
   el.addEventListener('scroll', ()=>{
-    if(calView!=='day' || scrollAdvanceLock) return;
+    if(calView!=='day') return;
     const hasOverflow = el.scrollWidth > el.clientWidth + 10;
-    if(el.scrollLeft > 20) schedHasScrolledAway=true;
-    if(hasOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 20) schedHasScrolledAwayFromEnd=true;
-    const atEnd = hasOverflow && schedHasScrolledAwayFromEnd && el.scrollLeft > 0 && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 4);
-    // Скроллом назад можно долистать только до сегодня (currentDayOffset===0),
-    // не дальше в прошлое — иначе легко нечаянно укрутить в старые даты.
-    // В прошлое — только явной кнопкой ‹ в тулбаре.
-    const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4 && currentDayOffset > 0;
-    // Лок на время самой перемотки ставит и снимает changeDay() — общий и
-    // для скролла, и для кнопок ‹ ›, чтобы программный scrollLeft внутри
-    // changeDay() не воспринимался этим же обработчиком как новый докрут.
-    if(atEnd) changeDay(1);
-    else if(atStart) changeDay(-1);
+    // Подгружаем чуть заранее (за 400px до самого края), не впритык —
+    // дозагрузка успевает отрисоваться до того, как пользователь реально
+    // докрутит до пустоты.
+    const nearEnd = hasOverflow && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 400);
+    if(nearEnd && scheduleRibbonDates.length < RIBBON_MAX_DAYS) appendRibbonDays(RIBBON_APPEND_DAYS);
   });
 }
 
@@ -4546,8 +4587,7 @@ function openNewAppt(prefill){
   }
   openModal('m-appt');
 }
-function schedCellClick(time, docId){
-  const dateIso = isoDate(dateAtOffset(currentDayOffset));
+function schedCellClick(dateIso, time, docId){
   openNewAppt({time, docId, date: dateIso});
 }
 // Тот же клик-по-пустой-ячейке, что и в дневном виде, но для недельной сетки —
@@ -4652,7 +4692,7 @@ function schedDragStart(ev, apptId, movable){
   ev.dataTransfer.setData('text/plain', String(apptId));
   ev.dataTransfer.effectAllowed='move';
 }
-async function schedDrop(ev, time, docId){
+async function schedDrop(ev, dateIso, time, docId){
   ev.preventDefault();
   ev.currentTarget.classList.remove('drop-target');
   const apptId=schedDragApptId || Number(ev.dataTransfer.getData('text/plain'));
@@ -4660,7 +4700,6 @@ async function schedDrop(ev, time, docId){
   if(!apptId) return;
   const appt=(scheduleRealData.appointments||[]).find(a=>a.id===apptId);
   if(!appt) return;
-  const dateIso=isoDate(dateAtOffset(currentDayOffset));
   const startIso=dateIso+'T'+time+':00';
   const startDt=new Date(startIso);
   const endDt=new Date(startDt.getTime() + (appt.durationMin||30)*60000);
