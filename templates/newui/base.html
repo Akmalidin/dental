@@ -4102,7 +4102,48 @@ function updateDayDateLabel(){
   document.getElementById('schedViewLabel').textContent=t('w_view_one_day','Вид: 1 день')+' · '+weekdayFullName(d);
   animateDateLabel();
 }
+// В непрерывной ленте дней заголовок сверху (schedDateLabel) изначально
+// показывает только якорный (первый) день — при прокрутке вглубь ленты он
+// переставал соответствовать тому, что реально видно на экране. Держим его
+// синхронизированным с прокруткой: определяем группу дня, чей блок сейчас
+// находится сразу за sticky-колонкой времени, и показываем её дату. Сам
+// currentDayOffset (якорь ленты) при этом НЕ трогаем — он меняется только
+// кнопками ‹ › / «Сегодня», иначе снова вернутся баги с откатом ленты.
+function updateVisibleDayLabelFromScroll(){
+  if(calView!=='day') return;
+  const c=document.getElementById('scheduleContent');
+  const label=document.getElementById('schedDateLabel');
+  if(!c || !label) return;
+  const groups=c.querySelectorAll('.sched-day-group-label');
+  if(!groups.length) return;
+  const containerRect=c.getBoundingClientRect();
+  const probeX=containerRect.left+70; // чуть правее sticky-колонки времени (60px)
+  let current=groups[0];
+  groups.forEach(g=>{
+    const r=g.getBoundingClientRect();
+    if(r.left<=probeX) current=g;
+  });
+  const iso=current.dataset.date;
+  if(!iso) return;
+  const d=new Date(iso+'T00:00:00');
+  label.textContent=formatDMY(d)+', '+weekdayFullName(d);
+}
 
+// Кнопка «Сегодня» — возвращает ленту на текущую дату (currentDayOffset=0),
+// откуда бы её ни увели кнопки ‹ › или переключение недели/месяца. Если
+// якорь и так уже сегодня (просто проскроллили ленту вправо) — не
+// перестраиваем всё заново, только мгновенно возвращаем скролл в начало.
+function goToScheduleToday(){
+  const delta=-currentDayOffset;
+  if(delta===0){
+    if(calView!=='day'){ calSetView('day'); return; }
+    const c=document.getElementById('scheduleContent');
+    if(c) c.scrollLeft=0;
+    updateDayDateLabel();
+    return;
+  }
+  changeDay(delta);
+}
 function changeDay(delta){
   currentDayOffset+=delta;
   if(calView!=='day'){
@@ -4197,7 +4238,7 @@ function buildDayRibbonHTML(){
   // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
   scheduleRibbonDates.forEach(dateIso=>{
     const d=new Date(dateIso+'T00:00:00');
-    html+=`<div class="sched-day-group-label" style="grid-column:span ${n};"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
+    html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:span ${n};"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
   });
   // Шапка врачей — повторяется под каждым днём ленты.
   html+='<div class="sched-head sched-head-corner"></div>';
@@ -4485,6 +4526,7 @@ function attachScheduleScrollWatcher(){
   if(!el) return;
   if(el.dataset.scrollWatcher) return;
   el.dataset.scrollWatcher='1';
+  let labelTicking=false;
   el.addEventListener('scroll', ()=>{
     if(calView!=='day') return;
     const hasOverflow = el.scrollWidth > el.clientWidth + 10;
@@ -4493,6 +4535,10 @@ function attachScheduleScrollWatcher(){
     // докрутит до пустоты.
     const nearEnd = hasOverflow && (el.scrollLeft + el.clientWidth >= el.scrollWidth - 400);
     if(nearEnd && scheduleRibbonDates.length < RIBBON_MAX_DAYS) appendRibbonDays(RIBBON_APPEND_DAYS);
+    if(!labelTicking){
+      labelTicking=true;
+      requestAnimationFrame(()=>{ updateVisibleDayLabelFromScroll(); labelTicking=false; });
+    }
   });
 }
 
