@@ -4097,6 +4097,13 @@ function changeDay(delta){
   // крутили/жали стрелку), затем новый день подставляется сразу за краем
   // экрана с противоположной стороны и въезжает на место — визуально это
   // непрерывное движение дальше по календарю, а не подмена/«обновление».
+  //
+  // scrollAdvanceLock блокирует обработчик scroll на всё время программной
+  // перемотки ниже — иначе c.scrollLeft=c.scrollWidth (переход НАЗАД
+  // "приземляется" у конца дня) сам выглядит как докрут до правого края и
+  // watcher тут же снова листает ВПЕРЁД, откатывая только что сделанный
+  // клик по ‹ (кнопка не была частью watcher'а и раньше лок не ставила).
+  scrollAdvanceLock=true;
   c.style.setProperty('--sched-slide', delta>0 ? '-100%' : '100%');
   setTimeout(()=>{
     renderSchedule();
@@ -4109,6 +4116,7 @@ function changeDay(delta){
     void c.offsetWidth; // reflow — зафиксировать стартовую позицию новой сетки без анимации
     c.classList.remove('sched-day-notransition');
     requestAnimationFrame(()=>{ c.style.setProperty('--sched-slide','0%'); });
+    setTimeout(()=>{ scrollAdvanceLock=false; }, 150);
   }, 200);
 }
 
@@ -4430,15 +4438,11 @@ function attachScheduleScrollWatcher(){
     // не дальше в прошлое — иначе легко нечаянно укрутить в старые даты.
     // В прошлое — только явной кнопкой ‹ в тулбаре.
     const atStart = hasOverflow && schedHasScrolledAway && el.scrollLeft <= 4 && currentDayOffset > 0;
-    if(atEnd){
-      scrollAdvanceLock=true;
-      changeDay(1);
-      setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
-    } else if(atStart){
-      scrollAdvanceLock=true;
-      changeDay(-1);
-      setTimeout(()=>{ scrollAdvanceLock=false; }, 350);
-    }
+    // Лок на время самой перемотки ставит и снимает changeDay() — общий и
+    // для скролла, и для кнопок ‹ ›, чтобы программный scrollLeft внутри
+    // changeDay() не воспринимался этим же обработчиком как новый докрут.
+    if(atEnd) changeDay(1);
+    else if(atStart) changeDay(-1);
   });
 }
 
