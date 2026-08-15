@@ -857,6 +857,45 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
+<!-- Калькулятор услуг — набрать несколько услуг (поиск по прайс-листу,
+     кол-во/цена редактируемые), посчитать итог и распечатать. Чисто
+     расчётный инструмент, ничего не сохраняет в БД — печать собирается
+     на лету в JS (svcCalcPrint), без похода на сервер. -->
+<div class="modal-backdrop" id="m-services-calc">
+  <div class="modal wide">
+    <div class="modal-head"><h3 data-i18n="w_services_calculator">Калькулятор услуг</h3><button class="modal-close" onclick="closeModal('m-services-calc')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" style="position:relative;">
+        <label data-i18n="w_add_service">Добавить услугу</label>
+        <input type="text" id="svcCalcSearch" placeholder="Поиск по названию…" data-i18n-placeholder="w_service_name" autocomplete="off" oninput="svcCalcSearch(this.value)" onfocus="svcCalcSearch(this.value)">
+        <div id="svcCalcSuggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th data-i18n="w_service">Услуга</th>
+          <th style="width:70px;" data-i18n="w_qty">Кол-во</th>
+          <th style="width:110px;" data-i18n="w_price">Цена</th>
+          <th style="width:110px;" data-i18n="w_sum">Сумма</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="svcCalcBody"></tbody>
+        <tfoot><tr>
+          <td colspan="3" style="text-align:right;font-weight:700;" data-i18n="w_total">Итого</td>
+          <td class="mono" id="svcCalcTotal" style="font-weight:700;">0 сом</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between;">
+      <button class="btn btn-ghost" onclick="svcCalcClear()"><span data-i18n="w_clear">Очистить</span></button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="closeModal('m-services-calc')"><span data-i18n="w_close">Закрыть</span></button>
+        <button class="btn btn-cobalt" id="svcCalcPrintBtn" onclick="svcCalcPrint()" disabled>🖨 <span data-i18n="w_print">Печать</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Новая заявка (CRM) -->
 <div class="modal-backdrop" id="m-lead">
   <div class="modal">
@@ -995,6 +1034,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-group"><label data-i18n="w_default_view">Вид по умолчанию</label>
         <select id="cs-defaultview"><option value="day" selected>День</option><option value="week">Неделя</option><option value="month">Месяц</option></select>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;justify-content:space-between;">
+          <span data-i18n="w_cs_column_width">Ширина колонки врача</span>
+          <span id="cs-col-width-value" class="mono" style="color:var(--ink-soft);">150 px</span>
+        </label>
+        <input autocomplete="off" type="range" id="cs-col-width" min="150" max="320" step="10" value="150"
+          oninput="document.getElementById('cs-col-width-value').textContent=this.value+' px'">
       </div>
       <div class="form-group">
         <label data-i18n="w_calendar_colors">Цвета записей в календаре</label>
@@ -2686,6 +2733,7 @@ const translations={
   title_m_calsettings: {ru:'Настройки календаря', ky:'Календарь жөндөөлөрү', en:'Calendar settings', uz:'Kalendar sozlamalari'},
   w_cs_offer_start_visit: {ru:'Предлагать начать приём при отметке «Пришёл» (только для врача)', ky:'«Келди» деп белгилегенде кабыл алууну баштоону сунуштоо (дарыгер үчүн гана)', en:'Offer to start the visit when marking "Arrived" (doctors only)', uz:'"Keldi" deb belgilaganda qabulni boshlashni taklif qilish (faqat shifokor uchun)'},
   w_cs_highlight_debt: {ru:'Подсвечивать пациентов с долгом', ky:'Карызы бар бейтаптарды белгилөө', en:'Highlight patients with debt', uz:'Qarzi bor bemorlarni ajratib ko\'rsatish'},
+  w_cs_column_width: {ru:'Ширина колонки врача', ky:'Дарыгер тилкесинин туурасы', en:'Doctor column width', uz:'Shifokor ustunining kengligi'},
   w_offer_start_visit_now: {ru:'Пациент отмечен как пришедший. Начать приём сейчас?', ky:'Бейтап келди деп белгиленди. Кабыл алууну азыр баштайсызбы?', en:'Patient marked as arrived. Start the visit now?', uz:'Bemor keldi deb belgilandi. Qabulni hozir boshlaysizmi?'},
   title_m_templates: {ru:'Шаблоны сообщений', ky:'Билдирүү үлгүлөрү', en:'Message templates', uz:'Xabar shablonlari'},
   title_m_condition_edit: {ru:'Редактирование состояния', ky:'Абалды түзөтүү', en:'Edit condition', uz:'Holatni tahrirlash'},
@@ -2930,6 +2978,11 @@ const translations={
   w_procedures_plan: {ru:'Процедуры и план', ky:'Процедуралар жана план', en:'Procedures & plan', uz:'Muolajalar va reja'},
   w_add_service: {ru:'Добавить услугу', ky:'Кызмат кошуу', en:'Add service', uz:'Xizmat qo\'shish'},
   w_qty: {ru:'Кол-во', ky:'Саны', en:'Qty', uz:'Soni'},
+  w_services_calculator: {ru:'Калькулятор услуг', ky:'Кызматтар калькулятору', en:'Services calculator', uz:'Xizmatlar kalkulyatori'},
+  w_clear: {ru:'Очистить', ky:'Тазалоо', en:'Clear', uz:'Tozalash'},
+  w_svc_calc_empty: {ru:'Добавьте услуги через поиск выше', ky:'Жогорудагы издөө аркылуу кызматтарды кошуңуз', en:'Add services using the search above', uz:'Yuqoridagi qidiruv orqali xizmatlar qo\'shing'},
+  w_svc_calc_print_title: {ru:'Расчёт стоимости услуг', ky:'Кызматтардын наркын эсептөө', en:'Services cost estimate', uz:'Xizmatlar narxini hisoblash'},
+  w_popup_blocked: {ru:'Разрешите всплывающие окна для печати', ky:'Басып чыгаруу үчүн копчо терезелерге уруксат бериңиз', en:'Please allow pop-ups to print', uz:'Chop etish uchun pop-up oynalarga ruxsat bering'},
   w_done_today: {ru:'Выполнено сегодня', ky:'Бүгүн аткарылды', en:'Done today', uz:'Bugun bajarildi'},
   w_no_procedures: {ru:'Процедуры не добавлены', ky:'Процедуралар кошулган жок', en:'No procedures added', uz:'Muolajalar qo\'shilmagan'},
   w_send_to_cashier: {ru:'Отправить в кассу', ky:'Кассага жиберүү', en:'Send to cashier', uz:'Kassaga yuborish'},
@@ -3368,6 +3421,121 @@ function svcToggleSecondaryPrice(){
   document.getElementById('svcSecondaryPriceRow').classList.toggle('hidden', !on);
   if(!on) document.getElementById('svc-price2').value='';
 }
+
+/* ================= Калькулятор услуг (страница «Услуги») =================
+   Набрать несколько услуг из прайс-листа (поиск, как в модалках записи/кассы —
+   servicesList уже загружен глобально), посчитать итог и распечатать —
+   чисто расчётный инструмент, ничего не пишет в БД. Печать — не через
+   модалку (у неё есть @media print{.modal-backdrop{display:none}} — сама
+   форма исчезла бы), а отдельным окном с готовым HTML, собранным на лету
+   (тот же принцип, что и printPaymentReceipt/printTreatmentReceipt, но без
+   похода на сервер — печатать тут физически нечего сохранять). */
+let svcCalcRows=[];
+function openServicesCalculator(){
+  svcCalcRows=[];
+  document.getElementById('svcCalcSearch').value='';
+  document.getElementById('svcCalcSuggestions').classList.add('hidden');
+  renderServicesCalc();
+  openModal('m-services-calc');
+}
+function svcCalcSearch(q){
+  const box=document.getElementById('svcCalcSuggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=servicesList.filter(s=>s.name.toLowerCase().includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;display:flex;justify-content:space-between;gap:10px;" onclick="svcCalcAdd(${s.id})"><b>${s.name}</b><span style="color:var(--ink-soft);white-space:nowrap;">${fmtSom(s.price)}</span></div>`).join('');
+  box.classList.remove('hidden');
+}
+function svcCalcAdd(serviceId){
+  const s=servicesList.find(x=>x.id===serviceId);
+  if(!s) return;
+  const existing=svcCalcRows.find(r=>r.id===serviceId);
+  if(existing) existing.qty+=1;
+  else svcCalcRows.push({id:s.id, name:s.name, price:s.price, qty:1});
+  document.getElementById('svcCalcSearch').value='';
+  document.getElementById('svcCalcSuggestions').classList.add('hidden');
+  document.getElementById('svcCalcSuggestions').innerHTML='';
+  renderServicesCalc();
+}
+function svcCalcRemove(serviceId){
+  svcCalcRows=svcCalcRows.filter(r=>r.id!==serviceId);
+  renderServicesCalc();
+}
+function svcCalcUpdateQty(serviceId, val){
+  const row=svcCalcRows.find(r=>r.id===serviceId);
+  if(row) row.qty=Math.max(1, parseInt(val)||1);
+  renderServicesCalc();
+}
+function svcCalcUpdatePrice(serviceId, val){
+  const row=svcCalcRows.find(r=>r.id===serviceId);
+  if(row) row.price=Math.max(0, parseFloat(val)||0);
+  renderServicesCalc();
+}
+function svcCalcClear(){
+  svcCalcRows=[];
+  renderServicesCalc();
+}
+function svcCalcTotal(){
+  return svcCalcRows.reduce((sum,r)=>sum+r.price*r.qty, 0);
+}
+function renderServicesCalc(){
+  const body=document.getElementById('svcCalcBody');
+  if(!body) return;
+  body.innerHTML = svcCalcRows.length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_svc_calc_empty','Добавьте услуги через поиск выше')}</td></tr>`
+    : svcCalcRows.map(r=>`<tr>
+        <td>${r.name}</td>
+        <td><input autocomplete="off" type="number" min="1" value="${r.qty}" style="width:60px;" onchange="svcCalcUpdateQty(${r.id}, this.value)"></td>
+        <td><input autocomplete="off" type="number" min="0" value="${r.price}" style="width:90px;" onchange="svcCalcUpdatePrice(${r.id}, this.value)"></td>
+        <td class="mono">${fmtSom(r.price*r.qty)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="svcCalcRemove(${r.id})">✕</button></td>
+      </tr>`).join('');
+  document.getElementById('svcCalcTotal').textContent=fmtSom(svcCalcTotal());
+  document.getElementById('svcCalcPrintBtn').disabled=svcCalcRows.length===0;
+}
+function svcCalcPrint(){
+  if(svcCalcRows.length===0) return;
+  const total=svcCalcTotal();
+  const rowsHtml=svcCalcRows.map(r=>`<tr>
+      <td>${r.name}</td>
+      <td style="text-align:center;">${r.qty}</td>
+      <td style="text-align:right;">${fmtSom(r.price)}</td>
+      <td style="text-align:right;">${fmtSom(r.price*r.qty)}</td>
+    </tr>`).join('');
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('ru-RU')+', '+now.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  const clinicName=(document.querySelector('.sidebar-clinic span')?.textContent || '').trim();
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${t('w_svc_calc_print_title','Расчёт стоимости услуг')}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:28px;color:#1c2430;}
+  h1{font-size:19px;margin:0 0 2px;}
+  .sub{font-size:12px;color:#6b7280;margin-bottom:22px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:left;}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#6b7280;border-bottom:2px solid #1c2430;}
+  tfoot td{font-weight:700;font-size:15px;border-top:2px solid #1c2430;border-bottom:none;padding-top:12px;}
+</style></head><body>
+  <h1>${clinicName ? clinicName+' — ' : ''}${t('w_svc_calc_print_title','Расчёт стоимости услуг')}</h1>
+  <div class="sub">${dateStr}</div>
+  <table>
+    <thead><tr><th>${t('w_service','Услуга')}</th><th style="text-align:center;">${t('w_qty','Кол-во')}</th><th style="text-align:right;">${t('w_price','Цена')}</th><th style="text-align:right;">${t('w_sum','Сумма')}</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot><tr><td colspan="3">${t('w_total','Итого')}</td><td style="text-align:right;">${fmtSom(total)}</td></tr></tfoot>
+  </table>
+  <script>window.onload=function(){ window.print(); };<\/script>
+</body></html>`;
+  const w=window.open('', '_blank');
+  if(!w){ showToast(t('w_popup_blocked','Разрешите всплывающие окна для печати'), 'error'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+document.addEventListener('click', e=>{
+  const box=document.getElementById('svcCalcSuggestions');
+  const input=document.getElementById('svcCalcSearch');
+  if(box && !box.classList.contains('hidden') && e.target!==input && !box.contains(e.target)) box.classList.add('hidden');
+});
 function openNewService(){
   editingServiceId=null;
   document.getElementById('svcModalTitle').textContent='Новая услуга';
@@ -4028,7 +4196,7 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
@@ -4062,6 +4230,11 @@ function loadCalSettings(){
   if(byId('cs-defaultview') && calSettings.defaultView) byId('cs-defaultview').value=calSettings.defaultView;
   if(byId('cs-offer-start-visit')) byId('cs-offer-start-visit').checked=calSettings.offerStartVisit!==false;
   if(byId('cs-highlight-debt')) byId('cs-highlight-debt').checked=calSettings.highlightDebt!==false;
+  if(byId('cs-col-width')){
+    const w=calSettings.colWidth||150;
+    byId('cs-col-width').value=String(w);
+    if(byId('cs-col-width-value')) byId('cs-col-width-value').textContent=w+' px';
+  }
   if(calSettings.colors){
     if(byId('cs-color-cobalt')) byId('cs-color-cobalt').value=calSettings.colors.cobalt;
     if(byId('cs-color-amber')) byId('cs-color-amber').value=calSettings.colors.amber;
@@ -4275,6 +4448,27 @@ function contrastTextColor(hex){
   const luminance=(0.299*r+0.587*g+0.114*b)/255;
   return luminance>0.6 ? '#1c2430' : '#ffffff';
 }
+// Тёмный текст того же оттенка поверх светлой плашки того же цвета (как
+// var(--cobalt-dark) относится к var(--cobalt)) — нужен для карточек записи,
+// раскрашенных цветом статуса из «Настроек календаря» (см. schedStatusColor):
+// текст должен оставаться читаемым и в цвет, а не просто чёрным.
+function darkenColor(hex, factor){
+  const h=(hex||'').replace('#','');
+  if(!/^[0-9a-fA-F]{6}$/.test(h)) return hex;
+  const clamp=v=>Math.max(0,Math.min(255,Math.round(v)));
+  const r=clamp(parseInt(h.slice(0,2),16)*factor);
+  const g=clamp(parseInt(h.slice(2,4),16)*factor);
+  const b=clamp(parseInt(h.slice(4,6),16)*factor);
+  return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+// Цвет статуса записи — берётся из calSettings.colors (настраивается в
+// «Настройки календаря»), с теми же значениями по умолчанию, что и у полей
+// выбора цвета в модалке (см. resetCalSettings). appt.status уже приходит с
+// бэкенда как один из этих же ключей (cobalt/amber/coral/teal).
+const SCHED_STATUS_DEFAULT_COLORS={cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'};
+function schedStatusColor(status){
+  return (calSettings.colors && calSettings.colors[status]) || SCHED_STATUS_DEFAULT_COLORS[status] || SCHED_STATUS_DEFAULT_COLORS.cobalt;
+}
 // Первые RIBBON_INITIAL_DAYS дней ленты от якорного (currentDayOffset).
 function ribbonInitialDates(){
   const out=[];
@@ -4306,7 +4500,12 @@ function buildDayRibbonHTML(){
   // пустым и кликабельным — можно было записать второго пациента поверх уже
   // идущего приёма). Строка 1 — подписи дат, строка 2 — шапка врачей, строки
   // 3..(2+numSlots) — слоты времени.
-  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(150px,1fr));grid-template-rows:auto auto repeat(${numSlots},76px);min-width:${60+totalCols*150}px;">`;
+  // Ширина колонки врача — настраивается ползунком в «Настройках календаря»
+  // (calSettings.colWidth, 150–320px, по умолчанию 150 — как и было), а не
+  // зашита в разметку: жалоба «карточки слишком узкие» + прямой запрос дать
+  // самим регулировать ширину.
+  const colWidth=calSettings.colWidth||150;
+  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(${colWidth}px,1fr));grid-template-rows:auto auto repeat(${numSlots},76px);min-width:${60+totalCols*colWidth}px;">`;
   html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>';
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
@@ -4372,7 +4571,16 @@ function buildDayRibbonHTML(){
         // должно явно выделяться»); сама карточка теперь ещё и растянута по
         // высоте на реальную длительность (grid-row span выше).
         const endLabel=minutesToTime(Math.min(timeToMinutes(appt.time)+(appt.durationMin||interval), 24*60-1));
-        html+=`<div class="sched-appt ${appt.status}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name">${appt.patient}</b><span class="sched-appt-time">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service">${appt.service}</span>`:''}</div>`;
+        // Раньше настроенный в «Настройках календаря» цвет красил только
+        // border-left (3px), фон/текст брались из фиксированных CSS-классов
+        // .sched-appt.teal/.coral/.amber — жалоба: «выделяется только край,
+        // нужно весь блок». Теперь фон/бордер/текст всей карточки считаются
+        // инлайн от schedStatusColor(appt.status), а не от класса статуса.
+        const statusHex=schedStatusColor(appt.status);
+        const apptBg=hexToRgba(statusHex, .22);
+        const apptText=darkenColor(statusHex, .72);
+        const apptStyle=`background:${apptBg};border-left-color:${statusHex};`;
+        html+=`<div class="sched-appt ${appt.status}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
         html+='</div>';
       });
       for(let s=0;s<numSlots;s++){
@@ -4714,7 +4922,10 @@ function buildWeekHTML(){
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}"><span class="week-empty">—</span></td>`;
       } else {
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}">`;
-        appts.forEach(a=>{ html+=`<div class="week-appt-chip ${a.status}" onclick="event.stopPropagation();openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b>${a.time}</b>${a.patient}</div>`; });
+        appts.forEach(a=>{
+          const statusHex=schedStatusColor(a.status), chipText=darkenColor(statusHex, .72);
+          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
+        });
         html+='</td>';
       }
     });
@@ -4927,6 +5138,7 @@ function applyCalSettings(){
   calSettings.interval=interval;
   calSettings.offerStartVisit=document.getElementById('cs-offer-start-visit').checked;
   calSettings.highlightDebt=document.getElementById('cs-highlight-debt').checked;
+  calSettings.colWidth=Number(document.getElementById('cs-col-width').value)||150;
 
   const colorMap={
     cobalt: document.getElementById('cs-color-cobalt').value,
@@ -4959,8 +5171,10 @@ function resetCalSettings(){
   document.getElementById('cs-color-amber').value='#b8862e';
   document.getElementById('cs-color-coral').value='#e85d2d';
   document.getElementById('cs-color-teal').value='#0e9c7d';
+  document.getElementById('cs-col-width').value='150';
+  document.getElementById('cs-col-width-value').textContent='150 px';
   localStorage.removeItem(CALSETTINGS_KEY);
-  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true};
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150};
   applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
