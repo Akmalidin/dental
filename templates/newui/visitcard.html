@@ -391,10 +391,10 @@
     vwPlan[i].discountMode = vwPlan[i].discountMode==='sum' ? '%' : 'sum';
     vwRenderPlan();
   };
-  // Голосовой ввод (base.html::handleVoiceVisitIntent) — ставит скидку на уже
+  // Голосовой ввод (base.html::applyVoiceVisitIntent) — ставит скидку на уже
   // добавленную голосом строку плана по (зуб, услуга), а не по индексу
   // массива (индекс vwPlan не виден снаружи этого замыкания). Строка на этот
-  // момент уже существует — voiceFabClick сначала вызывает vwToothServicePick
+  // момент уже существует — applyVoiceVisitIntent сначала вызывает vwToothServicePick
   // (создаёт строку), только потом это. discountMode свежей строки всегда
   // '%' (см. push в vwToothServicePick) — vwPlanSetDiscount(i, val) в этом
   // режиме и ожидает val процентом, конвертации не нужно.
