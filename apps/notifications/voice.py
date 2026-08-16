@@ -102,13 +102,25 @@ def _get_whisper_model():
     или "tiny", если сервер слабый, через env, без правки кода.
     WHISPER_MODEL_PATH — если указан, грузит модель из локальной папки
     (уже скачанные веса) вместо обращения к Hugging Face Hub — на случай,
-    если и huggingface.co недоступен с сервера."""
+    если и huggingface.co недоступен с сервера.
+
+    download_root указан явно (settings.BASE_DIR/whisper_cache) — иначе
+    huggingface_hub по умолчанию кэширует в домашнюю папку пользователя
+    (~/.cache), а systemd-сервис обычно запущен от www-data без прав на
+    запись туда (поймано в проде: "Permission denied: '/var/www/sadaf/.cache'").
+    Папка внутри WorkingDirectory уже принадлежит www-data (deploy/update.sh
+    делает chown -R на весь проект), поэтому создаётся без проблем с правами."""
     global _whisper_model
     if _whisper_model is None:
         from faster_whisper import WhisperModel
-        model_ref = getattr(settings, "WHISPER_MODEL_PATH", "") or getattr(settings, "WHISPER_MODEL_SIZE", "small")
-        log.info("voice: loading Whisper model %r (первый запуск — может занять время)", model_ref)
-        _whisper_model = WhisperModel(model_ref, device="cpu", compute_type="int8")
+        model_path = getattr(settings, "WHISPER_MODEL_PATH", "")
+        model_size = getattr(settings, "WHISPER_MODEL_SIZE", "small")
+        cache_dir = str(settings.BASE_DIR / "whisper_cache")
+        log.info("voice: loading Whisper model %r (первый запуск — может занять время)", model_path or model_size)
+        if model_path:
+            _whisper_model = WhisperModel(model_path, device="cpu", compute_type="int8")
+        else:
+            _whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8", download_root=cache_dir)
     return _whisper_model
 
 

@@ -33,6 +33,9 @@ staticfiles/
 *.log
 local_settings.py
 
+# Скачанные веса Whisper (apps/notifications/voice.py) — не в репозиторий
+whisper_cache/
+
 # Docker
 .dockerignore
 
