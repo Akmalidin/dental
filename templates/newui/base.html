@@ -2446,7 +2446,7 @@ function reportsTab(which){
   if(which==='expenses') renderReportsExpenses();
   if(which==='debtors') renderReportsDebtors();
   if(which==='doctors') renderReportsDoctors();
-  if(which==='rooms') document.getElementById('roomsChart').innerHTML = buildDonutChart(reportDatasets.rooms.utilization, '%');
+  if(which==='rooms') renderReportsRooms();
   if(which==='cancelled') renderReportsCancelled();
   if(which==='repeat') renderReportsRepeat();
   if(which==='sources') renderReportsSources();
@@ -2512,6 +2512,18 @@ function renderReportsDoctors(){
   body.innerHTML = stats.length===0
     ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
     : stats.map(s=>`<tr><td>${s.doctor}</td><td class="mono">${s.count}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td><span class="pill ${s.fillRatePct>=70?'teal':(s.fillRatePct>=40?'amber':'coral')}">${s.fillRatePct}%</span></td></tr>`).join('');
+}
+function renderReportsRooms(){
+  const d=reportsRealData;
+  if(!d) return;
+  const rows=d.roomLoad||[];
+  document.getElementById('roomsChart').innerHTML = buildDonutChart(
+    rows.map((r,i)=>({label:r.room, value:r.hours, color:['cobalt','teal','amber','coral'][i%4]})), ' ч'
+  );
+  const body=document.getElementById('roomsTableBody');
+  body.innerHTML = rows.length===0
+    ? `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : rows.map(r=>`<tr><td>${r.room}</td><td class="mono">${r.hours} ч</td><td><span class="pill ${r.sharePct>=40?'teal':(r.sharePct>=20?'amber':'coral')}">${r.sharePct}%</span></td></tr>`).join('');
 }
 function renderReportsSources(){
   const d=reportsRealData;
@@ -3222,6 +3234,8 @@ const translations={
   w_revenue_share_doctors: {ru:'Доля выручки по врачам', ky:'Дарыгерлер боюнча түшүм үлүшү', en:'Revenue share by doctor', uz:'Shifokorlar bo\'yicha tushum ulushi'},
   w_visits: {ru:'Приёмов', ky:'Кабыл алуулар', en:'Visits', uz:'Qabullar'},
   w_utilization_short: {ru:'Загрузка', ky:'Жүктөлүү', en:'Utilization', uz:'Bandlik'},
+  w_share_short: {ru:'Доля', ky:'Үлүшү', en:'Share', uz:'Ulushi'},
+  w_room_load_hint: {ru:'«Доля» — часы кабинета от суммы часов по всем кабинетам за неделю (не % от рабочего времени — своего графика работы у кабинета в системе нет, в отличие от врача).', ky:'«Үлүшү» — ушул кабинеттин саат саны бардык кабинеттердин суммасынан (жумуш убактысынын % эмес — кабинеттин өз графиги жок, дарыгерден айырмаланып).', en:'"Share" is this room\'s hours as a fraction of total booked hours across all rooms this week (not a % of working time — rooms don\'t have their own schedule the way doctors do).', uz:'"Ulushi" — bu xonaning soatlari barcha xonalar bo‘yicha jami soatlardan ulushi (ish vaqtining % emas — xonaning shifokordan farqli o‘z jadvali yo‘q).'},
   w_room: {ru:'Кабинет', ky:'Кабинет', en:'Room', uz:'Xona'},
   w_hours_busy: {ru:'Часов занято', ky:'Саат бош эмес', en:'Hours busy', uz:'Band soatlar'},
   w_visits_per_patient: {ru:'Количество визитов на пациента', ky:'Бир бейтапка визиттердин саны', en:'Visits per patient', uz:'Bemorga tashriflar soni'},
@@ -3232,7 +3246,7 @@ const translations={
   w_conversion: {ru:'Конверсия в визит', ky:'Визитке конверсия', en:'Visit conversion', uz:'Tashrifga konversiya'},
   w_acquisition_cost: {ru:'Стоимость привлечения', ky:'Тартуу наркы', en:'Acquisition cost', uz:'Jalb qilish narxi'},
   w_excel: {ru:'Excel', ky:'Excel', en:'Excel', uz:'Excel'},
-  w_reports_hint: {ru:'Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок и Повторные визиты — реальные данные. Конструктор сравнения (свободный график), «ИИ-помощник» и «Загрузка кабинетов» (часы по кабинетам ещё не считаются) пока демонстрационные.', ky:'Жалпы отчёт (KPI жана графиктер), Чыгашалар, Карыздарлар, Жокко чыгарылган визиттер, Дарыгерлер боюнча статистика, Арыз булактары жана Кайталама визиттер — реалдуу маалыматтар. Салыштыруу конструктору, «ИИ-жардамчы» жана «Кабинеттердин жүктөлүшү» (кабинеттер боюнча саат азырынча эсептелбейт) азырынча демонстрациялык.', en:'The Overview (KPIs and charts), Expenses, Debtors, Cancelled visits, Doctor stats, Lead sources and Repeat visits are real data. The comparison builder, the AI-assistant and "Room load" (per-room hours aren\'t tracked yet) are still demo-only.', uz:'Umumiy hisobot (KPI va grafiklar), Xarajatlar, Qarzdorlar, Bekor qilingan tashriflar, Shifokorlar statistikasi, Ariza manbalari va Takroriy tashriflar — haqiqiy ma\'lumotlar. Solishtirish konstruktori, «AI-yordamchi» va «Xonalar yuklamasi» (xonalar bo\'yicha soatlar hali hisoblanmaydi) hali namoyish uchun.'},
+  w_reports_hint: {ru:'Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок, Повторные визиты и Загрузка кабинетов — реальные данные. Демонстрационные пока только Конструктор сравнения (свободный график) и «ИИ-помощник».', ky:'Жалпы отчёт (KPI жана графиктер), Чыгашалар, Карыздарлар, Жокко чыгарылган визиттер, Дарыгерлер боюнча статистика, Арыз булактары, Кайталама визиттер жана Кабинеттердин жүктөлүшү — реалдуу маалыматтар. Азырынча демонстрациялык — Салыштыруу конструктору (эркин график) жана «ИИ-жардамчы».', en:'The Overview (KPIs and charts), Expenses, Debtors, Cancelled visits, Doctor stats, Lead sources, Repeat visits and Room load are real data. Only the comparison builder and the AI-assistant are still demo-only.', uz:'Umumiy hisobot (KPI va grafiklar), Xarajatlar, Qarzdorlar, Bekor qilingan tashriflar, Shifokorlar statistikasi, Ariza manbalari, Takroriy tashriflar va Xonalar yuklamasi — haqiqiy ma\'lumotlar. Faqat Solishtirish konstruktori va «AI-yordamchi» hali namoyish uchun.'},
   w_cancel_reason: {ru:'Причина', ky:'Себеби', en:'Reason', uz:'Sababi'},
   w_repeat_visits_alltime: {ru:'Повторные визиты · за всё время', ky:'Кайталама визиттер · бүт убакыт', en:'Repeat visits · all time', uz:'Takroriy tashriflar · butun vaqt'},
   w_active_status: {ru:'Активный', ky:'Активдүү', en:'Active', uz:'Faol'},

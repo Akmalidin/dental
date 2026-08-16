@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок и Повторные визиты — реальные данные. Конструктор сравнения (свободный график), «ИИ-помощник» и «Загрузка кабинетов» (часы по кабинетам ещё не считаются) пока демонстрационные.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок, Повторные визиты и Загрузка кабинетов — реальные данные. Демонстрационные пока только Конструктор сравнения (свободный график) и «ИИ-помощник».</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
           <button class="chip" id="rtExpenses" onclick="reportsTab('expenses')"><span data-i18n="w_expenses">Расходы</span></button>
@@ -169,15 +169,10 @@
           </div>
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_room_load_week">Загрузка кабинетов · неделя</h3></div>
+            <p style="font-size:11px;color:var(--ink-soft);padding:0 18px;margin:0 0 6px;" data-i18n="w_room_load_hint">«Доля» — часы кабинета от суммы часов по всем кабинетам за неделю (не % от рабочего времени — своего графика работы у кабинета в системе нет, в отличие от врача).</p>
             <table>
-              <thead><tr><th data-i18n="w_room">Кабинет</th><th data-i18n="w_hours_busy">Часов занято</th><th data-i18n="w_utilization_short">Загрузка</th></tr></thead>
-              <tbody>
-                <tr><td>Кабинет 1</td><td class="mono">38 ч</td><td><span class="pill amber">54%</span></td></tr>
-                <tr><td>Кабинет 2</td><td class="mono">65 ч</td><td><span class="pill teal">92%</span></td></tr>
-                <tr><td>Кабинет 3</td><td class="mono">22 ч</td><td><span class="pill coral">31%</span></td></tr>
-                <tr><td>Кабинет 4</td><td class="mono">55 ч</td><td><span class="pill teal">78%</span></td></tr>
-                <tr><td>Кабинет 5</td><td class="mono">40 ч</td><td><span class="pill amber">57%</span></td></tr>
-              </tbody>
+              <thead><tr><th data-i18n="w_room">Кабинет</th><th data-i18n="w_hours_busy">Часов занято</th><th data-i18n="w_share_short">Доля</th></tr></thead>
+              <tbody id="roomsTableBody"></tbody>
             </table>
           </div>
         </div>

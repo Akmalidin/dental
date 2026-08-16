@@ -623,14 +623,18 @@ def _newui_reports_data():
     """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта», графики
     на нём же (выручка по неделям, загрузка врачей, источники заявок, причины
     отмены) и реальные вкладки Расходы/Должники/Отменённые визиты/Статистика по
-    врачам/Источники заявок/Повторные визиты (всё — тот же период: текущий месяц,
-    кроме «Повторных визитов» — там вся история, иначе повторность не увидеть).
+    врачам/Источники заявок/Повторные визиты/Загрузка кабинетов (период — текущий
+    месяц, кроме «Повторных визитов» — там вся история, иначе повторность не
+    увидеть, и «Загрузки кабинетов» — там текущая неделя, см. ниже).
     Конструктор сравнения (свободный разрез по любому измерению/графику) и
     ИИ-помощник НЕ подключены — см. баннер на странице; ИИ-рекомендаций как
-    функции в системе не существует. «Загрузка кабинетов» тоже пока не
-    подключена — Cabinet и Appointment.cabinet в системе ЕСТЬ (вопреки старому
-    комментарию здесь), просто нет модели «рабочих часов кабинета», без которой
-    посчитать % загрузки (не только «часов занято») честно нечем."""
+    функции в системе не существует. «Загрузка кабинетов» — часы заняты
+    реальными (сумма длительности приёмов по Appointment.cabinet за текущую
+    неделю), а «загрузка» — честная доля кабинета от суммарных часов по всем
+    кабинетам (не % от «рабочих часов» — такой модели в системе нет, у кабинета
+    нет своего графика работы в отличие от врача)."""
+    from datetime import timedelta
+    from collections import defaultdict
     from django.db.models import Sum, Count, Max
     from django.utils import timezone
     from apps.finance.models import Payment, Expense
@@ -757,6 +761,25 @@ def _newui_reports_data():
         "daysSince": (today - timezone.localtime(row["last_at"]).date()).days if row["last_at"] else None,
     } for row in patient_visits[:200]]
 
+    # ── Загрузка кабинетов — часы заняты за ТЕКУЩУЮ неделю (пн-вс), реальная
+    # сумма длительности приёмов по Appointment.cabinet (не только этот месяц,
+    # т.к. таблица так и называется «...· неделя» — короткое окно нагляднее).
+    # Отменённые/неявки в занятость кабинета не считаем — кабинет ими не занят. ──
+    week_start = today - timedelta(days=today.weekday())
+    week_appts = (Appointment.objects.filter(
+        start_at__date__gte=week_start, start_at__date__lt=week_start + timedelta(days=7),
+        cabinet__isnull=False,
+    ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).select_related("cabinet"))
+    cabinet_hours = defaultdict(float)
+    for a in week_appts:
+        cabinet_hours[a.cabinet.name] += (a.end_at - a.start_at).total_seconds() / 3600.0
+    total_cabinet_hours = sum(cabinet_hours.values())
+    room_load = sorted([
+        {"room": name, "hours": round(hrs, 1),
+         "sharePct": round(hrs / total_cabinet_hours * 100, 1) if total_cabinet_hours else 0}
+        for name, hrs in cabinet_hours.items()
+    ], key=lambda x: -x["hours"])
+
     return {
         "revenueMonth": float(income - refund),
         "completed": completed,
@@ -774,6 +797,7 @@ def _newui_reports_data():
         "weeklyRevenue": weekly_revenue,
         "cancelReasons": cancel_reasons_chart,
         "repeatVisits": repeat_visits,
+        "roomLoad": room_load,
     }
 
 
