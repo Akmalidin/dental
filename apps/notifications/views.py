@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.conf import settings
 from .models import Notification, PushSubscription
 
@@ -956,3 +957,37 @@ def tg_broadcast(request):
         "linked_count": linked_count,
         "cs": ClinicSettings.get(),
     })
+
+
+@login_required
+@require_POST
+def voice_command(request):
+    """Голосовой ввод для врачей — единая точка входа и для диктовки в карту
+    приёма (mode=dictate → {transcript}), и для голосовых команд по
+    расписанию (mode=schedule → {transcript, intent, date, patient_name,
+    status}). Сам эндпоинт ничего не пишет в БД — только транскрибирует
+    аудио и (для mode=schedule) классифицирует намерение; реальное действие
+    (смена статуса записи, переход на дату) выполняет уже существующий,
+    защищённый правами JS-код на клиенте. Аудио не сохраняется."""
+    from django.utils import timezone
+    from .voice import voice_enabled, transcribe_audio, parse_schedule_command, parse_visit_command
+    if not voice_enabled():
+        return JsonResponse({"error": "Голосовой ввод не настроен"}, status=503)
+    audio = request.FILES.get("audio")
+    if not audio:
+        return JsonResponse({"error": "Аудио не получено"}, status=400)
+    if audio.size > 15 * 1024 * 1024:
+        return JsonResponse({"error": "Слишком большой файл"}, status=400)
+    mode = request.POST.get("mode") or "dictate"
+    transcript, err = transcribe_audio(audio)
+    if err:
+        return JsonResponse({"error": err}, status=502)
+    if not transcript:
+        return JsonResponse({"error": "Речь не распознана"}, status=422)
+    result = {"transcript": transcript}
+    if mode == "schedule":
+        today_iso = timezone.localdate().isoformat()
+        result.update(parse_schedule_command(transcript, today_iso))
+    elif mode == "visit":
+        result.update(parse_visit_command(transcript))
+    return JsonResponse(result)

@@ -21,4 +21,5 @@ urlpatterns = [
     path("tg-link/<int:chat_id>/", views.tg_link_chat, name="tg_link_chat"),
     path("tg-broadcast/", views.tg_broadcast, name="tg_broadcast"),
     path("tg-connect/", views.tg_connect, name="tg_connect"),
+    path("voice/", views.voice_command, name="voice_command"),
 ]

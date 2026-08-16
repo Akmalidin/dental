@@ -200,6 +200,10 @@ GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
 GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
 GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
 
+# ─── OpenAI (голосовой ввод для врачей) — ключ только из env, не в репозиторий ─
+OPENAI_ENABLED = os.environ.get("OPENAI_ENABLED", "") == "1"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
 # ─── Google Calendar (OAuth2) — ключи только из env ──────────────────────────
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")

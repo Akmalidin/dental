@@ -29,6 +29,7 @@ def _shared_options(request, clinic):
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
     from apps.patients.models import LeadSource
     from apps.settings_clinic.models import ClinicSettings
+    from apps.notifications.voice import voice_enabled
     cs = ClinicSettings.get()
     return {
         # Язык интерфейса — реальная настройка клиники (Настройки → Общие),
@@ -76,6 +77,11 @@ def _shared_options(request, clinic):
         # у тех, у кого нет права (иначе клик просто упёрся бы в 403).
         "canDeleteHistory": bool(request.user.is_superadmin or
                                  (request.user.role_id and request.user.role.has_perm("patients.delete_history"))),
+        # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
+        # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
+        # не настроен на сервере (тот же безопасно-выключенный паттерн, что
+        # и у GreenAPI).
+        "voiceEnabled": voice_enabled(),
         # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
         # тот же персональный механизм allowed_sections, что и в старом интерфейсе
         # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.
