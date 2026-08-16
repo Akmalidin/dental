@@ -12,7 +12,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import render
 
 from .decorators import role_required
-from .models import Role, Branch, Permission, clinic_doctors
+from .models import Role, Branch, Permission, SECTIONS, clinic_doctors
 from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
     _newui_patients_data, _newui_patients_page_data, _newui_patient_by_pk, _newui_services_data, _newui_finance_data,
@@ -72,6 +72,14 @@ def _shared_options(request, clinic):
         # у тех, у кого нет права (иначе клик просто упёрся бы в 403).
         "canDeleteHistory": bool(request.user.is_superadmin or
                                  (request.user.role_id and request.user.role.has_perm("patients.delete_history"))),
+        # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
+        # тот же персональный механизм allowed_sections, что и в старом интерфейсе
+        # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.
+        # _apply_access_from_form). sectionsCatalog — список разделов для чекбоксов,
+        # currentUserId — чтобы скрыть блок при редактировании самого себя (нельзя
+        # ограничить самому себе доступ и остаться без возможности его вернуть).
+        "sectionsCatalog": [{"key": k, "label": lbl} for k, lbl, _url in SECTIONS if k != "dashboard"],
+        "currentUserId": request.user.pk,
     }
 
 
