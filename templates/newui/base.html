@@ -282,6 +282,10 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-cell-empty:hover{background:var(--cobalt-tint);}
 .sched-cell-empty:hover::after{content:'+ Записать';position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--cobalt-dark);font-weight:600;pointer-events:none;}
 .sched-cell.drop-target{background:var(--cobalt-tint);}
+.sched-cell-leftover{position:absolute;left:0;right:0;bottom:0;cursor:pointer;border-radius:0 0 6px 6px;}
+.sched-cell-leftover:hover{background:var(--cobalt-tint);}
+.sched-cell-leftover:hover::after{content:'+ Записать на ' attr(data-time);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1.1;color:var(--cobalt-dark);font-weight:600;pointer-events:none;text-align:center;padding:0 2px;overflow:hidden;}
+.sched-cell-leftover.drop-target{background:var(--cobalt-tint);}
 .sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
 /* Имя пациента и время приёма — главное, что должно бросаться в глаза на
    карточке (жалоба: «имена, время записи должны явно выделяться»). */
@@ -2554,35 +2558,6 @@ function renderReportsSources(){
     : sources.map(s=>`<tr><td>${s.source}</td><td class="mono">${s.count}</td><td><span class="pill ${s.conversionPct>=60?'teal':(s.conversionPct>=35?'amber':'coral')}">${s.conversionPct}%</span></td></tr>`).join('');
 }
 
-/* ---- chart datasets ---- */
-const reportDatasets = {
-  doctors: {
-    revenue:[{label:'Асанов Б.',value:1240000,color:'cobalt'},{label:'Нурбекова С.',value:980000,color:'teal'},{label:'Мамедов Т.',value:610000,color:'amber'},{label:'Джумабекова А.',value:120000,color:'coral'}],
-    count:[{label:'Асанов Б.',value:184,color:'cobalt'},{label:'Нурбекова С.',value:96,color:'teal'},{label:'Мамедов Т.',value:61,color:'amber'},{label:'Джумабекова А.',value:44,color:'coral'}],
-    avgcheck:[{label:'Нурбекова С.',value:10200,color:'teal'},{label:'Мамедов Т.',value:10000,color:'amber'},{label:'Асанов Б.',value:6740,color:'cobalt'},{label:'Джумабекова А.',value:2700,color:'coral'}],
-    utilization:[{label:'Асанов Б.',value:92,color:'cobalt'},{label:'Нурбекова С.',value:78,color:'teal'},{label:'Мамедов Т.',value:54,color:'amber'},{label:'Джумабекова А.',value:31,color:'coral'}]
-  },
-  rooms: {
-    utilization:[{label:'Кабинет 2',value:92,color:'teal'},{label:'Кабинет 4',value:78,color:'cobalt'},{label:'Кабинет 5',value:57,color:'amber'},{label:'Кабинет 1',value:54,color:'amber'},{label:'Кабинет 3',value:31,color:'coral'}],
-    count:[{label:'Кабинет 2',value:65,color:'teal'},{label:'Кабинет 4',value:55,color:'cobalt'},{label:'Кабинет 5',value:40,color:'amber'},{label:'Кабинет 1',value:38,color:'amber'},{label:'Кабинет 3',value:22,color:'coral'}],
-    revenue:[{label:'Кабинет 2',value:1450000,color:'teal'},{label:'Кабинет 4',value:980000,color:'cobalt'},{label:'Кабинет 5',value:620000,color:'amber'},{label:'Кабинет 1',value:340000,color:'amber'},{label:'Кабинет 3',value:122400,color:'coral'}]
-  },
-  materials: {
-    count:[{label:'Композит A2',value:4,color:'coral'},{label:'Анестетик Ультракаин',value:32,color:'teal'},{label:'Перчатки нитриловые M',value:18,color:'amber'}],
-    revenue:[{label:'Композит A2',value:38000,color:'coral'},{label:'Анестетик Ультракаин',value:64000,color:'teal'},{label:'Перчатки нитриловые M',value:22000,color:'amber'}]
-  },
-  services: {
-    revenue:[{label:'Пломбирование',value:589000,color:'cobalt'},{label:'Установка брекетов',value:462000,color:'teal'},{label:'Удаление',value:194000,color:'coral'},{label:'Проф. чистка',value:129000,color:'amber'}],
-    count:[{label:'Пломбирование',value:184,color:'cobalt'},{label:'Проф. чистка',value:96,color:'amber'},{label:'Удаление',value:36,color:'coral'},{label:'Установка брекетов',value:11,color:'teal'}]
-  },
-  sources: {
-    count:[{label:'Instagram',value:142,color:'cobalt'},{label:'Звонки',value:98,color:'teal'},{label:'WhatsApp/Telegram',value:71,color:'amber'},{label:'Сайт',value:58,color:'coral'}],
-    revenue:[{label:'Звонки',value:812000,color:'teal'},{label:'Instagram',value:648000,color:'cobalt'},{label:'WhatsApp/Telegram',value:294000,color:'amber'},{label:'Сайт',value:118000,color:'coral'}]
-  }
-};
-const cancelReasonsData=[{label:'Заболел',value:14,color:'coral'},{label:'Не успевает',value:11,color:'amber'},{label:'Забыл',value:7,color:'cobalt'},{label:'Не получается',value:5,color:'teal'}];
-const repeatVisitsData=[{label:'Кыдыров Р.',value:6,color:'teal'},{label:'Молдалиева Т.',value:4,color:'cobalt'},{label:'Асанова Г.',value:3,color:'amber'},{label:'Осмонова Н.',value:1,color:'coral'}];
-
 function colorVar(c){ return 'var(--'+c+')'; }
 function formatNum(v){ return Math.round(v).toLocaleString('ru-RU'); }
 
@@ -2618,8 +2593,11 @@ function renderReportConstructor(){
   const dim=document.getElementById('rcDimension').value;
   const metric=document.getElementById('rcMetric').value;
   const type=document.getElementById('rcType').value;
-  const ds=reportDatasets[dim] || {};
-  const data = ds[metric] || ds[Object.keys(ds)[0]] || [];
+  const comparison=(reportsRealData && reportsRealData.comparison) || {};
+  const ds=comparison[dim] || {};
+  const raw = ds[metric] || [];
+  const palette=['cobalt','teal','amber','coral'];
+  const data = raw.map((d,i)=>({label:d.label, value:d.value, color:palette[i%4]}));
   const suffix = metric==='utilization' ? '%' : (metric==='revenue'||metric==='avgcheck' ? ' '+CUR_SYM : '');
   const el=document.getElementById('rcChartArea');
   if(!el) return;
@@ -3300,7 +3278,7 @@ const translations={
   w_conversion: {ru:'Конверсия в визит', ky:'Визитке конверсия', en:'Visit conversion', uz:'Tashrifga konversiya'},
   w_acquisition_cost: {ru:'Стоимость привлечения', ky:'Тартуу наркы', en:'Acquisition cost', uz:'Jalb qilish narxi'},
   w_excel: {ru:'Excel', ky:'Excel', en:'Excel', uz:'Excel'},
-  w_reports_hint: {ru:'Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок, Повторные визиты и Загрузка кабинетов — реальные данные. Демонстрационные пока только Конструктор сравнения (свободный график) и «ИИ-помощник».', ky:'Жалпы отчёт (KPI жана графиктер), Чыгашалар, Карыздарлар, Жокко чыгарылган визиттер, Дарыгерлер боюнча статистика, Арыз булактары, Кайталама визиттер жана Кабинеттердин жүктөлүшү — реалдуу маалыматтар. Азырынча демонстрациялык — Салыштыруу конструктору (эркин график) жана «ИИ-жардамчы».', en:'The Overview (KPIs and charts), Expenses, Debtors, Cancelled visits, Doctor stats, Lead sources, Repeat visits and Room load are real data. Only the comparison builder and the AI-assistant are still demo-only.', uz:'Umumiy hisobot (KPI va grafiklar), Xarajatlar, Qarzdorlar, Bekor qilingan tashriflar, Shifokorlar statistikasi, Ariza manbalari, Takroriy tashriflar va Xonalar yuklamasi — haqiqiy ma\'lumotlar. Faqat Solishtirish konstruktori va «AI-yordamchi» hali namoyish uchun.'},
+  w_reports_hint: {ru:'Всё, включая Конструктор сравнения, — реальные данные. Демонстрационный пока только «ИИ-помощник».', ky:'Баары, анын ичинде Салыштыруу конструктору да, — реалдуу маалыматтар. Азырынча демонстрациялык — жалгыз «ИИ-жардамчы».', en:'Everything, including the comparison builder, is real data. Only the AI-assistant is still demo-only.', uz:'Hammasi, jumladan Solishtirish konstruktori ham, — haqiqiy ma\'lumotlar. Faqat «AI-yordamchi» hali namoyish uchun.'},
   w_cancel_reason: {ru:'Причина', ky:'Себеби', en:'Reason', uz:'Sababi'},
   w_repeat_visits_alltime: {ru:'Повторные визиты · за всё время', ky:'Кайталама визиттер · бүт убакыт', en:'Repeat visits · all time', uz:'Takroriy tashriflar · butun vaqt'},
   w_active_status: {ru:'Активный', ky:'Активдүү', en:'Active', uz:'Faol'},
@@ -4849,8 +4827,28 @@ function buildDayRibbonHTML(){
         const statusHex=schedStatusColor(appt.status);
         const apptBg=hexToRgba(statusHex, .22);
         const apptText=darkenColor(statusHex, .72);
-        const apptStyle=`background:${apptBg};border-left-color:${statusHex};`;
+        // Карточка занимает целые слоты (span выше округляет длительность
+        // ВВЕРХ до границы слота — иначе приём «повисал» бы между строк
+        // сетки), но если приём короче своих слотов (например, 20 минут при
+        // часовом слоте), внизу остаётся реально свободное время — жалоба:
+        // «есть запись 14:00–14:20, а записать ещё на 14:30 в тот же час
+        // некуда, весь час выглядит занятым». Поэтому карточку саму сжимаем
+        // по факту длительности (fillPct), а остаток слота отдаём под
+        // отдельную кликабельную зону-«хвост», которая открывает новую запись
+        // сразу на реальное время окончания приёма — не дожидаясь следующего
+        // часа.
+        const slotStartMin=startMin+startSlot*interval;
+        const slotEndMin=slotStartMin+span*interval;
+        const apptStartMin=timeToMinutes(appt.time);
+        const apptEndMin=Math.min(apptStartMin+(appt.durationMin||interval), slotEndMin);
+        const fillPct=Math.max(30, Math.min(100, Math.round((apptEndMin-apptStartMin)/(slotEndMin-slotStartMin)*100)));
+        const leftoverMin=slotEndMin-apptEndMin;
+        const apptStyle=`background:${apptBg};border-left-color:${statusHex};height:${fillPct}%;`;
         html+=`<div class="sched-appt ${appt.status}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        if(leftoverMin>=10){
+          const leftoverLabel=minutesToTime(apptEndMin);
+          html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
+        }
         html+='</div>';
       });
       for(let s=0;s<numSlots;s++){

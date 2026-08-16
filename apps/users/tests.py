@@ -1952,8 +1952,10 @@ class RoleHasPermTestCase(TestCase):
 
 
 class PermissionSeedTestCase(TestCase):
-    def test_catalog_seeded_with_nine_permissions(self):
-        self.assertEqual(Permission.objects.count(), 9)
+    def test_catalog_seeded_with_eleven_permissions(self):
+        # 9 из 0022_seed_permissions + finance.quick_sale (0024) +
+        # patients.delete_history (0026).
+        self.assertEqual(Permission.objects.count(), 11)
 
     def test_system_roles_marked_is_system(self):
         for name in ["superadmin", "admin_main", "admin", "doctor", "nurse"]:

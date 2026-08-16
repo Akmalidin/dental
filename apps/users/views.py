@@ -631,13 +631,18 @@ def _newui_reports_data():
     врачам/Источники заявок/Повторные визиты/Загрузка кабинетов (период — текущий
     месяц, кроме «Повторных визитов» — там вся история, иначе повторность не
     увидеть, и «Загрузки кабинетов» — там текущая неделя, см. ниже).
-    Конструктор сравнения (свободный разрез по любому измерению/графику) и
-    ИИ-помощник НЕ подключены — см. баннер на странице; ИИ-рекомендаций как
-    функции в системе не существует. «Загрузка кабинетов» — часы заняты
-    реальными (сумма длительности приёмов по Appointment.cabinet за текущую
-    неделю), а «загрузка» — честная доля кабинета от суммарных часов по всем
-    кабинетам (не % от «рабочих часов» — такой модели в системе нет, у кабинета
-    нет своего графика работы в отличие от врача)."""
+    «Загрузка кабинетов» — часы заняты реальными (сумма длительности приёмов
+    по Appointment.cabinet за текущую неделю), а «загрузка» — честная доля
+    кабинета от суммарных часов по всем кабинетам (не % от «рабочих часов» —
+    такой модели в системе нет, у кабинета нет своего графика работы в
+    отличие от врача). Конструктор сравнения — реальные датасеты по 4
+    измерениям (doctors/rooms/services/sources), см. comparison ниже; кроме
+    «Материалы» — списания склада не привязаны ни к пациенту, ни к приёму,
+    выручку/количество по материалам посчитать нечем без новых полей в
+    модели, поэтому этого измерения в выборе больше нет вообще (не показываем
+    вкладку с обещанием, которое нечем выполнить). ИИ-помощник НЕ подключен —
+    см. баннер на странице; ИИ-рекомендаций как функции в системе не
+    существует."""
     from datetime import timedelta
     from collections import defaultdict
     from django.db.models import Sum, Count, Max
@@ -708,21 +713,45 @@ def _newui_reports_data():
 
     # ── Источники заявок (Lead/LeadSource) — за месяц, конверсия = дошли/завершено
     # из всех заявок этого источника (грубая, но реальная метрика; стоимость
-    # привлечения не считаем — в LeadSource такого поля нет). ──
+    # привлечения не считаем — в LeadSource такого поля нет). Заодно копим
+    # id связанных пациентов по источнику — для «Конструктора сравнения»
+    # (реальная выручка по источнику, см. comparison ниже). ──
     month_leads = Lead.objects.filter(created_at__date__gte=month_start).select_related("source")
     sources = {}
+    source_patient_ids = {}
     for lead in month_leads:
         key = lead.source.name if lead.source else "Без источника"
         s = sources.setdefault(key, {"source": key, "count": 0, "converted": 0})
         s["count"] += 1
         if lead.stage in (Lead.STAGE_CAME, Lead.STAGE_COMPLETED):
             s["converted"] += 1
+        if lead.patient_id:
+            source_patient_ids.setdefault(key, set()).add(lead.patient_id)
     lead_sources = sorted(
         [{"source": s["source"], "count": s["count"],
           "conversionPct": round(s["converted"] / s["count"] * 100, 1) if s["count"] else 0}
          for s in sources.values()],
         key=lambda x: -x["count"],
     )
+    source_revenue = {}
+    for key, pids in source_patient_ids.items():
+        rev = (Treatment.objects.filter(patient_id__in=pids, created_at__date__gte=month_start)
+               .exclude(status="cancelled").aggregate(s=Sum("total_amount"))["s"] or 0)
+        source_revenue[key] = float(rev)
+
+    # ── Услуги — выручка/количество за месяц (TreatmentCure.subtotal — цена со
+    # скидкой, тот же расчёт, что и в самой карточке приёма). Для «Конструктора
+    # сравнения» — своей отдельной вкладки в отчётах у услуг нет. ──
+    from apps.treatments.models import TreatmentCure
+    service_agg = {}
+    cures_qs = (TreatmentCure.objects.filter(treatment__created_at__date__gte=month_start)
+                .exclude(treatment__status="cancelled").select_related("service"))
+    for cure in cures_qs:
+        key = cure.service.name if cure.service_id else "Без услуги"
+        row = service_agg.setdefault(key, {"count": 0, "revenue": 0.0})
+        row["count"] += cure.quantity
+        row["revenue"] += float(cure.subtotal)
+    top_services = sorted(service_agg.items(), key=lambda kv: -kv[1]["revenue"])[:10]
 
     # ── Выручка по неделям месяца (для «Общего отчёта» — раньше был статичный
     # захардкоженный график). Недели считаем простыми блоками по 7 дней от
@@ -785,6 +814,36 @@ def _newui_reports_data():
         for name, hrs in cabinet_hours.items()
     ], key=lambda x: -x["hours"])
 
+    # ── Конструктор сравнения — реальные датасеты по 4 измерениям (не 5:
+    # «Материалы» убраны из выбора — списания склада не привязаны ни к
+    # пациенту, ни к приёму (WarehouseDistribution.issued_to — это сотрудник,
+    # получивший материал, а не потраченный на кого-то), выручку/количество
+    # по материалам посчитать нечем без нового поля в модели). Показатель,
+    # для которого у измерения нет данных (напр. avgcheck у кабинетов),
+    # просто не заполняем — buildBarChart/buildDonutChart сами покажут
+    # «Нет данных» вместо выдумки. ──
+    comparison = {
+        "doctors": {
+            "revenue": [{"label": d["doctor"], "value": d["revenue"]} for d in doctor_stats],
+            "count": [{"label": d["doctor"], "value": d["count"]} for d in doctor_stats],
+            "avgcheck": [{"label": d["doctor"], "value": d["avgCheck"]} for d in doctor_stats],
+            "utilization": [{"label": d["doctor"], "value": d["fillRatePct"]} for d in doctor_stats],
+        },
+        "rooms": {
+            "count": [{"label": r["room"], "value": r["hours"]} for r in room_load],
+            "utilization": [{"label": r["room"], "value": r["sharePct"]} for r in room_load],
+        },
+        "services": {
+            "revenue": [{"label": name, "value": round(v["revenue"], 2)} for name, v in top_services],
+            "count": [{"label": name, "value": v["count"]} for name, v in top_services],
+            "avgcheck": [{"label": name, "value": round(v["revenue"] / v["count"], 2) if v["count"] else 0} for name, v in top_services],
+        },
+        "sources": {
+            "count": [{"label": s["source"], "value": s["count"]} for s in lead_sources],
+            "revenue": [{"label": s["source"], "value": source_revenue.get(s["source"], 0)} for s in lead_sources],
+        },
+    }
+
     return {
         "revenueMonth": float(income - refund),
         "completed": completed,
@@ -803,6 +862,7 @@ def _newui_reports_data():
         "cancelReasons": cancel_reasons_chart,
         "repeatVisits": repeat_visits,
         "roomLoad": room_load,
+        "comparison": comparison,
     }
 
 
