@@ -29,7 +29,7 @@ def _shared_options(request, clinic):
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
     from apps.patients.models import LeadSource
     from apps.settings_clinic.models import ClinicSettings
-    from apps.notifications.voice import voice_enabled
+    from apps.notifications.voice import voice_enabled, ai_enabled
     cs = ClinicSettings.get()
     return {
         # Язык интерфейса — реальная настройка клиники (Настройки → Общие),
@@ -82,6 +82,10 @@ def _shared_options(request, clinic):
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
         # и у GreenAPI).
         "voiceEnabled": voice_enabled(),
+        # Свободный вопрос-ответ (YandexGPT) — включает и голосовой fallback
+        # («спроси что угодно» в плавающем виджете), и реальный ответ в
+        # текстовом чате «ИИ-помощник» на странице Отчётов.
+        "aiEnabled": ai_enabled(),
         # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
         # тот же персональный механизм allowed_sections, что и в старом интерфейсе
         # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.

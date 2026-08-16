@@ -573,7 +573,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
      loadRealStaffData). Клик обрабатывается самим JS drag-контроллером
      (initVoiceFabDrag) — там же отличает обычный клик от перетаскивания,
      поэтому здесь нет отдельного onclick. -->
-<button type="button" id="voiceFab" class="voice-fab hidden" title="Голосовой ввод">🎤</button>
+<button type="button" id="voiceFab" class="voice-fab hidden" title="Голосовой ввод">🤖</button>
 
 <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Меню" title="Меню">☰</button>
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
@@ -2666,8 +2666,15 @@ function renderAIInsights(){
     </div>`).join('');
 }
 
+// Раньше aiAnswer() был локальным подбором ответа по ключевым словам с
+// захардкоженными цифрами ("выручка за июль — 3 512 400 сом" и т.п.) —
+// демо-заглушка. Теперь реальный вопрос-ответ через YandexGPT (тот же
+// бэкенд, что и у голосового виджета, /notifications/voice/ mode=chat) —
+// см. apps/notifications/voice.py::ask_ai. Если AI_ENABLED=false (ключ
+// YandexGPT не настроен на сервере), сервер сам вернёт понятную ошибку,
+// которая покажется в чате как ответ.
 let aiChatHistory=[
-  {from:'in', text:'Здравствуйте! Я проанализировал показатели клиники за июль. Спросите меня о выручке, врачах, отменах или должниках — или посмотрите рекомендации выше.'}
+  {from:'in', text:'Здравствуйте! Задайте мне вопрос о работе клиники — постараюсь ответить.'}
 ];
 function renderAIChat(){
   const el=document.getElementById('aiChatMessages');
@@ -2675,38 +2682,31 @@ function renderAIChat(){
   el.innerHTML=aiChatHistory.map(m=>`<div class="chat-bubble ${m.from}">${m.text}</div>`).join('');
   el.scrollTop=el.scrollHeight;
 }
-function aiAnswer(q){
-  const s=q.toLowerCase();
-  if(s.includes('выручк') || s.includes('деньг') || s.includes('доход')){
-    return 'Выручка за июль — 3 512 400 сом, это на 14% больше июня. Лучшая неделя — 4-я (+88% от среднего). Просадка в выходные: суббота и воскресенье дают всего 15% недельной выручки — стоит подумать о промо на эти дни.';
+async function askAIPreset(q){
+  aiChatHistory.push({from:'out', text:q});
+  aiChatHistory.push({from:'in', text:'…', pending:true});
+  renderAIChat();
+  let answerText;
+  try{
+    const fd=new FormData();
+    fd.append('mode', 'chat');
+    fd.append('question', q);
+    const res=await postForm('/notifications/voice/', fd);
+    const data=await res.json().catch(()=>({}));
+    answerText = (res.ok && data.answer) ? data.answer : (data.error || t('w_voice_failed'));
+  }catch(e){
+    answerText = t('w_voice_failed');
   }
-  if(s.includes('врач') || s.includes('догруз') || s.includes('загруз')){
-    return 'Больше всех загружен Асанов Б. (92%) — риск выгорания и очередей. Меньше всех — Джумабекова А. (31%). Рекомендую перенести часть профилактических приёмов от Асанова к Джумабековой.';
-  }
-  if(s.includes('отмен') || s.includes('не пришёл') || s.includes('не пришел')){
-    return 'Главная причина отмен — «Заболел» (14 случаев за месяц), на втором месте «Не успевает» (11). Оба показателя снижаются, если включить напоминание за 24 часа в WhatsApp — сейчас такой шаблон уже настроен в разделе Маркетинг.';
-  }
-  if(s.includes('должник') || s.includes('оплат') || s.includes('долг')){
-    return 'Дебиторская задолженность — 198 300 сом у 11 пациентов. Крупнейший долг — у Бекова Азамата (12 000 сом). Могу подготовить напоминание об оплате шаблоном в разделе Мессенджеры.';
-  }
-  if(s.includes('заявк') || s.includes('конверс') || s.includes('источник')){
-    return 'Лучшая конверсия в визит — у звонков (71%) и Instagram (64%). Сайт конвертирует хуже всего (38%) — вероятно, форма записи на сайте слишком длинная.';
-  }
-  return 'Пока не готов ответить на этот вопрос подробно — но вот что я вижу: выручка растёт, конверсия заявок немного просела, а у Джумабековой А. есть свободные окна. Попробуйте спросить конкретнее — например, «где мы теряем деньги?»';
+  aiChatHistory.pop(); // убрать "…"
+  aiChatHistory.push({from:'in', text:answerText});
+  renderAIChat();
 }
 function sendAIQuestion(){
   const input=document.getElementById('aiChatInput');
   const q=input.value.trim();
   if(!q) return;
-  aiChatHistory.push({from:'out', text:q});
-  aiChatHistory.push({from:'in', text:aiAnswer(q)});
   input.value='';
-  renderAIChat();
-}
-function askAIPreset(q){
-  aiChatHistory.push({from:'out', text:q});
-  aiChatHistory.push({from:'in', text:aiAnswer(q)});
-  renderAIChat();
+  askAIPreset(q);
 }
 
 /* ================= MENU SETTINGS (скрыть/показать пункты меню) ================= */
@@ -3294,7 +3294,7 @@ const translations={
   w_conversion: {ru:'Конверсия в визит', ky:'Визитке конверсия', en:'Visit conversion', uz:'Tashrifga konversiya'},
   w_acquisition_cost: {ru:'Стоимость привлечения', ky:'Тартуу наркы', en:'Acquisition cost', uz:'Jalb qilish narxi'},
   w_excel: {ru:'Excel', ky:'Excel', en:'Excel', uz:'Excel'},
-  w_reports_hint: {ru:'Всё, включая Конструктор сравнения, — реальные данные. Демонстрационный пока только «ИИ-помощник».', ky:'Баары, анын ичинде Салыштыруу конструктору да, — реалдуу маалыматтар. Азырынча демонстрациялык — жалгыз «ИИ-жардамчы».', en:'Everything, including the comparison builder, is real data. Only the AI-assistant is still demo-only.', uz:'Hammasi, jumladan Solishtirish konstruktori ham, — haqiqiy ma\'lumotlar. Faqat «AI-yordamchi» hali namoyish uchun.'},
+  w_reports_hint: {ru:'Всё, включая Конструктор сравнения, — реальные данные. Чат «Спросить у ИИ» отвечает по-настоящему (если ИИ-помощник настроен на сервере), а вот блок «Рекомендации ИИ на сегодня» выше — пока демонстрационный.', ky:'Баары, анын ичинде Салыштыруу конструктору да, — реалдуу маалыматтар. «ИИдэн сурануу» чаты чындап жооп берет (сервердэ ИИ-жардамчы жөндөлсө), ал эми жогорудагы «Бүгүнкү ИИ сунуштары» блогу азырынча демонстрациялык.', en:'Everything, including the comparison builder, is real data. The "Ask AI" chat gives real answers (if the AI assistant is configured on the server), but the "AI recommendations for today" block above is still demo-only.', uz:'Hammasi, jumladan Solishtirish konstruktori ham, — haqiqiy ma\'lumotlar. "AI dan so\'rash" chati chindan javob beradi (agar server sozlangan bo\'lsa), lekin yuqoridagi "Bugungi AI tavsiyalari" bloki hali namoyish uchun.'},
   w_cancel_reason: {ru:'Причина', ky:'Себеби', en:'Reason', uz:'Sababi'},
   w_repeat_visits_alltime: {ru:'Повторные визиты · за всё время', ky:'Кайталама визиттер · бүт убакыт', en:'Repeat visits · all time', uz:'Takroriy tashriflar · butun vaqt'},
   w_active_status: {ru:'Активный', ky:'Активдүү', en:'Active', uz:'Faol'},
@@ -5434,6 +5434,24 @@ function apptPatientSearch(q){
   }
   box.classList.remove('hidden');
 }
+// Дашборд → строка поиска в шапке ("Пациент, запись, заявка…") раньше была
+// декоративной надписью без реального <input> — жалоба «тут поиск не
+// работает» была буквально верна, искать было нечем. V1: живой поиск по уже
+// загруженному на дашборд patientsList (newui_dashboard передаёт "patients"
+// в контекст — см. apps/users/newui_views.py), клик по результату ведёт на
+// карту пациента. Поиск по записям/заявкам — в этот заход не входит (на
+// дашборде нет соответствующих данных целиком, отдельная задача).
+function dashGlobalSearch(q){
+  const box=document.getElementById('dashSearchSuggestions');
+  if(!box) return;
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=(patientsList||[]).filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onclick="location.href='/new/patients/${p.id}/'"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
 function selectApptPatient(id){
   const p=patientsList.find(x=>x.id===id);
   if(!p) return;
@@ -5684,6 +5702,7 @@ let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_M
 // mode=schedule) классифицирует намерение, реальное действие выполняют уже
 // существующие защищённые правами функции (visitSetStatus/schedJumpToDate).
 let VOICE_ENABLED=false;
+let AI_ENABLED=false; // YandexGPT настроен на сервере — свободный вопрос-ответ доступен
 let voiceRecorder=null, voiceChunks=[], voiceActive=false;
 let lastFocusedTextField=null;
 document.addEventListener('focusin', (e)=>{
@@ -5753,7 +5772,54 @@ function voiceFabClick(btnEl){
       handleVoiceScheduleIntent(data);
     });
   } else {
-    showToast(t('w_voice_pick_field'), 'error');
+    // Ни поле в фокусе, ни расписание/карта приёма — свободный вопрос к
+    // ИИ-помощнику (YandexGPT), тот самый «слушать врачей везде».
+    voiceRecordToggle(btnEl, 'chat', (data)=>{
+      if(!data.transcript) return;
+      showVoiceChatAnswer(data.transcript, data.answer || data.error || t('w_voice_failed'));
+    });
+  }
+}
+// Небольшая плавающая карточка с вопросом+ответом ИИ — тосты (showToast)
+// слишком короткие для абзаца текста. Одна карточка одновременно (новый
+// вопрос убирает старую), автоскрытие через 20с или по крестику.
+function showVoiceChatAnswer(question, answer){
+  const old=document.getElementById('voiceChatAnswer');
+  if(old) old.remove();
+  const panel=document.createElement('div');
+  panel.id='voiceChatAnswer';
+  panel.style.cssText='position:fixed;right:20px;bottom:140px;z-index:501;background:var(--paper);border:1px solid var(--mist-line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:14px 40px 14px 16px;max-width:320px;font-size:13px;line-height:1.5;';
+  const closeBtn=document.createElement('button');
+  closeBtn.type='button';
+  closeBtn.textContent='✕';
+  closeBtn.style.cssText='position:absolute;top:6px;right:8px;border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:13px;';
+  closeBtn.onclick=()=>panel.remove();
+  const q=document.createElement('div');
+  q.style.cssText='color:var(--ink-soft);font-size:12px;margin-bottom:6px;';
+  q.textContent='🎤 «'+question+'»';
+  const a=document.createElement('div');
+  a.textContent=answer;
+  panel.appendChild(closeBtn);
+  panel.appendChild(q);
+  panel.appendChild(a);
+  document.body.appendChild(panel);
+  setTimeout(()=>{ if(document.body.contains(panel)) panel.remove(); }, 20000);
+}
+// Если команда по расписанию/карте приёма не распозналась как одно из
+// поддерживаемых действий — не тупик, а fallback на свободный вопрос:
+// транскрипт уже есть, повторной записи не нужно, просто отдаём его
+// ИИ-помощнику как обычный вопрос (тот же принцип "слушать врачей везде").
+async function askAIFromTranscript(transcript){
+  if(!AI_ENABLED){ showToast(t('w_voice_not_understood'), 'error'); return; }
+  const fd=new FormData();
+  fd.append('mode', 'chat');
+  fd.append('question', transcript);
+  try{
+    const res=await postForm('/notifications/voice/', fd);
+    const data=await res.json().catch(()=>({}));
+    showVoiceChatAnswer(transcript, (res.ok && data.answer) ? data.answer : (data.error || t('w_voice_failed')));
+  }catch(e){
+    showVoiceChatAnswer(transcript, t('w_voice_failed'));
   }
 }
 // Карта приёма: «зуб 26, композитная пломба, скидка 10%» → выбор зуба
@@ -5767,7 +5833,9 @@ function voiceFabClick(btnEl){
 // голосовых команд расписания).
 function handleVoiceVisitIntent(data){
   if(data.intent!=='add_tooth_service' || !data.teeth || data.teeth.length===0){
-    showToast(t('w_voice_not_understood'), 'error');
+    // Не похоже на команду «зуб+услуга» — не тупик, спросим как обычный
+    // вопрос ИИ-помощнику (транскрипт уже есть, повторной записи не нужно).
+    askAIFromTranscript(data.transcript);
     return;
   }
   if(typeof window.vwToothServicePick!=='function'){
@@ -5813,7 +5881,8 @@ function handleVoiceScheduleIntent(data){
     }
     return;
   }
-  showToast(t('w_voice_not_understood'), 'error');
+  // Не похоже на команду по расписанию — свободный вопрос ИИ-помощнику.
+  askAIFromTranscript(data.transcript);
 }
 // Перетаскивание + прилипание к краю ("спрятать" виджет) + персистентность
 // позиции per-browser (localStorage, как и другие пользовательские настройки
@@ -5924,6 +5993,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     VOICE_ENABLED=!!data.voiceEnabled;
+    AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
     if(voiceFabEl) voiceFabEl.classList.toggle('hidden', !VOICE_ENABLED);
   }catch(e){ console.error('newui real data parse failed', e); }
