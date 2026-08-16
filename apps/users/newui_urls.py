@@ -22,6 +22,7 @@ urlpatterns = [
     path("accounting/", v.newui_accounting, name="newui_accounting"),
     path("reports/", v.newui_reports, name="newui_reports"),
     path("salary/", v.newui_salary, name="newui_salary"),
+    path("profile/", v.newui_profile, name="newui_profile"),
     path("messages/", v.newui_messages, name="newui_messages"),
     path("audit/", v.newui_audit, name="newui_audit"),
     path("settings/", v.newui_settings, name="newui_settings"),

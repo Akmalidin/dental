@@ -1674,7 +1674,9 @@ class NewUISectionAccessTestCase(TestCase):
     def test_new_finance_blocked_for_restricted_user(self):
         resp = self.client.get("/new/finance/")
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, "/")
+        # Остаёмся в новом интерфейсе (не уводим на дашборд старого) —
+        # см. комментарий в SectionAccessMiddleware.
+        self.assertEqual(resp.url, "/new/")
 
     def test_new_staff_blocked_for_restricted_user(self):
         resp = self.client.get("/new/staff/")
@@ -1691,6 +1693,26 @@ class NewUISectionAccessTestCase(TestCase):
     def test_new_dashboard_always_allowed(self):
         resp = self.client.get("/new/")
         self.assertEqual(resp.status_code, 200)
+
+    def test_sidebar_nav_sections_reflect_restriction(self):
+        """real_data.navSections (см. _shared_options) — то, чем сайдбар нового
+        интерфейса решает, какие пункты прятать (hideRestrictedNavItems в
+        base.html). Должен нести именно то, что реально разрешено, а не
+        всё подряд. Сам HTML сайдбара всегда содержит ссылки на все разделы
+        (data-view/href), поэтому проверяем не текст страницы целиком, а
+        именно json_script-блок real_data — иначе тест ловил бы href="/new/
+        finance/" самой (скрываемой) ссылки и ложно падал."""
+        import json
+        import re
+        resp = self.client.get("/new/")
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        m = re.search(
+            r'<script id="newui-real-data"[^>]*>(.*?)</script>', content, re.S,
+        )
+        self.assertIsNotNone(m, "real_data json_script блок не найден")
+        real_data = json.loads(m.group(1))
+        self.assertEqual(sorted(real_data["navSections"]), ["dashboard", "patients"])
 
 
 class NewUIPatientCardDetailTestCase(TestCase):

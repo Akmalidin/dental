@@ -20,7 +20,7 @@ from .views import (
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
-    _newui_settings_data, _newui_funnel_data, _newui_salary_data,
+    _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
 )
 
 
@@ -84,6 +84,13 @@ def _shared_options(request, clinic):
         # ограничить самому себе доступ и остаться без возможности его вернуть).
         "sectionsCatalog": [{"key": k, "label": lbl} for k, lbl, _url in SECTIONS if k != "dashboard"],
         "currentUserId": request.user.pk,
+        # Пункты сайдбара, к которым у пользователя ЛИЧНО есть доступ (allowed_
+        # sections) — сайдбар прячет остальные (см. hideRestrictedNavItems в
+        # base.html), чтобы не показывать ссылку, по которой всё равно
+        # редиректнёт SectionAccessMiddleware (apps/tenancy.py). Раньше сайдбар
+        # это никак не учитывал — все пункты были видны независимо от
+        # ограничения, кликабельны, но вели в никуда.
+        "navSections": sorted(request.user.nav_sections),
     }
 
 
@@ -227,6 +234,14 @@ def newui_salary(request):
     """Зарплаты и схемы — те же права, что и старый /users/salary/
     (только директор/суперадмин, см. apps.users.views.salary_report)."""
     return _render(request, "salary", "salary.html", {"salaryData": _newui_salary_data()})
+
+
+@login_required
+def newui_profile(request):
+    """Профиль — доступен всем (не только директору/суперадмину, в отличие
+    от Зарплат): свой аватар/пароль/WhatsApp/Google Calendar меняет любой
+    сотрудник."""
+    return _render(request, "profile", "profile.html", {"profileData": _newui_profile_data(request.user)})
 
 
 # ── Разделы без реального бэкенда (см. баннеры в самих шаблонах) — просто

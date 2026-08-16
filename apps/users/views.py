@@ -2063,6 +2063,26 @@ def save_user_access(request, pk):
                     or f"/users/clinic/{target.clinic_id}/overview/")
 
 
+def _newui_profile_data(user):
+    """Профиль для нового интерфейса — те же поля, что и старый /profile/
+    (см. profile_view): ФИО/логин/пароль/аватар, номер WhatsApp, Google
+    Calendar. Сохранение — тот же POST /profile/ (три ветки по маркерным
+    полям _avatar_only/_whatsapp_only/основная форма) и /profile/daily-report/,
+    просто вызываются через fetch() с новой страницы, как и везде раньше."""
+    from apps.appointments.gcal import gcal_enabled
+    gcal_account = getattr(user, "gcal_account", None)
+    return {
+        "name": user.name,
+        "login": user.login,
+        "phone": user.phone or "",
+        "avatarUrl": user.avatar.url if user.avatar else "",
+        "roleName": user.role.display_name if user.role else "",
+        "gcalEnabled": gcal_enabled(),
+        "gcalConnected": bool(gcal_account),
+        "gcalEmail": getattr(gcal_account, "email", "") or "",
+    }
+
+
 @login_required
 def profile_view(request):
     from django.contrib.auth import update_session_auth_hash

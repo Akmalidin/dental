@@ -657,10 +657,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <span data-i18n="nav_настроить_меню">Настроить меню</span>
     </a>
 
-    <div class="sidebar-user">
+    <a class="sidebar-user" href="{% url 'newui_profile' %}" style="text-decoration:none;cursor:pointer;">
+      {% if request.user.avatar %}
+      <img class="avatar" src="{{ request.user.avatar.url }}" style="object-fit:cover;" alt="">
+      {% else %}
       <div class="avatar">{{ request.user.name|first|upper }}</div>
+      {% endif %}
       <div><b>{{ request.user.name|truncatechars:18 }}</b><span>{{ request.user.role }}</span></div>
-    </div>
+    </a>
 
     <a href="/new/use-old-interface/" class="nav-item" style="margin-top:6px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
@@ -3269,6 +3273,23 @@ const translations={
   w_note_placeholder: {ru:'Примечание', ky:'Эскертүү', en:'Note', uz:'Izoh'},
   w_not_set: {ru:'Не задана', ky:'Коюлган эмес', en:'Not set', uz:'Belgilanmagan'},
   w_configure: {ru:'Настроить', ky:'Ырастоо', en:'Configure', uz:'Sozlash'},
+  nav_профиль: {ru:'Профиль', ky:'Профиль', en:'Profile', uz:'Profil'},
+  w_edit_profile: {ru:'Редактировать профиль', ky:'Профильди түзөтүү', en:'Edit profile', uz:'Profilni tahrirlash'},
+  w_new_password: {ru:'Новый пароль', ky:'Жаңы сыр сөз', en:'New password', uz:'Yangi parol'},
+  w_confirm_password: {ru:'Подтвердите пароль', ky:'Сыр сөздү ырастаңыз', en:'Confirm password', uz:'Parolni tasdiqlang'},
+  w_password_blank_hint: {ru:'Оставьте пустым, чтобы не менять', ky:'Өзгөртпөө үчүн бош калтырыңыз', en:'Leave blank to keep unchanged', uz:'O‘zgartirmaslik uchun bo‘sh qoldiring'},
+  w_whatsapp_hint: {ru:'Укажите номер для получения сообщений и отчётов', ky:'Билдирүү жана отчёт алуу үчүн номерди көрсөтүңүз', en:'Enter a number to receive messages and reports', uz:'Xabar va hisobotlarni olish uchun raqam kiriting'},
+  w_gcal: {ru:'Google Календарь', ky:'Google Календары', en:'Google Calendar', uz:'Google Kalendar'},
+  w_gcal_connect: {ru:'Подключить', ky:'Туташтыруу', en:'Connect', uz:'Ulash'},
+  w_gcal_disconnect: {ru:'Отключить', ky:'Ажыратуу', en:'Disconnect', uz:'Uzish'},
+  w_gcal_disconnect_confirm: {ru:'Отключить Google Календарь?', ky:'Google Календарын ажыратасызбы?', en:'Disconnect Google Calendar?', uz:'Google Kalendar uzilsinmi?'},
+  w_gcal_connected: {ru:'Подключён', ky:'Туташтырылды', en:'Connected', uz:'Ulangan'},
+  w_gcal_hint: {ru:'Подключите Google-аккаунт — записи из расписания будут автоматически добавляться в ваш Google Календарь.', ky:'Google аккаунтуңузду туташтырыңыз — расписаниедеги жазуулар Google Календарыңызга автоматтык түрдө кошулат.', en:'Connect a Google account — appointments from the schedule will be added to your Google Calendar automatically.', uz:'Google hisobingizni ulang — jadvaldagi yozuvlar avtomatik ravishda Google Kalendaringizga qo‘shiladi.'},
+  w_gcal_not_configured: {ru:'Интеграция с Google Календарём не настроена. Обратитесь к администратору.', ky:'Google Календары менен интеграция орнотулган эмес. Администраторго кайрылыңыз.', en:'Google Calendar integration is not configured. Contact your administrator.', uz:'Google Kalendar integratsiyasi sozlanmagan. Administratorga murojaat qiling.'},
+  w_daily_report: {ru:'Ежедневный отчёт', ky:'Күнүмдүк отчёт', en:'Daily report', uz:'Kunlik hisobot'},
+  w_daily_report_hint: {ru:'Придёт в WhatsApp', ky:'WhatsApp\'ка келет', en:'Sent to WhatsApp', uz:'WhatsApp\'ga keladi'},
+  w_daily_report_sent: {ru:'Отчёт отправлен в WhatsApp', ky:'Отчёт WhatsApp\'ка жөнөтүлдү', en:'Report sent to WhatsApp', uz:'Hisobot WhatsApp\'ga yuborildi'},
+  w_passwords_mismatch: {ru:'Пароли не совпадают', ky:'Сыр сөздөр дал келген жок', en:'Passwords do not match', uz:'Parollar mos kelmadi'},
   w_room: {ru:'Кабинет', ky:'Кабинет', en:'Room', uz:'Xona'},
   w_hours_busy: {ru:'Часов занято', ky:'Саат бош эмес', en:'Hours busy', uz:'Band soatlar'},
   w_visits_per_patient: {ru:'Количество визитов на пациента', ky:'Бир бейтапка визиттердин саны', en:'Visits per patient', uz:'Bemorga tashriflar soni'},
@@ -3991,6 +4012,27 @@ function applyMenuPrefs(){
     while(n && !n.classList.contains('nav-label') && n.tagName==='A'){ n=n.nextElementSibling; }
     return n;
   }
+}
+// Пункты сайдбара → ключ раздела (Personal allowed_sections) — то же
+// сопоставление URL-префиксов, что и в apps.tenancy.SectionAccessMiddleware
+// (PREFIXES для /new/*). Пункт, которого нет в этом словаре (funnel,
+// marketing, visits, messages, salary, dashboard), бэкенд никак не
+// ограничивает через allowed_sections — не прячем и его тут, иначе сайдбар
+// врал бы о том, что реально заблокировано.
+const NAV_VIEW_TO_SECTION = {
+  patients: 'patients', schedule: 'appointments', treatplans: 'treatments',
+  staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
+  cashdesk: 'finance', finance: 'finance', accounting: 'finance',
+  reports: 'reports', audit: 'reports', settings: 'settings',
+};
+function hideRestrictedNavItems(navSections){
+  const sidebar=document.querySelector('.sidebar');
+  if(!sidebar || !navSections) return;
+  sidebar.querySelectorAll('.nav-item[data-view]').forEach(el=>{
+    const section=NAV_VIEW_TO_SECTION[el.dataset.view];
+    if(!section) return;  // не под личным ограничением — трогать нечего
+    el.classList.toggle('hidden', !navSections.includes(section));
+  });
 }
 function msSetHiddenLook(item, hidden){
   item.classList.toggle('ms-item-hidden', hidden);
@@ -5583,6 +5625,7 @@ let labRealData=null;
 let warehouseRealData=null;
 let reportsRealData=null;
 let salaryRealData=null;
+let profileRealData=null;
 let treatplansData=null;
 let visitsData=null;
 let accountingData=null;
@@ -5631,6 +5674,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     warehouseRealData=data.warehouseData || null;
     reportsRealData=data.reportsData || null;
     salaryRealData=data.salaryData || null;
+    profileRealData=data.profileData || null;
     window.newuiOpenPatientId=data.openPatientId || null;
     blacklistEntries=data.blacklistEntries || [];
     treatplansData=data.treatplansData || null;
@@ -5656,6 +5700,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     SERVER_CLINIC_MENU_PREFS=data.clinicMenuPrefs || {};
     CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
     document.getElementById('navSalary').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
+    hideRestrictedNavItems(data.navSections);
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
@@ -6126,7 +6171,9 @@ function printTreatmentReceipt(treatmentId){
 async function extractFormError(res){
   try{
     const doc=new DOMParser().parseFromString(await res.text(), 'text/html');
-    const block=doc.querySelector('.bg-red-50');
+    // .bg-red-50 — инлайновые ошибки формы (staff_create и т.п.); .badge-red —
+    // django messages.error() (например profile_view при неверном логине/пароле).
+    const block=doc.querySelector('.bg-red-50, .badge-red');
     return block ? block.textContent.trim().replace(/\s+/g,' ') : t('w_check_entered_data');
   }catch(e){ return t('w_check_entered_data'); }
 }
