@@ -297,7 +297,11 @@ class SectionAccessMiddleware:
                             from django.shortcuts import redirect
                             from django.contrib import messages
                             messages.error(request, "У вас нет доступа к этому разделу")
-                            return redirect("/")
+                            # Заблокированный /new/* уводил на дашборд СТАРОГО
+                            # интерфейса — для пользователя нового интерфейса
+                            # это выглядело как случайный обрыв в другое
+                            # приложение. Остаёмся в том интерфейсе, где были.
+                            return redirect("/new/" if path.startswith("/new/") else "/")
                         break
         return self.get_response(request)
 
