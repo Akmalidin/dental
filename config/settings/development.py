@@ -211,10 +211,14 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 # ─── YandexGPT (свободный вопрос-ответ «ИИ-помощник») — ключ только из env ───
 # Доступен из РФ без ограничений (в отличие от OpenAI). YANDEX_MODEL —
 # необязательно, по умолчанию "yandexgpt-lite" (дешевле/быстрее); можно
-# переключить на "yandexgpt" (полная модель) без правки кода.
+# переключить на "yandexgpt" (полная модель) без правки кода. YANDEX_TTS_VOICE —
+# голос для озвучки ответов (Yandex SpeechKit, тот же ключ/аккаунт), по
+# умолчанию "alena" — см. полный список голосов в документации SpeechKit,
+# если нужен другой.
 YANDEX_API_KEY = os.environ.get("YANDEX_API_KEY", "")
 YANDEX_FOLDER_ID = os.environ.get("YANDEX_FOLDER_ID", "")
 YANDEX_MODEL = os.environ.get("YANDEX_MODEL", "yandexgpt-lite")
+YANDEX_TTS_VOICE = os.environ.get("YANDEX_TTS_VOICE", "alena")
 
 # ─── Google Calendar (OAuth2) — ключи только из env ──────────────────────────
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")

@@ -562,6 +562,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .voice-fab.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
 .voice-fab.voice-busy{opacity:.55;pointer-events:none;}
 @keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(232,93,45,.45);}50%{box-shadow:0 0 0 10px rgba(232,93,45,0);}}
+/* Панель ассистента (#voiceChatPanel) — открывается кликом по #voiceFab,
+   когда нет сфокусированного текстового поля. Текст + голос, помнит
+   разговор (voiceChatHistory), отвечает и текстом, и голосом (speakText). */
+.voice-chat-panel{position:fixed;right:20px;bottom:140px;width:320px;max-width:calc(100vw - 32px);height:420px;max-height:calc(100vh - 180px);background:var(--paper);border:1px solid var(--mist-line);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.24);z-index:501;display:flex;flex-direction:column;overflow:hidden;}
+.voice-chat-panel .vcp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--mist-line);font-size:13px;font-weight:600;flex-shrink:0;}
+.voice-chat-panel .vcp-close{border:none;background:transparent;font-size:16px;cursor:pointer;color:var(--ink-soft);line-height:1;padding:2px 4px;}
+.voice-chat-panel .vcp-messages{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px;}
+.voice-chat-panel .chat-bubble{max-width:88%;padding:7px 10px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+.voice-chat-panel .chat-bubble.out{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:3px;}
+.voice-chat-panel .chat-bubble.in{align-self:flex-start;background:var(--cloud);color:var(--ink);border-bottom-left-radius:3px;}
+.voice-chat-panel .vcp-foot{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--mist-line);flex-shrink:0;}
+.voice-chat-panel .vcp-foot input{flex:1;border:1px solid var(--mist-line);border-radius:20px;padding:7px 12px;font-size:13px;outline:none;background:var(--cloud);}
+.voice-chat-panel .vcp-mic,.voice-chat-panel .vcp-send{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:none;background:var(--cobalt);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.voice-chat-panel .vcp-mic.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
+.voice-chat-panel .vcp-mic.voice-busy{opacity:.55;pointer-events:none;}
+@media(max-width:480px){.voice-chat-panel{right:8px;left:8px;width:auto;bottom:132px;}}
 </style>
 {% block extra_head %}{% endblock %}
 </head>
@@ -574,6 +590,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
      (initVoiceFabDrag) — там же отличает обычный клик от перетаскивания,
      поэтому здесь нет отдельного onclick. -->
 <button type="button" id="voiceFab" class="voice-fab hidden" title="Голосовой ввод">🤖</button>
+
+<!-- Панель ассистента — открывается кликом по #voiceFab (см. voiceFabClick/
+     openVoiceChatPanel), когда нет сфокусированного текстового поля. Скрыта
+     по умолчанию (класс hidden), поведение полностью в JS (base.html). -->
+<div id="voiceChatPanel" class="voice-chat-panel hidden">
+  <div class="vcp-head">
+    <span data-i18n="w_voice_assistant_title">Ассистент</span>
+    <button type="button" class="vcp-close" onclick="closeVoiceChatPanel()" aria-label="Закрыть">✕</button>
+  </div>
+  <div id="voiceChatMessages" class="vcp-messages"></div>
+  <div class="vcp-foot">
+    <button type="button" id="voiceChatMicBtn" class="vcp-mic" onclick="voiceChatMicToggle(this)" title="Голосовое сообщение">🎤</button>
+    <input type="text" id="voiceChatTextInput" data-i18n-placeholder="w_voice_type_hint" placeholder="Сообщение…" onkeydown="if(event.key==='Enter'){event.preventDefault();sendVoiceChatText();}">
+    <button type="button" class="vcp-send" onclick="sendVoiceChatText()" title="Отправить">➤</button>
+  </div>
+</div>
 
 <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Меню" title="Меню">☰</button>
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
@@ -3453,6 +3485,18 @@ const translations={
   w_voice_no_service_match: {ru:'Услуга не найдена в каталоге — уточните название', ky:'Кызмат каталогдо табылган жок — атын тактаңыз', en:'Service not found in catalog — clarify the name', uz:'Xizmat katalogda topilmadi — nomini aniqlashtiring'},
   w_voice_service_ambiguous: {ru:'Найдено несколько подходящих услуг, уточните', ky:'Бир нече ылайыктуу кызмат табылды, тактаңыз', en:'Several matching services found, please clarify', uz:'Bir nechta mos xizmat topildi, aniqlashtiring'},
   w_voice_visit_applied: {ru:'Зуб и услуга добавлены в план', ky:'Тиш жана кызмат планга кошулду', en:'Tooth and service added to the plan', uz:'Tish va xizmat rejaga qo\'shildi'},
+  w_voice_chat_hint: {ru:'Напишите или продиктуйте сообщение — я отвечу текстом и голосом и запомню разговор', ky:'Билдирүү жазыңыз же диктант кылыңыз — мен текст жана добуш менен жооп берем жана сүйлөшүүнү эстеп калам', en:'Type or dictate a message — I\'ll reply in text and voice, and remember our conversation', uz:'Xabar yozing yoki diktant qiling — men matn va ovoz bilan javob beraman va suhbatni eslab qolaman'},
+  w_voice_opening_patient: {ru:'Открываю карту пациента', ky:'Пациенттин картасын ачам', en:'Opening patient record', uz:'Bemor kartasi ochilmoqda'},
+  w_voice_patient_not_found: {ru:'Пациент не найден', ky:'Пациент табылган жок', en:'Patient not found', uz:'Bemor topilmadi'},
+  w_voice_ambiguous: {ru:'Найдено несколько совпадений, уточните', ky:'Бир нече дал келүү табылды, тактаңыз', en:'Several matches found, please clarify', uz:'Bir nechta mos kelish topildi, aniqlashtiring'},
+  w_voice_need_schedule_page: {ru:'Для этого откройте страницу «Расписание»', ky:'Бул үчүн «График» бетин ачыңыз', en:'Open the Schedule page for this', uz:'Buning uchun «Jadval» sahifasini oching'},
+  w_voice_doctor_appt_count: {ru:'У врача {doctor} на {date}: {count} приёмов', ky:'{doctor} врачта {date} күнү: {count} кабыл алуу', en:'Dr. {doctor} has {count} appointments on {date}', uz:'{doctor} shifokorda {date} kuni: {count} ta qabul'},
+  w_voice_doctor_not_found: {ru:'Врач не найден', ky:'Врач табылган жок', en:'Doctor not found', uz:'Shifokor topilmadi'},
+  w_voice_showing_schedule: {ru:'Показываю расписание', ky:'Графикти көрсөтөм', en:'Showing schedule', uz:'Jadval ko\'rsatilmoqda'},
+  w_voice_opening_schedule: {ru:'Открываю расписание', ky:'Графикти ачам', en:'Opening schedule', uz:'Jadval ochilmoqda'},
+  w_voice_status_applied: {ru:'Статус изменён', ky:'Статус өзгөртүлдү', en:'Status updated', uz:'Holat o\'zgartirildi'},
+  w_voice_assistant_title: {ru:'Ассистент', ky:'Ассистент', en:'Assistant', uz:'Assistent'},
+  w_voice_type_hint: {ru:'Сообщение…', ky:'Билдирүү…', en:'Message…', uz:'Xabar…'},
 };
 let currentLang='ru';
 /* Хелпер для JS-строк, которые сами решают, что показать (напр. значение
@@ -5749,6 +5793,7 @@ async function voiceRecordToggle(btnEl, mode, onResult){
 function voiceFabClick(btnEl){
   const target = lastFocusedTextField && document.contains(lastFocusedTextField) ? lastFocusedTextField : null;
   if(target){
+    // Поле в фокусе — обычная диктовка прямо в него, без панели (как и раньше).
     voiceRecordToggle(btnEl, 'dictate', (data)=>{
       if(!data.transcript) return;
       target.value = (target.value.trim() ? target.value.trim()+' ' : '') + data.transcript;
@@ -5756,100 +5801,161 @@ function voiceFabClick(btnEl){
       target.blur();   // настоящее blur-событие — существующий onblur-автосейв поля (если есть) сработает сам
       target.focus();   // возвращаем курсор, чтобы можно было продолжить диктовать/печатать
     });
-  } else if(isVisitPage()){
-    // На карте приёма без поля в фокусе — не диктовка, а структурная команда:
-    // «зуб 26, композитная пломба, скидка 10%» → сама выбирает зуб, добавляет
-    // услугу, ставит скидку теми же функциями, что и обычный клик мышью.
-    voiceRecordToggle(btnEl, 'visit', (data)=>{
-      if(!data.transcript) return;
-      showToast('🎤 «'+data.transcript+'»');
-      handleVoiceVisitIntent(data);
-    });
-  } else if(isSchedulePage()){
-    voiceRecordToggle(btnEl, 'schedule', (data)=>{
-      if(!data.transcript) return;
-      showToast('🎤 «'+data.transcript+'»');
-      handleVoiceScheduleIntent(data);
-    });
   } else {
-    // Ни поле в фокусе, ни расписание/карта приёма — свободный вопрос к
-    // ИИ-помощнику (YandexGPT), тот самый «слушать врачей везде».
-    voiceRecordToggle(btnEl, 'chat', (data)=>{
-      if(!data.transcript) return;
-      showVoiceChatAnswer(data.transcript, data.answer || data.error || t('w_voice_failed'));
-    });
+    // Ничего не в фокусе — открываем панель ассистента (текст + голос,
+    // помнит разговор, отвечает и текстом, и голосом).
+    openVoiceChatPanel();
   }
 }
-// Небольшая плавающая карточка с вопросом+ответом ИИ — тосты (showToast)
-// слишком короткие для абзаца текста. Одна карточка одновременно (новый
-// вопрос убирает старую), автоскрытие через 20с или по крестику.
-function showVoiceChatAnswer(question, answer){
-  const old=document.getElementById('voiceChatAnswer');
-  if(old) old.remove();
-  const panel=document.createElement('div');
-  panel.id='voiceChatAnswer';
-  panel.style.cssText='position:fixed;right:20px;bottom:140px;z-index:501;background:var(--paper);border:1px solid var(--mist-line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:14px 40px 14px 16px;max-width:320px;font-size:13px;line-height:1.5;';
-  const closeBtn=document.createElement('button');
-  closeBtn.type='button';
-  closeBtn.textContent='✕';
-  closeBtn.style.cssText='position:absolute;top:6px;right:8px;border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:13px;';
-  closeBtn.onclick=()=>panel.remove();
-  const q=document.createElement('div');
-  q.style.cssText='color:var(--ink-soft);font-size:12px;margin-bottom:6px;';
-  q.textContent='🎤 «'+question+'»';
-  const a=document.createElement('div');
-  a.textContent=answer;
-  panel.appendChild(closeBtn);
-  panel.appendChild(q);
-  panel.appendChild(a);
-  document.body.appendChild(panel);
-  setTimeout(()=>{ if(document.body.contains(panel)) panel.remove(); }, 20000);
+
+/* ===== Панель ассистента: чат с памятью, текст+голос, озвучка ответа =====
+   voiceChatHistory живёт в памяти вкладки (не в БД/сессии на сервере) —
+   «помнит разговор» в рамках открытой страницы; при переходе на другую
+   /new/* страницу история не сохраняется (полноценная серверная память
+   разговора — отдельная, более крупная задача). */
+let voiceChatHistory=[];
+let voiceChatPanelOpen=false;
+function openVoiceChatPanel(){
+  const panel=document.getElementById('voiceChatPanel');
+  if(!panel) return;
+  voiceChatPanelOpen=true;
+  panel.classList.remove('hidden');
+  renderVoiceChatPanel();
+  const input=document.getElementById('voiceChatTextInput');
+  if(input) input.focus();
 }
-// Если команда по расписанию/карте приёма не распозналась как одно из
-// поддерживаемых действий — не тупик, а fallback на свободный вопрос:
-// транскрипт уже есть, повторной записи не нужно, просто отдаём его
-// ИИ-помощнику как обычный вопрос (тот же принцип "слушать врачей везде").
-async function askAIFromTranscript(transcript){
-  if(!AI_ENABLED){ showToast(t('w_voice_not_understood'), 'error'); return; }
+function closeVoiceChatPanel(){
+  voiceChatPanelOpen=false;
+  const panel=document.getElementById('voiceChatPanel');
+  if(panel) panel.classList.add('hidden');
+}
+function renderVoiceChatPanel(){
+  const el=document.getElementById('voiceChatMessages');
+  if(!el) return;
+  el.innerHTML = voiceChatHistory.length
+    ? voiceChatHistory.map(m=>`<div class="chat-bubble ${m.role==='user'?'out':'in'}">${m.text}</div>`).join('')
+    : `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">${t('w_voice_chat_hint')}</div>`;
+  el.scrollTop=el.scrollHeight;
+}
+function voiceChatSetBusy(busy){
+  const el=document.getElementById('voiceChatMessages');
+  if(!el) return;
+  let ind=document.getElementById('voiceChatTyping');
+  if(busy && !ind){
+    ind=document.createElement('div');
+    ind.id='voiceChatTyping';
+    ind.className='chat-bubble in';
+    ind.textContent='…';
+    el.appendChild(ind);
+    el.scrollTop=el.scrollHeight;
+  } else if(!busy && ind){
+    ind.remove();
+  }
+}
+async function sendVoiceChatText(){
+  const input=document.getElementById('voiceChatTextInput');
+  const text=(input.value||'').trim();
+  if(!text) return;
+  input.value='';
+  await processAssistantMessage(text);
+}
+function voiceChatMicToggle(btnEl){
+  voiceRecordToggle(btnEl, 'dictate', (data)=>{
+    if(data.transcript) processAssistantMessage(data.transcript);
+  });
+}
+// Текстовый запрос к тому же /notifications/voice/, что и у голоса — просто
+// вместо аудиофайла передаём уже готовый текст (транскрипт из голосового
+// сообщения или напечатанное сообщение), эндпоинт это поддерживает без
+// распознавания речи (см. apps/notifications/views.py::voice_command).
+async function callAssistantBackend(text, mode, withHistory){
   const fd=new FormData();
-  fd.append('mode', 'chat');
-  fd.append('question', transcript);
+  fd.append('mode', mode);
+  fd.append('question', text);
+  if(withHistory) fd.append('history', JSON.stringify(voiceChatHistory.slice(-12)));
   try{
     const res=await postForm('/notifications/voice/', fd);
     const data=await res.json().catch(()=>({}));
-    showVoiceChatAnswer(transcript, (res.ok && data.answer) ? data.answer : (data.error || t('w_voice_failed')));
-  }catch(e){
-    showVoiceChatAnswer(transcript, t('w_voice_failed'));
-  }
+    return res.ok ? data : null;
+  }catch(e){ return null; }
 }
-// Карта приёма: «зуб 26, композитная пломба, скидка 10%» → выбор зуба
-// (toggleToothSelect, base.html) + добавление услуги в план
-// (window.vwToothServicePick, определена в visitcard.html) + скидка
-// (window.vwSetDiscountForTooth, тоже visitcard.html) — те же функции, что
-// уже вызываются кликом мыши, здесь только параметры берутся из голоса.
-// Сопоставление произнесённого названия услуги с конкретной услугой клиники —
-// на клиенте, по уже загруженному servicesList; при 0 или >1 совпадений
-// ничего не делаем и объясняем тостом (тот же принцип «не гадать», что и у
-// голосовых команд расписания).
-function handleVoiceVisitIntent(data){
-  if(data.intent!=='add_tooth_service' || !data.teeth || data.teeth.length===0){
-    // Не похоже на команду «зуб+услуга» — не тупик, спросим как обычный
-    // вопрос ИИ-помощнику (транскрипт уже есть, повторной записи не нужно).
-    askAIFromTranscript(data.transcript);
-    return;
+// Единая обработка одного сообщения (напечатанного или надиктованного):
+// 1) на карте приёма — пробуем как «зуб+услуга»;
+// 2) пробуем как команду по расписанию/поиску пациента/приёмам врача —
+//    работает на любой странице (сами действия могут быть недоступны, если
+//    нужные данные не загружены на текущей странице — тогда честно об этом
+//    и говорим, не гадаем);
+// 3) иначе — свободный вопрос ИИ-помощнику, с памятью разговора, + озвучка.
+async function processAssistantMessage(text){
+  voiceChatHistory.push({role:'user', text});
+  renderVoiceChatPanel();
+  voiceChatSetBusy(true);
+  let answer=null;
+
+  if(isVisitPage()){
+    const visitData=await callAssistantBackend(text, 'visit');
+    if(visitData && visitData.intent==='add_tooth_service'){
+      answer=applyVoiceVisitIntent(visitData);
+    }
   }
-  if(typeof window.vwToothServicePick!=='function'){
-    showToast(t('w_voice_not_understood'), 'error'); return; // карта приёма ещё не проинициализировалась
+  if(answer===null){
+    const genData=await callAssistantBackend(text, 'schedule');
+    if(genData && genData.intent && genData.intent!=='unknown'){
+      answer=applyAssistantIntent(genData);
+    }
   }
+  if(answer===null){
+    if(!AI_ENABLED){
+      answer=t('w_voice_not_understood');
+    } else {
+      const chatData=await callAssistantBackend(text, 'chat', true);
+      answer=(chatData && chatData.answer) ? chatData.answer : ((chatData && chatData.error) || t('w_voice_failed'));
+    }
+  }
+
+  voiceChatSetBusy(false);
+  voiceChatHistory.push({role:'assistant', text:answer});
+  renderVoiceChatPanel();
+  speakText(answer);
+}
+// Озвучка ответа (Yandex SpeechKit) — необязательное дополнение к тексту,
+// который уже показан в панели; молча ничего не делает при ошибке/выключенном
+// ИИ, не должна мешать основному потоку чата.
+async function speakText(text){
+  if(!AI_ENABLED || !text) return;
+  try{
+    const fd=new FormData();
+    fd.append('text', text);
+    const res=await postForm('/notifications/voice/speak/', fd);
+    if(!res.ok) return;
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const audio=new Audio(url);
+    audio.onended=()=>URL.revokeObjectURL(url);
+    audio.play().catch(()=>{});
+  }catch(e){}
+}
+
+/* ---- Карта приёма: «зуб 26, композитная пломба, скидка 10%» → выбор зуба
+   (toggleToothSelect, base.html) + добавление услуги (window.vwToothServicePick,
+   visitcard.html) + скидка (window.vwSetDiscountForTooth, тоже visitcard.html) —
+   те же функции, что вызывает обычный клик мышью. Сопоставление названия
+   услуги с каталогом клиники — на клиенте, по servicesList; при 0 или >1
+   совпадений ничего не делаем и честно объясняем, а не гадаем. Возвращает
+   текст для чата (null, если это вообще не похоже на команду «зуб+услуга» —
+   тогда processAssistantMessage пробует дальше). ---- */
+function applyVoiceVisitIntent(data){
+  if(!data.teeth || data.teeth.length===0) return null;
+  if(typeof window.vwToothServicePick!=='function') return t('w_voice_not_understood');
   let svc=null;
   if(data.service_query){
     const q=data.service_query.toLowerCase();
     const matches=(servicesList||[]).filter(s=>s.name.toLowerCase().includes(q));
     if(matches.length===1) svc=matches[0];
-    else if(matches.length===0){ showToast(t('w_voice_no_service_match'), 'error'); return; }
-    else { showToast(t('w_voice_service_ambiguous')+': '+matches.slice(0,5).map(s=>s.name).join(', '), 'error'); return; }
+    else if(matches.length===0) return t('w_voice_no_service_match');
+    else return t('w_voice_service_ambiguous')+': '+matches.slice(0,5).map(s=>s.name).join(', ');
   } else {
-    showToast(t('w_voice_no_service_match'), 'error'); return;
+    return t('w_voice_no_service_match');
   }
   data.teeth.forEach(num=>{
     toggleToothSelect('adult-'+num, true);
@@ -5858,31 +5964,76 @@ function handleVoiceVisitIntent(data){
       window.vwSetDiscountForTooth(num, svc.id, data.discount_pct);
     }
   });
-  showToast(t('w_voice_visit_applied'));
+  return t('w_voice_visit_applied')+': '+svc.name+' — '+data.teeth.join(', ');
 }
-function handleVoiceScheduleIntent(data){
+
+/* ---- Расписание / поиск пациента / приёмы врача — работает на любой
+   странице в пределах уже загруженных там данных: patientsList почти везде,
+   scheduleRealData только там, где расписание реально нужно (честно
+   сообщаем, если данных нет, а не делаем вид, что искали). ---- */
+function fuzzyNameMatch(a, b){
+  // Русские фамилии/имена в разных падежах отличаются на 1-2 буквы в конце
+  // ("Иванова"/"Ивановой") — точное совпадение слишком строгое для голоса.
+  if(!a || !b) return false;
+  if(a.includes(b) || b.includes(a)) return true;
+  const n=Math.min(a.length, b.length, 6);
+  return n>=3 && a.slice(0,n)===b.slice(0,n);
+}
+function applyAssistantIntent(data){
+  if(data.intent==='find_patient' && data.patient_name){
+    const q=data.patient_name.toLowerCase();
+    const matches=(patientsList||[]).filter(p=>fuzzyNameMatch(p.fullName.toLowerCase(), q) || (p.phone||'').includes(q));
+    if(matches.length===1){
+      const p=matches[0];
+      setTimeout(()=>{ location.href='/new/patients/'+p.id+'/'; }, 700);
+      return t('w_voice_opening_patient')+': '+p.fullName;
+    } else if(matches.length===0){
+      return t('w_voice_patient_not_found');
+    }
+    return t('w_voice_ambiguous')+': '+matches.slice(0,5).map(p=>p.fullName).join(', ');
+  }
+  if(data.intent==='doctor_appointments' && data.doctor_name){
+    if(!scheduleRealData || !(scheduleDoctors||[]).length){
+      return t('w_voice_need_schedule_page');
+    }
+    const q=data.doctor_name.toLowerCase();
+    const matches=(scheduleDoctors||[]).filter(d=>fuzzyNameMatch(d.name.toLowerCase(), q));
+    if(matches.length===1){
+      const doc=matches[0];
+      const list=apptsFor(data.date, doc.id)||[];
+      return t('w_voice_doctor_appt_count').replace('{doctor}', doc.name).replace('{count}', list.length).replace('{date}', data.date);
+    } else if(matches.length===0){
+      return t('w_voice_doctor_not_found');
+    }
+    return t('w_voice_ambiguous')+': '+matches.slice(0,5).map(d=>d.name).join(', ');
+  }
   if(data.intent==='show_date' && data.date){
-    schedJumpToDate(data.date);
-    return;
+    if(isSchedulePage()){
+      schedJumpToDate(data.date);
+      return t('w_voice_showing_schedule');
+    }
+    setTimeout(()=>{ location.href='/new/schedule/'; }, 700);
+    return t('w_voice_opening_schedule');
   }
   if(data.intent==='mark_status' && data.status){
+    if(!scheduleRealData){
+      return t('w_voice_need_schedule_page');
+    }
     const todayIso=isoDate(dateAtOffset(0));
     let list=(apptsFor(todayIso, CURRENT_USER_ID)||[]).filter(a=>!['completed','cancelled','no_show'].includes(a.statusRaw));
     if(data.patient_name){
       const q=data.patient_name.toLowerCase();
-      list=list.filter(a=>a.patient && a.patient.toLowerCase().includes(q));
+      list=list.filter(a=>a.patient && fuzzyNameMatch(a.patient.toLowerCase(), q));
     }
     if(list.length===1){
       visitSetStatus(list[0].id, data.status);
+      return t('w_voice_status_applied')+': '+list[0].patient;
     } else if(list.length===0){
-      showToast(t('w_voice_no_match'), 'error');
-    } else {
-      showToast(t('w_voice_no_match')+': '+list.map(a=>a.patient+' '+a.time).join(', '), 'error');
+      return t('w_voice_no_match');
     }
-    return;
+    return t('w_voice_ambiguous')+': '+list.map(a=>a.patient+' '+a.time).join(', ');
   }
-  // Не похоже на команду по расписанию — свободный вопрос ИИ-помощнику.
-  askAIFromTranscript(data.transcript);
+  return null;
 }
 // Перетаскивание + прилипание к краю ("спрятать" виджет) + персистентность
 // позиции per-browser (localStorage, как и другие пользовательские настройки

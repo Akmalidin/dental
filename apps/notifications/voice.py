@@ -49,26 +49,41 @@ def ai_enabled():
     return bool(getattr(settings, "YANDEX_API_KEY", "") and getattr(settings, "YANDEX_FOLDER_ID", ""))
 
 
-def ask_ai(question):
+_MAX_HISTORY_TURNS = 12  # ~6 пар вопрос-ответ — держит контекст разговора, не раздувая запрос без предела
+
+
+def ask_ai(question, history=None):
     """Возвращает (answer, error). Безопасно выключено, если ключ/folder_id
-    не заданы — вызывающий код должен сам проверить ai_enabled() ДО вызова."""
+    не заданы — вызывающий код должен сам проверить ai_enabled() ДО вызова.
+
+    history — список прошлых реплик [{role:'user'|'assistant', text:'...'}]
+    (хранится и передаётся клиентом, base.html::voiceChatHistory — «помнить
+    разговор» реализовано так, без серверной сессии/БД под это, сознательно
+    просто: список растёт в JS-памяти вкладки, живёт до перезагрузки
+    страницы). Обрезается до последних _MAX_HISTORY_TURNS реплик."""
     import json as _json
     import urllib.request
     import urllib.error
 
     folder_id = settings.YANDEX_FOLDER_ID
     model = getattr(settings, "YANDEX_MODEL", "") or "yandexgpt-lite"
+    messages = [{"role": "system", "text": (
+        "Ты — голосовой ассистент стоматологической клиники. Отвечай кратко и по "
+        "делу на вопросы врачей и администраторов о работе клиники. Отвечай на том "
+        "же языке, на котором задан вопрос (русский, кыргызский или узбекский). "
+        "Ответ будет озвучен вслух — избегай списков, таблиц и markdown-разметки, "
+        "формулируй обычными предложениями."
+    )}]
+    for turn in (history or [])[-_MAX_HISTORY_TURNS:]:
+        role = "assistant" if turn.get("role") == "assistant" else "user"
+        text = (turn.get("text") or "").strip()
+        if text:
+            messages.append({"role": role, "text": text})
+    messages.append({"role": "user", "text": question})
     body = {
         "modelUri": f"gpt://{folder_id}/{model}/latest",
         "completionOptions": {"stream": False, "temperature": 0.3, "maxTokens": "800"},
-        "messages": [
-            {"role": "system", "text": (
-                "Ты — ассистент стоматологической клиники. Отвечай кратко и по делу "
-                "на вопросы врачей и администраторов о работе клиники. Отвечай на том "
-                "же языке, на котором задан вопрос (русский, кыргызский или узбекский)."
-            )},
-            {"role": "user", "text": question},
-        ],
+        "messages": messages,
     }
     req = urllib.request.Request(
         "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
@@ -91,6 +106,47 @@ def ask_ai(question):
     except Exception as e:
         log.warning("voice: YandexGPT request failed: %s", e)
         return None, "Не удалось получить ответ от ИИ"
+
+
+def synthesize_speech(text):
+    """Озвучивание ответа — Yandex SpeechKit TTS (тот же аккаунт/ключ, что и
+    у YandexGPT — scope speechkit уже выдан). Возвращает (audio_bytes, error);
+    audio_bytes — сырой OggOpus (совместим с HTML5 <audio> в Chrome/Firefox
+    без доп. библиотек). Ограничение по длине текста (SpeechKit режет очень
+    длинные) — обрезаем до разумного, озвучка не более пары абзацев не имеет
+    смысла для голосового ассистента."""
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+
+    folder_id = settings.YANDEX_FOLDER_ID
+    voice = getattr(settings, "YANDEX_TTS_VOICE", "") or "alena"
+    text = (text or "").strip()[:2000]
+    if not text:
+        return None, "Пустой текст для озвучки"
+    params = urllib.parse.urlencode({
+        "text": text,
+        "lang": "ru-RU",
+        "voice": voice,
+        "format": "oggopus",
+        "folderId": folder_id,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize",
+        data=params,
+        headers={"Authorization": f"Api-Key {settings.YANDEX_API_KEY}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            return resp.read(), None
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        log.warning("voice: YandexTTS HTTP %s: %s", e.code, detail)
+        return None, "Не удалось озвучить ответ"
+    except Exception as e:
+        log.warning("voice: YandexTTS request failed: %s", e)
+        return None, "Не удалось озвучить ответ"
 
 
 _whisper_model = None
@@ -171,6 +227,16 @@ _SCHEDULE_STOPWORDS = {
     "отметь", "отметить", "пациента", "пациент", "запись", "как", "что", "его", "её", "ее",
     "статус", "визит", "приём", "прием",
 }
+_FIND_PATIENT_KEYWORDS = ("найди", "найти", "поиск", "ищи", "искать")
+_FIND_PATIENT_STOPWORDS = {
+    "найди", "найти", "поиск", "ищи", "искать", "пациента", "пациент", "пациенту", "мне",
+}
+_DOCTOR_COUNT_KEYWORDS = ("сколько",)
+_DOCTOR_COUNT_TOPIC_WORDS = ("приём", "прием", "записи", "запись", "записей", "пациентов")
+_DOCTOR_COUNT_STOPWORDS = {
+    "сколько", "приёмов", "приемов", "приём", "прием", "записи", "запись", "записей",
+    "пациентов", "у", "врача", "доктора", "сегодня", "завтра",
+}
 
 
 def _extract_relative_date(text, today):
@@ -202,24 +268,53 @@ def _extract_patient_name(transcript, matched_stems):
     return name or None
 
 
+def _strip_words(transcript, stopwords):
+    kept = [w for w in transcript.split() if w.lower().strip(",.") not in stopwords]
+    return " ".join(kept).strip(" ,.") or None
+
+
 def parse_schedule_command(transcript, today_iso):
-    """Возвращает dict {intent, date, patient_name, status} — intent='unknown',
-    если команда не распознана как одно из поддерживаемых действий."""
+    """Возвращает dict {intent, date, patient_name, status, doctor_name} —
+    intent='unknown', если команда не распознана как одно из поддерживаемых
+    действий. Единый разбор для расписания, поиска пациента и подсчёта
+    приёмов врача — используется и на странице расписания, и на любой другой
+    (виджет вызывает его же, если ни диктовка, ни специфичная для страницы
+    команда не подошли, см. handleAssistantCommand в base.html)."""
     text = transcript.lower()
     today = datetime.date.fromisoformat(today_iso)
+    empty = {"intent": "unknown", "date": None, "patient_name": None, "status": None, "doctor_name": None}
+
+    # «найди пациента Иванова» — раньше без реального поиска команда просто
+    # уходила в общий вопрос к ИИ, который не видит базу пациентов клиники и
+    # ничего не находил. Реальный поиск — на клиенте (patientsList уже
+    # загружен), здесь только вычленяем имя.
+    if any(kw in text for kw in _FIND_PATIENT_KEYWORDS):
+        name = _strip_words(transcript, _FIND_PATIENT_STOPWORDS)
+        if name:
+            return {**empty, "intent": "find_patient", "patient_name": name}
+
+    # «сколько приёмов у Ивановой сегодня» — тоже реальные данные на клиенте
+    # (scheduleRealData), не вопрос к ИИ.
+    if any(kw in text for kw in _DOCTOR_COUNT_KEYWORDS) and any(w in text for w in _DOCTOR_COUNT_TOPIC_WORDS):
+        doctor_name = _strip_words(transcript, _DOCTOR_COUNT_STOPWORDS)
+        date = _extract_relative_date(text, today) or today
+        if doctor_name:
+            return {**empty, "intent": "doctor_appointments", "doctor_name": doctor_name, "date": date.isoformat()}
 
     if "расписан" in text or "покажи" in text or "открой" in text:
-        date = _extract_relative_date(text, today)
-        if date:
-            return {"intent": "show_date", "date": date.isoformat(), "patient_name": None, "status": None}
+        # Дата не названа явно («покажи расписание») — раньше это тоже
+        # уходило в unknown → общий вопрос к ИИ, хотя разумный дефолт
+        # очевиден: сегодняшний день.
+        date = _extract_relative_date(text, today) or today
+        return {**empty, "intent": "show_date", "date": date.isoformat()}
 
     for keywords, status in _STATUS_KEYWORDS:
         matched = [kw for kw in keywords if kw in text]
         if matched:
             name = _extract_patient_name(transcript, matched)
-            return {"intent": "mark_status", "date": None, "patient_name": name, "status": status}
+            return {**empty, "intent": "mark_status", "patient_name": name, "status": status}
 
-    return {"intent": "unknown", "date": None, "patient_name": None, "status": None}
+    return empty
 
 
 # ---- Карта приёма: «зуб 26, композитная пломба, скидка 10%» ----

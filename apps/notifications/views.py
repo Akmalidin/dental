@@ -970,12 +970,16 @@ def voice_command(request):
       teeth, service_query, discount_pct})
     - свободного вопроса-ответа (mode=chat → {transcript, answer}) — либо
       голосом (аудио), либо текстом (поле question, без аудио — используется
-      текстовым чатом «ИИ-помощник» в Отчётах, распознавание речи там не
-      нужно).
+      текстовым чатом «ИИ-помощник» в Отчётах и панелью ассистента,
+      распознавание речи в текстовом случае не нужно). Опциональное поле
+      history (JSON-строка [{role, text}, ...]) — память разговора, хранится
+      и передаётся клиентом (base.html::voiceChatHistory), не в БД.
     Сам эндпоинт ничего не пишет в БД — только распознаёт речь и (для
     schedule/visit) классифицирует намерение; реальное действие (смена
-    статуса записи, добавление услуги, переход на дату) выполняет уже
-    существующий, защищённый правами JS-код на клиенте. Аудио не сохраняется."""
+    статуса записи, добавление услуги, переход на дату, поиск пациента)
+    выполняет уже существующий, защищённый правами JS-код на клиенте. Аудио
+    не сохраняется."""
+    import json
     from django.utils import timezone
     from .voice import (
         voice_enabled, transcribe_audio, parse_schedule_command, parse_visit_command,
@@ -983,41 +987,73 @@ def voice_command(request):
     )
     mode = request.POST.get("mode") or "dictate"
     text_question = (request.POST.get("question") or "").strip()
+    try:
+        history = json.loads(request.POST.get("history") or "[]")
+        if not isinstance(history, list):
+            history = []
+    except (ValueError, TypeError):
+        history = []
 
-    if mode == "chat" and text_question and not request.FILES.get("audio"):
-        # Текстовый вопрос (например, из чата в Отчётах) — распознавание речи
-        # не требуется, сразу к YandexGPT.
-        if not ai_enabled():
-            return JsonResponse({"error": "ИИ-помощник не настроен"}, status=503)
-        answer, err = ask_ai(text_question)
+    audio = request.FILES.get("audio")
+
+    if text_question and not audio:
+        # Текстовый ввод — напечатанное сообщение в панели ассистента ИЛИ уже
+        # готовый транскрипт голосового сообщения (base.html::
+        # processAssistantMessage сначала распознаёт речь через mode=dictate,
+        # потом отправляет полученный текст сюда для классификации). Работает
+        # для ЛЮБОГО mode, не только chat — раньше text_question обрабатывался
+        # только при mode=='chat', из-за чего напечатанные (и надиктованные —
+        # см. выше) команды вроде «найди пациента …»/«сколько приёмов у …»
+        # всегда падали в "Аудио не получено" и тихо скатывались к общему
+        # ИИ-чату, который не видит данные клиники (баг с прода: «найди
+        # пациента … не нашёл», «в расписании не показывает…»). Распознавание
+        # речи тут не нужно — voice_enabled() (Whisper) не проверяем.
+        transcript = text_question
+    else:
+        if not voice_enabled():
+            return JsonResponse({"error": "Голосовой ввод не настроен"}, status=503)
+        if not audio:
+            return JsonResponse({"error": "Аудио не получено"}, status=400)
+        if audio.size > 15 * 1024 * 1024:
+            return JsonResponse({"error": "Слишком большой файл"}, status=400)
+        transcript, err = transcribe_audio(audio)
         if err:
             return JsonResponse({"error": err}, status=502)
-        return JsonResponse({"transcript": text_question, "answer": answer})
+        if not transcript:
+            return JsonResponse({"error": "Речь не распознана"}, status=422)
 
-    if not voice_enabled():
-        return JsonResponse({"error": "Голосовой ввод не настроен"}, status=503)
-    audio = request.FILES.get("audio")
-    if not audio:
-        return JsonResponse({"error": "Аудио не получено"}, status=400)
-    if audio.size > 15 * 1024 * 1024:
-        return JsonResponse({"error": "Слишком большой файл"}, status=400)
-    transcript, err = transcribe_audio(audio)
-    if err:
-        return JsonResponse({"error": err}, status=502)
-    if not transcript:
-        return JsonResponse({"error": "Речь не распознана"}, status=422)
+    if mode == "chat":
+        if not ai_enabled():
+            return JsonResponse({"error": "ИИ-помощник не настроен", "transcript": transcript}, status=503)
+        answer, err = ask_ai(transcript, history=history)
+        if err:
+            return JsonResponse({"error": err, "transcript": transcript}, status=502)
+        return JsonResponse({"transcript": transcript, "answer": answer})
+
     result = {"transcript": transcript}
     if mode == "schedule":
         today_iso = timezone.localdate().isoformat()
         result.update(parse_schedule_command(transcript, today_iso))
     elif mode == "visit":
         result.update(parse_visit_command(transcript))
-    elif mode == "chat":
-        if ai_enabled():
-            answer, ai_err = ask_ai(transcript)
-            result["answer"] = answer
-            if ai_err:
-                result["error"] = ai_err
-        else:
-            result["error"] = "ИИ-помощник не настроен"
     return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def voice_speak(request):
+    """Озвучивание текста ответа ассистента (Yandex SpeechKit) — отдельный
+    эндпоинт, а не поле в voice_command: не всякий ответ нужно озвучивать
+    (например, текстовый чат в Отчётах — тихий), и аудио тяжелее гонять
+    внутри JSON. Отдаёт сырой OggOpus напрямую (Content-Type: audio/ogg),
+    без обёртки в JSON — клиент проигрывает его как Blob."""
+    from .voice import ai_enabled, synthesize_speech
+    if not ai_enabled():
+        return JsonResponse({"error": "ИИ-помощник не настроен"}, status=503)
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"error": "Пустой текст"}, status=400)
+    audio_bytes, err = synthesize_speech(text)
+    if err:
+        return JsonResponse({"error": err}, status=502)
+    return HttpResponse(audio_bytes, content_type="audio/ogg")

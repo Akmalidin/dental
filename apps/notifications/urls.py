@@ -22,4 +22,5 @@ urlpatterns = [
     path("tg-broadcast/", views.tg_broadcast, name="tg_broadcast"),
     path("tg-connect/", views.tg_connect, name="tg_connect"),
     path("voice/", views.voice_command, name="voice_command"),
+    path("voice/speak/", views.voice_speak, name="voice_speak"),
 ]
