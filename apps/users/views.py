@@ -2800,6 +2800,48 @@ def _salary_rows(date_from, date_to, completed_only=False):
     return rows
 
 
+def _newui_salary_data():
+    """Зарплаты для нового интерфейса — тот же расчёт (_salary_rows), что и
+    старый /users/salary/, за текущий месяц (без выбора периода — тот же
+    принцип, что и у остальных разделов нового интерфейса; полноценный
+    date-range и печать остаются в старом /users/salary/, туда же ведёт
+    ссылка «Excel»). Сохранение схемы — существующий POST
+    /users/salary/<pk>/scheme/ (см. salary_scheme_edit), просто вызывается
+    через fetch() с этой страницы, как и «Кабинеты и график» в Настройках."""
+    from datetime import date
+    from .models_salary import SalaryScheme
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    rows = _salary_rows(month_start, today)
+    return {
+        "periodFrom": month_start.strftime("%d.%m.%Y"),
+        "periodTo": today.strftime("%d.%m.%Y"),
+        "exportFrom": month_start.isoformat(),
+        "exportTo": today.isoformat(),
+        "schemeTypes": [{"code": c, "label": lbl} for c, lbl in SalaryScheme.TYPE_CHOICES],
+        "rows": [{
+            "doctorId": r["doctor"].pk,
+            "doctorName": r["doctor"].name,
+            "roleLabel": r["role_label"] or "—",
+            "schemeType": r["scheme"].scheme_type if r["scheme"] else "",
+            "schemeTypeLabel": r["scheme"].get_scheme_type_display() if r["scheme"] else "",
+            "schemeFixed": float(r["scheme"].fixed_amount) if r["scheme"] else 0,
+            "schemePercent": float(r["scheme"].percent) if r["scheme"] else 0,
+            "schemeDescription": r["scheme"].description if r["scheme"] else "",
+            "treatmentsCount": r["treatments_count"],
+            "completedCount": r["completed_count"],
+            "avgCheck": float(r["avg_check"]),
+            "revenue": float(r["revenue"]),
+            "paid": float(r["paid"]),
+            "salary": float(r["salary"]),
+        } for r in rows],
+        "totalRevenue": float(sum(r["revenue"] for r in rows)),
+        "totalPaid": float(sum(r["paid"] for r in rows)),
+        "totalSalary": float(sum(r["salary"] for r in rows)),
+    }
+
+
 @login_required
 @role_required("superadmin", "admin_main")
 def salary_report(request):

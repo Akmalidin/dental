@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.middleware.csrf import get_token
 from django.shortcuts import render
 
+from .decorators import role_required
 from .models import Role, Branch, Permission, clinic_doctors
 from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
@@ -19,7 +20,7 @@ from .views import (
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
-    _newui_settings_data, _newui_funnel_data,
+    _newui_settings_data, _newui_funnel_data, _newui_salary_data,
 )
 
 
@@ -206,6 +207,14 @@ def newui_warehouse(request):
 @login_required
 def newui_reports(request):
     return _render(request, "reports", "reports.html", {"reportsData": _newui_reports_data()})
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+def newui_salary(request):
+    """Зарплаты и схемы — те же права, что и старый /users/salary/
+    (только директор/суперадмин, см. apps.users.views.salary_report)."""
+    return _render(request, "salary", "salary.html", {"salaryData": _newui_salary_data()})
 
 
 # ── Разделы без реального бэкенда (см. баннеры в самих шаблонах) — просто

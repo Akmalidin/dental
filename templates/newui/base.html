@@ -626,6 +626,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span data-i18n="nav_бухгалтерия">Бухгалтерия</span>
     </a>
+    <!-- Зарплаты — те же права, что у старой /users/salary/ (только директор/
+         суперадмин, см. role_required на newui_salary) — прячем пункт меню,
+         чтобы не вести туда, откуда всё равно молча отправит на дашборд. -->
+    <a class="nav-item hidden{% if active == 'salary' %} active{% endif %}" id="navSalary" data-view="salary" href="{% url 'newui_salary' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+      <span data-i18n="nav_зарплаты">Зарплаты</span>
+    </a>
 
     <div class="nav-label">Управление</div>
     <a class="nav-item{% if active == 'reports' %} active{% endif %}" data-view="reports" href="{% url 'newui_reports' %}">
@@ -2721,6 +2728,7 @@ const translations={
   nav_касса:          {ru:'Касса',              ky:'Касса',            en:'Cash desk',         uz:'Kassa'},
   nav_финансы:        {ru:'Финансы',            ky:'Каржы',            en:'Finance',           uz:'Moliya'},
   nav_бухгалтерия:    {ru:'Бухгалтерия',        ky:'Бухгалтерия',      en:'Accounting',        uz:'Buxgalteriya'},
+  nav_зарплаты:       {ru:'Зарплаты',           ky:'Эмгек акылар',     en:'Salaries',          uz:'Maoshlar'},
   'nav_отч_ты':       {ru:'Отчёты',             ky:'Отчёттор',         en:'Reports',           uz:"Hisobotlar"},
   nav_мессенджеры:    {ru:'Мессенджеры',        ky:'Мессенджерлер',    en:'Messengers',        uz:'Messenjerlar'},
   nav_журнал_аудита:  {ru:'Журнал аудита',      ky:'Аудит журналы',    en:'Audit log',         uz:'Audit jurnali'},
@@ -3236,6 +3244,25 @@ const translations={
   w_utilization_short: {ru:'Загрузка', ky:'Жүктөлүү', en:'Utilization', uz:'Bandlik'},
   w_share_short: {ru:'Доля', ky:'Үлүшү', en:'Share', uz:'Ulushi'},
   w_room_load_hint: {ru:'«Доля» — часы кабинета от суммы часов по всем кабинетам за неделю (не % от рабочего времени — своего графика работы у кабинета в системе нет, в отличие от врача).', ky:'«Үлүшү» — ушул кабинеттин саат саны бардык кабинеттердин суммасынан (жумуш убактысынын % эмес — кабинеттин өз графиги жок, дарыгерден айырмаланып).', en:'"Share" is this room\'s hours as a fraction of total booked hours across all rooms this week (not a % of working time — rooms don\'t have their own schedule the way doctors do).', uz:'"Ulushi" — bu xonaning soatlari barcha xonalar bo‘yicha jami soatlardan ulushi (ish vaqtining % emas — xonaning shifokordan farqli o‘z jadvali yo‘q).'},
+  w_salary_hint: {ru:'Расчёт за текущий месяц, реальные приёмы и оплаты. Период и печать — в старом интерфейсе (кнопка «Excel» ведёт туда же). Схема зарплаты сохраняется тем же эндпоинтом, что и в старом интерфейсе.', ky:'Учурдагы ай боюнча эсептөө, реалдуу кабылдоолор жана төлөмдөр. Мезгил жана басып чыгаруу — эски интерфейсте («Excel» баскычы ошол жерге алып барат). Эмгек акы схемасы эски интерфейстеги эндпоинт менен эле сакталат.', en:'Calculated for the current month, from real appointments and payments. The date range and printing are in the old interface (the Excel button leads there). The salary scheme is saved through the same endpoint as the old interface.', uz:'Joriy oy uchun hisob-kitob, haqiqiy qabullar va to‘lovlar asosida. Davr va chop etish — eski interfeysda ("Excel" tugmasi o‘sha yerga olib boradi). Maosh sxemasi eski interfeysdagi bilan bir xil endpoint orqali saqlanadi.'},
+  w_period: {ru:'Период', ky:'Мезгил', en:'Period', uz:'Davr'},
+  w_employees_count: {ru:'Сотрудников', ky:'Кызматкерлер', en:'Employees', uz:'Xodimlar'},
+  w_total_to_pay: {ru:'К выплате', ky:'Төлөнүүчү сумма', en:'To pay', uz:'To‘lanadigan summa'},
+  w_total_revenue: {ru:'Общая выручка', ky:'Жалпы түшүм', en:'Total revenue', uz:'Umumiy tushum'},
+  w_salary_calc: {ru:'Расчёт зарплаты', ky:'Эмгек акыны эсептөө', en:'Salary calculation', uz:'Maoshni hisoblash'},
+  w_employee: {ru:'Сотрудник', ky:'Кызматкер', en:'Employee', uz:'Xodim'},
+  w_position: {ru:'Должность', ky:'Кызматы', en:'Position', uz:'Lavozimi'},
+  w_treatments_short: {ru:'Приёмов', ky:'Кабылдоо', en:'Visits', uz:'Qabullar'},
+  w_completed_short: {ru:'Заверш.', ky:'Аяктал.', en:'Done', uz:'Tugagan'},
+  w_paid: {ru:'Оплачено', ky:'Төлөндү', en:'Paid', uz:'To‘landi'},
+  w_salary_scheme: {ru:'Схема зарплаты', ky:'Эмгек акы схемасы', en:'Salary scheme', uz:'Maosh sxemasi'},
+  w_scheme: {ru:'Схема', ky:'Схема', en:'Scheme', uz:'Sxema'},
+  w_scheme_type: {ru:'Тип схемы', ky:'Схеманын түрү', en:'Scheme type', uz:'Sxema turi'},
+  w_fixed_rate: {ru:'Фиксированная ставка', ky:'Так ставка', en:'Fixed rate', uz:'Belgilangan stavka'},
+  w_percent: {ru:'Процент (%)', ky:'Пайыз (%)', en:'Percent (%)', uz:'Foiz (%)'},
+  w_note_placeholder: {ru:'Примечание', ky:'Эскертүү', en:'Note', uz:'Izoh'},
+  w_not_set: {ru:'Не задана', ky:'Коюлган эмес', en:'Not set', uz:'Belgilanmagan'},
+  w_configure: {ru:'Настроить', ky:'Ырастоо', en:'Configure', uz:'Sozlash'},
   w_room: {ru:'Кабинет', ky:'Кабинет', en:'Room', uz:'Xona'},
   w_hours_busy: {ru:'Часов занято', ky:'Саат бош эмес', en:'Hours busy', uz:'Band soatlar'},
   w_visits_per_patient: {ru:'Количество визитов на пациента', ky:'Бир бейтапка визиттердин саны', en:'Visits per patient', uz:'Bemorga tashriflar soni'},
@@ -5547,6 +5574,7 @@ let financeRealData=null;
 let labRealData=null;
 let warehouseRealData=null;
 let reportsRealData=null;
+let salaryRealData=null;
 let treatplansData=null;
 let visitsData=null;
 let accountingData=null;
@@ -5592,6 +5620,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     labRealData=data.labData || null;
     warehouseRealData=data.warehouseData || null;
     reportsRealData=data.reportsData || null;
+    salaryRealData=data.salaryData || null;
     window.newuiOpenPatientId=data.openPatientId || null;
     blacklistEntries=data.blacklistEntries || [];
     treatplansData=data.treatplansData || null;
@@ -5616,6 +5645,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     SERVER_USER_MENU_PREFS=data.userMenuPrefs || {};
     SERVER_CLINIC_MENU_PREFS=data.clinicMenuPrefs || {};
     CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
+    document.getElementById('navSalary').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;

@@ -1,0 +1,109 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Зарплаты{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="nav_зарплаты">Зарплаты</h1><div class="topbar-right"><a class="btn btn-ghost" id="salaryExportLink" target="_blank" rel="noopener"><span data-i18n="w_excel">Excel</span></a></div></div>
+      <div class="page">
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_salary_hint">Расчёт за текущий месяц, реальные приёмы и оплаты. Период и печать — в старом интерфейсе (кнопка «Excel» ведёт туда же). Схема зарплаты сохраняется тем же эндпоинтом, что и в старом интерфейсе.</span></div>
+
+        <div class="kpi-grid" style="margin-bottom:16px;">
+          <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_period">Период</span><b style="font-size:16px" id="sal-period">—</b></div>
+          <div class="card kpi b-teal"><span class="lbl" data-i18n="w_employees_count">Сотрудников</span><b style="font-size:22px" id="sal-count">—</b></div>
+          <div class="card kpi b-amber"><span class="lbl" data-i18n="w_total_to_pay">К выплате</span><b style="font-size:22px" id="sal-total">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_total_revenue">Общая выручка</span><b style="font-size:22px" id="sal-revenue">—</b></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 data-i18n="w_salary_calc">Расчёт зарплаты</h3></div>
+          <table>
+            <thead><tr>
+              <th data-i18n="w_employee">Сотрудник</th>
+              <th data-i18n="w_position">Должность</th>
+              <th data-i18n="w_scheme">Схема</th>
+              <th data-i18n="w_treatments_short">Приёмов</th>
+              <th data-i18n="w_completed_short">Заверш.</th>
+              <th data-i18n="w_avg_check">Средний чек</th>
+              <th data-i18n="w_revenue">Выручка</th>
+              <th data-i18n="w_paid">Оплачено</th>
+              <th data-i18n="w_total_to_pay">К выплате</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="salaryTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-salaryScheme">
+        <div class="modal">
+          <div class="modal-head"><h3 id="ssModalTitle" data-i18n="w_salary_scheme">Схема зарплаты</h3><button class="modal-close" onclick="closeModal('m-salaryScheme')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label data-i18n="w_scheme_type">Тип схемы</label><select id="ss-type" onchange="ssTypeChanged()"></select></div>
+            <div class="form-group" id="ss-fixed-wrap"><label id="ss-fixed-label" data-i18n="w_fixed_rate">Фиксированная ставка</label><input autocomplete="off" type="number" id="ss-fixed" min="0" step="1"></div>
+            <div class="form-group" id="ss-percent-wrap"><label data-i18n="w_percent">Процент (%)</label><input autocomplete="off" type="number" id="ss-percent" min="0" max="100" step="0.5"></div>
+            <div class="form-group"><label data-i18n="w_description">Описание</label><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="ss-description" placeholder="Примечание" data-i18n-placeholder="w_note_placeholder"></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-salaryScheme')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" type="button" onclick="submitSalaryScheme()"><span data-i18n="w_save">Сохранить</span></button></div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const s = salaryRealData;
+  if(!s) return;
+
+  document.getElementById('salaryExportLink').href = '/users/salary/export/?from='+s.exportFrom+'&to='+s.exportTo;
+  document.getElementById('sal-period').textContent = s.periodFrom+' — '+s.periodTo;
+  document.getElementById('sal-count').textContent = (s.rows||[]).length;
+  document.getElementById('sal-total').textContent = fmtSom(s.totalSalary);
+  document.getElementById('sal-revenue').textContent = fmtSom(s.totalRevenue);
+
+  const body = document.getElementById('salaryTableBody');
+  body.innerHTML = (s.rows||[]).length===0
+    ? `<tr><td colspan="10" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_doctors')}</td></tr>`
+    : s.rows.map(r => `<tr>
+        <td style="font-weight:600;">${r.doctorName}</td>
+        <td style="color:var(--ink-soft);font-size:12px;">${r.roleLabel}</td>
+        <td>${r.schemeTypeLabel ? `<span class="pill cobalt">${r.schemeTypeLabel}${r.schemePercent?' · '+r.schemePercent+'%':''}</span>` : `<span class="pill grey">${t('w_not_set')}</span>`}</td>
+        <td class="mono">${r.treatmentsCount}</td>
+        <td class="mono">${r.completedCount}</td>
+        <td class="mono">${fmtSom(r.avgCheck)}</td>
+        <td class="mono">${fmtSom(r.revenue)}</td>
+        <td class="mono" style="color:var(--teal)">${fmtSom(r.paid)}</td>
+        <td class="mono" style="font-weight:700;">${fmtSom(r.salary)}</td>
+        <td style="text-align:right;"><button class="btn btn-ghost btn-sm" type="button" onclick="openSalaryScheme(${r.doctorId})">${t('w_configure')}</button></td>
+      </tr>`).join('');
+
+  let ssEditingDoctorId = null;
+  window.openSalaryScheme = function(doctorId){
+    const row = (s.rows||[]).find(r => r.doctorId===doctorId);
+    if(!row) return;
+    ssEditingDoctorId = doctorId;
+    document.getElementById('ssModalTitle').textContent = row.doctorName;
+    document.getElementById('ss-type').innerHTML = (s.schemeTypes||[]).map(st =>
+      `<option value="${st.code}" ${st.code===row.schemeType?'selected':''}>${st.label}</option>`
+    ).join('');
+    document.getElementById('ss-fixed').value = row.schemeFixed || 0;
+    document.getElementById('ss-percent').value = row.schemePercent || 0;
+    document.getElementById('ss-description').value = row.schemeDescription || '';
+    ssTypeChanged();
+    openModal('m-salaryScheme');
+  };
+  window.ssTypeChanged = function(){
+    const type = document.getElementById('ss-type').value;
+    document.getElementById('ss-fixed-wrap').classList.toggle('hidden', !(type==='fixed'||type==='combined'));
+    document.getElementById('ss-percent-wrap').classList.toggle('hidden', !(type==='percent_revenue'||type==='percent_paid'||type==='combined'));
+  };
+  window.submitSalaryScheme = async function(){
+    if(ssEditingDoctorId==null) return;
+    const fd = new FormData();
+    fd.append('scheme_type', document.getElementById('ss-type').value);
+    fd.append('fixed_amount', document.getElementById('ss-fixed').value || '0');
+    fd.append('percent', document.getElementById('ss-percent').value || '0');
+    fd.append('description', document.getElementById('ss-description').value);
+    const res = await postForm('/users/salary/'+ssEditingDoctorId+'/scheme/', fd);
+    if(res.redirected){ closeModal('m-salaryScheme'); flashAndReload(t('w_settings_saved')); }
+    else { showToast(t('w_settings_save_failed'), 'error'); }
+  };
+})();
+</script>
+{% endblock %}
