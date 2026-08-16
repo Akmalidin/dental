@@ -391,6 +391,17 @@
     vwPlan[i].discountMode = vwPlan[i].discountMode==='sum' ? '%' : 'sum';
     vwRenderPlan();
   };
+  // Голосовой ввод (base.html::handleVoiceVisitIntent) — ставит скидку на уже
+  // добавленную голосом строку плана по (зуб, услуга), а не по индексу
+  // массива (индекс vwPlan не виден снаружи этого замыкания). Строка на этот
+  // момент уже существует — voiceFabClick сначала вызывает vwToothServicePick
+  // (создаёт строку), только потом это. discountMode свежей строки всегда
+  // '%' (см. push в vwToothServicePick) — vwPlanSetDiscount(i, val) в этом
+  // режиме и ожидает val процентом, конвертации не нужно.
+  window.vwSetDiscountForTooth = function(tooth, serviceId, pct){
+    const idx = vwPlan.findIndex(it=>String(it.tooth)===String(tooth) && String(it.service_id)===String(serviceId));
+    if(idx>-1) window.vwPlanSetDiscount(idx, pct);
+  };
   // Общий datalist для поиска услуги в строке плана — нативная фильтрация
   // браузера по мере ввода, вместо длинного select со всеми услугами разом.
   if(!document.getElementById('vwServicesDatalist')){

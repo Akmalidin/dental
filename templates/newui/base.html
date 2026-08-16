@@ -554,10 +554,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .docs-grid .doc-tile .doc-file-icon{font-size:32px;}
 .docs-grid .doc-name{font-size:11px;color:var(--ink-soft);padding:6px 4px 0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 @media(max-width:640px){.lb-prev,.lb-next{width:40px;height:52px;font-size:30px;}}
+/* Голосовой ввод — плавающий виджет, см. #voiceFab выше и initVoiceFabDrag в
+   основном скрипте. bottom:84px по умолчанию (не 20px), чтобы не перекрывать
+   другие плавающие элементы внизу справа. */
+.voice-fab{position:fixed;right:20px;bottom:84px;width:46px;height:46px;border-radius:50%;border:none;background:var(--cobalt);color:#fff;font-size:19px;box-shadow:0 4px 16px rgba(0,0,0,.22);cursor:grab;z-index:500;touch-action:none;}
+.voice-fab:active{cursor:grabbing;}
+.voice-fab.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
+.voice-fab.voice-busy{opacity:.55;pointer-events:none;}
+@keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(232,93,45,.45);}50%{box-shadow:0 0 0 10px rgba(232,93,45,0);}}
 </style>
 {% block extra_head %}{% endblock %}
 </head>
 <body>
+
+<!-- Голосовой ввод — один плавающий виджет на ВСЕХ страницах /new/* (общий
+     base.html), перетаскиваемый, скрыт целиком (класс hidden), пока
+     VOICE_ENABLED не подтвердит, что на сервере настроен OpenAI-ключ (см.
+     loadRealStaffData). Клик обрабатывается самим JS drag-контроллером
+     (initVoiceFabDrag) — там же отличает обычный клик от перетаскивания,
+     поэтому здесь нет отдельного onclick. -->
+<button type="button" id="voiceFab" class="voice-fab hidden" title="Голосовой ввод">🎤</button>
 
 <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Меню" title="Меню">☰</button>
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
@@ -3427,6 +3443,16 @@ const translations={
   w_link_patients: {ru:'Пациенты →', ky:'Бейтаптар →', en:'Patients →', uz:'Bemorlar →'},
   w_upcoming_today: {ru:'Ближайшие приёмы сегодня', ky:'Бүгүнкү жакынкы кабыл алуулар', en:'Upcoming visits today', uz:'Bugungi yaqin qabullar'},
   w_link_schedule: {ru:'Расписание →', ky:'График →', en:'Schedule →', uz:'Jadval →'},
+  // ---- Голосовой ввод (плавающий виджет #voiceFab) ----
+  w_voice_not_supported: {ru:'Микрофон не поддерживается этим браузером', ky:'Бул браузер микрофонду колдобойт', en:'Microphone not supported in this browser', uz:'Bu brauzerda mikrofon qo\'llab-quvvatlanmaydi'},
+  w_mic_denied: {ru:'Нет доступа к микрофону', ky:'Микрофонго уруксат жок', en:'Microphone access denied', uz:'Mikrofonga ruxsat yo\'q'},
+  w_voice_failed: {ru:'Не удалось распознать речь', ky:'Сүйлөшүү таанылган жок', en:'Voice recognition failed', uz:'Nutqni aniqlab bo\'lmadi'},
+  w_voice_not_understood: {ru:'Команда не распознана', ky:'Буйрук таанылган жок', en:'Command not understood', uz:'Buyruq aniqlanmadi'},
+  w_voice_no_match: {ru:'Пациент не найден в сегодняшних записях', ky:'Пациент бүгүнкү жазууларда табылган жок', en:'Patient not found in today\'s appointments', uz:'Bemor bugungi yozuvlarda topilmadi'},
+  w_voice_pick_field: {ru:'Сначала кликните в текстовое поле, куда диктовать — либо откройте расписание/карту приёма для голосовых команд', ky:'Алгач диктант үчүн текст талаасын басыңыз — же добуштук буйруктар үчүн график/кабыл алуу картасын ачыңыз', en:'Click into a text field to dictate into, or open Schedule/Visit for voice commands', uz:'Diktant uchun avval matn maydonini bosing — yoki ovozli buyruqlar uchun jadval/qabul kartasini oching'},
+  w_voice_no_service_match: {ru:'Услуга не найдена в каталоге — уточните название', ky:'Кызмат каталогдо табылган жок — атын тактаңыз', en:'Service not found in catalog — clarify the name', uz:'Xizmat katalogda topilmadi — nomini aniqlashtiring'},
+  w_voice_service_ambiguous: {ru:'Найдено несколько подходящих услуг, уточните', ky:'Бир нече ылайыктуу кызмат табылды, тактаңыз', en:'Several matching services found, please clarify', uz:'Bir nechta mos xizmat topildi, aniqlashtiring'},
+  w_voice_visit_applied: {ru:'Зуб и услуга добавлены в план', ky:'Тиш жана кызмат планга кошулду', en:'Tooth and service added to the plan', uz:'Tish va xizmat rejaga qo\'shildi'},
 };
 let currentLang='ru';
 /* Хелпер для JS-строк, которые сами решают, что показать (напр. значение
@@ -5650,6 +5676,196 @@ let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
 let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_MENU=false;
 // Расписание: подсказка «начать приём» после «Пришёл» — только для врача (см.
 // maybeOfferStartVisit). Касса: кнопка «Быстрая продажа» — только у права finance.quick_sale.
+// Голосовой ввод — общий виджет на всех страницах (см. #voiceFab). Работает
+// в двух режимах, решает сам по клику: если в фокусе текстовое поле —
+// диктует в него (везде, любая страница); если поле не в фокусе и это
+// страница расписания — голосовая команда по расписанию. Сам эндпоинт
+// /notifications/voice/ ничего не пишет в БД — только транскрибирует и (для
+// mode=schedule) классифицирует намерение, реальное действие выполняют уже
+// существующие защищённые правами функции (visitSetStatus/schedJumpToDate).
+let VOICE_ENABLED=false;
+let voiceRecorder=null, voiceChunks=[], voiceActive=false;
+let lastFocusedTextField=null;
+document.addEventListener('focusin', (e)=>{
+  const el=e.target;
+  if(el && (el.tagName==='TEXTAREA' || (el.tagName==='INPUT' && (el.type==='text' || !el.type))) && !el.disabled){
+    lastFocusedTextField=el;
+  }
+});
+function isSchedulePage(){ return location.pathname.indexOf('/new/schedule')===0; }
+function isVisitPage(){ return location.pathname.indexOf('/new/visitcard/')===0; }
+async function voiceRecordToggle(btnEl, mode, onResult){
+  if(voiceActive){ voiceRecorder.stop(); return; } // второй клик — остановить запись
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showToast(t('w_voice_not_supported'), 'error'); return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ showToast(t('w_mic_denied'), 'error'); return; }
+  voiceChunks=[];
+  voiceRecorder=new MediaRecorder(stream);
+  voiceRecorder.ondataavailable=e=>{ if(e.data.size>0) voiceChunks.push(e.data); };
+  voiceRecorder.onstop=async()=>{
+    voiceActive=false;
+    btnEl.classList.remove('voice-recording');
+    stream.getTracks().forEach(tr=>tr.stop());
+    btnEl.classList.add('voice-busy');
+    try{
+      const blob=new Blob(voiceChunks, {type:'audio/webm'});
+      const fd=new FormData();
+      fd.append('audio', blob, 'voice.webm');
+      fd.append('mode', mode);
+      const res=await postForm('/notifications/voice/', fd);
+      btnEl.classList.remove('voice-busy');
+      if(res.ok){ onResult(await res.json()); }
+      else { const err=await res.json().catch(()=>({})); showToast(err.error || t('w_voice_failed'), 'error'); }
+    }catch(e){ btnEl.classList.remove('voice-busy'); showToast(t('w_voice_failed'), 'error'); }
+  };
+  voiceRecorder.start();
+  voiceActive=true;
+  btnEl.classList.add('voice-recording');
+  // защита от "забыл остановить" — жёсткий потолок в 60с
+  setTimeout(()=>{ if(voiceActive && voiceRecorder && voiceRecorder.state==='recording') voiceRecorder.stop(); }, 60000);
+}
+function voiceFabClick(btnEl){
+  const target = lastFocusedTextField && document.contains(lastFocusedTextField) ? lastFocusedTextField : null;
+  if(target){
+    voiceRecordToggle(btnEl, 'dictate', (data)=>{
+      if(!data.transcript) return;
+      target.value = (target.value.trim() ? target.value.trim()+' ' : '') + data.transcript;
+      target.focus();
+      target.blur();   // настоящее blur-событие — существующий onblur-автосейв поля (если есть) сработает сам
+      target.focus();   // возвращаем курсор, чтобы можно было продолжить диктовать/печатать
+    });
+  } else if(isVisitPage()){
+    // На карте приёма без поля в фокусе — не диктовка, а структурная команда:
+    // «зуб 26, композитная пломба, скидка 10%» → сама выбирает зуб, добавляет
+    // услугу, ставит скидку теми же функциями, что и обычный клик мышью.
+    voiceRecordToggle(btnEl, 'visit', (data)=>{
+      if(!data.transcript) return;
+      showToast('🎤 «'+data.transcript+'»');
+      handleVoiceVisitIntent(data);
+    });
+  } else if(isSchedulePage()){
+    voiceRecordToggle(btnEl, 'schedule', (data)=>{
+      if(!data.transcript) return;
+      showToast('🎤 «'+data.transcript+'»');
+      handleVoiceScheduleIntent(data);
+    });
+  } else {
+    showToast(t('w_voice_pick_field'), 'error');
+  }
+}
+// Карта приёма: «зуб 26, композитная пломба, скидка 10%» → выбор зуба
+// (toggleToothSelect, base.html) + добавление услуги в план
+// (window.vwToothServicePick, определена в visitcard.html) + скидка
+// (window.vwSetDiscountForTooth, тоже visitcard.html) — те же функции, что
+// уже вызываются кликом мыши, здесь только параметры берутся из голоса.
+// Сопоставление произнесённого названия услуги с конкретной услугой клиники —
+// на клиенте, по уже загруженному servicesList; при 0 или >1 совпадений
+// ничего не делаем и объясняем тостом (тот же принцип «не гадать», что и у
+// голосовых команд расписания).
+function handleVoiceVisitIntent(data){
+  if(data.intent!=='add_tooth_service' || !data.teeth || data.teeth.length===0){
+    showToast(t('w_voice_not_understood'), 'error');
+    return;
+  }
+  if(typeof window.vwToothServicePick!=='function'){
+    showToast(t('w_voice_not_understood'), 'error'); return; // карта приёма ещё не проинициализировалась
+  }
+  let svc=null;
+  if(data.service_query){
+    const q=data.service_query.toLowerCase();
+    const matches=(servicesList||[]).filter(s=>s.name.toLowerCase().includes(q));
+    if(matches.length===1) svc=matches[0];
+    else if(matches.length===0){ showToast(t('w_voice_no_service_match'), 'error'); return; }
+    else { showToast(t('w_voice_service_ambiguous')+': '+matches.slice(0,5).map(s=>s.name).join(', '), 'error'); return; }
+  } else {
+    showToast(t('w_voice_no_service_match'), 'error'); return;
+  }
+  data.teeth.forEach(num=>{
+    toggleToothSelect('adult-'+num, true);
+    window.vwToothServicePick(num, svc.id);
+    if(data.discount_pct && typeof window.vwSetDiscountForTooth==='function'){
+      window.vwSetDiscountForTooth(num, svc.id, data.discount_pct);
+    }
+  });
+  showToast(t('w_voice_visit_applied'));
+}
+function handleVoiceScheduleIntent(data){
+  if(data.intent==='show_date' && data.date){
+    schedJumpToDate(data.date);
+    return;
+  }
+  if(data.intent==='mark_status' && data.status){
+    const todayIso=isoDate(dateAtOffset(0));
+    let list=(apptsFor(todayIso, CURRENT_USER_ID)||[]).filter(a=>!['completed','cancelled','no_show'].includes(a.statusRaw));
+    if(data.patient_name){
+      const q=data.patient_name.toLowerCase();
+      list=list.filter(a=>a.patient && a.patient.toLowerCase().includes(q));
+    }
+    if(list.length===1){
+      visitSetStatus(list[0].id, data.status);
+    } else if(list.length===0){
+      showToast(t('w_voice_no_match'), 'error');
+    } else {
+      showToast(t('w_voice_no_match')+': '+list.map(a=>a.patient+' '+a.time).join(', '), 'error');
+    }
+    return;
+  }
+  showToast(t('w_voice_not_understood'), 'error');
+}
+// Перетаскивание + прилипание к краю ("спрятать" виджет) + персистентность
+// позиции per-browser (localStorage, как и другие пользовательские настройки
+// интерфейса вроде calSettings). Обычный клик (без сдвига мыши/пальца больше
+// чем на 4px) обрабатывается тут же, в onUp — отдельного onclick на кнопке
+// нет, иначе клик после перетаскивания срабатывал бы дважды.
+(function initVoiceFabDrag(){
+  const KEY='newui_voice_fab_pos';
+  const fab=document.getElementById('voiceFab');
+  if(!fab) return;
+  let dragging=false, moved=false, startX=0, startY=0, origX=0, origY=0;
+  function applyPos(x, y){
+    const w=window.innerWidth, h=window.innerHeight;
+    y=Math.max(8, Math.min(h-54, y));
+    x=Math.max(8, Math.min(w-54, x));
+    fab.style.left=x+'px'; fab.style.top=y+'px'; fab.style.right='auto'; fab.style.bottom='auto';
+  }
+  function snapAndSave(x, y){
+    const w=window.innerWidth;
+    const snappedX = (x+23 < w/2) ? 8 : (w-54);
+    applyPos(snappedX, y);
+    try{ localStorage.setItem(KEY, JSON.stringify({x:snappedX, y})); }catch(e){}
+  }
+  try{
+    const saved=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(saved) applyPos(saved.x, saved.y);
+  }catch(e){}
+  function onDown(clientX, clientY){
+    dragging=true; moved=false;
+    const rect=fab.getBoundingClientRect();
+    startX=clientX; startY=clientY; origX=rect.left; origY=rect.top;
+  }
+  function onMove(clientX, clientY){
+    if(!dragging) return;
+    const dx=clientX-startX, dy=clientY-startY;
+    if(Math.abs(dx)>4 || Math.abs(dy)>4) moved=true;
+    if(moved) applyPos(origX+dx, origY+dy);
+  }
+  function onUp(clientX, clientY){
+    if(!dragging) return;
+    dragging=false;
+    if(moved){ snapAndSave(origX+(clientX-startX), origY+(clientY-startY)); }
+    else { voiceFabClick(fab); }
+  }
+  fab.addEventListener('mousedown', e=>{ onDown(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', e=>onMove(e.clientX, e.clientY));
+  document.addEventListener('mouseup', e=>onUp(e.clientX, e.clientY));
+  fab.addEventListener('touchstart', e=>{ const tt=e.touches[0]; onDown(tt.clientX, tt.clientY); }, {passive:true});
+  document.addEventListener('touchmove', e=>{ if(dragging){ const tt=e.touches[0]; onMove(tt.clientX, tt.clientY); } }, {passive:true});
+  document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
+})();
+
 let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
@@ -5707,6 +5923,9 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
+    VOICE_ENABLED=!!data.voiceEnabled;
+    const voiceFabEl=document.getElementById('voiceFab');
+    if(voiceFabEl) voiceFabEl.classList.toggle('hidden', !VOICE_ENABLED);
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();

@@ -924,6 +924,11 @@ def _newui_schedule_data(clinic):
             if a.status == Appointment.STATUS_COMPLETED and a.pk in debt_by_appt
             else status_color.get(a.status, "cobalt")
         ),
+        # Сырой статус (scheduled/confirmed/arrived/...), в отличие от
+        # "status" выше, который на самом деле цвет пилюли — нужен голосовым
+        # командам расписания, чтобы отличать завершённые/отменённые записи
+        # от активных без парсинга цвета.
+        "statusRaw": a.status,
         "durationMin": max(int((a.end_at - a.start_at).total_seconds() // 60), 1),
         "movable": a.status not in (Appointment.STATUS_COMPLETED, Appointment.STATUS_NO_SHOW),
         # Общий долг пациента (Patient.debt, а не долг конкретно ЭТОГО приёма) —
