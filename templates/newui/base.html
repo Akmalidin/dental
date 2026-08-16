@@ -1182,6 +1182,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group"><label data-i18n="w_branches">Филиалы</label><div id="staff-branches" style="display:flex;flex-wrap:wrap;gap:10px;"></div></div>
       <div class="form-group"><label data-i18n="w_staff_color">Цвет<div class="hint" data-i18n="w_staff_color_hint">Необязательно — для аватара и ячейки в расписании</div></label><input autocomplete="off" type="color" id="staff-color" value="#6366F1" style="width:64px;padding:2px;height:34px;"></div>
       <div class="form-group toggle" style="margin-top:2px;"><input autocomplete="off" type="checkbox" checked id="staff-active"><span style="font-size:13px;margin-left:2px">Сотрудник активен</span></div>
+      <div class="form-group" id="staff-access-section" style="border-top:1px solid var(--mist-line);padding-top:14px;margin-top:4px;">
+        <label data-i18n="w_access_restriction">Ограничение доступа</label>
+        <div class="toggle" style="margin-bottom:8px;"><input autocomplete="off" type="checkbox" checked id="staff-full-access" onchange="staffAccessToggled()"><span style="font-size:13px;margin-left:2px" data-i18n="w_full_access_label">Полный доступ ко всем разделам</span></div>
+        <div id="staff-sections-grid" class="hidden" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--cloud);border-radius:8px;"></div>
+      </div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-staff')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="staffModalSaveBtn" onclick="submitStaffModal()"><span data-i18n="btn_add_staff">Добавить сотрудника</span></button></div>
   </div>
@@ -2963,7 +2968,7 @@ const translations={
   w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
   w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
   w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
-  w_access_restriction_hint: {ru:'Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)', ky:'Кызматкер боюнча жеке чектөөлөр — «Персонал» бетиндеги кызматкер картасында (эски интерфейс)', en:'Per-employee access restrictions — on the employee card in “Staff” (old interface)', uz:'Xodim bo‘yicha shaxsiy cheklovlar — «Xodimlar» sahifasidagi xodim kartasida (eski interfeys)'},
+  w_access_restriction_hint: {ru:'Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал»', ky:'Кызматкер боюнча жеке чектөөлөр — «Персонал» бетиндеги кызматкер картасында', en:'Per-employee access restrictions — on the employee card in "Staff"', uz:'Xodim bo‘yicha shaxsiy cheklovlar — «Xodimlar» sahifasidagi xodim kartasida'},
   w_interface_language: {ru:'Язык интерфейса', ky:'Интерфейс тили', en:'Interface language', uz:'Interfeys tili'},
   w_interface_language_hint: {ru:'Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже', ky:'Меню жазууларын дароо, кайра жүктөбөй өзгөртөт — төмөнкү баскыч менен сакталат', en:'Changes menu labels instantly, without reloading — saved with the button below', uz:'Menyu yozuvlarini darhol, qayta yuklamasdan o‘zgartiradi — pastdagi tugma bilan saqlanadi'},
   w_phone_label: {ru:'Телефон', ky:'Телефон', en:'Phone', uz:'Telefon'},
@@ -3112,7 +3117,7 @@ const translations={
   w_click_tooth_hint: {ru:'Нажмите на зуб, чтобы указать его состояние', ky:'Абалын көрсөтүү үчүн тишти басыңыз', en:'Click a tooth to set its condition', uz:'Holatini belgilash uchun tishni bosing'},
   w_current_tooth_states: {ru:'Текущие состояния зубов', ky:'Тиштердин учурдагы абалы', en:'Current tooth states', uz:'Tishlarning joriy holati'},
   w_patient_not_found: {ru:'Пациент не найден.', ky:'Бейтап табылган жок.', en:'Patient not found.', uz:'Bemor topilmadi.'},
-  w_settings_hint: {ru:'«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника (старый интерфейс) — там же, где и раньше. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.', ky:'Төмөндөгү «Жалпы», «Байланыш жана реквизиттер», WhatsApp/Telegram эскертүүлөрү, «Кабинеттер жана график», «Жокко чыгаруу себептери» жана «Камсыздандыруу компаниялары» — клиниканын реалдуу жөндөөлөрү (эски интерфейс менен бирдей backend). «Кирүү чектөө» кызматкердин картасына алып барат (эски интерфейс). Сол жактагы калган пункттар (визит натыйжалары, дарылоо картасы, төлөм ыкмалары, депозиттик эсептер, интеграциялар) азырынча демонстрациялык.', en:'"General", "Contacts & details", the WhatsApp/Telegram reminders, "Cabinets & schedule", "Cancellation reasons" and "Insurers" below are real clinic settings (same backend as the old interface). "Access restriction" opens the employee card (old interface) — same place as before. The other items on the left (visit results, treatment card, payment methods, deposit accounts, integrations) are still demo-only.', uz:'Quyidagi "Umumiy", "Kontaktlar va rekvizitlar", WhatsApp/Telegram eslatmalari, "Kabinetlar va jadval", "Bekor qilish sabablari" va "Sug\'urta kompaniyalari" — klinikaning haqiqiy sozlamalari (eski interfeys bilan bir xil backend). "Kirishni cheklash" xodim kartasiga olib boradi (eski interfeys). Chapdagi qolgan bandlar (tashrif natijalari, davolash kartasi, to\'lov usullari, depozit hisoblari, integratsiyalar) hali namoyish uchun.'},
+  w_settings_hint: {ru:'«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника на странице «Персонал» — там и настраивается. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.', ky:'Төмөндөгү «Жалпы», «Байланыш жана реквизиттер», WhatsApp/Telegram эскертүүлөрү, «Кабинеттер жана график», «Жокко чыгаруу себептери» жана «Камсыздандыруу компаниялары» — клиниканын реалдуу жөндөөлөрү (эски интерфейс менен бирдей backend). «Кирүү чектөө» «Персонал» бетиндеги кызматкер картасына алып барат — ошол жерде ырасталат. Сол жактагы калган пункттар (визит натыйжалары, дарылоо картасы, төлөм ыкмалары, депозиттик эсептер, интеграциялар) азырынча демонстрациялык.', en:'"General", "Contacts & details", the WhatsApp/Telegram reminders, "Cabinets & schedule", "Cancellation reasons" and "Insurers" below are real clinic settings (same backend as the old interface). "Access restriction" opens the employee card on the "Staff" page — that\'s where it\'s configured. The other items on the left (visit results, treatment card, payment methods, deposit accounts, integrations) are still demo-only.', uz:'Quyidagi "Umumiy", "Kontaktlar va rekvizitlar", WhatsApp/Telegram eslatmalari, "Kabinetlar va jadval", "Bekor qilish sabablari" va "Sug\'urta kompaniyalari" — klinikaning haqiqiy sozlamalari (eski interfeys bilan bir xil backend). "Kirishni cheklash" "Xodimlar" sahifasidagi xodim kartasiga olib boradi — o‘sha yerda sozlanadi. Chapdagi qolgan bandlar (tashrif natijalari, davolash kartasi, to\'lov usullari, depozit hisoblari, integratsiyalar) hali namoyish uchun.'},
   w_grp_clinic: {ru:'Клиника', ky:'Клиника', en:'Clinic', uz:'Klinika'},
   w_general: {ru:'Общие', ky:'Жалпы', en:'General', uz:'Umumiy'},
   w_contacts_req: {ru:'Контакты и реквизиты', ky:'Байланыш жана реквизиттер', en:'Contacts & details', uz:'Kontaktlar va rekvizitlar'},
@@ -3128,6 +3133,7 @@ const translations={
   w_grp_system: {ru:'Система', ky:'Тутум', en:'System', uz:'Tizim'},
   w_integrations: {ru:'Интеграции', ky:'Интеграциялар', en:'Integrations', uz:'Integratsiyalar'},
   w_access_restriction: {ru:'Ограничение доступа', ky:'Кирүүнү чектөө', en:'Access restriction', uz:'Kirishni cheklash'},
+  w_full_access_label: {ru:'Полный доступ ко всем разделам', ky:'Бардык бөлүмдөргө толук кирүү', en:'Full access to all sections', uz:'Barcha bo‘limlarga to‘liq kirish'},
   w_general_settings: {ru:'Общие настройки', ky:'Жалпы жөндөөлөр', en:'General settings', uz:'Umumiy sozlamalar'},
   w_slot_interval: {ru:'Интервал слота календаря', ky:'Календарь слотунун аралыгы', en:'Calendar slot interval', uz:'Kalendar slot oralig\'i'},
   w_15min: {ru:'15 минут', ky:'15 мүнөт', en:'15 minutes', uz:'15 daqiqa'},
@@ -5546,6 +5552,8 @@ let roles=[];
 let staffList=[];
 let roleOptions=[];
 let branchOptions=[];
+let sectionsCatalog=[];
+let CURRENT_USER_ID=null;
 let permCatalog=[];
 let dashboardData=null;
 let patientsList=[];
@@ -5606,6 +5614,8 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     staffList=data.staff || [];
     roleOptions=data.roleOptions || [];
     branchOptions=data.branchOptions || [];
+    sectionsCatalog=data.sectionsCatalog || [];
+    CURRENT_USER_ID=data.currentUserId || null;
     permCatalog=data.permCatalog || [];
     dashboardData=data.dashboard || null;
     patientsList=data.patients || [];
@@ -6171,6 +6181,18 @@ function populateStaffBranches(selectedIds){
     `<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input autocomplete="off" type="checkbox" value="${b.id}" class="staff-branch-cb" ${selectedIds.includes(b.id)?'checked':''}>${b.name}</label>`
   ).join('');
 }
+// Ограничение доступа к разделам (allowed_sections) — реальный персональный
+// механизм, тот же, что и в старом интерфейсе (см. sectionsCatalog/
+// currentUserId в _shared_options, apps.users.forms.UserForm.sections).
+function populateStaffSections(selectedKeys){
+  selectedKeys = selectedKeys || [];
+  document.getElementById('staff-sections-grid').innerHTML = sectionsCatalog.map(sec=>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;min-width:160px;"><input autocomplete="off" type="checkbox" value="${sec.key}" class="staff-section-cb" ${selectedKeys.includes(sec.key)?'checked':''}>${sec.label}</label>`
+  ).join('');
+}
+function staffAccessToggled(){
+  document.getElementById('staff-sections-grid').classList.toggle('hidden', document.getElementById('staff-full-access').checked);
+}
 function openNewStaff(){
   editingStaffId=null;
   document.getElementById('staffModalTitle').textContent='Новый сотрудник';
@@ -6182,6 +6204,10 @@ function openNewStaff(){
   populateStaffRoleSelect(null);
   populateStaffRole2Select(null);
   populateStaffBranches([]);
+  document.getElementById('staff-access-section').classList.remove('hidden');
+  document.getElementById('staff-full-access').checked=true;
+  populateStaffSections([]);
+  staffAccessToggled();
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }
@@ -6202,6 +6228,13 @@ function editStaff(id){
   populateStaffRoleSelect(s.roleId);
   populateStaffRole2Select((s.extraRoleIds && s.extraRoleIds[0]) || null);
   populateStaffBranches(s.branchIds);
+  // Себе самому ограничение доступа не задать (иначе можно случайно
+  // заблокировать себе разделы без возможности их вернуть) — бэкенд это
+  // тоже не применит (_can_manage_access), просто здесь честно прячем блок.
+  document.getElementById('staff-access-section').classList.toggle('hidden', id===CURRENT_USER_ID);
+  document.getElementById('staff-full-access').checked = s.fullAccess !== false;
+  populateStaffSections(s.allowedSections || []);
+  staffAccessToggled();
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }
@@ -6222,10 +6255,16 @@ async function submitStaffModal(){
   if(document.getElementById('staff-active').checked) fd.append('is_active','on');
   fd.append('can_view_all_appointments','on');
   document.querySelectorAll('.staff-branch-cb:checked').forEach(cb=>fd.append('branches', cb.value));
-  // Полный доступ к разделам — этот модал не редактирует персональные ограничения
-  // разделов (устаревающий отдельный от ролей механизм), поэтому не сбрасываем
-  // их в пустой список (это заблокировало бы все разделы), а оставляем «полный».
-  fd.append('full_access','on');
+  // Ограничение доступа — блок скрыт при редактировании себя (см. editStaff),
+  // тогда просто не трогаем full_access/sections вообще: бэкенд (_can_manage_access)
+  // всё равно проигнорирует изменение доступов себе самому.
+  if(!document.getElementById('staff-access-section').classList.contains('hidden')){
+    if(document.getElementById('staff-full-access').checked){
+      fd.append('full_access','on');
+    } else {
+      document.querySelectorAll('.staff-section-cb:checked').forEach(cb=>fd.append('sections', cb.value));
+    }
+  }
 
   const url = editingStaffId ? `/users/${editingStaffId}/edit/` : '/users/create/';
   const res = await postForm(url, fd);

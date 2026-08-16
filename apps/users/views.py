@@ -88,6 +88,11 @@ def _newui_staff_data(request, clinic):
             "phone": u.phone or "",
             "active": u.is_active,
             "color": u.color or "",
+            # Персональное ограничение доступа к разделам (allowed_sections=None
+            # значит «все разделы») — см. sectionsCatalog/currentUserId в
+            # _shared_options и редактор в модалке сотрудника (m-staff).
+            "fullAccess": u.allowed_sections is None,
+            "allowedSections": list(u.allowed_sections) if u.allowed_sections is not None else [],
         })
     return data
 

@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_settings">Настройки клиники</h1></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника (старый интерфейс) — там же, где и раньше. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_settings_hint">«Общие», «Контакты и реквизиты», напоминания WhatsApp/Telegram, «Кабинеты и график», «Причины отмены» и «Страховые компании» ниже — реальные настройки клиники (тот же backend, что и старый интерфейс). «Ограничение доступа» ведёт в карточку сотрудника на странице «Персонал» — там и настраивается. Остальные пункты слева (результаты визита, карточка лечения, способы оплаты, депозитные счета, интеграции) пока демонстрационные.</span></div>
         <div class="settings-grid">
           <div class="settings-nav">
             <div class="grp" data-i18n="w_grp_clinic">Клиника</div>
@@ -25,7 +25,7 @@
             <button id="setNavInsurance" onclick="setSettingsTab('insurance')" data-i18n="w_insurance_companies">Страховые компании</button>
             <div class="grp" data-i18n="w_grp_system">Система</div>
             <button onclick="settingsNotWired()" data-i18n="w_integrations">Интеграции</button>
-            <button onclick="location.href='/users/'" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал» (старый интерфейс)" data-i18n-title="w_access_restriction_hint"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
+            <button onclick="location.href='{% url 'newui_staff' %}'" title="Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал»" data-i18n-title="w_access_restriction_hint"><span data-i18n="w_access_restriction">Ограничение доступа</span></button>
           </div>
 
           <form id="settingsForm" onsubmit="return false;">
