@@ -1,15 +1,30 @@
-"""Голосовой ввод для врачей (Whisper — транскрипция, GPT — разбор команды
-по расписанию). Безопасно выключено, если OPENAI_ENABLED!=1 или нет ключа —
-вызывающий код (apps/notifications/views.py::voice_command) должен сам
-проверить voice_enabled() ДО вызова, эти функции при выключенном флаге не
-вызываются вообще (а не тихо возвращают пустоту), чтобы ошибка была видна
-на этапе разработки, а не терялась в проде.
+"""Голосовой ввод для врачей — распознавание речи и разбор команд.
 
-Ключ — только из env (OPENAI_API_KEY, см. config/settings/development.py),
-никогда не в репозитории. Записи не сохраняются: аудио транскрибируется и
-отбрасывается, TreatmentFile не создаётся."""
-import json
+Изначально использовал OpenAI Whisper API + GPT для разбора команд, но
+OpenAI полностью блокирует API-доступ из России (403
+unsupported_country_region_territory — санкционное ограничение на стороне
+OpenAI, не лечится ни ключом, ни кодом). Сервер клиники — российский IP,
+поэтому транскрипция переведена на локальный self-hosted Whisper
+(faster-whisper, работает на CPU, ничего никуда не отправляет), а разбор
+команд по расписанию/карте приёма — на простые правила (regex/ключевые
+слова) вместо GPT, тоже полностью офлайн.
+
+Переменная `OPENAI_ENABLED` в settings оставлена как есть (просто общий
+тумблер «голосовой ввод включён») — переименовывать её и просить
+пользователя ещё раз лезть в серверный .env смысла не было. `OPENAI_API_KEY`
+больше нигде не используется.
+
+Модель Whisper грузится лениво (при первом запросе) и кэшируется в памяти
+процесса — иначе каждая транскрипция заново грузила бы веса модели (заметно
+дольше самой распознавания). Первый запрос после перезапуска сервиса будет
+медленнее обычного — сначала модель либо скачивается с Hugging Face Hub
+(нужен исходящий доступ к huggingface.co — он НЕ входит в тот же санкционный
+список, что и OpenAI, но если и он заблокирован, см. WHISPER_MODEL_PATH
+ниже), либо просто загружается с диска, если уже скачана раньше."""
 import logging
+import re
+import datetime
+from io import BytesIO
 
 from django.conf import settings
 
@@ -17,122 +32,215 @@ log = logging.getLogger("apps")
 
 
 def voice_enabled():
-    return bool(getattr(settings, "OPENAI_ENABLED", False) and getattr(settings, "OPENAI_API_KEY", ""))
+    return bool(getattr(settings, "OPENAI_ENABLED", False))
 
 
-def _client():
-    from openai import OpenAI  # импорт лениво — пакет не обязателен, если фича выключена
-    return OpenAI(api_key=settings.OPENAI_API_KEY)
+# ---- Свободный вопрос-ответ (ИИ-помощник) — YandexGPT ----
+# OpenAI/большинство западных LLM недоступны из России (см. voice_enabled
+# выше и историю в git log) — для «отвечай на любые вопросы» используется
+# YandexGPT (Yandex Cloud Foundation Models), доступен из РФ без ограничений.
+# Используется и голосовым виджетом (свободный вопрос, когда ни диктовка, ни
+# команда по расписанию/приёму не подошли), и текстовым чатом «ИИ-помощник»
+# в Отчётах (apps/notifications/views.py::voice_command, mode=chat).
+# Простой urllib, как и apps/notifications/whatsapp.py — без лишней
+# HTTP-библиотеки в зависимостях ради одного эндпоинта.
+def ai_enabled():
+    return bool(getattr(settings, "YANDEX_API_KEY", "") and getattr(settings, "YANDEX_FOLDER_ID", ""))
+
+
+def ask_ai(question):
+    """Возвращает (answer, error). Безопасно выключено, если ключ/folder_id
+    не заданы — вызывающий код должен сам проверить ai_enabled() ДО вызова."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    folder_id = settings.YANDEX_FOLDER_ID
+    model = getattr(settings, "YANDEX_MODEL", "") or "yandexgpt-lite"
+    body = {
+        "modelUri": f"gpt://{folder_id}/{model}/latest",
+        "completionOptions": {"stream": False, "temperature": 0.3, "maxTokens": "800"},
+        "messages": [
+            {"role": "system", "text": (
+                "Ты — ассистент стоматологической клиники. Отвечай кратко и по делу "
+                "на вопросы врачей и администраторов о работе клиники. Отвечай на том "
+                "же языке, на котором задан вопрос (русский, кыргызский или узбекский)."
+            )},
+            {"role": "user", "text": question},
+        ],
+    }
+    req = urllib.request.Request(
+        "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+        data=_json.dumps(body).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Api-Key {settings.YANDEX_API_KEY}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+        answer = data["result"]["alternatives"][0]["message"]["text"]
+        return answer.strip(), None
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        log.warning("voice: YandexGPT HTTP %s: %s", e.code, detail)
+        return None, "Не удалось получить ответ от ИИ"
+    except Exception as e:
+        log.warning("voice: YandexGPT request failed: %s", e)
+        return None, "Не удалось получить ответ от ИИ"
+
+
+_whisper_model = None
+
+
+def _get_whisper_model():
+    """Ленивая инициализация + кэш на весь процесс (per-worker gunicorn).
+    WHISPER_MODEL_SIZE (по умолчанию "small") — компромисс скорость/качество
+    для CPU-инференса на обычном сервере без GPU; можно уменьшить до "base"
+    или "tiny", если сервер слабый, через env, без правки кода.
+    WHISPER_MODEL_PATH — если указан, грузит модель из локальной папки
+    (уже скачанные веса) вместо обращения к Hugging Face Hub — на случай,
+    если и huggingface.co недоступен с сервера."""
+    global _whisper_model
+    if _whisper_model is None:
+        from faster_whisper import WhisperModel
+        model_ref = getattr(settings, "WHISPER_MODEL_PATH", "") or getattr(settings, "WHISPER_MODEL_SIZE", "small")
+        log.info("voice: loading Whisper model %r (первый запуск — может занять время)", model_ref)
+        _whisper_model = WhisperModel(model_ref, device="cpu", compute_type="int8")
+    return _whisper_model
 
 
 def transcribe_audio(file_obj, filename="voice.webm"):
     """file_obj — Django UploadedFile (request.FILES['audio']). Возвращает
-    (text, error) — error=None при успехе, иначе text=''.
-
-    Django UploadedFile — не то же самое, что io.IOBase (openai-python
-    принимает bytes/io.IOBase/PathLike/(filename, content, content_type) —
-    именно последний вариант нужен здесь, иначе SDK отказывается его
-    принимать, см. openai-python#file-uploads)."""
+    (text, error) — error=None при успехе, иначе text=''."""
     try:
         content = file_obj.read()
-        resp = _client().audio.transcriptions.create(
-            model="whisper-1",
-            file=(filename, content, file_obj.content_type or "audio/webm"),
-        )
-        return (resp.text or "").strip(), None
+        model = _get_whisper_model()
+        # vad_filter — обрезает тишину по краям записи (voice activity
+        # detection), без него faster-whisper иногда «галлюцинирует» текст
+        # на пустом/шумном звуке. language=None — автоопределение (ru/ky/en).
+        segments, _info = model.transcribe(BytesIO(content), vad_filter=True, language=None)
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        return text, None
     except Exception as e:
         log.warning("voice: transcribe failed: %s", e)
         return "", "Не удалось распознать речь"
 
 
-SCHEDULE_INTENT_SCHEMA = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "schedule_intent",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "intent": {"type": "string", "enum": ["show_date", "mark_status", "unknown"]},
-                "date": {"type": ["string", "null"], "description": "ISO YYYY-MM-DD, только для show_date"},
-                "patient_name": {"type": ["string", "null"], "description": "Имя/фамилия пациента, если названы, для mark_status"},
-                "status": {"type": ["string", "null"], "enum": ["arrived", "confirmed", "cancelled", None], "description": "Только для mark_status"},
-            },
-            "required": ["intent", "date", "patient_name", "status"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
+# ---- Расписание: «покажи расписание на завтра», «отметь Иванова пришедшим» ----
+# Простой разбор по ключевым словам вместо GPT (офлайн, без внешних вызовов).
+# Менее гибко, чем LLM, но для этих двух конкретных сценариев — рабочий
+# минимум; при желании легко заменить эту функцию на вызов любой доступной
+# в регионе LLM (YandexGPT/GigaChat и т.п.), сигнатура (transcript, today_iso)
+# → dict останется той же, вызывающий код (apps/notifications/views.py) не
+# меняется.
+_WEEKDAYS_RU = {
+    "понедельник": 0, "вторник": 1, "среда": 2, "среду": 2,
+    "четверг": 3, "пятница": 4, "пятницу": 4,
+    "суббота": 5, "субботу": 5, "воскресенье": 6,
 }
+_STATUS_KEYWORDS = [
+    (("приш",), "arrived"),          # пришёл/пришел/пришла/пришли/пришедший/пришедшим/...
+    (("подтверд", "подтвержд"), "confirmed"),  # подтверди(ть) — подтверждён (д/жд чередование)
+    (("отмен",), "cancelled"),       # отмени(ть)/отмена/отменён/отменена — общий корень
+]
+_SCHEDULE_STOPWORDS = {
+    "отметь", "отметить", "пациента", "пациент", "запись", "как", "что", "его", "её", "ее",
+    "статус", "визит", "приём", "прием",
+}
+
+
+def _extract_relative_date(text, today):
+    if "послезавтра" in text:
+        return today + datetime.timedelta(days=2)
+    if "завтра" in text:
+        return today + datetime.timedelta(days=1)
+    if "сегодня" in text:
+        return today
+    for name, weekday in _WEEKDAYS_RU.items():
+        if name in text:
+            delta = (weekday - today.weekday()) % 7
+            delta = delta or 7  # «на понедельник», сказанное в понедельник — про следующий, не про сегодня
+            return today + datetime.timedelta(days=delta)
+    return None
+
+
+def _extract_patient_name(transcript, matched_stems):
+    """matched_stems — корни слов ("приш", "отмен" и т.п.), а не целые формы,
+    поэтому здесь проверка на вхождение подстроки, а не точное совпадение
+    (иначе "пришедшим" не отфильтровался бы, т.к. не равен корню "приш")."""
+    kept = []
+    for w in transcript.split():
+        wl = w.lower().strip(",.")
+        if wl in _SCHEDULE_STOPWORDS or any(stem in wl for stem in matched_stems):
+            continue
+        kept.append(w)
+    name = " ".join(kept).strip(" ,.")
+    return name or None
 
 
 def parse_schedule_command(transcript, today_iso):
     """Возвращает dict {intent, date, patient_name, status} — intent='unknown',
     если команда не распознана как одно из поддерживаемых действий."""
-    system = (
-        f"Сегодня {today_iso}. Ты разбираешь голосовую команду врача на русском/"
-        "кыргызском/английском по расписанию стоматологической клиники. "
-        "Поддерживаемые намерения: show_date (показать расписание на дату — "
-        "верни абсолютную ISO-дату, вычисленную от сегодняшней), mark_status "
-        "(изменить статус записи пациента — arrived/confirmed/cancelled). "
-        "Если команда не про это — intent='unknown'."
-    )
-    try:
-        resp = _client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": transcript}],
-            response_format=SCHEDULE_INTENT_SCHEMA,
-        )
-        return json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        log.warning("voice: intent parse failed: %s", e)
-        return {"intent": "unknown", "date": None, "patient_name": None, "status": None}
+    text = transcript.lower()
+    today = datetime.date.fromisoformat(today_iso)
+
+    if "расписан" in text or "покажи" in text or "открой" in text:
+        date = _extract_relative_date(text, today)
+        if date:
+            return {"intent": "show_date", "date": date.isoformat(), "patient_name": None, "status": None}
+
+    for keywords, status in _STATUS_KEYWORDS:
+        matched = [kw for kw in keywords if kw in text]
+        if matched:
+            name = _extract_patient_name(transcript, matched)
+            return {"intent": "mark_status", "date": None, "patient_name": name, "status": status}
+
+    return {"intent": "unknown", "date": None, "patient_name": None, "status": None}
 
 
 # ---- Карта приёма: «зуб 26, композитная пломба, скидка 10%» ----
-# Само распознавание номеров зубов/названия услуги/скидки — на сервере (GPT),
-# но сопоставление названия услуги с конкретной услугой клиники (по
-# servicesList, уже загруженному на странице) и сам вызов
-# toggleToothSelect/vwToothServicePick/vwSetDiscountForTooth — на клиенте,
-# теми же функциями, что и обычный клик мышью по зубу/поиску услуги. Здесь
-# только разбор речи, ни одна БД-запись отсюда не создаётся.
-VISIT_INTENT_SCHEMA = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "visit_intent",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "intent": {"type": "string", "enum": ["add_tooth_service", "unknown"]},
-                "teeth": {"type": "array", "items": {"type": "integer"}, "description": "Номера зубов по FDI (11-18,21-28,31-38,41-48)"},
-                "service_query": {"type": ["string", "null"], "description": "Как врач назвал услугу — сырой текст, сопоставление с каталогом на клиенте"},
-                "discount_pct": {"type": ["number", "null"], "description": "Скидка в процентах, если названа"},
-            },
-            "required": ["intent", "teeth", "service_query", "discount_pct"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
-}
+# Тот же офлайн-подход: номера зубов и скидка — регуляркой, название услуги —
+# то, что осталось после вычитания распознанных чисел/служебных слов (само
+# сопоставление с конкретной услугой клиники — на клиенте, по servicesList,
+# см. handleVoiceVisitIntent в base.html).
+_FDI_TEETH = set(range(11, 19)) | set(range(21, 29)) | set(range(31, 39)) | set(range(41, 49))
+_DISCOUNT_RE = re.compile(r"скидк\w*\s*(\d+(?:[.,]\d+)?)\s*(?:процент\w*|%)?")
+_TOOTH_RE = re.compile(r"\b(\d{2})\b")
 
 
 def parse_visit_command(transcript):
     """Возвращает dict {intent, teeth, service_query, discount_pct} —
-    intent='unknown', если команда не про зуб/услугу приёма."""
-    system = (
-        "Ты разбираешь голосовую команду врача-стоматолога во время приёма, на "
-        "русском/кыргызском/английском. Врач диктует, какой зуб(ы) лечил, какой "
-        "услугой и с какой скидкой (в процентах, если названа). Номера зубов — "
-        "по международной системе FDI (11-18, 21-28, 31-38, 41-48), двузначные "
-        "числа. Если несколько зубов — верни все. Если это не про зуб/услугу — "
-        "intent='unknown'."
-    )
-    try:
-        resp = _client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": transcript}],
-            response_format=VISIT_INTENT_SCHEMA,
-        )
-        return json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        log.warning("voice: visit intent parse failed: %s", e)
+    intent='unknown', если в фразе не нашлось ни одного номера зуба по FDI."""
+    text = transcript.lower()
+
+    # Скидку вырезаем ИЗ ТЕКСТА ПЕРВЫМ ДЕЛОМ, до поиска номеров зубов — иначе
+    # "скидка 15%" сама попадает в диапазон FDI (11-18) и ложно распознаётся
+    # как ещё один зуб.
+    discount_pct = None
+    discount_match = _DISCOUNT_RE.search(text)
+    text_wo_discount = text
+    if discount_match:
+        discount_pct = float(discount_match.group(1).replace(",", "."))
+        text_wo_discount = text[:discount_match.start()] + text[discount_match.end():]
+
+    teeth = []
+    for m in _TOOTH_RE.finditer(text_wo_discount):
+        n = int(m.group(1))
+        if n in _FDI_TEETH and n not in teeth:
+            teeth.append(n)
+
+    if not teeth:
         return {"intent": "unknown", "teeth": [], "service_query": None, "discount_pct": None}
+
+    cleaned = text_wo_discount
+    cleaned = re.sub(r"\bзуб\w*\b", " ", cleaned)
+    cleaned = _TOOTH_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\b(?:и|а|но|или)\b", " ", cleaned)  # союзы — не часть названия услуги
+    cleaned = re.sub(r"[,.]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    service_query = cleaned or None
+
+    return {"intent": "add_tooth_service", "teeth": teeth, "service_query": service_query, "discount_pct": discount_pct}

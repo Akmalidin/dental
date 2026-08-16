@@ -962,15 +962,38 @@ def tg_broadcast(request):
 @login_required
 @require_POST
 def voice_command(request):
-    """Голосовой ввод для врачей — единая точка входа и для диктовки в карту
-    приёма (mode=dictate → {transcript}), и для голосовых команд по
-    расписанию (mode=schedule → {transcript, intent, date, patient_name,
-    status}). Сам эндпоинт ничего не пишет в БД — только транскрибирует
-    аудио и (для mode=schedule) классифицирует намерение; реальное действие
-    (смена статуса записи, переход на дату) выполняет уже существующий,
-    защищённый правами JS-код на клиенте. Аудио не сохраняется."""
+    """Голосовой ввод для врачей — единая точка входа для:
+    - диктовки в карту приёма (mode=dictate → {transcript})
+    - голосовых команд по расписанию (mode=schedule → {transcript, intent,
+      date, patient_name, status})
+    - голосовых команд по карте приёма (mode=visit → {transcript, intent,
+      teeth, service_query, discount_pct})
+    - свободного вопроса-ответа (mode=chat → {transcript, answer}) — либо
+      голосом (аудио), либо текстом (поле question, без аудио — используется
+      текстовым чатом «ИИ-помощник» в Отчётах, распознавание речи там не
+      нужно).
+    Сам эндпоинт ничего не пишет в БД — только распознаёт речь и (для
+    schedule/visit) классифицирует намерение; реальное действие (смена
+    статуса записи, добавление услуги, переход на дату) выполняет уже
+    существующий, защищённый правами JS-код на клиенте. Аудио не сохраняется."""
     from django.utils import timezone
-    from .voice import voice_enabled, transcribe_audio, parse_schedule_command, parse_visit_command
+    from .voice import (
+        voice_enabled, transcribe_audio, parse_schedule_command, parse_visit_command,
+        ai_enabled, ask_ai,
+    )
+    mode = request.POST.get("mode") or "dictate"
+    text_question = (request.POST.get("question") or "").strip()
+
+    if mode == "chat" and text_question and not request.FILES.get("audio"):
+        # Текстовый вопрос (например, из чата в Отчётах) — распознавание речи
+        # не требуется, сразу к YandexGPT.
+        if not ai_enabled():
+            return JsonResponse({"error": "ИИ-помощник не настроен"}, status=503)
+        answer, err = ask_ai(text_question)
+        if err:
+            return JsonResponse({"error": err}, status=502)
+        return JsonResponse({"transcript": text_question, "answer": answer})
+
     if not voice_enabled():
         return JsonResponse({"error": "Голосовой ввод не настроен"}, status=503)
     audio = request.FILES.get("audio")
@@ -978,7 +1001,6 @@ def voice_command(request):
         return JsonResponse({"error": "Аудио не получено"}, status=400)
     if audio.size > 15 * 1024 * 1024:
         return JsonResponse({"error": "Слишком большой файл"}, status=400)
-    mode = request.POST.get("mode") or "dictate"
     transcript, err = transcribe_audio(audio)
     if err:
         return JsonResponse({"error": err}, status=502)
@@ -990,4 +1012,12 @@ def voice_command(request):
         result.update(parse_schedule_command(transcript, today_iso))
     elif mode == "visit":
         result.update(parse_visit_command(transcript))
+    elif mode == "chat":
+        if ai_enabled():
+            answer, ai_err = ask_ai(transcript)
+            result["answer"] = answer
+            if ai_err:
+                result["error"] = ai_err
+        else:
+            result["error"] = "ИИ-помощник не настроен"
     return JsonResponse(result)

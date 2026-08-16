@@ -201,8 +201,20 @@ GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com"
 GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
 
 # ─── OpenAI (голосовой ввод для врачей) — ключ только из env, не в репозиторий ─
+# OPENAI_API_KEY больше не используется (OpenAI недоступен из РФ — сервер
+# клиники российский) — распознавание речи переведено на локальный Whisper
+# (apps/notifications/voice.py), OPENAI_ENABLED остался общим тумблером
+# «голосовой ввод включён», чтобы не просить менять .env на сервере ещё раз.
 OPENAI_ENABLED = os.environ.get("OPENAI_ENABLED", "") == "1"
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# ─── YandexGPT (свободный вопрос-ответ «ИИ-помощник») — ключ только из env ───
+# Доступен из РФ без ограничений (в отличие от OpenAI). YANDEX_MODEL —
+# необязательно, по умолчанию "yandexgpt-lite" (дешевле/быстрее); можно
+# переключить на "yandexgpt" (полная модель) без правки кода.
+YANDEX_API_KEY = os.environ.get("YANDEX_API_KEY", "")
+YANDEX_FOLDER_ID = os.environ.get("YANDEX_FOLDER_ID", "")
+YANDEX_MODEL = os.environ.get("YANDEX_MODEL", "yandexgpt-lite")
 
 # ─── Google Calendar (OAuth2) — ключи только из env ──────────────────────────
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
