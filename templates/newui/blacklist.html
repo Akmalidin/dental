@@ -5,7 +5,7 @@
         <div><h1 data-i18n="title_blacklist">Чёрный список</h1><div class="topbar-sub"><span data-i18n="w_bl_hint">Общий для всей клиники — виден всем администраторам и врачам</span></div></div>
         <div class="topbar-right">
           <button class="btn btn-ghost" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_patients">Назад к пациентам</span></button>
-          <div class="search-box"><input autocomplete="off" type="text" id="blSearchInput" placeholder="Поиск по имени, телефону…" data-i18n-placeholder="w_search_name_phone_dots" oninput="renderBlacklist()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <div class="search-box"><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="blSearchInput" placeholder="Поиск по имени, телефону…" data-i18n-placeholder="w_search_name_phone_dots" oninput="renderBlacklist()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           <button class="btn btn-cobalt" onclick="openModal('m-blacklist-add')">+ <span data-i18n="btn_add_to_list">Добавить в список</span></button>
         </div>
       </div>

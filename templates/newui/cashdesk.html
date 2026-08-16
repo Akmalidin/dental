@@ -32,7 +32,7 @@
              момент, не только сразу после приёма оплаты). -->
         <div id="cashPaymentsPanel" class="hidden">
           <div class="toolbar">
-            <div class="search-box" style="max-width:320px;"><input autocomplete="off" type="text" id="cashPaymentsSearch" placeholder="⌕ Пациент, телефон…" data-i18n-placeholder="w_search_payments_hint" oninput="renderCashPayments()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+            <div class="search-box" style="max-width:320px;"><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="cashPaymentsSearch" placeholder="⌕ Пациент, телефон…" data-i18n-placeholder="w_search_payments_hint" oninput="renderCashPayments()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           </div>
           <div class="card">
             <table>
@@ -113,8 +113,8 @@
             <div id="agError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
             <div class="form-group" style="position:relative;">
               <label data-i18n="w_patient">Пациент</label>
-              <input autocomplete="off" type="text" id="ag-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone"
-                     oninput="agPatientSearch(this.value)" onfocus="agPatientSearch(this.value)"
+              <input readonly autocomplete="off" type="text" id="ag-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone"
+                     oninput="agPatientSearch(this.value)" onfocus="this.removeAttribute('readonly');agPatientSearch(this.value)"
                      onblur="setTimeout(()=>document.getElementById('ag-patient-suggestions').classList.add('hidden'),200)">
               <input autocomplete="off" type="hidden" id="ag-patient-id">
               <div id="ag-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow-y:auto;"></div>
@@ -166,8 +166,8 @@
             </div>
             <div class="form-group" style="position:relative;">
               <label data-i18n="w_patient">Пациент</label>
-              <input type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off"
-                     oninput="qsPatientSearch(this.value)" onfocus="qsPatientSearch(this.value)"
+              <input readonly type="text" id="qs-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off"
+                     oninput="qsPatientSearch(this.value)" onfocus="this.removeAttribute('readonly');qsPatientSearch(this.value)"
                      onblur="setTimeout(()=>{const b=document.getElementById('qs-patient-suggestions'); if(b) b.classList.add('hidden');},200)">
               <input autocomplete="off" type="hidden" id="qs-patient-id">
               <div id="qs-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:6;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
@@ -538,12 +538,12 @@ function renderQsRows(){
   el.innerHTML=qsRows.map(r=>`
     <div class="qs-row" style="display:grid;grid-template-columns:1fr 70px 60px 100px 84px 90px 28px;gap:8px;align-items:center;margin-bottom:8px;">
       <div class="qs-field-service" style="position:relative;">
-        <input type="text" id="qsSvcInput-${r.idx}" value="${(r.service_name||'').replace(/"/g,'&quot;')}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off"
-               oninput="qsServiceSearch(${r.idx}, this.value)" onfocus="qsServiceSearch(${r.idx}, this.value)"
+        <input readonly type="text" id="qsSvcInput-${r.idx}" value="${(r.service_name||'').replace(/"/g,'&quot;')}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off"
+               oninput="qsServiceSearch(${r.idx}, this.value)" onfocus="this.removeAttribute('readonly');qsServiceSearch(${r.idx}, this.value)"
                onblur="setTimeout(()=>{const b=document.getElementById('qsSvcSuggest-${r.idx}'); if(b) b.classList.add('hidden');},200)">
         <div id="qsSvcSuggest-${r.idx}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:7;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;"></div>
       </div>
-      <input autocomplete="off" class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
+      <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" class="qs-field-tooth" type="text" placeholder="${t('w_tooth')||'Зуб'}" value="${r.tooth||''}" onchange="qsSetRowField(${r.idx},'tooth',this.value)">
       <input autocomplete="off" class="qs-field-qty" type="number" min="1" value="${r.qty||1}" onchange="qsSetRowField(${r.idx},'qty',this.value)">
       <input autocomplete="off" class="qs-field-price" type="number" value="${r.price||0}" onchange="qsSetRowField(${r.idx},'price',this.value)">
       <div class="qs-field-discount" style="display:flex;gap:2px;align-items:center;">

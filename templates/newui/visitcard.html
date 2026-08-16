@@ -57,8 +57,8 @@
               </div>
               <div class="form-row2">
                 <div class="form-group" style="position:relative;"><label><span data-i18n="w_planned_service">Планируемая услуга</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;" data-i18n="w_adds_row_hint">Добавляет строку в «Процедуры и план» ниже</div></label>
-                  <input type="text" id="vw-plan-search" placeholder="Поиск услуги…" data-i18n-placeholder="w_search_service" autocomplete="off"
-                         oninput="vwPlanServiceSearch(this.value)" onfocus="vwPlanServiceSearch(this.value)"
+                  <input readonly type="text" id="vw-plan-search" placeholder="Поиск услуги…" data-i18n-placeholder="w_search_service" autocomplete="off"
+                         oninput="vwPlanServiceSearch(this.value)" onfocus="this.removeAttribute('readonly');vwPlanServiceSearch(this.value)"
                          onblur="setTimeout(()=>document.getElementById('vw-plan-suggestions').classList.add('hidden'),200)">
                   <div id="vw-plan-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:240px;overflow-y:auto;"></div>
                 </div>
@@ -411,8 +411,8 @@
       const svc = vw.services.find(s=>String(s.id)===String(it.service_id));
       const svcLabel = svc ? `${svc.name} · ${Math.round(svc.price)} сом` : '';
       return `<tr>
-        <td><input autocomplete="off" type="text" list="vwServicesDatalist" value="${svcLabel.replace(/"/g,'&quot;')}" placeholder="${t('w_search_service')}…" style="min-width:180px;" onchange="vwPlanServiceInputChange(${i},this.value)"></td>
-        <td><input autocomplete="off" type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
+        <td><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" list="vwServicesDatalist" value="${svcLabel.replace(/"/g,'&quot;')}" placeholder="${t('w_search_service')}…" style="min-width:180px;" onchange="vwPlanServiceInputChange(${i},this.value)"></td>
+        <td><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" value="${it.tooth||''}" style="width:60px;" onchange="vwPlanSetField(${i},'tooth',this.value)"></td>
         <td><input autocomplete="off" type="number" min="1" value="${it.qty||1}" style="width:60px;" onchange="vwPlanSetField(${i},'qty',this.value)"></td>
         <td><input autocomplete="off" type="number" value="${it.price||0}" style="width:90px;" onchange="vwPlanSetField(${i},'price',this.value)"></td>
         <td><div style="display:flex;gap:2px;align-items:center;">

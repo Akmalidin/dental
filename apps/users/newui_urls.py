@@ -21,10 +21,12 @@ urlpatterns = [
     path("finance/", v.newui_finance, name="newui_finance"),
     path("accounting/", v.newui_accounting, name="newui_accounting"),
     path("reports/", v.newui_reports, name="newui_reports"),
+    path("salary/", v.newui_salary, name="newui_salary"),
     path("messages/", v.newui_messages, name="newui_messages"),
     path("audit/", v.newui_audit, name="newui_audit"),
     path("settings/", v.newui_settings, name="newui_settings"),
     path("visit/start/", v.newui_visit_start, name="newui_visit_start"),
     path("visitcard/<int:pk>/", v.newui_visitcard, name="newui_visitcard"),
     path("menu-prefs/save/", v.newui_menu_prefs_save, name="newui_menu_prefs_save"),
+    path("use-old-interface/", v.newui_use_old_interface, name="newui_use_old_interface"),
 ]

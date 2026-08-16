@@ -620,15 +620,22 @@ def _newui_warehouse_data():
 
 
 def _newui_reports_data():
-    """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта» + реальные
-    вкладки Расходы/Должники/Отменённые визиты/Статистика по врачам/Источники
-    заявок (все — за текущий месяц, тот же период, что и остальной раздел).
+    """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта», графики
+    на нём же (выручка по неделям, загрузка врачей, источники заявок, причины
+    отмены) и реальные вкладки Расходы/Должники/Отменённые визиты/Статистика по
+    врачам/Источники заявок/Повторные визиты/Загрузка кабинетов (период — текущий
+    месяц, кроме «Повторных визитов» — там вся история, иначе повторность не
+    увидеть, и «Загрузки кабинетов» — там текущая неделя, см. ниже).
     Конструктор сравнения (свободный разрез по любому измерению/графику) и
     ИИ-помощник НЕ подключены — см. баннер на странице; ИИ-рекомендаций как
-    функции в системе не существует. «Загрузка кабинетов» тоже не подключена —
-    модели кабинетов/помещений в системе нет вообще (только Cabinet — учётная
-    единица техники в расписании, не про загрузку помещений)."""
-    from django.db.models import Sum, Count
+    функции в системе не существует. «Загрузка кабинетов» — часы заняты
+    реальными (сумма длительности приёмов по Appointment.cabinet за текущую
+    неделю), а «загрузка» — честная доля кабинета от суммарных часов по всем
+    кабинетам (не % от «рабочих часов» — такой модели в системе нет, у кабинета
+    нет своего графика работы в отличие от врача)."""
+    from datetime import timedelta
+    from collections import defaultdict
+    from django.db.models import Sum, Count, Max
     from django.utils import timezone
     from apps.finance.models import Payment, Expense
     from apps.appointments.models import Appointment
@@ -661,17 +668,18 @@ def _newui_reports_data():
     debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
     debtors_total = float(sum(p["balance"] for p in debtors_list))
 
-    # ── Отменённые визиты (cancelled + no-show) — за месяц. Причина отмены не
-    # хранится в Appointment (нет такого поля), поэтому колонки «Причина» нет —
-    # вместо неё честный статус (Отменён/Не пришёл). ──
+    # ── Отменённые визиты (cancelled + no-show) — за месяц. Причина — только у
+    # статуса «Отменён» (cancellation_reason на Appointment реально есть — см.
+    # cancel_reasons_chart ниже); у «Не пришёл» её не выбирают, там просто «—». ──
     cancelled_qs = (month_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW])
-                     .select_related("patient", "doctor").order_by("-start_at"))
+                     .select_related("patient", "doctor", "cancellation_reason").order_by("-start_at"))
     cancelled_list = [{
         "date": timezone.localtime(a.start_at).strftime("%d.%m.%Y"),
         "patient": a.patient.full_name if a.patient else "—",
         "doctor": a.doctor.name if a.doctor else "—",
         "status": a.get_status_display(),
         "statusColor": "coral" if a.status == Appointment.STATUS_CANCELLED else "amber",
+        "reason": a.cancellation_reason.name if a.cancellation_reason_id else "—",
     } for a in cancelled_qs[:200]]
 
     # ── Статистика по врачам — завершённые/оплаченные приёмы за месяц ──
@@ -711,6 +719,67 @@ def _newui_reports_data():
         key=lambda x: -x["count"],
     )
 
+    # ── Выручка по неделям месяца (для «Общего отчёта» — раньше был статичный
+    # захардкоженный график). Недели считаем простыми блоками по 7 дней от
+    # начала месяца (1-7, 8-14, ...), а не календарными — проще и достаточно
+    # для тренда внутри месяца. ──
+    import calendar
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    week_count = (days_in_month - 1) // 7 + 1
+    weekly_net = [0.0] * week_count
+    month_income_refund = Payment.objects.filter(
+        created_at__date__gte=month_start, created_at__date__lte=today,
+        type__in=[Payment.TYPE_INCOME, Payment.TYPE_REFUND],
+    ).only("amount", "type", "created_at")
+    for p in month_income_refund:
+        week_idx = (timezone.localtime(p.created_at).date().day - 1) // 7
+        weekly_net[week_idx] += float(p.amount) if p.type == Payment.TYPE_INCOME else -float(p.amount)
+    weekly_revenue = [{"label": "Нед. %d" % (i + 1), "value": round(v, 2)} for i, v in enumerate(weekly_net)]
+
+    # ── Причины отмены визитов — Appointment.cancellation_reason реально есть
+    # в модели (несмотря на старый комментарий выше — он был неверным), просто
+    # заполняется только когда причину явно выбрали при отмене. ──
+    cancel_reasons_qs = (
+        month_appts.filter(status=Appointment.STATUS_CANCELLED, cancellation_reason__isnull=False)
+        .values("cancellation_reason__name").annotate(cnt=Count("id")).order_by("-cnt")
+    )
+    cancel_reasons_chart = [{"reason": c["cancellation_reason__name"], "count": c["cnt"]} for c in cancel_reasons_qs]
+
+    # ── Повторные визиты — визитов на пациента (все завершённые приёмы, не
+    # только этот месяц — иначе «повторность» не увидеть) + дата последнего. ──
+    patient_visits = (
+        Appointment.objects.filter(status=Appointment.STATUS_COMPLETED, patient__isnull=False)
+        .values("patient_id", "patient__last_name", "patient__first_name", "patient__middle_name")
+        .annotate(cnt=Count("id"), last_at=Max("start_at"))
+        .order_by("-cnt")
+    )
+    repeat_visits = [{
+        "patientId": row["patient_id"],
+        "patient": " ".join(p for p in (row["patient__last_name"], row["patient__first_name"], row["patient__middle_name"]) if p) or "—",
+        "count": row["cnt"],
+        "lastVisit": timezone.localtime(row["last_at"]).strftime("%d.%m.%Y") if row["last_at"] else "—",
+        "daysSince": (today - timezone.localtime(row["last_at"]).date()).days if row["last_at"] else None,
+    } for row in patient_visits[:200]]
+
+    # ── Загрузка кабинетов — часы заняты за ТЕКУЩУЮ неделю (пн-вс), реальная
+    # сумма длительности приёмов по Appointment.cabinet (не только этот месяц,
+    # т.к. таблица так и называется «...· неделя» — короткое окно нагляднее).
+    # Отменённые/неявки в занятость кабинета не считаем — кабинет ими не занят. ──
+    week_start = today - timedelta(days=today.weekday())
+    week_appts = (Appointment.objects.filter(
+        start_at__date__gte=week_start, start_at__date__lt=week_start + timedelta(days=7),
+        cabinet__isnull=False,
+    ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).select_related("cabinet"))
+    cabinet_hours = defaultdict(float)
+    for a in week_appts:
+        cabinet_hours[a.cabinet.name] += (a.end_at - a.start_at).total_seconds() / 3600.0
+    total_cabinet_hours = sum(cabinet_hours.values())
+    room_load = sorted([
+        {"room": name, "hours": round(hrs, 1),
+         "sharePct": round(hrs / total_cabinet_hours * 100, 1) if total_cabinet_hours else 0}
+        for name, hrs in cabinet_hours.items()
+    ], key=lambda x: -x["hours"])
+
     return {
         "revenueMonth": float(income - refund),
         "completed": completed,
@@ -725,6 +794,10 @@ def _newui_reports_data():
         "cancelledVisits": cancelled_list,
         "doctorStats": doctor_stats,
         "leadSources": lead_sources,
+        "weeklyRevenue": weekly_revenue,
+        "cancelReasons": cancel_reasons_chart,
+        "repeatVisits": repeat_visits,
+        "roomLoad": room_load,
     }
 
 
@@ -1015,6 +1088,7 @@ def _newui_settings_data(clinic):
     туда же, что и старый интерфейс (/notifications/wa-connect/, /tg-connect/)."""
     from apps.settings_clinic.models import ClinicSettings
     from apps.users.models import TIMEZONE_CHOICES
+    from .models_salary import DoctorSchedule
 
     cs = ClinicSettings.get()
     return {
@@ -1048,7 +1122,66 @@ def _newui_settings_data(clinic):
         "waRemindDebtDays": cs.wa_remind_debt_days,
         "telegramEnabled": cs.telegram_enabled,
         "telegramBotUsername": cs.telegram_bot_username,
+        # «Кабинеты и график» (вкладка настроек) — реальные данные, сохранение
+        # идёт через уже существующие эндпоинты старого интерфейса
+        # (/users/branches/.../cabinets/add/, /users/cabinets/.../delete/,
+        # /users/schedule/.../edit/ — см. apps.users.views.cabinet_create и
+        # соседние), просто вызываются через fetch() и перерисовывают эту же
+        # страницу (см. postForm/flashAndReload в base.html), а не уводят на
+        # старый интерфейс.
+        "branches": [
+            {
+                "id": b.pk, "name": b.name,
+                "cabinets": [
+                    {"id": c.pk, "name": c.name, "color": c.color}
+                    for c in b.cabinets.filter(is_active=True).order_by("name")
+                ],
+            }
+            for b in Branch.objects.all()
+        ],
+        "scheduleDays": [{"num": num, "label": label} for num, label in DoctorSchedule.DAY_CHOICES],
+        "doctorSchedules": _newui_doctor_schedules(clinic),
+        # «Причины отмены» и «Страховые компании» — тоже реальные справочники
+        # (apps.appointments.models.CancellationReason, apps.patients.models_insurance.
+        # InsuranceCompany), уже управляемые в старом интерфейсе через общий
+        # /settings/references/<kind>/... (apps.settings_clinic.views.reference_add/
+        # reference_delete) — переиспользуем те же эндпоинты, просто с плоским
+        # списком «имя» вместо всей карточки старого интерфейса.
+        "cancelReasons": _newui_reference_list("cancel_reasons"),
+        "insuranceCompanies": _newui_reference_list("insurance"),
     }
+
+
+def _newui_reference_list(kind):
+    from apps.settings_clinic.views import _ref_models
+    Model, _label, _icon = _ref_models()[kind]
+    return [{"id": obj.pk, "name": str(obj)} for obj in Model.objects.all()]
+
+
+def _newui_doctor_schedules(clinic):
+    """Врачи клиники + их рабочий график по дням недели, для вкладки
+    «Кабинеты и график» в Настройках нового интерфейса."""
+    from .models import clinic_doctors
+    from .models_salary import DoctorSchedule
+
+    doctors = clinic_doctors(clinic).order_by("name").prefetch_related("schedules")
+    rows = []
+    for doc in doctors:
+        by_day = {s.day_of_week: s for s in doc.schedules.all()}
+        rows.append({
+            "id": doc.pk, "name": doc.name,
+            "branchId": next((s.branch_id for s in by_day.values()), None),
+            "days": [
+                {
+                    "num": num,
+                    "working": num in by_day,
+                    "start": by_day[num].start_time.strftime("%H:%M") if num in by_day else "09:00",
+                    "end": by_day[num].end_time.strftime("%H:%M") if num in by_day else "18:00",
+                }
+                for num, _label in DoctorSchedule.DAY_CHOICES
+            ],
+        })
+    return rows
 
 
 def _newui_funnel_data(clinic):
@@ -2100,12 +2233,17 @@ def google_calendar_disconnect(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect("/")
+        return redirect("/new/" if request.user.use_new_interface else "/")
     form = LoginForm(request=request, data=request.POST or None)
     if request.method == "POST" and form.is_valid():
         user = form.get_user()
         login(request, user)
-        next_url = request.GET.get("next", "/")
+        # Помним, каким интерфейсом пользователь пользовался в прошлый раз
+        # (User.use_new_interface — переключается заходом на /new/* или
+        # ссылкой «Старый интерфейс», см. apps.users.newui_views), чтобы не
+        # приходилось при каждом входе заново нажимать «Новый интерфейс».
+        default_next = "/new/" if user.use_new_interface else "/"
+        next_url = request.GET.get("next") or default_next
         return redirect(next_url)
 
     # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники
@@ -2660,6 +2798,48 @@ def _salary_rows(date_from, date_to, completed_only=False):
             "avg_check": avg, "salary": salary,
         })
     return rows
+
+
+def _newui_salary_data():
+    """Зарплаты для нового интерфейса — тот же расчёт (_salary_rows), что и
+    старый /users/salary/, за текущий месяц (без выбора периода — тот же
+    принцип, что и у остальных разделов нового интерфейса; полноценный
+    date-range и печать остаются в старом /users/salary/, туда же ведёт
+    ссылка «Excel»). Сохранение схемы — существующий POST
+    /users/salary/<pk>/scheme/ (см. salary_scheme_edit), просто вызывается
+    через fetch() с этой страницы, как и «Кабинеты и график» в Настройках."""
+    from datetime import date
+    from .models_salary import SalaryScheme
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    rows = _salary_rows(month_start, today)
+    return {
+        "periodFrom": month_start.strftime("%d.%m.%Y"),
+        "periodTo": today.strftime("%d.%m.%Y"),
+        "exportFrom": month_start.isoformat(),
+        "exportTo": today.isoformat(),
+        "schemeTypes": [{"code": c, "label": lbl} for c, lbl in SalaryScheme.TYPE_CHOICES],
+        "rows": [{
+            "doctorId": r["doctor"].pk,
+            "doctorName": r["doctor"].name,
+            "roleLabel": r["role_label"] or "—",
+            "schemeType": r["scheme"].scheme_type if r["scheme"] else "",
+            "schemeTypeLabel": r["scheme"].get_scheme_type_display() if r["scheme"] else "",
+            "schemeFixed": float(r["scheme"].fixed_amount) if r["scheme"] else 0,
+            "schemePercent": float(r["scheme"].percent) if r["scheme"] else 0,
+            "schemeDescription": r["scheme"].description if r["scheme"] else "",
+            "treatmentsCount": r["treatments_count"],
+            "completedCount": r["completed_count"],
+            "avgCheck": float(r["avg_check"]),
+            "revenue": float(r["revenue"]),
+            "paid": float(r["paid"]),
+            "salary": float(r["salary"]),
+        } for r in rows],
+        "totalRevenue": float(sum(r["revenue"] for r in rows)),
+        "totalPaid": float(sum(r["paid"] for r in rows)),
+        "totalSalary": float(sum(r["salary"] for r in rows)),
+    }
 
 
 @login_required

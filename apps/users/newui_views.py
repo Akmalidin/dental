@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.middleware.csrf import get_token
 from django.shortcuts import render
 
+from .decorators import role_required
 from .models import Role, Branch, Permission, clinic_doctors
 from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
@@ -19,7 +20,7 @@ from .views import (
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
-    _newui_settings_data, _newui_funnel_data,
+    _newui_settings_data, _newui_funnel_data, _newui_salary_data,
 )
 
 
@@ -77,6 +78,16 @@ def _shared_options(request, clinic):
 def _render(request, page, template, extra_data=None):
     from apps.tenancy import get_current_clinic
     get_token(request)  # cookie csrftoken для fetch()-запросов из модалок
+    # Запоминаем «пользователь сейчас на новом интерфейсе» — чтобы при следующем
+    # входе login_view сразу вёл в /new/, а не на старый дашборд (см.
+    # User.use_new_interface). update() вместо save() — не гонять историю/сигналы
+    # ради одного поля на каждой странице, и пишем только если значение меняется.
+    if not request.user.use_new_interface:
+        from .models import User
+        # request.user — SimpleLazyObject (type() вернул бы сам враппер, не модель),
+        # поэтому используем импортированный User напрямую.
+        User.objects.filter(pk=request.user.pk).update(use_new_interface=True)
+        request.user.use_new_interface = True
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     real_data = _shared_options(request, clinic)
     real_data.update(extra_data or {})
@@ -196,6 +207,14 @@ def newui_warehouse(request):
 @login_required
 def newui_reports(request):
     return _render(request, "reports", "reports.html", {"reportsData": _newui_reports_data()})
+
+
+@login_required
+@role_required("superadmin", "admin_main")
+def newui_salary(request):
+    """Зарплаты и схемы — те же права, что и старый /users/salary/
+    (только директор/суперадмин, см. apps.users.views.salary_report)."""
+    return _render(request, "salary", "salary.html", {"salaryData": _newui_salary_data()})
 
 
 # ── Разделы без реального бэкенда (см. баннеры в самих шаблонах) — просто
@@ -359,3 +378,15 @@ def newui_menu_prefs_save(request):
         request.user.menu_prefs = prefs
         request.user.save(update_fields=["menu_prefs"])
     return JsonResponse({"ok": True})
+
+
+@login_required
+def newui_use_old_interface(request):
+    """Ссылка «Старый интерфейс» в сайдбаре — явный выбор пользователя вернуться
+    к старому UI, поэтому здесь (в отличие от _render выше) снимаем флажок
+    use_new_interface, чтобы следующий вход снова вёл на старый дашборд."""
+    if request.user.use_new_interface:
+        from .models import User
+        User.objects.filter(pk=request.user.pk).update(use_new_interface=False)
+    from django.shortcuts import redirect
+    return redirect("/")
