@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок, Повторные визиты и Загрузка кабинетов — реальные данные. Демонстрационные пока только Конструктор сравнения (свободный график) и «ИИ-помощник».</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Всё, включая Конструктор сравнения, — реальные данные. Демонстрационный пока только «ИИ-помощник».</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
           <button class="chip" id="rtExpenses" onclick="reportsTab('expenses')"><span data-i18n="w_expenses">Расходы</span></button>
@@ -59,7 +59,6 @@
                   <select id="rcDimension" onchange="renderReportConstructor()">
                     <option value="doctors" data-i18n="nav_расписание_врачей">Врачи</option>
                     <option value="rooms" data-i18n="w_rooms">Кабинеты</option>
-                    <option value="materials" data-i18n="w_material">Материалы</option>
                     <option value="services" data-i18n="w_services">Услуги</option>
                     <option value="sources" data-i18n="w_lead_sources">Источники заявок</option>
                   </select>
