@@ -6190,8 +6190,38 @@ function populateStaffSections(selectedKeys){
     `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;min-width:160px;"><input autocomplete="off" type="checkbox" value="${sec.key}" class="staff-section-cb" ${selectedKeys.includes(sec.key)?'checked':''}>${sec.label}</label>`
   ).join('');
 }
-function staffAccessToggled(){
+// Разумные наборы разделов по роли — только подсказка для ПЕРВОГО снятия
+// «Полного доступа» (не жёсткое правило, админ дальше меняет как хочет и
+// это никак не завязано на права роли — см. комментарий у sections в
+// apps.users.forms.UserForm). Ключи — Role.DOCTOR и т.п. (roleKey в
+// roleOptions), не завязаны на display_name/язык.
+const ROLE_SECTION_DEFAULTS = {
+  admin_main:  ['calendar','appointments','patients','treatments','services','finance','warehouse','medicines','technicians','tasks','reports','staff','settings'],
+  admin:       ['calendar','appointments','patients','services','finance','tasks','reports'],
+  doctor:      ['calendar','appointments','patients','treatments','services','medicines','tasks'],
+  nurse:       ['calendar','appointments','patients','treatments','medicines','tasks'],
+  technician:  ['technicians','warehouse','tasks'],
+};
+function staffAccessVisibility(){
   document.getElementById('staff-sections-grid').classList.toggle('hidden', document.getElementById('staff-full-access').checked);
+}
+// onchange самого чекбокса «Полный доступ» — в отличие от staffAccessVisibility()
+// (которую дёргаем и программно при открытии модалки), это только реальный
+// клик пользователя, поэтому здесь безопасно подставлять подсказку по роли —
+// не затираем ей уже сохранённый (в т.ч. осознанно пустой) список разделов
+// при обычном открытии карточки на редактирование.
+function staffAccessToggled(){
+  staffAccessVisibility();
+  if(document.getElementById('staff-full-access').checked) return;
+  const anyChecked = document.querySelectorAll('.staff-section-cb:checked').length > 0;
+  if(anyChecked) return;
+  const roleId = document.getElementById('staff-role').value;
+  const role = roleOptions.find(r => String(r.id)===String(roleId));
+  const defaults = (role && ROLE_SECTION_DEFAULTS[role.roleKey]) || [];
+  defaults.forEach(key=>{
+    const cb = document.querySelector(`.staff-section-cb[value="${key}"]`);
+    if(cb) cb.checked = true;
+  });
 }
 function openNewStaff(){
   editingStaffId=null;
@@ -6207,7 +6237,7 @@ function openNewStaff(){
   document.getElementById('staff-access-section').classList.remove('hidden');
   document.getElementById('staff-full-access').checked=true;
   populateStaffSections([]);
-  staffAccessToggled();
+  staffAccessVisibility();
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }
@@ -6234,7 +6264,7 @@ function editStaff(id){
   document.getElementById('staff-access-section').classList.toggle('hidden', id===CURRENT_USER_ID);
   document.getElementById('staff-full-access').checked = s.fullAccess !== false;
   populateStaffSections(s.allowedSections || []);
-  staffAccessToggled();
+  staffAccessVisibility();
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }
