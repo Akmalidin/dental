@@ -22,6 +22,7 @@ OpenAI, не лечится ни ключом, ни кодом). Сервер к
 список, что и OpenAI, но если и он заблокирован, см. WHISPER_MODEL_PATH
 ниже), либо просто загружается с диска, если уже скачана раньше."""
 import logging
+import os
 import re
 import datetime
 from io import BytesIO
@@ -104,18 +105,26 @@ def _get_whisper_model():
     (уже скачанные веса) вместо обращения к Hugging Face Hub — на случай,
     если и huggingface.co недоступен с сервера.
 
-    download_root указан явно (settings.BASE_DIR/whisper_cache) — иначе
-    huggingface_hub по умолчанию кэширует в домашнюю папку пользователя
-    (~/.cache), а systemd-сервис обычно запущен от www-data без прав на
-    запись туда (поймано в проде: "Permission denied: '/var/www/sadaf/.cache'").
-    Папка внутри WorkingDirectory уже принадлежит www-data (deploy/update.sh
-    делает chown -R на весь проект), поэтому создаётся без проблем с правами."""
+    Кэш-пути huggingface_hub по умолчанию — в домашней папке пользователя
+    (~/.cache/huggingface), а systemd-сервис запущен от www-data, чья "домашняя"
+    /var/www принадлежит root и недоступна на запись. Одного download_root
+    (передаётся в WhisperModel — влияет только на путь основного снапшота
+    модели) НЕДОСТАТОЧНО: у huggingface_hub есть отдельный ускоритель загрузки
+    "hf_xet" (xet-core), который пишет СВОИ логи в $HF_HOME/xet/logs/ в обход
+    download_root — поймано в проде: "Permission denied:
+    '/var/www/.cache/huggingface/xet/logs/...'", хотя WhisperModel уже
+    вызывался с explicit download_root. Поэтому переменная окружения HF_HOME
+    выставляется явно, ДО первого импорта huggingface_hub/faster_whisper —
+    так весь кэш (и основной, и вспомогательные вроде xet) остаётся внутри
+    settings.BASE_DIR/whisper_cache, которая уже принадлежит www-data
+    (deploy/update.sh делает chown -R на весь проект)."""
     global _whisper_model
     if _whisper_model is None:
+        cache_dir = str(settings.BASE_DIR / "whisper_cache")
+        os.environ.setdefault("HF_HOME", cache_dir)
         from faster_whisper import WhisperModel
         model_path = getattr(settings, "WHISPER_MODEL_PATH", "")
         model_size = getattr(settings, "WHISPER_MODEL_SIZE", "small")
-        cache_dir = str(settings.BASE_DIR / "whisper_cache")
         log.info("voice: loading Whisper model %r (первый запуск — может занять время)", model_path or model_size)
         if model_path:
             _whisper_model = WhisperModel(model_path, device="cpu", compute_type="int8")
