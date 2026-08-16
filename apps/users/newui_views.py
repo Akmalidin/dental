@@ -51,7 +51,11 @@ def _shared_options(request, clinic):
         "clinicMenuPrefs": cs.menu_prefs or {},
         "canSetClinicMenu": bool(request.user.is_superadmin or request.user.has_role("admin_main")),
         "roleOptions": [
-            {"id": r.pk, "name": r.display_name}
+            # roleKey — стабильный системный ключ роли (Role.DOCTOR и т.п., не
+            # зависит от языка/переименования display_name) — нужен, чтобы
+            # подсказывать разумный набор разделов при первом снятии «Полного
+            # доступа» в карточке сотрудника (см. ROLE_SECTION_DEFAULTS в base.html).
+            {"id": r.pk, "name": r.display_name, "roleKey": r.name}
             for r in Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).order_by("name")
         ],
         "branchOptions": [{"id": b.pk, "name": b.name} for b in Branch.objects.all().order_by("name")],
