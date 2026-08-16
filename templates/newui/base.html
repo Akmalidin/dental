@@ -4008,8 +4008,13 @@ function applyMenuPrefs(){
     });
   });
   function findGroupEnd(label){
+    // .sidebar-user (карточка профиля) — тоже <a> с недавних пор (ссылка на
+    // /new/profile/), но это не пункт группы «Управление», а конец сайдбара —
+    // без явной остановки здесь insertBefore() промахивался мимо неё и мимо
+    // «Старый интерфейс» (тоже <a>) до самого конца .sidebar, и переставленные
+    // пункты «Управления» улетали за них.
     let n=label.nextElementSibling;
-    while(n && !n.classList.contains('nav-label') && n.tagName==='A'){ n=n.nextElementSibling; }
+    while(n && !n.classList.contains('nav-label') && !n.classList.contains('sidebar-user') && n.tagName==='A'){ n=n.nextElementSibling; }
     return n;
   }
 }
