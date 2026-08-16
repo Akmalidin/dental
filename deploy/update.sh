@@ -18,6 +18,9 @@ echo ">>> migrate"
 echo ">>> collectstatic"
 ./venv/bin/python manage.py collectstatic --noinput
 
+echo ">>> прогрев кэша Whisper (один раз, до старта воркеров — иначе гонка)"
+./venv/bin/python manage.py warm_voice_cache || true
+
 echo ">>> chown + restart"
 chown -R www-data:www-data "$APP"
 systemctl restart sadaf.service
