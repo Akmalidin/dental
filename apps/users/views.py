@@ -620,15 +620,18 @@ def _newui_warehouse_data():
 
 
 def _newui_reports_data():
-    """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта» + реальные
-    вкладки Расходы/Должники/Отменённые визиты/Статистика по врачам/Источники
-    заявок (все — за текущий месяц, тот же период, что и остальной раздел).
+    """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта», графики
+    на нём же (выручка по неделям, загрузка врачей, источники заявок, причины
+    отмены) и реальные вкладки Расходы/Должники/Отменённые визиты/Статистика по
+    врачам/Источники заявок/Повторные визиты (всё — тот же период: текущий месяц,
+    кроме «Повторных визитов» — там вся история, иначе повторность не увидеть).
     Конструктор сравнения (свободный разрез по любому измерению/графику) и
     ИИ-помощник НЕ подключены — см. баннер на странице; ИИ-рекомендаций как
-    функции в системе не существует. «Загрузка кабинетов» тоже не подключена —
-    модели кабинетов/помещений в системе нет вообще (только Cabinet — учётная
-    единица техники в расписании, не про загрузку помещений)."""
-    from django.db.models import Sum, Count
+    функции в системе не существует. «Загрузка кабинетов» тоже пока не
+    подключена — Cabinet и Appointment.cabinet в системе ЕСТЬ (вопреки старому
+    комментарию здесь), просто нет модели «рабочих часов кабинета», без которой
+    посчитать % загрузки (не только «часов занято») честно нечем."""
+    from django.db.models import Sum, Count, Max
     from django.utils import timezone
     from apps.finance.models import Payment, Expense
     from apps.appointments.models import Appointment
@@ -661,17 +664,18 @@ def _newui_reports_data():
     debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
     debtors_total = float(sum(p["balance"] for p in debtors_list))
 
-    # ── Отменённые визиты (cancelled + no-show) — за месяц. Причина отмены не
-    # хранится в Appointment (нет такого поля), поэтому колонки «Причина» нет —
-    # вместо неё честный статус (Отменён/Не пришёл). ──
+    # ── Отменённые визиты (cancelled + no-show) — за месяц. Причина — только у
+    # статуса «Отменён» (cancellation_reason на Appointment реально есть — см.
+    # cancel_reasons_chart ниже); у «Не пришёл» её не выбирают, там просто «—». ──
     cancelled_qs = (month_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW])
-                     .select_related("patient", "doctor").order_by("-start_at"))
+                     .select_related("patient", "doctor", "cancellation_reason").order_by("-start_at"))
     cancelled_list = [{
         "date": timezone.localtime(a.start_at).strftime("%d.%m.%Y"),
         "patient": a.patient.full_name if a.patient else "—",
         "doctor": a.doctor.name if a.doctor else "—",
         "status": a.get_status_display(),
         "statusColor": "coral" if a.status == Appointment.STATUS_CANCELLED else "amber",
+        "reason": a.cancellation_reason.name if a.cancellation_reason_id else "—",
     } for a in cancelled_qs[:200]]
 
     # ── Статистика по врачам — завершённые/оплаченные приёмы за месяц ──
@@ -711,6 +715,48 @@ def _newui_reports_data():
         key=lambda x: -x["count"],
     )
 
+    # ── Выручка по неделям месяца (для «Общего отчёта» — раньше был статичный
+    # захардкоженный график). Недели считаем простыми блоками по 7 дней от
+    # начала месяца (1-7, 8-14, ...), а не календарными — проще и достаточно
+    # для тренда внутри месяца. ──
+    import calendar
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    week_count = (days_in_month - 1) // 7 + 1
+    weekly_net = [0.0] * week_count
+    month_income_refund = Payment.objects.filter(
+        created_at__date__gte=month_start, created_at__date__lte=today,
+        type__in=[Payment.TYPE_INCOME, Payment.TYPE_REFUND],
+    ).only("amount", "type", "created_at")
+    for p in month_income_refund:
+        week_idx = (timezone.localtime(p.created_at).date().day - 1) // 7
+        weekly_net[week_idx] += float(p.amount) if p.type == Payment.TYPE_INCOME else -float(p.amount)
+    weekly_revenue = [{"label": "Нед. %d" % (i + 1), "value": round(v, 2)} for i, v in enumerate(weekly_net)]
+
+    # ── Причины отмены визитов — Appointment.cancellation_reason реально есть
+    # в модели (несмотря на старый комментарий выше — он был неверным), просто
+    # заполняется только когда причину явно выбрали при отмене. ──
+    cancel_reasons_qs = (
+        month_appts.filter(status=Appointment.STATUS_CANCELLED, cancellation_reason__isnull=False)
+        .values("cancellation_reason__name").annotate(cnt=Count("id")).order_by("-cnt")
+    )
+    cancel_reasons_chart = [{"reason": c["cancellation_reason__name"], "count": c["cnt"]} for c in cancel_reasons_qs]
+
+    # ── Повторные визиты — визитов на пациента (все завершённые приёмы, не
+    # только этот месяц — иначе «повторность» не увидеть) + дата последнего. ──
+    patient_visits = (
+        Appointment.objects.filter(status=Appointment.STATUS_COMPLETED, patient__isnull=False)
+        .values("patient_id", "patient__last_name", "patient__first_name", "patient__middle_name")
+        .annotate(cnt=Count("id"), last_at=Max("start_at"))
+        .order_by("-cnt")
+    )
+    repeat_visits = [{
+        "patientId": row["patient_id"],
+        "patient": " ".join(p for p in (row["patient__last_name"], row["patient__first_name"], row["patient__middle_name"]) if p) or "—",
+        "count": row["cnt"],
+        "lastVisit": timezone.localtime(row["last_at"]).strftime("%d.%m.%Y") if row["last_at"] else "—",
+        "daysSince": (today - timezone.localtime(row["last_at"]).date()).days if row["last_at"] else None,
+    } for row in patient_visits[:200]]
+
     return {
         "revenueMonth": float(income - refund),
         "completed": completed,
@@ -725,6 +771,9 @@ def _newui_reports_data():
         "cancelledVisits": cancelled_list,
         "doctorStats": doctor_stats,
         "leadSources": lead_sources,
+        "weeklyRevenue": weekly_revenue,
+        "cancelReasons": cancel_reasons_chart,
+        "repeatVisits": repeat_visits,
     }
 
 

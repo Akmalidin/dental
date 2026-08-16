@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Расходы, Должники, Отменённые визиты, Статистика по врачам и Источники заявок — реальные данные за текущий месяц. Конструктор сравнения (свободный график), «ИИ-помощник», «Загрузка кабинетов» (нет модели кабинетов в системе) и «Повторные визиты» пока демонстрационные.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок и Повторные визиты — реальные данные. Конструктор сравнения (свободный график), «ИИ-помощник» и «Загрузка кабинетов» (часы по кабинетам ещё не считаются) пока демонстрационные.</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
           <button class="chip" id="rtExpenses" onclick="reportsTab('expenses')"><span data-i18n="w_expenses">Расходы</span></button>
@@ -93,14 +93,7 @@
           <div class="grid-2">
             <div class="card">
               <div class="card-head"><h3 data-i18n="w_revenue_by_week">Выручка по неделям</h3></div>
-              <div class="card-body">
-                <div class="bars">
-                  <div class="col"><div class="bar" style="height:55%"></div><span class="lbl">Нед. 1</span></div>
-                  <div class="col"><div class="bar" style="height:70%"></div><span class="lbl">Нед. 2</span></div>
-                  <div class="col"><div class="bar" style="height:62%"></div><span class="lbl">Нед. 3</span></div>
-                  <div class="col"><div class="bar" style="height:88%"></div><span class="lbl">Нед. 4</span></div>
-                </div>
-              </div>
+              <div class="card-body" id="ovWeeklyRevenueChart"></div>
             </div>
             <div class="card">
               <div class="card-head"><h3 data-i18n="w_lead_sources">Источники заявок</h3></div>
@@ -149,7 +142,7 @@
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_cancelled_visits_month">Отменённые визиты · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_status">Статус</th></tr></thead>
+              <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_status">Статус</th><th data-i18n="w_cancel_reason">Причина</th></tr></thead>
               <tbody id="cancelledTableBody"></tbody>
             </table>
           </div>
@@ -195,14 +188,10 @@
             <div class="card-body" id="repeatChart"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3 data-i18n="w_repeat_visits_quarter">Повторные визиты · квартал</h3></div>
+            <div class="card-head"><h3 data-i18n="w_repeat_visits_alltime">Повторные визиты · за всё время</h3></div>
             <table>
               <thead><tr><th data-i18n="w_patient">Пациент</th><th data-i18n="w_visits">Визитов</th><th data-i18n="w_last_visit_full">Последний визит</th><th data-i18n="w_status">Статус</th></tr></thead>
-              <tbody>
-                <tr><td>Кыдыров Р.</td><td class="mono">6</td><td>30.07.2026</td><td><span class="pill teal">Активный</span></td></tr>
-                <tr><td>Молдалиева Т.</td><td class="mono">4</td><td>28.07.2026</td><td><span class="pill teal">Активный</span></td></tr>
-                <tr><td>Осмонова Н.</td><td class="mono">1</td><td>12.02.2026</td><td><span class="pill coral">Не был 5 мес.</span></td></tr>
-              </tbody>
+              <tbody id="repeatTableBody"></tbody>
             </table>
           </div>
         </div>

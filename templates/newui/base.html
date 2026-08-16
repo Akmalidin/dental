@@ -2448,7 +2448,7 @@ function reportsTab(which){
   if(which==='doctors') renderReportsDoctors();
   if(which==='rooms') document.getElementById('roomsChart').innerHTML = buildDonutChart(reportDatasets.rooms.utilization, '%');
   if(which==='cancelled') renderReportsCancelled();
-  if(which==='repeat') document.getElementById('repeatChart').innerHTML = buildBarChart(repeatVisitsData, ' визитов');
+  if(which==='repeat') renderReportsRepeat();
   if(which==='sources') renderReportsSources();
 }
 /* ---- Расходы/Должники/Отменённые/Врачи/Источники — реальные данные из
@@ -2480,8 +2480,26 @@ function renderReportsCancelled(){
   if(!d) return;
   const body=document.getElementById('cancelledTableBody');
   body.innerHTML = (d.cancelledVisits||[]).length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : d.cancelledVisits.map(a=>`<tr><td>${a.patient}</td><td>${a.date}</td><td>${a.doctor}</td><td><span class="pill ${a.statusColor}">${a.status}</span></td><td>${a.reason||'—'}</td></tr>`).join('');
+}
+function renderReportsRepeat(){
+  const d=reportsRealData;
+  if(!d) return;
+  const rows=d.repeatVisits||[];
+  document.getElementById('repeatChart').innerHTML = buildBarChart(
+    rows.slice(0,10).map((r,i)=>({label:r.patient, value:r.count, color:['teal','cobalt','amber','coral'][i%4]})), ' визитов'
+  );
+  const body=document.getElementById('repeatTableBody');
+  body.innerHTML = rows.length===0
     ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
-    : d.cancelledVisits.map(a=>`<tr><td>${a.patient}</td><td>${a.date}</td><td>${a.doctor}</td><td><span class="pill ${a.statusColor}">${a.status}</span></td></tr>`).join('');
+    : rows.map(r=>{
+        // «Активный» — был в последние 3 месяца, иначе честно показываем, сколько не был.
+        const status = (r.daysSince===null) ? '—'
+          : r.daysSince<=90 ? `<span class="pill teal">${t('w_active_status')}</span>`
+          : `<span class="pill coral">${t('w_not_seen_months').replace('{n}', Math.round(r.daysSince/30))}</span>`;
+        return `<tr class="clickable" onclick="location.href='/new/patients/${r.patientId}/'"><td><b>${r.patient}</b></td><td class="mono">${r.count}</td><td>${r.lastVisit}</td><td>${status}</td></tr>`;
+      }).join('');
 }
 function renderReportsDoctors(){
   const d=reportsRealData;
@@ -2582,9 +2600,26 @@ function renderReportConstructor(){
 function renderOverviewCharts(){
   if(!document.getElementById('ovSourcesChart')) return;  // графики есть только на /new/reports/
   renderReportConstructor();
-  document.getElementById('ovSourcesChart').innerHTML = buildDonutChart(reportDatasets.sources.count, '');
-  document.getElementById('ovDoctorsChart').innerHTML = buildBarChart(reportDatasets.doctors.utilization, '%');
-  document.getElementById('ovCancelReasonsChart').innerHTML = buildDonutChart(cancelReasonsData, '');
+  const d=reportsRealData;
+  const palette=['cobalt','teal','amber','coral'];
+  // Источники заявок и загрузка врачей — те же реальные данные, что и на
+  // отдельных вкладках «Источники заявок»/«Статистика по врачам» (просто
+  // здесь — сжатая сводка, без таблицы).
+  const sources=(d&&d.leadSources)||[];
+  document.getElementById('ovSourcesChart').innerHTML = buildDonutChart(
+    sources.map((s,i)=>({label:s.source, value:s.count, color:palette[i%4]})), ''
+  );
+  const doctors=(d&&d.doctorStats)||[];
+  document.getElementById('ovDoctorsChart').innerHTML = buildBarChart(
+    doctors.map((s,i)=>({label:s.doctor, value:s.fillRatePct, color:palette[i%4]})), '%'
+  );
+  const reasons=(d&&d.cancelReasons)||[];
+  document.getElementById('ovCancelReasonsChart').innerHTML = buildDonutChart(
+    reasons.map((r,i)=>({label:r.reason, value:r.count, color:palette[i%4]})), ''
+  );
+  const weekly=(d&&d.weeklyRevenue)||[];
+  const weekEl=document.getElementById('ovWeeklyRevenueChart');
+  if(weekEl) weekEl.innerHTML = buildBarChart(weekly.map((w,i)=>({label:w.label, value:w.value, color:palette[i%4]})), ' '+CUR_SYM);
 }
 
 const aiInsights=[
@@ -3197,7 +3232,11 @@ const translations={
   w_conversion: {ru:'Конверсия в визит', ky:'Визитке конверсия', en:'Visit conversion', uz:'Tashrifga konversiya'},
   w_acquisition_cost: {ru:'Стоимость привлечения', ky:'Тартуу наркы', en:'Acquisition cost', uz:'Jalb qilish narxi'},
   w_excel: {ru:'Excel', ky:'Excel', en:'Excel', uz:'Excel'},
-  w_reports_hint: {ru:'Показатели ниже — реальные. Конструктор сравнения, графики, вкладки «ИИ-помощник» и детальная статистика по врачам/кабинетам/повторным визитам пока не подключены к базе (ИИ-рекомендаций в системе вообще нет).', ky:'Төмөнкү көрсөткүчтөр — реалдуу. Салыштыруу конструктору, графиктер, «ИИ-жардамчы» табы жана дарыгерлер/кабинеттер/кайталама визиттер боюнча толук статистика азырынча базага туташкан эмес (тутумда ИИ-сунуштар такыр жок).', en:'The figures below are real. The comparison builder, charts, the AI-assistant tab, and detailed doctor/room/repeat-visit stats aren\'t connected to the database yet (there are no AI recommendations in the system at all).', uz:'Quyidagi ko\'rsatkichlar — haqiqiy. Solishtirish konstruktori, grafiklar, «AI-yordamchi» tabi va shifokorlar/xonalar/takroriy tashriflar bo\'yicha batafsil statistika hali bazaga ulanmagan (tizimda AI-tavsiyalar umuman yo\'q).'},
+  w_reports_hint: {ru:'Общий отчёт (KPI и графики), Расходы, Должники, Отменённые визиты, Статистика по врачам, Источники заявок и Повторные визиты — реальные данные. Конструктор сравнения (свободный график), «ИИ-помощник» и «Загрузка кабинетов» (часы по кабинетам ещё не считаются) пока демонстрационные.', ky:'Жалпы отчёт (KPI жана графиктер), Чыгашалар, Карыздарлар, Жокко чыгарылган визиттер, Дарыгерлер боюнча статистика, Арыз булактары жана Кайталама визиттер — реалдуу маалыматтар. Салыштыруу конструктору, «ИИ-жардамчы» жана «Кабинеттердин жүктөлүшү» (кабинеттер боюнча саат азырынча эсептелбейт) азырынча демонстрациялык.', en:'The Overview (KPIs and charts), Expenses, Debtors, Cancelled visits, Doctor stats, Lead sources and Repeat visits are real data. The comparison builder, the AI-assistant and "Room load" (per-room hours aren\'t tracked yet) are still demo-only.', uz:'Umumiy hisobot (KPI va grafiklar), Xarajatlar, Qarzdorlar, Bekor qilingan tashriflar, Shifokorlar statistikasi, Ariza manbalari va Takroriy tashriflar — haqiqiy ma\'lumotlar. Solishtirish konstruktori, «AI-yordamchi» va «Xonalar yuklamasi» (xonalar bo\'yicha soatlar hali hisoblanmaydi) hali namoyish uchun.'},
+  w_cancel_reason: {ru:'Причина', ky:'Себеби', en:'Reason', uz:'Sababi'},
+  w_repeat_visits_alltime: {ru:'Повторные визиты · за всё время', ky:'Кайталама визиттер · бүт убакыт', en:'Repeat visits · all time', uz:'Takroriy tashriflar · butun vaqt'},
+  w_active_status: {ru:'Активный', ky:'Активдүү', en:'Active', uz:'Faol'},
+  w_not_seen_months: {ru:'Не был {n} мес.', ky:'{n} ай болгон жок', en:'Away {n} mo.', uz:'{n} oy kelmadi'},
   w_overview_report: {ru:'Общий отчёт', ky:'Жалпы отчёт', en:'Overview report', uz:'Umumiy hisobot'},
   w_ai_assistant: {ru:'ИИ-помощник', ky:'ИИ-жардамчы', en:'AI assistant', uz:'AI-yordamchi'},
   w_cancelled_visits: {ru:'Отменённые визиты', ky:'Жокко чыгарылган визиттер', en:'Cancelled visits', uz:'Bekor qilingan tashriflar'},
