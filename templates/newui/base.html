@@ -628,6 +628,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .voice-chat-panel .vcp-mic,.voice-chat-panel .vcp-send{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:none;background:var(--cobalt);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .voice-chat-panel .vcp-mic.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
 .voice-chat-panel .vcp-mic.voice-busy{opacity:.55;pointer-events:none;}
+.voice-chat-panel .vcp-settings{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-bottom:1px solid var(--mist-line);flex-shrink:0;background:var(--cloud);}
+.voice-chat-panel .vcp-settings-label{font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+.voice-chat-panel .vcp-settings input[type=text]{border:1px solid var(--mist-line);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;background:var(--paper);}
+.voice-chat-panel .vcp-settings-check{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.35;cursor:pointer;}
+.voice-chat-panel .vcp-settings-check input{margin-top:2px;flex-shrink:0;}
+.voice-chat-panel .vcp-settings-hint{font-size:11px;color:var(--ink-faint);line-height:1.35;}
 @media(max-width:480px){.voice-chat-panel{right:8px;left:8px;width:auto;bottom:132px;}}
 </style>
 {% block extra_head %}{% endblock %}
@@ -647,8 +653,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
      по умолчанию (класс hidden), поведение полностью в JS (base.html). -->
 <div id="voiceChatPanel" class="voice-chat-panel hidden">
   <div class="vcp-head">
-    <span data-i18n="w_voice_assistant_title">Ассистент</span>
-    <button type="button" class="vcp-close" onclick="closeVoiceChatPanel()" aria-label="Закрыть">✕</button>
+    <span id="vcpTitle" data-i18n="w_voice_assistant_title">Ассистент</span>
+    <div style="display:flex;align-items:center;gap:2px;">
+      <button type="button" class="vcp-close" onclick="toggleAssistantSettings()" aria-label="Настройки" title="Настройки" style="font-size:14px;">⚙</button>
+      <button type="button" class="vcp-close" onclick="closeVoiceChatPanel()" aria-label="Закрыть">✕</button>
+    </div>
+  </div>
+  <div id="vcpSettings" class="vcp-settings hidden">
+    <label class="vcp-settings-label" data-i18n="w_assistant_name_label">Имя ассистента</label>
+    <input type="text" id="vcpAssistantNameInput" data-i18n-placeholder="w_assistant_name_placeholder" placeholder="ODONTIS">
+    <label class="vcp-settings-check">
+      <input type="checkbox" id="vcpWakeWordCheck" onchange="vcpWakeWordToggled(this.checked)">
+      <span data-i18n="w_wake_word_label">Слушать имя ассистента и включаться самому</span>
+    </label>
+    <div class="vcp-settings-hint" data-i18n="w_wake_word_hint">Скажите имя ассистента вслух — он начнёт слушать команду. Требует постоянного доступа к микрофону; работает только в Chrome.</div>
+    <button type="button" class="btn btn-primary btn-sm" onclick="saveAssistantSettings()" data-i18n="w_assistant_settings_save" style="align-self:flex-end;">Сохранить</button>
   </div>
   <div id="voiceChatMessages" class="vcp-messages"></div>
   <div class="vcp-foot">
@@ -894,6 +913,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <a class="btn btn-ghost" id="av-patient-link" href="#">Карта пациента</a>
       <button type="button" class="btn btn-ghost" id="av-edit-link" data-i18n="w_edit">Изменить</button>
       <button class="btn btn-ghost" onclick="closeModal('m-appt-view')" style="margin-left:auto;"><span data-i18n="w_close">Закрыть</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Новый план лечения (страница «Планы лечения») — сначала выбрать
+     пациента (у плана нет смысла без него), затем тот же бэкенд-эндпоинт
+     создания плана, что и кнопка «Создать» на карточке пациента (см.
+     pcCreateTreatmentPlan). Раньше кнопка на этой странице вела прямо на
+     /patients/ (старый интерфейс) без создания чего-либо — жалоба «при
+     нажатии создать перекидывает на старый интерфейс». -->
+<div class="modal-backdrop" id="m-newplan-patient">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="w_new_plan">Новый план</h3><button class="modal-close" onclick="closeModal('m-newplan-patient')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" style="position:relative;">
+        <label data-i18n="w_patient">Пациент</label>
+        <input type="text" id="newplan-patient-search" data-i18n-placeholder="w_search_by_name_phone" placeholder="Поиск по имени или телефону" autocomplete="off" oninput="newPlanPatientSearch(this.value)">
+        <div id="newplan-patient-suggestions" class="hidden" style="position:relative;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;margin-top:4px;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -3139,7 +3177,6 @@ const translations={
   w_no_expenses_month: {ru:'Расходов за месяц не заведено', ky:'Ай ичинде чыгашалар киргизилген эмес', en:'No expenses recorded for the month', uz:'Oy uchun xarajatlar kiritilmagan'},
   w_margin: {ru:'Рентабельность', ky:'Рентабелдүүлүк', en:'Margin', uz:'Rentabellik'},
   w_no_events_found: {ru:'Событий не найдено', ky:'Окуялар табылган жок', en:'No events found', uz:'Voqealar topilmadi'},
-  w_new_plan_hint: {ru:'Новый план создаётся из карточки пациента в старом интерфейсе', ky:'Жаңы план бейтап картасынан эски интерфейсте түзүлөт', en:'A new plan is created from the patient card in the old interface', uz:'Yangi reja bemor kartasidan eski interfeysda yaratiladi'},
   w_today_f: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
   w_scheduled_pl: {ru:'Запланированы', ky:'Пландаштырылган', en:'Scheduled', uz:'Rejalashtirilgan'},
   w_not_closed: {ru:'Не закрыты', ky:'Жабылган эмес', en:'Not closed', uz:'Yopilmagan'},
@@ -3583,6 +3620,16 @@ const translations={
   w_voice_status_applied: {ru:'Статус изменён', ky:'Статус өзгөртүлдү', en:'Status updated', uz:'Holat o\'zgartirildi'},
   w_voice_assistant_title: {ru:'Ассистент', ky:'Ассистент', en:'Assistant', uz:'Assistent'},
   w_voice_type_hint: {ru:'Сообщение…', ky:'Билдирүү…', en:'Message…', uz:'Xabar…'},
+  w_voice_opening_patients_list: {ru:'Открываю список пациентов', ky:'Пациенттер тизмесин ачам', en:'Opening patients list', uz:'Bemorlar ro\'yxati ochilmoqda'},
+  w_voice_identity_answer: {ru:'Меня зовут {name}. Я — голосовой ассистент клиники на платформе AKM SOFT CLINIC, в приложении ODONTIS. Помогаю с расписанием, поиском пациентов и картой приёма.', ky:'Менин атым {name}. Мен — AKM SOFT CLINIC платформасында, ODONTIS колдонмосунда иштеген клиниканын добуштук ассистентимин. График, пациенттерди издөө жана кабыл алуу картасы менен жардам берем.', en:'My name is {name}. I\'m the clinic\'s voice assistant, running on the AKM SOFT CLINIC platform, inside the ODONTIS app. I help with the schedule, finding patients and the visit card.', uz:'Mening ismim {name}. Men — AKM SOFT CLINIC platformasida, ODONTIS ilovasida ishlaydigan klinikaning ovozli assistentiman. Jadval, bemorlarni qidirish va qabul kartasi bilan yordam beraman.'},
+  w_assistant_settings_title: {ru:'Настройки ассистента', ky:'Ассистент тууралоолору', en:'Assistant settings', uz:'Assistent sozlamalari'},
+  w_assistant_name_label: {ru:'Имя ассистента', ky:'Ассистенттин аты', en:'Assistant name', uz:'Assistent nomi'},
+  w_assistant_name_placeholder: {ru:'ODONTIS', ky:'ODONTIS', en:'ODONTIS', uz:'ODONTIS'},
+  w_wake_word_label: {ru:'Слушать имя ассистента и включаться самому', ky:'Ассистенттин атын угуп, өзү күйгүзүлсүн', en:'Listen for the assistant\'s name and activate automatically', uz:'Assistent nomini eshitib, o\'zi yoqilsin'},
+  w_wake_word_hint: {ru:'Скажите имя ассистента вслух — он начнёт слушать команду. Требует постоянного доступа к микрофону; работает только в Chrome.', ky:'Ассистенттин атын үн менен айтыңыз — ал буйрукту угуп баштайт. Микрофонго туруктуу уруксат керек; Chrome\'до гана иштейт.', en:'Say the assistant\'s name out loud — it will start listening for a command. Requires persistent microphone access; works only in Chrome.', uz:'Assistent nomini ovoz chiqarib ayting — u buyruqni tinglay boshlaydi. Doimiy mikrofon ruxsati kerak; faqat Chrome\'da ishlaydi.'},
+  w_wake_not_supported: {ru:'Постоянное прослушивание не поддерживается этим браузером', ky:'Бул браузер туруктуу угууну колдобойт', en:'Continuous listening is not supported in this browser', uz:'Doimiy tinglash bu brauzerda qo\'llab-quvvatlanmaydi'},
+  w_wake_listening: {ru:'Слушаю…', ky:'Угуп жатам…', en:'Listening…', uz:'Tinglayapman…'},
+  w_assistant_settings_save: {ru:'Сохранить', ky:'Сактоо', en:'Save', uz:'Saqlash'},
 };
 let currentLang='ru';
 /* Хелпер для JS-строк, которые сами решают, что показать (напр. значение
@@ -6114,6 +6161,134 @@ let VOICE_ENABLED=false;
 let AI_ENABLED=false; // YandexGPT настроен на сервере — свободный вопрос-ответ доступен
 let voiceRecorder=null, voiceChunks=[], voiceActive=false;
 let lastFocusedTextField=null;
+// Имя ассистента — задаётся пользователем ("могут дать ему имя пользователи"),
+// хранится per-browser в localStorage (как и другие персональные настройки
+// интерфейса — calSettings, позиция #voiceFab и т.п.), не в БД: это личная
+// настройка того, кто разговаривает с ассистентом, не настройка клиники.
+// По умолчанию — название продукта (видно на логотипе в сайдбаре).
+const DEFAULT_ASSISTANT_NAME='ODONTIS';
+const ASSISTANT_NAME_KEY='newui_assistant_name';
+const WAKE_WORD_ENABLED_KEY='newui_wake_word_enabled';
+function getAssistantName(){
+  return (localStorage.getItem(ASSISTANT_NAME_KEY)||'').trim() || DEFAULT_ASSISTANT_NAME;
+}
+function setAssistantName(name){
+  name=(name||'').trim();
+  if(name && name!==DEFAULT_ASSISTANT_NAME) localStorage.setItem(ASSISTANT_NAME_KEY, name);
+  else localStorage.removeItem(ASSISTANT_NAME_KEY);
+}
+function isWakeWordEnabled(){ return localStorage.getItem(WAKE_WORD_ENABLED_KEY)==='1'; }
+function wakeWordSupported(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+// Простая фонетическая транслитерация латиницы в кириллицу — нужна, потому
+// что имя по умолчанию ("ODONTIS") написано латиницей, а распознавание речи
+// (lang='ru-RU') на русской/кыргызской/узбекской речи транскрибирует
+// произнесённое слово кириллицей ("одонтис"), не латиницей — прямое
+// сравнение строк без этого никогда бы не сработало для имени по умолчанию.
+// Таблица простая, для реальных слов (не палатализация/йотирование и т.п.) —
+// этого достаточно для распознавания короткого имени-триггера, не полного
+// текста.
+const _LATIN_TO_CYRILLIC={a:'а',b:'б',c:'к',d:'д',e:'е',f:'ф',g:'г',h:'х',i:'и',j:'дж',k:'к',l:'л',m:'м',n:'н',o:'о',p:'п',q:'к',r:'р',s:'с',t:'т',u:'у',v:'в',w:'в',x:'кс',y:'й',z:'з'};
+function transliterateLatinToCyrillic(s){
+  return (s||'').toLowerCase().split('').map(ch=>_LATIN_TO_CYRILLIC[ch] || ch).join('');
+}
+// Все варианты написания имени, по которым можно засчитать срабатывание —
+// само имя как есть (на случай, если пользователь и правда произнесёт его
+// латиницей, либо распознавание вернёт латиницу) и его кириллическая
+// транслитерация (реальный частый случай для "ODONTIS").
+function wakeWordVariants(name){
+  const lower=(name||'').toLowerCase();
+  const translit=transliterateLatinToCyrillic(lower);
+  return translit!==lower ? [lower, translit] : [lower];
+}
+// ---- Постоянное прослушивание имени ассистента (wake word) — по запросу
+// «при использовании его имени он сам начинает слушать пользователя».
+// Опционально (выключено по умолчанию, включается через настройки панели
+// ассистента, см. saveAssistantSettings) — постоянный доступ к микрофону
+// достаточно инвазивен, чтобы не включать его молча всем. Работает через
+// Web Speech API (webkitSpeechRecognition) — распознавание идёт ПРЯМО В
+// БРАУЗЕРЕ (Chrome/Edge, без сервера), а не через серверный Whisper
+// (transcribe_audio) — тот рассчитан на короткие одноразовые записи, а не
+// на непрерывное прослушивание. Поэтому wake word работает независимо от
+// VOICE_ENABLED... но если сервер вообще не настроен на голосовой ввод,
+// включать его смысла нет (нечем будет ответить) — проверяем VOICE_ENABLED
+// на всякий случай при старте.
+let wakeRecognition=null, wakeListening=false, wakeAwaitingCommand=false, wakeIntentionalStop=false;
+function startWakeWordListening(){
+  if(!VOICE_ENABLED || !isWakeWordEnabled() || !wakeWordSupported()) return;
+  if(wakeRecognition) return; // уже слушаем — вторую сессию не создаём
+  const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec=new SR();
+  rec.continuous=true;
+  rec.interimResults=true;
+  rec.lang='ru-RU';
+  wakeAwaitingCommand=false;
+  rec.onresult=(e)=>{
+    for(let i=e.resultIndex; i<e.results.length; i++){
+      const res=e.results[i];
+      const transcript=((res[0] && res[0].transcript) || '').trim();
+      if(!transcript) continue;
+      if(wakeAwaitingCommand){
+        // Имя уже прозвучало отдельной фразой — следующий ЗАВЕРШЁННЫЙ
+        // результат распознавания и есть сама команда.
+        if(res.isFinal){
+          wakeAwaitingCommand=false;
+          if(!voiceChatPanelOpen) openVoiceChatPanel();
+          processAssistantMessage(transcript);
+        }
+        continue;
+      }
+      const transcriptLower=transcript.toLowerCase();
+      let idx=-1, matchedLen=0;
+      for(const variant of wakeWordVariants(getAssistantName())){
+        const i=transcriptLower.indexOf(variant);
+        if(i!==-1){ idx=i; matchedLen=variant.length; break; }
+      }
+      if(idx===-1) continue;
+      // Имя найдено — то, что сказано ПОСЛЕ него в той же фразе, и есть
+      // команда («Ассистент, покажи расписание на завтра» — одним выдохом).
+      const after=transcript.slice(idx+matchedLen).replace(/^[,\s:—-]+/, '').trim();
+      if(!voiceChatPanelOpen) openVoiceChatPanel();
+      if(res.isFinal){
+        if(after) processAssistantMessage(after);
+        else { wakeAwaitingCommand=true; showToast(t('w_wake_listening')); }
+      }
+      break; // не обрабатывать остальные результаты этого события повторно
+    }
+  };
+  rec.onerror=(e)=>{
+    if(e.error==='not-allowed' || e.error==='service-not-allowed'){
+      // Доступ к микрофону отозван/запрещён — молча пытаться заново нет
+      // смысла (браузер снова откажет), выключаем настройку целиком.
+      localStorage.setItem(WAKE_WORD_ENABLED_KEY, '0');
+      showToast(t('w_mic_denied'), 'error');
+      wakeIntentionalStop=true;
+    }
+    // 'no-speech'/'aborted'/сетевые сбои — штатная ситуация в continuous-
+    // режиме (браузер останавливает распознавание при паузе в речи), не
+    // ошибка — onend ниже сам решит, перезапускать или нет.
+  };
+  rec.onend=()=>{
+    wakeRecognition=null;
+    wakeListening=false;
+    if(!wakeIntentionalStop && isWakeWordEnabled()){
+      setTimeout(()=>{ if(isWakeWordEnabled()) startWakeWordListening(); }, 300);
+    }
+    wakeIntentionalStop=false;
+  };
+  try{
+    rec.start();
+    wakeRecognition=rec;
+    wakeListening=true;
+  }catch(e){}
+}
+function stopWakeWordListening(){
+  wakeAwaitingCommand=false;
+  wakeListening=false;
+  if(wakeRecognition){
+    wakeIntentionalStop=true;
+    try{ wakeRecognition.stop(); }catch(e){ wakeIntentionalStop=false; }
+  }
+}
 document.addEventListener('focusin', (e)=>{
   const el=e.target;
   if(el && (el.tagName==='TEXTAREA' || (el.tagName==='INPUT' && (el.type==='text' || !el.type))) && !el.disabled){
@@ -6130,6 +6305,12 @@ async function voiceRecordToggle(btnEl, mode, onResult){
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
   catch(e){ showToast(t('w_mic_denied'), 'error'); return; }
+  // Постоянное прослушивание имени (wake word, см. startWakeWordListening)
+  // использует тот же микрофон через отдельный API (SpeechRecognition) — на
+  // время ручной записи (MediaRecorder) приостанавливаем его, чтобы не
+  // держать два одновременных захвата микрофона.
+  const wasWakeListening=wakeListening;
+  if(wasWakeListening) stopWakeWordListening();
   voiceChunks=[];
   voiceRecorder=new MediaRecorder(stream);
   voiceRecorder.ondataavailable=e=>{ if(e.data.size>0) voiceChunks.push(e.data); };
@@ -6137,6 +6318,7 @@ async function voiceRecordToggle(btnEl, mode, onResult){
     voiceActive=false;
     btnEl.classList.remove('voice-recording');
     stream.getTracks().forEach(tr=>tr.stop());
+    if(wasWakeListening && isWakeWordEnabled()) startWakeWordListening();
     btnEl.classList.add('voice-busy');
     try{
       const blob=new Blob(voiceChunks, {type:'audio/webm'});
@@ -6194,6 +6376,42 @@ function closeVoiceChatPanel(){
   const panel=document.getElementById('voiceChatPanel');
   if(panel) panel.classList.add('hidden');
 }
+// ---- Настройки ассистента: имя (localStorage) + переключатель "слушать имя
+// и включаться самому" (wake word, см. startWakeWordListening ниже). Попап
+// внутри самой панели ассистента (шестерёнка рядом с заголовком), а не
+// отдельная модалка — это персональная мелкая настройка, не требует
+// отдельного полноэкранного диалога. ----
+function toggleAssistantSettings(){
+  const el=document.getElementById('vcpSettings');
+  if(!el) return;
+  const opening=el.classList.contains('hidden');
+  if(opening){
+    document.getElementById('vcpAssistantNameInput').value=getAssistantName()===DEFAULT_ASSISTANT_NAME ? '' : getAssistantName();
+    document.getElementById('vcpWakeWordCheck').checked=isWakeWordEnabled();
+    document.getElementById('vcpWakeWordCheck').disabled=!wakeWordSupported();
+  }
+  el.classList.toggle('hidden');
+}
+function vcpWakeWordToggled(checked){
+  if(checked && !wakeWordSupported()){
+    showToast(t('w_wake_not_supported'), 'error');
+    document.getElementById('vcpWakeWordCheck').checked=false;
+  }
+}
+function saveAssistantSettings(){
+  const name=document.getElementById('vcpAssistantNameInput').value;
+  setAssistantName(name);
+  document.getElementById('vcpTitle').textContent=getAssistantName();
+  const wantWake=document.getElementById('vcpWakeWordCheck').checked;
+  if(wantWake && !wakeWordSupported()){
+    showToast(t('w_wake_not_supported'), 'error');
+  } else {
+    localStorage.setItem(WAKE_WORD_ENABLED_KEY, wantWake ? '1' : '0');
+    if(wantWake) startWakeWordListening(); else stopWakeWordListening();
+  }
+  document.getElementById('vcpSettings').classList.add('hidden');
+  showToast(t('w_settings_saved'));
+}
 function renderVoiceChatPanel(){
   const el=document.getElementById('voiceChatMessages');
   if(!el) return;
@@ -6237,6 +6455,7 @@ async function callAssistantBackend(text, mode, withHistory){
   const fd=new FormData();
   fd.append('mode', mode);
   fd.append('question', text);
+  if(mode==='chat') fd.append('assistant_name', getAssistantName());
   if(withHistory) fd.append('history', JSON.stringify(voiceChatHistory.slice(-12)));
   try{
     const res=await postForm('/notifications/voice/', fd);
@@ -6285,7 +6504,10 @@ async function processAssistantMessage(text){
 }
 // Озвучка ответа (Yandex SpeechKit) — необязательное дополнение к тексту,
 // который уже показан в панели; молча ничего не делает при ошибке/выключенном
-// ИИ, не должна мешать основному потоку чата.
+// ИИ, не должна мешать основному потоку чата. Если включено постоянное
+// прослушивание имени (wake word) — на время воспроизведения останавливаем
+// его, иначе ассистент рискует «услышать» своё же имя в собственном ответе
+// и снова активироваться (обратная связь).
 async function speakText(text){
   if(!AI_ENABLED || !text) return;
   try{
@@ -6296,8 +6518,11 @@ async function speakText(text){
     const blob=await res.blob();
     const url=URL.createObjectURL(blob);
     const audio=new Audio(url);
-    audio.onended=()=>URL.revokeObjectURL(url);
-    audio.play().catch(()=>{});
+    const wasListening=isWakeWordEnabled() && wakeListening;
+    if(wasListening) stopWakeWordListening();
+    const resumeWake=()=>{ if(wasListening && isWakeWordEnabled()) startWakeWordListening(); };
+    audio.onended=()=>{ URL.revokeObjectURL(url); resumeWake(); };
+    audio.play().catch(()=>{ resumeWake(); });
   }catch(e){}
 }
 
@@ -6341,6 +6566,20 @@ function applyVoiceVisitIntent(data){
    на странице расписания), из-за чего ассистент не находил пациентов вне
    последних 300 и не отвечал на команды по врачу/статусу вне расписания. ---- */
 function applyAssistantIntent(data){
+  // «Кто ты»/«как тебя зовут» — отвечаем сразу, без обращения к общему ИИ-чату
+  // (гарантированно верный ответ, даже если YandexGPT не настроен на сервере).
+  if(data.intent==='identity'){
+    return t('w_voice_identity_answer').replace('{name}', getAssistantName());
+  }
+  // «Открой список пациентов» (без конкретного имени) — раньше такая фраза
+  // ошибочно уходила в find_patient с пустым/мусорным именем и отвечала
+  // «Пациент не найден» (баг с прода, см. apps.notifications.voice.
+  // parse_schedule_command — open_patients_list проверяется там ДО этого,
+  // если конкретное имя не названо).
+  if(data.intent==='open_patients_list'){
+    setTimeout(()=>{ location.href='/new/patients/'; }, 700);
+    return t('w_voice_opening_patients_list');
+  }
   // Поиск/подсчёт теперь делает СЕРВЕР по всей базе клиники (apps.notifications.
   // views._enrich_schedule_intent), не клиент по тому, что уже загружено на
   // текущей странице — раньше find_patient искал только среди patientsList
@@ -6505,6 +6744,11 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
     if(voiceFabEl) voiceFabEl.classList.toggle('hidden', !VOICE_ENABLED);
+    // Постоянное прослушивание имени — если пользователь уже включил его
+    // раньше (localStorage переживает переход между страницами /new/*),
+    // запускаем заново на каждой загрузке страницы (сама сессия
+    // распознавания не сохраняется между перезагрузками).
+    if(VOICE_ENABLED && isWakeWordEnabled()) startWakeWordListening();
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
   redirectToHomeIfNeeded();
@@ -6716,9 +6960,38 @@ function renderPatientCardPlan(d){
 // (templates/patients/detail.html) — просто переиспользуем его.
 async function pcCreateTreatmentPlan(){
   if(!currentPatientCardId) return;
-  const res=await apiJson('/treatments/plans/create/', {patient_id: currentPatientCardId, items: []});
+  await newPlanCreateForPatient(currentPatientCardId);
+}
+// «Новый план» на странице «Планы лечения» (вне карточки конкретного
+// пациента) — раньше кнопка просто редиректила на /patients/ (старый
+// интерфейс) без создания чего-либо (жалоба «при нажатии создать
+// перекидывает на старый интерфейс»). У плана лечения нет смысла без
+// пациента, поэтому сначала — тот же поиск по patientsList, что и в модалке
+// записи (apptPatientSearch), затем тот же бэкенд-эндпоинт создания плана,
+// что и на карточке пациента (см. pcCreateTreatmentPlan выше — теперь обе
+// кнопки используют одну и ту же newPlanCreateForPatient).
+function openNewPlanModal(){
+  document.getElementById('newplan-patient-search').value='';
+  document.getElementById('newplan-patient-suggestions').classList.add('hidden');
+  document.getElementById('newplan-patient-suggestions').innerHTML='';
+  openModal('m-newplan-patient');
+  setTimeout(()=>document.getElementById('newplan-patient-search').focus(), 50);
+}
+function newPlanPatientSearch(q){
+  const box=document.getElementById('newplan-patient-suggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=(patientsList||[]).filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onclick="newPlanCreateForPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
+async function newPlanCreateForPatient(patientId){
+  const res=await apiJson('/treatments/plans/create/', {patient_id: patientId, items: []});
   const data=await res.json().catch(()=>({}));
   if(res.ok && data.ok && data.plan_id){
+    closeModal('m-newplan-patient');
     location.href='/treatments/plans/'+data.plan_id+'/';
   } else {
     showToast(data.error || t('w_save_failed'), 'error');

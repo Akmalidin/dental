@@ -51,8 +51,17 @@ def ai_enabled():
 
 _MAX_HISTORY_TURNS = 12  # ~6 пар вопрос-ответ — держит контекст разговора, не раздувая запрос без предела
 
+# Платформа/продукт — озвучивается ассистентом на вопрос «кто ты»/«на какой
+# платформе ты работаешь» и т.п. ODONTIS — название самого продукта (видно на
+# логотипе в сайдбаре, templates/newui/base.html), AKM SOFT CLINIC — вендор/
+# разработчик платформы. Раньше система-промпт вообще не упоминал ни то, ни
+# другое — ассистент не мог сказать, кто он и на чём работает (баг с прода).
+PLATFORM_PRODUCT_NAME = "ODONTIS"
+PLATFORM_VENDOR_NAME = "AKM SOFT CLINIC"
+DEFAULT_ASSISTANT_NAME = "ODONTIS"
 
-def ask_ai(question, history=None):
+
+def ask_ai(question, history=None, assistant_name=None):
     """Возвращает (answer, error). Безопасно выключено, если ключ/folder_id
     не заданы — вызывающий код должен сам проверить ai_enabled() ДО вызова.
 
@@ -60,22 +69,32 @@ def ask_ai(question, history=None):
     (хранится и передаётся клиентом, base.html::voiceChatHistory — «помнить
     разговор» реализовано так, без серверной сессии/БД под это, сознательно
     просто: список растёт в JS-памяти вкладки, живёт до перезагрузки
-    страницы). Обрезается до последних _MAX_HISTORY_TURNS реплик."""
+    страницы). Обрезается до последних _MAX_HISTORY_TURNS реплик.
+
+    assistant_name — как пользователь назвал ассистента (клиентская настройка,
+    localStorage — см. base.html::getAssistantName; сервер её не хранит).
+    Если не передано — представляется именем продукта по умолчанию."""
     import json as _json
     import urllib.request
     import urllib.error
 
+    name = (assistant_name or "").strip() or DEFAULT_ASSISTANT_NAME
     folder_id = settings.YANDEX_FOLDER_ID
     model = getattr(settings, "YANDEX_MODEL", "") or "yandexgpt-lite"
     messages = [{"role": "system", "text": (
-        "Ты — голосовой ИИ-ассистент стоматологической клиники, разговариваешь с "
-        "врачами и администраторами. Отвечай на ЛЮБЫЕ вопросы — и о работе клиники, "
-        "и общие (медицина, повседневные темы, что угодно ещё), как обычный "
-        "ИИ-помощник, а не узкий бот с фиксированным набором тем. Если чего-то не "
-        "знаешь — так и скажи, не выдумывай. Отвечай кратко и по делу, разговорным "
-        "тоном, на том же языке, на котором задан вопрос (русский, кыргызский, "
-        "узбекский или английский). Ответ будет озвучен вслух — избегай списков, "
-        "таблиц и markdown-разметки, формулируй обычными предложениями."
+        f"Тебя зовут «{name}». Ты — голосовой ИИ-ассистент стоматологической "
+        f"клиники, работаешь на платформе {PLATFORM_VENDOR_NAME}, в приложении "
+        f"{PLATFORM_PRODUCT_NAME} (CRM для стоматологических клиник). Если "
+        f"спросят, кто ты, как тебя зовут или на какой платформе ты работаешь — "
+        f"так прямо и отвечай, не уклоняйся и не говори, что у тебя нет имени. "
+        "Разговариваешь с врачами и администраторами клиники. Отвечай на ЛЮБЫЕ "
+        "вопросы — и о работе клиники, и общие (медицина, повседневные темы, что "
+        "угодно ещё), как обычный ИИ-помощник, а не узкий бот с фиксированным "
+        "набором тем. Если чего-то не знаешь — так и скажи, не выдумывай. Отвечай "
+        "кратко и по делу, разговорным тоном, на том же языке, на котором задан "
+        "вопрос (русский, кыргызский, узбекский или английский). Ответ будет "
+        "озвучен вслух — избегай списков, таблиц и markdown-разметки, формулируй "
+        "обычными предложениями."
     )}]
     for turn in (history or [])[-_MAX_HISTORY_TURNS:]:
         role = "assistant" if turn.get("role") == "assistant" else "user"
@@ -250,6 +269,44 @@ _DOCTOR_COUNT_STOPWORDS = {
     "сколько", "приёмов", "приемов", "приём", "прием", "записи", "запись", "записей",
     "пациентов", "визитов", "визит", "визита", "у", "врача", "доктора", "сегодня", "завтра",
 }
+# «Открой список пациентов»/«покажи всех пациентов» — раньше не было отдельного
+# намерения: "открой"/"покажи" (_OPEN_PATIENT_ACTION_WORDS) + "пациентов"
+# (подстрока "пациент" из _PATIENT_SUBJECT_WORDS входит и в "пациентов") уже
+# засчитывались как find_patient, а "пациентов"/"список" не входили в
+# _FIND_PATIENT_STOPWORDS — команда без единого настоящего имени превращалась
+# в поиск несуществующего пациента "список пациентов" → «Пациент не найден»
+# (баг с прода). Эти слова добавлены в стоп-лист ИМЕННО для случая "имени нет
+# вообще" — после их вычитания из фразы пустой остаток означает "открыть
+# список", а не "найти пациента по имени «список»".
+_PATIENT_LIST_STOPWORDS = {"список", "списки", "всех", "пациентов", "весь"}
+
+_MONTHS_RU = {
+    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
+    "июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+# «Расписание на 21 августа» — конкретная дата словами (родительный падеж
+# названия месяца — единственная форма, которую реально говорят в этой
+# конструкции, "21 август"/"21 августе" не встречается на практике).
+_DATE_WORD_RE = re.compile(
+    r"\b(\d{1,2})\s+(" + "|".join(_MONTHS_RU.keys()) + r")\b"
+)
+# «3 дня вперёд» / «на 3 дня вперёд» / «через 3 дня» / «через неделю».
+_DAYS_FORWARD_RE = re.compile(r"(\d+)\s*дн\w*\s*впер(?:ё|е)д")
+_THROUGH_DAYS_RE = re.compile(r"через\s+(\d+)\s*дн\w*")
+_THROUGH_WEEK_RE = re.compile(r"через\s+недел\w*")
+
+# «Как тебя зовут»/«кто ты»/«представься» — узнаваемая фраза-идентичность
+# обрабатывается правилом, а не только общим ИИ-чатом (ask_ai) — так ответ
+# гарантированно верный (платформа/имя) даже если YandexGPT не настроен
+# (ai_enabled()==False) или просто ответит расплывчато. Порядок проверки в
+# parse_schedule_command — САМЫЙ первый, чтобы не быть перехваченным другими
+# намерениями (например «кто ты» само по себе не пересекается ни с чем
+# другим, но лучше не рисковать).
+_IDENTITY_PHRASES = (
+    "как тебя зовут", "как тебя называть", "твоё имя", "твое имя", "кто ты",
+    "что ты за", "представься", "расскажи о себе", "на какой платформе",
+    "чей ты", "кто тебя сделал", "кто тебя создал",
+)
 
 
 def _extract_relative_date(text, today):
@@ -259,6 +316,22 @@ def _extract_relative_date(text, today):
         return today + datetime.timedelta(days=1)
     if "сегодня" in text:
         return today
+    m = _DATE_WORD_RE.search(text)
+    if m:
+        day, month = int(m.group(1)), _MONTHS_RU[m.group(2)]
+        year = today.year
+        try:
+            d = datetime.date(year, month, day)
+        except ValueError:
+            return None  # «31 февраля» и т.п. — невалидная дата, не гадаем
+        if d < today:
+            d = datetime.date(year + 1, month, day)  # «на 1 января», сказанное в декабре — про следующий год
+        return d
+    m = _DAYS_FORWARD_RE.search(text) or _THROUGH_DAYS_RE.search(text)
+    if m:
+        return today + datetime.timedelta(days=int(m.group(1)))
+    if _THROUGH_WEEK_RE.search(text):
+        return today + datetime.timedelta(days=7)
     for name, weekday in _WEEKDAYS_RU.items():
         if name in text:
             delta = (weekday - today.weekday()) % 7
@@ -297,6 +370,11 @@ def parse_schedule_command(transcript, today_iso):
     today = datetime.date.fromisoformat(today_iso)
     empty = {"intent": "unknown", "date": None, "patient_name": None, "status": None, "doctor_name": None}
 
+    # «Как тебя зовут»/«кто ты» — проверяется первой, до всех остальных
+    # намерений (см. комментарий у _IDENTITY_PHRASES выше).
+    if any(p in text for p in _IDENTITY_PHRASES):
+        return {**empty, "intent": "identity"}
+
     # «найди пациента Иванова» / «открой визиты у Мадакимова Акмалидина» /
     # «покажи карточку Петровой» — раньше без реального поиска команда просто
     # уходила в общий вопрос к ИИ, который не видит базу пациентов клиники и
@@ -311,9 +389,14 @@ def parse_schedule_command(transcript, today_iso):
     has_open_action = any(kw in text for kw in _OPEN_PATIENT_ACTION_WORDS)
     has_patient_subject = any(kw in text for kw in _PATIENT_SUBJECT_WORDS)
     if (has_open_action and has_patient_subject) or any(kw in text for kw in _FIND_PATIENT_KEYWORDS):
-        name = _strip_words(transcript, _FIND_PATIENT_STOPWORDS)
+        name = _strip_words(transcript, _FIND_PATIENT_STOPWORDS | _PATIENT_LIST_STOPWORDS)
         if name:
             return {**empty, "intent": "find_patient", "patient_name": name}
+        # Осталось пусто после вычитания служебных слов (включая «список»/
+        # «всех») — не было названо ни одного имени, команда была про список
+        # целиком: «открой список пациентов», «покажи всех пациентов».
+        if has_open_action:
+            return {**empty, "intent": "open_patients_list"}
 
     # «сколько приёмов у Ивановой сегодня» — тоже реальные данные на клиенте
     # (scheduleRealData), не вопрос к ИИ.

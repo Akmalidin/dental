@@ -1152,7 +1152,12 @@ def voice_command(request):
     if mode == "chat":
         if not ai_enabled():
             return JsonResponse({"error": "ИИ-помощник не настроен", "transcript": transcript}, status=503)
-        answer, err = ask_ai(transcript, history=history)
+        # assistant_name — клиентская настройка (localStorage, base.html::
+        # getAssistantName), сервер её не хранит, только пробрасывает в
+        # системный промпт, чтобы «как тебя зовут» отвечался тем именем,
+        # которое пользователь сам задал (см. apps.notifications.voice.ask_ai).
+        assistant_name = (request.POST.get("assistant_name") or "").strip()
+        answer, err = ask_ai(transcript, history=history, assistant_name=assistant_name)
         if err:
             return JsonResponse({"error": err, "transcript": transcript}, status=502)
         return JsonResponse({"transcript": transcript, "answer": answer})
