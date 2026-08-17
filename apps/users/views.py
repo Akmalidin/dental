@@ -1207,6 +1207,35 @@ def _newui_accounting_data(clinic):
     }
 
 
+def _newui_notifications_data(request):
+    """Уведомления — полный список для /new/notifications/. Переиспользует ту
+    же выборку, что и старый интерфейс (apps.notifications.views.
+    _user_notifications — уже фильтрует по пользователю и текущей клинике),
+    просто отдаёт плоским списком под оформление нового интерфейса:
+    группировка по дням (Сегодня/Вчера/Ранее) и фильтр по типу — на клиенте,
+    тем же паттерном, что и остальные таблицы/списки нового интерфейса.
+    Пометка прочитанным/«прочитать всё» — существующие эндпоинты
+    (/notifications/<id>/read/, /notifications/read-all/), с ними уже умеет
+    работать сама модель уведомлений — дублировать не стали."""
+    from django.utils import timezone
+    from apps.notifications.views import _user_notifications
+
+    qs = _user_notifications(request).select_related("actor").order_by("-created_at")[:200]
+    return [
+        {
+            "id": n.pk,
+            "title": n.title,
+            "body": n.body,
+            "type": n.type,
+            "isRead": n.is_read,
+            "link": n.link,
+            "actor": n.actor.name if n.actor else "",
+            "time": timezone.localtime(n.created_at).strftime("%d.%m.%Y %H:%M"),
+        }
+        for n in qs
+    ]
+
+
 def _newui_audit_data(clinic):
     """Журнал аудита — реальная история изменений (django-simple-history) по
     пациентам и приёмам лечения, плюс факты приёма оплат/возвратов (Payment —

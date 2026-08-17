@@ -789,6 +789,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       <span data-i18n="nav_мессенджеры">Мессенджеры</span>
     </a>
+    <a class="nav-item{% if active == 'notifications' %} active{% endif %}" data-view="notifications" href="{% url 'newui_notifications' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span data-i18n="nav_уведомления">Уведомления</span>
+      <span class="nav-badge hidden" id="navNotifBadge">0</span>
+    </a>
     <a class="nav-item{% if active == 'audit' %} active{% endif %}" data-view="audit" href="{% url 'newui_audit' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       <span data-i18n="nav_журнал_аудита">Журнал аудита</span>
@@ -3005,6 +3010,7 @@ const translations={
   nav_зарплаты:       {ru:'Зарплаты',           ky:'Эмгек акылар',     en:'Salaries',          uz:'Maoshlar'},
   'nav_отч_ты':       {ru:'Отчёты',             ky:'Отчёттор',         en:'Reports',           uz:"Hisobotlar"},
   nav_мессенджеры:    {ru:'Мессенджеры',        ky:'Мессенджерлер',    en:'Messengers',        uz:'Messenjerlar'},
+  nav_уведомления:    {ru:'Уведомления',        ky:'Билдирүүлөр',      en:'Notifications',     uz:'Bildirishnomalar'},
   nav_журнал_аудита:  {ru:'Журнал аудита',      ky:'Аудит журналы',    en:'Audit log',         uz:'Audit jurnali'},
   nav_настройки:      {ru:'Настройки',          ky:'Жөндөөлөр',        en:'Settings',          uz:'Sozlamalar'},
   nav_настроить_меню: {ru:'Настроить меню',     ky:'Менюну ырастоо',   en:'Customize menu',    uz:'Menyuni sozlash'},
@@ -3300,6 +3306,16 @@ const translations={
   w_no_expenses_month: {ru:'Расходов за месяц не заведено', ky:'Ай ичинде чыгашалар киргизилген эмес', en:'No expenses recorded for the month', uz:'Oy uchun xarajatlar kiritilmagan'},
   w_margin: {ru:'Рентабельность', ky:'Рентабелдүүлүк', en:'Margin', uz:'Rentabellik'},
   w_no_events_found: {ru:'Событий не найдено', ky:'Окуялар табылган жок', en:'No events found', uz:'Voqealar topilmadi'},
+  w_mark_all_read: {ru:'Прочитать всё', ky:'Баарын окуу', en:'Mark all read', uz:'Barchasini o\'qish'},
+  w_notif_filter_all: {ru:'Все', ky:'Баары', en:'All', uz:'Barchasi'},
+  w_notif_filter_unread: {ru:'Непрочитанные', ky:'Окулбагандар', en:'Unread', uz:'O\'qilmaganlar'},
+  w_notif_filter_appointment: {ru:'Записи', ky:'Жазуулар', en:'Appointments', uz:'Yozuvlar'},
+  w_notif_filter_payment: {ru:'Платежи', ky:'Төлөмдөр', en:'Payments', uz:'To\'lovlar'},
+  w_notif_filter_wa: {ru:'Сообщения', ky:'Билдирүүлөр', en:'Messages', uz:'Xabarlar'},
+  w_notif_today: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
+  w_notif_yesterday: {ru:'Вчера', ky:'Кечээ', en:'Yesterday', uz:'Kecha'},
+  w_notif_earlier: {ru:'Ранее', ky:'Мурда', en:'Earlier', uz:'Avvalroq'},
+  w_notif_empty: {ru:'Уведомлений нет', ky:'Билдирүүлөр жок', en:'No notifications', uz:'Bildirishnomalar yo\'q'},
   w_today_f: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
   w_scheduled_pl: {ru:'Запланированы', ky:'Пландаштырылган', en:'Scheduled', uz:'Rejalashtirilgan'},
   w_not_closed: {ru:'Не закрыты', ky:'Жабылган эмес', en:'Not closed', uz:'Yopilmagan'},
@@ -4255,6 +4271,87 @@ async function auditRevert(model, historyId){
   } else {
     showToast(apiErrorMessage(data, t('w_save_failed')), 'error');
   }
+}
+
+/* ================= УВЕДОМЛЕНИЯ (/new/notifications/) =================
+   Данные — тот же список, что и у старого интерфейса (apps.notifications.
+   views._user_notifications, см. apps.users.views._newui_notifications_data),
+   группировка по дням и фильтр по типу — на клиенте (тот же паттерн, что и
+   у остальных списков нового интерфейса). Пометка прочитанным/«прочитать
+   всё» — уже существующие эндпоинты старого интерфейса
+   (/notifications/<id>/read/, /notifications/read-all/), переиспользуются
+   как есть — своей логики под это заводить не стали. */
+const NOTIF_TYPE_ICON={appointment:'📅', reminder:'⏰', payment:'💳', wa:'💬', task:'✅', system:'ℹ️'};
+function notifSetFilter(type){
+  notifFilter=type;
+  document.querySelectorAll('#notifTabs button').forEach(b=>b.classList.toggle('active', b.dataset.type===type));
+  renderNotifications();
+}
+function notifDateGroupLabel(iso){
+  const today=new Date(), y=new Date(today); y.setDate(y.getDate()-1);
+  const d=new Date(iso.split(' ')[0].split('.').reverse().join('-'));
+  if(d.toDateString()===today.toDateString()) return t('w_notif_today');
+  if(d.toDateString()===y.toDateString()) return t('w_notif_yesterday');
+  return t('w_notif_earlier');
+}
+function renderNotifications(){
+  const list=document.getElementById('notifList');
+  if(!list) return;
+  let items=notificationsData;
+  if(notifFilter==='unread') items=items.filter(n=>!n.isRead);
+  else if(notifFilter==='appointment') items=items.filter(n=>n.type==='appointment' || n.type==='reminder');
+  else if(notifFilter!=='all') items=items.filter(n=>n.type===notifFilter);
+  if(items.length===0){
+    list.innerHTML=`<div style="text-align:center;color:var(--ink-soft);padding:40px;">${t('w_notif_empty')}</div>`;
+    return;
+  }
+  let html='', curGroup=null;
+  items.forEach(n=>{
+    const group=notifDateGroupLabel(n.time);
+    if(group!==curGroup){
+      curGroup=group;
+      html+=`<div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;padding:14px 0 6px;">${group}</div>`;
+    }
+    const icon=NOTIF_TYPE_ICON[n.type]||'🔔';
+    html+=`<div class="row clickable" style="cursor:pointer;${n.isRead?'':'background:var(--cobalt-tint);border-radius:8px;padding-left:8px;padding-right:8px;'}" onclick="notifOpen(${n.id},'${(n.link||'').replace(/'/g,"\\'")}')">
+      <div class="row-avatar">${icon}</div>
+      <div class="row-main"><b>${n.title}</b><span>${n.body||''}${n.actor?' · '+n.actor:''}</span></div>
+      <span class="mono" style="font-size:11px;color:var(--ink-soft);flex-shrink:0;">${n.time.split(' ')[1]||n.time}</span>
+    </div>`;
+  });
+  list.innerHTML=html;
+}
+async function notifOpen(id, link){
+  const n=notificationsData.find(x=>x.id===id);
+  if(n && !n.isRead){
+    n.isRead=true;
+    fetch(`/notifications/${id}/read/`, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
+    updateNotifBadge();
+  }
+  if(link) location.href=link; else renderNotifications();
+}
+async function notifMarkAllRead(){
+  await fetch('/notifications/read-all/', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
+  notificationsData.forEach(n=>n.isRead=true);
+  renderNotifications();
+  updateNotifBadge();
+}
+// Бейдж непрочитанных в сайдбаре — на КАЖДОЙ странице /new/*, не только на
+// самой странице уведомлений (тот же принцип, что и у voiceFab — общий
+// виджет живёт в base.html). Переиспользует уже существующий
+// /notifications/poll/ (используется старым интерфейсом для браузерных
+// уведомлений — тот же счётчик непрочитанных, ничего дублировать не пришлось).
+async function updateNotifBadge(){
+  const badge=document.getElementById('navNotifBadge');
+  if(!badge) return;
+  try{
+    const res=await fetch('/notifications/poll/', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+    if(!res.ok) return;
+    const data=await res.json();
+    const count=data.count||0;
+    badge.textContent=count>99?'99+':String(count);
+    badge.classList.toggle('hidden', count===0);
+  }catch(e){}
 }
 
 function openVisitResult(btnEl){
@@ -6306,6 +6403,8 @@ let treatplansData=null;
 let visitsData=null;
 let accountingData=null;
 let auditEvents=[];
+let notificationsData=[];
+let notifFilter='all';
 let patientCardDetail=null;
 // «+ Добавить пациента» открыто изнутри модалки «Новая запись» (m-appt) —
 // значит после создания пациента НЕ перезагружаем страницу (это стирало бы
@@ -6890,6 +6989,8 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     visitsData=data.visitsData || null;
     accountingData=data.accountingData || null;
     auditEvents=data.auditEvents || [];
+    notificationsData=data.notificationsData || [];
+    updateNotifBadge();
     patientCardDetail=data.patientCardDetail || null;
     cashdeskData=data.cashdeskData || null;
     window.visitWizard=data.visitWizard || null;
@@ -7766,6 +7867,7 @@ renderTreatplans();
 renderVisits();
 renderAccounting();
 renderAudit();
+renderNotifications();
 
 /* ---- у каждого раздела теперь свой URL (см. apps/users/newui_urls.py) —
    "остаться на разделе после перезагрузки" даёт сама навигация по ссылкам,
