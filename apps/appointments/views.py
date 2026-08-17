@@ -393,11 +393,17 @@ def appointment_create_quick(request):
         services = list(Service.objects.filter(pk__in=service_ids)) if service_ids else []
         service = services[0] if services else None
         if not service:
+            # Дефолт длительности — 60 минут (не 30): жалоба «должно показывать
+            # с 9:00 до .... автоматически 1 час» — тот же дефолт и в модалке
+            # «Новая запись» (templates/newui/base.html::apptServiceDurationMin).
+            # get_or_create применяет defaults только при СОЗДАНИИ записи —
+            # если "Визит к врачу" уже существует в клинике с duration=30 (создан
+            # до этого фикса), это значение не поменяется задним числом.
             service, _ = Service.objects.get_or_create(
-                name="Визит к врачу", defaults={"price": 0, "duration": 30, "is_active": True}
+                name="Визит к врачу", defaults={"price": 0, "duration": 60, "is_active": True}
             )
             services = [service]
-        duration = sum(s.duration for s in services) or 30
+        duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
 
         # Prevent double-booking: doctor can't have overlapping appointments
