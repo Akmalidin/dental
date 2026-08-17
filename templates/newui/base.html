@@ -773,6 +773,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           </div>
         </div>
       </div>
+      <!-- Готовые кнопки с типовыми интервалами времени (запрос: «снизу даты
+           и времени сделай кнопки готовые например 12:00-12:30, 12:30-13:00») —
+           см. renderApptTimeChips()/apptPickTimeChip() ниже. -->
+      <div style="margin:-8px 0 14px;">
+        <div id="apptTimeChips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+      </div>
       <!-- Живая подсказка о занятости выбранного слота у выбранного врача —
            см. updateApptAvailabilityHint()/schedSlotFree(). Пересчитывается
            при смене врача/даты/времени; при открытии из «Новая запись» на
@@ -5342,6 +5348,7 @@ function openNewAppt(prefill){
   }
   apptEndTimeTouched=false;
   apptUpdateEndTimeDefault(); // сразу, не дожидаясь ensureScheduleDataLoaded() ниже — нужен только servicesList, он уже загружен
+  renderApptTimeChips(); // тоже сразу — до подгрузки расписания все чипы считаются свободными, перерисуются точнее в updateApptAvailabilityHint() ниже
   openModal('m-appt');
   // Открываем модалку сразу (не ждём сеть) — подсказка о занятости слота
   // просто появится чуть позже, как только (и если) данные расписания
@@ -5449,8 +5456,47 @@ function apptDurationMin(){
   }
   return apptServiceDurationMin();
 }
+// Готовые кнопки-чипы с типовыми интервалами времени под полями «Дата»/
+// «Время» (запрос: «снизу даты и времени сделай кнопки готовые например
+// 12:00-12:30, 12:30-13:00») — по шагу сетки расписания (calSettings.interval)
+// в пределах рабочих часов клиники (calSettings.start–calSettings.end) на
+// выбранную дату; занятые у выбранного врача — показаны серым/зачёркнутыми
+// (видно расписание сразу, не тыкаясь в «занято» уже после выбора), но не
+// кликабельны. Конец каждого чипа — по реальной длительности приёма
+// (apptDurationMin), не по шагу сетки — совпадает с тем, что реально
+// сохранится при клике.
+function renderApptTimeChips(){
+  const box=document.getElementById('apptTimeChips');
+  if(!box) return;
+  const dateIso=document.getElementById('appt-date').value;
+  if(!dateIso){ box.innerHTML=''; return; }
+  const docId=document.getElementById('appt-doctor').value;
+  const dur=apptDurationMin();
+  const interval=calSettings.interval;
+  const startMin=calSettings.start*60, endMin=calSettings.end*60;
+  const currentStart=document.getElementById('appt-time').value;
+  let html='';
+  for(let m=startMin; m+interval<=endMin; m+=interval){
+    const label=minutesToTime(m);
+    const endLabel=minutesToTime(Math.min(m+dur, 24*60-1));
+    const busy=docId ? !schedSlotFree(dateIso, docId, label, dur) : false;
+    const active=!busy && label===currentStart;
+    if(busy){
+      html+=`<button type="button" class="chip" disabled style="flex-shrink:0;white-space:nowrap;opacity:.4;text-decoration:line-through;cursor:not-allowed;" title="${t('w_appt_slot_busy')}">${label}–${endLabel}</button>`;
+    } else {
+      html+=`<button type="button" class="chip${active?' active':''}" style="flex-shrink:0;white-space:nowrap;cursor:pointer;" onclick="apptPickTimeChip('${label}')">${label}–${endLabel}</button>`;
+    }
+  }
+  box.innerHTML=html;
+}
+function apptPickTimeChip(label){
+  document.getElementById('appt-time').value=label;
+  apptEndTimeTouched=false; // новое время начала — «до» пересчитывается заново по длительности услуги
+  updateApptAvailabilityHint();
+}
 function updateApptAvailabilityHint(){
   apptUpdateEndTimeDefault();
+  renderApptTimeChips();
   const hint=document.getElementById('apptAvailabilityHint');
   if(!hint) return;
   const docId=document.getElementById('appt-doctor').value;
