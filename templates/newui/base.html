@@ -752,11 +752,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
-        <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service"></select></div>
+        <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service" onchange="updateApptAvailabilityHint()"></select></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
-        <div class="form-group"><label data-i18n="w_time">Время</label><input autocomplete="off" type="time" id="appt-time" lang="ru" onchange="updateApptAvailabilityHint()"></div>
+        <div class="form-group">
+          <label data-i18n="w_time">Время</label>
+          <input autocomplete="off" type="time" id="appt-time" lang="ru" onchange="updateApptAvailabilityHint()">
+          <!-- Показывает реальный интервал приёма (с — до), посчитанный из
+               длительности выбранной услуги (60 минут по умолчанию, если
+               услуга не выбрана/без указанной длительности) — жалоба: «должно
+               показывать с 9:00 до .... автоматически 1 час», раньше было видно
+               только время НАЧАЛА. См. apptTimeRangeText()/updateApptAvailabilityHint(). -->
+          <div id="apptTimeRangeHint" style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;"></div>
+        </div>
       </div>
       <!-- Живая подсказка о занятости выбранного слота у выбранного врача —
            см. updateApptAvailabilityHint()/schedSlotFree(). Пересчитывается
@@ -5324,6 +5333,7 @@ function openNewAppt(prefill){
     document.getElementById('appt-patient-search').value=prefill.patientName||'';
     document.getElementById('appt-patient-id').value=prefill.patientId;
   }
+  updateApptTimeRangeHint(); // сразу, не дожидаясь ensureScheduleDataLoaded() ниже — нужен только servicesList, он уже загружен
   openModal('m-appt');
   // Открываем модалку сразу (не ждём сеть) — подсказка о занятости слота
   // просто появится чуть позже, как только (и если) данные расписания
@@ -5393,20 +5403,41 @@ function findNextFreeSlot(docId, durationMin){
   // возвращаем «идеальное» время как есть, пусть проверят и подправят сами.
   return {date:isoDate(now), time:minutesToTime(idealMin), isNow:false, notFound:true};
 }
+// Длительность приёма для модалки «Новая запись» — из выбранной услуги
+// (servicesList[].duration, минуты), 60 минут по умолчанию, если услуга не
+// выбрана или её длительность не задана/нулевая (жалоба: раньше падало на
+// 30 минут — слишком коротко для «по умолчанию»). Тот же дефолт продублирован
+// на бэкенде (apps.appointments.views.appointment_create_quick) — там
+// отдельная копия, т.к. это два разных рантайма без общего кода.
+function apptServiceDurationMin(){
+  const serviceId=document.getElementById('appt-service').value;
+  const service=servicesList.find(s=>s.id===Number(serviceId));
+  return (service && service.duration) || 60;
+}
+function updateApptTimeRangeHint(){
+  const hint=document.getElementById('apptTimeRangeHint');
+  if(!hint) return;
+  const timeLabel=document.getElementById('appt-time').value;
+  if(!timeLabel){ hint.textContent=''; return; }
+  const endLabel=minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1));
+  hint.textContent=timeLabel+'–'+endLabel;
+}
 function updateApptAvailabilityHint(){
+  updateApptTimeRangeHint();
   const hint=document.getElementById('apptAvailabilityHint');
   if(!hint) return;
   const docId=document.getElementById('appt-doctor').value;
   const dateIso=document.getElementById('appt-date').value;
   const timeLabel=document.getElementById('appt-time').value;
   if(!docId || !dateIso || !timeLabel){ hint.classList.add('hidden'); return; }
-  const free=schedSlotFree(dateIso, docId, timeLabel);
+  const dur=apptServiceDurationMin();
+  const free=schedSlotFree(dateIso, docId, timeLabel, dur);
   if(free){
     hint.className='';
     hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--teal-tint);color:var(--teal);';
     hint.textContent='✓ '+t('w_appt_slot_free','Время свободно — запись будет создана успешно.');
   } else {
-    const suggestion=findNextFreeSlot(docId);
+    const suggestion=findNextFreeSlot(docId, dur);
     hint.className='';
     hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--amber-tint);color:var(--amber);';
     const suggDate=new Date(suggestion.date+'T00:00:00');
@@ -5544,7 +5575,7 @@ async function submitNewAppt(){
           patientId: patientId?Number(patientId):null,
           patient: patient ? patient.fullName : 'Без пациента',
           service: service ? service.name : '',
-          status: 'cobalt', durationMin: (service && service.duration) || 30, movable: true,
+          status: 'cobalt', durationMin: (service && service.duration) || 60, movable: true,
         });
         rebuildApptsByDateDoc();
         renderSchedule();
