@@ -77,6 +77,14 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .topbar-right{display:flex;align-items:center;gap:12px;}
 .search-box{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--mist);border-radius:9px;padding:9px 13px;font-size:13px;color:var(--ink-faint);width:250px;}
 .icon-btn{width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--mist);display:flex;align-items:center;justify-content:center;position:relative;font-size:14px;}
+/* Колокольчик уведомлений — в шапке (navbar) каждой страницы /new/*, а не
+   пункт в сайдбаре (запрос пользователя: «уведомление сделай на navbar а не
+   на sidebar»). Один и тот же .icon-btn, что и у остальных иконок в topbar
+   (например ⚙ настроек расписания) — вставляется в начало .topbar-right
+   через JS (см. initNavNotifBell), т.к. разметка topbar своя у каждого
+   шаблона страницы, а не общая. */
+.navbar-notif-bell{cursor:pointer;}
+.navbar-notif-bell .nav-badge{position:absolute;top:-5px;right:-5px;margin-left:0;min-width:16px;text-align:center;line-height:1.4;}
 #schedDateLabel{font-size:16px;font-weight:700;color:var(--ink);min-width:100px;display:inline-block;text-align:center;}
 @keyframes schedDatePulse{0%{opacity:0;transform:translateY(-4px);}100%{opacity:1;transform:translateY(0);}}
 #schedDateLabel.sched-date-anim{animation:schedDatePulse .25s ease-out;}
@@ -788,11 +796,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <a class="nav-item{% if active == 'messages' %} active{% endif %}" data-view="messages" href="{% url 'newui_messages' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       <span data-i18n="nav_мессенджеры">Мессенджеры</span>
-    </a>
-    <a class="nav-item{% if active == 'notifications' %} active{% endif %}" data-view="notifications" href="{% url 'newui_notifications' %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span data-i18n="nav_уведомления">Уведомления</span>
-      <span class="nav-badge hidden" id="navNotifBadge">0</span>
     </a>
     <a class="nav-item{% if active == 'audit' %} active{% endif %}" data-view="audit" href="{% url 'newui_audit' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -3316,6 +3319,7 @@ const translations={
   w_notif_yesterday: {ru:'Вчера', ky:'Кечээ', en:'Yesterday', uz:'Kecha'},
   w_notif_earlier: {ru:'Ранее', ky:'Мурда', en:'Earlier', uz:'Avvalroq'},
   w_notif_empty: {ru:'Уведомлений нет', ky:'Билдирүүлөр жок', en:'No notifications', uz:'Bildirishnomalar yo\'q'},
+  w_notif_no_new_page: {ru:'Этот раздел пока доступен только в старом интерфейсе', ky:'Бул бөлүм азырынча эски интерфейсте гана жеткиликтүү', en:'This section is only available in the old interface for now', uz:'Bu bo\'lim hozircha faqat eski interfeysda mavjud'},
   w_today_f: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
   w_scheduled_pl: {ru:'Запланированы', ky:'Пландаштырылган', en:'Scheduled', uz:'Rejalashtirilgan'},
   w_not_closed: {ru:'Не закрыты', ky:'Жабылган эмес', en:'Not closed', uz:'Yopilmagan'},
@@ -4321,7 +4325,7 @@ function renderNotifications(){
       html+=`<div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;padding:14px 0 6px;">${group}</div>`;
     }
     const icon=NOTIF_TYPE_ICON[n.type]||'🔔';
-    html+=`<div class="row clickable" style="cursor:pointer;${n.isRead?'':'background:var(--cobalt-tint);border-radius:8px;padding-left:8px;padding-right:8px;'}" onclick="notifOpen(${n.id},'${(n.link||'').replace(/'/g,"\\'")}')">
+    html+=`<div class="row clickable" style="cursor:pointer;${n.isRead?'':'background:var(--cobalt-tint);border-radius:8px;padding-left:8px;padding-right:8px;'}" onclick="notifOpen(${n.id})">
       <div class="row-avatar">${icon}</div>
       <div class="row-main"><b>${n.title}</b><span>${n.body||''}${n.actor?' · '+n.actor:''}</span></div>
       <span class="mono" style="font-size:11px;color:var(--ink-soft);flex-shrink:0;">${n.time.split(' ')[1]||n.time}</span>
@@ -4329,14 +4333,38 @@ function renderNotifications(){
   });
   list.innerHTML=html;
 }
-async function notifOpen(id, link){
+// Ссылки уведомлений (Notification.link) всегда ведут на СТАРЫЙ интерфейс —
+// они создаются в разных местах (apps.finance/apps.appointments/apps.tasks/
+// apps.notifications), написанных до нового интерфейса, и переписывать
+// каждое место ради одного поля избыточно. Клик по уведомлению в новом
+// интерфейсе раньше уводил прямо по этой старой ссылке (баг с прода:
+// «перекидывает на старый интерфейс») — сопоставляем известные префиксы
+// старых ссылок с их СУЩЕСТВУЮЩИМИ эквивалентами в новом интерфейсе. Для
+// «Задачи» (apps.tasks) в новом интерфейсе пока вообще нет своего раздела —
+// честно не редиректим никуда (только сообщаем об этом), а не тихо
+// открываем старый интерфейс.
+function notifResolveLink(n){
+  const link=n.link||'';
+  if(link.startsWith('/finance/payments/')) return '/new/cashdesk/';
+  if(link.startsWith('/appointments/') || link.startsWith('/calendar/')) return '/new/schedule/';
+  const waMatch=link.match(/^\/patients\/(\d+)\/notify\/?/);
+  if(waMatch) return '/new/patients/'+waMatch[1]+'/';
+  if(link.startsWith('/tasks/')) return null;
+  return link || null;
+}
+async function notifOpen(id){
   const n=notificationsData.find(x=>x.id===id);
   if(n && !n.isRead){
     n.isRead=true;
     fetch(`/notifications/${id}/read/`, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
     updateNotifBadge();
   }
-  if(link) location.href=link; else renderNotifications();
+  const target=n ? notifResolveLink(n) : null;
+  if(target){ location.href=target; }
+  else {
+    if(n && n.link) showToast(t('w_notif_no_new_page'), 'error');
+    renderNotifications();
+  }
 }
 async function notifMarkAllRead(){
   await fetch('/notifications/read-all/', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
@@ -4344,11 +4372,32 @@ async function notifMarkAllRead(){
   renderNotifications();
   updateNotifBadge();
 }
-// Бейдж непрочитанных в сайдбаре — на КАЖДОЙ странице /new/*, не только на
-// самой странице уведомлений (тот же принцип, что и у voiceFab — общий
-// виджет живёт в base.html). Переиспользует уже существующий
-// /notifications/poll/ (используется старым интерфейсом для браузерных
-// уведомлений — тот же счётчик непрочитанных, ничего дублировать не пришлось).
+// Колокольчик уведомлений — в шапке (navbar) КАЖДОЙ страницы /new/*, а не
+// пункт сайдбара (правили по прямому запросу — было в сайдбаре). Разметка
+// .topbar своя у каждого шаблона страницы (не общий блок в base.html), так
+// что вставляем кнопку через JS в готовый .topbar-right (или сам .topbar,
+// если у страницы нет правого блока — сейчас так только у profile/settings).
+function initNavNotifBell(){
+  document.querySelectorAll('.topbar').forEach(topbar=>{
+    if(topbar.querySelector('#navNotifBell')) return;
+    const bell=document.createElement('button');
+    bell.type='button';
+    bell.id='navNotifBell';
+    bell.className='icon-btn navbar-notif-bell';
+    bell.title=t('nav_уведомления');
+    bell.setAttribute('aria-label', t('nav_уведомления'));
+    bell.onclick=()=>{ location.href='/new/notifications/'; };
+    bell.innerHTML='🔔<span class="nav-badge hidden" id="navNotifBadge">0</span>';
+    const right=topbar.querySelector('.topbar-right');
+    if(right) right.insertBefore(bell, right.firstChild);
+    else topbar.appendChild(bell);
+  });
+}
+// Бейдж непрочитанных — на КАЖДОЙ странице /new/*, не только на самой
+// странице уведомлений (тот же принцип, что и у voiceFab — общий виджет
+// живёт в base.html). Переиспользует уже существующий /notifications/poll/
+// (используется старым интерфейсом для браузерных уведомлений — тот же
+// счётчик непрочитанных, ничего дублировать не пришлось).
 async function updateNotifBadge(){
   const badge=document.getElementById('navNotifBadge');
   if(!badge) return;
@@ -7028,6 +7077,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     accountingData=data.accountingData || null;
     auditEvents=data.auditEvents || [];
     notificationsData=data.notificationsData || [];
+    initNavNotifBell();
     updateNotifBadge();
     patientCardDetail=data.patientCardDetail || null;
     cashdeskData=data.cashdeskData || null;
