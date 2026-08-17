@@ -25,6 +25,7 @@ urlpatterns = [
     path("profile/", v.newui_profile, name="newui_profile"),
     path("messages/", v.newui_messages, name="newui_messages"),
     path("audit/", v.newui_audit, name="newui_audit"),
+    path("audit/<str:model>/<int:history_id>/revert/", v.audit_revert, name="newui_audit_revert"),
     path("settings/", v.newui_settings, name="newui_settings"),
     path("visit/start/", v.newui_visit_start, name="newui_visit_start"),
     path("visitcard/<int:pk>/", v.newui_visitcard, name="newui_visitcard"),

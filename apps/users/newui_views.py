@@ -77,6 +77,10 @@ def _shared_options(request, clinic):
         # у тех, у кого нет права (иначе клик просто упёрся бы в 403).
         "canDeleteHistory": bool(request.user.is_superadmin or
                                  (request.user.role_id and request.user.role.has_perm("patients.delete_history"))),
+        # Журнал аудита → кнопка «Откатить» — необратимо перезаписывает
+        # текущее состояние объекта прошлым значением из истории, поэтому
+        # только суперадминистратору (см. apps.users.newui_views.audit_revert).
+        "isSuperadmin": bool(request.user.is_superadmin),
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
@@ -317,6 +321,49 @@ def newui_audit(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     return _render(request, "audit", "audit.html", {"auditEvents": _newui_audit_data(clinic)})
+
+
+@login_required
+def audit_revert(request, model, history_id):
+    """Откатить пациента/приём к состоянию на момент выбранной исторической
+    записи (django-simple-history: hist.instance — реконструированный по
+    historical-полям экземпляр, .save() перезаписывает им текущую запись —
+    стандартный для этой библиотеки способ отката). Необратимо перезаписывает
+    текущее состояние объекта — поэтому строго только для
+    суперадминистратора, без более тонкого права (риск слишком велик, чтобы
+    давать его через обычную ролевую систему)."""
+    from django.http import JsonResponse
+
+    if request.method != "POST":
+        return JsonResponse({"error": "Метод не поддерживается"}, status=405)
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадминистратору"}, status=403)
+
+    from apps.patients.models import Patient
+    from apps.treatments.models import Treatment
+    from apps.tenancy import get_current_clinic
+
+    model_map = {"patient": Patient, "treatment": Treatment}
+    Model = model_map.get(model)
+    if Model is None:
+        return JsonResponse({"error": "Неизвестный тип записи"}, status=400)
+
+    clinic = get_current_clinic()
+    qs = Model.history.all()
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    hist = qs.filter(history_id=history_id).first()
+    if hist is None:
+        return JsonResponse({"error": "Запись в истории не найдена"}, status=404)
+    if hist.history_type == "-":
+        # У записи «Удаление» нет корректного «предыдущего состояния» объекта
+        # для восстановления через этот путь — выбирайте более раннюю запись.
+        return JsonResponse({"error": "Нельзя откатить к записи об удалении — выберите более раннюю запись"}, status=400)
+    try:
+        hist.instance.save()
+    except Exception as e:
+        return JsonResponse({"error": f"Не удалось откатить: {e}"}, status=500)
+    return JsonResponse({"ok": True})
 
 
 @login_required
