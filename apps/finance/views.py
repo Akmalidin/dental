@@ -496,9 +496,6 @@ def payment_create(request):
     from django.http import JsonResponse
     patient_id = request.POST.get("patient") or request.GET.get("patient")
     treatment_id = request.POST.get("treatment") or request.GET.get("treatment")
-    form = PaymentForm(request.POST or None, initial={
-        "patient": patient_id, "treatment": treatment_id
-    })
     # показывать в выпадающем списке только приёмы выбранного пациента.
     # Сначала проверяем, что patient_id вообще существует В ДОСТУПНОЙ вызывающему
     # клинике (Patient.objects — защищённый менеджер, это и есть граница доступа),
@@ -506,8 +503,30 @@ def payment_create(request):
     # а не по активной клинике вызывающего (иначе список приёмов мог быть пуст/неверен
     # при расхождении тегов клиники между пациентом и его приёмами).
     verified_patient_id = patient_id if patient_id and Patient.objects.filter(pk=patient_id).exists() else None
+    valid_treatments_qs = (Treatment.all_objects.filter(patient_id=verified_patient_id, is_deleted=False).order_by("-created_at")
+                            if verified_patient_id else Treatment.objects.none())
+    post_data = request.POST
+    # Ссылка на приём — необязательное поле-подсказка (Payment.treatment:
+    # null=True, blank=True), приходит из очереди «В кассу» (заявка
+    # send_to_cashier, ссылка вида ?treatment=<pk>) как удобство: сразу
+    # предзаполнить, к какому приёму отнести оплату. Если к моменту приёма
+    # оплаты этот приём уже удалён/сменил пациента (протухшая ссылка) —
+    # ModelChoiceField считает всю форму невалидной и раньше блокировал ВЕСЬ
+    # платёж целиком из-за одного вспомогательного поля (баг с прода: кассир
+    # не мог принять обычную частичную оплату по заявке из очереди, «Не
+    # удалось сохранить» без объяснения причины). Сумма важнее привязки к
+    # конкретному приёму — если ссылка невалидна, просто отбрасываем её и
+    # принимаем платёж без привязки (_allocate_income ниже сам распределит
+    # его по актуальным приёмам пациента).
+    if request.method == "POST" and treatment_id and not valid_treatments_qs.filter(pk=treatment_id).exists():
+        post_data = request.POST.copy()
+        post_data["treatment"] = ""
+        treatment_id = ""
+    form = PaymentForm(post_data or None, initial={
+        "patient": patient_id, "treatment": treatment_id
+    })
     if verified_patient_id:
-        form.fields["treatment"].queryset = Treatment.all_objects.filter(patient_id=verified_patient_id, is_deleted=False).order_by("-created_at")
+        form.fields["treatment"].queryset = valid_treatments_qs
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
@@ -556,6 +575,19 @@ def payment_create(request):
         if patient_id:
             return redirect("patient_detail", pk=patient_id)
         return redirect("payment_list")
+    # Форма невалидна (или GET) — новый интерфейс шлёт X-Requested-With и ждёт
+    # JSON (см. комментарий выше про payment_id). Раньше при невалидной форме
+    # сюда всегда падало в HTML-рендер старого шаблона (200 OK, но не JSON) —
+    # клиент ловил ошибку парсинга JSON и показывал безликое «Не удалось
+    # сохранить», НЕ показывая, какое поле на самом деле не прошло валидацию
+    # (баг с прода: кассир не мог понять, почему сохранение падает на
+    # обычной частичной оплате). Реальные ошибки формы теперь возвращаются
+    # клиенту как есть.
+    if request.method == "POST" and request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": False, "error": "; ".join(
+            f"{form.fields[field].label if field in form.fields else field}: {', '.join(errs)}"
+            for field, errs in form.errors.items()
+        ) or "Проверьте поля формы"}, status=400)
     return render(request, "finance/payment_form.html", {
         "form": form, "treatments_json": _treatments_by_patient(verified_patient_id),
     })
