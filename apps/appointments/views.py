@@ -448,6 +448,72 @@ def appointment_create_quick(request):
 
 
 @login_required
+@require_POST
+def appointment_update_quick(request, pk):
+    """AJAX: изменить существующую запись из того же модала «Новая запись»
+    (templates/newui/base.html::openApptEdit/submitNewAppt) — раньше кнопка
+    «Изменить» уводила на страницу старого интерфейса (appointment_edit,
+    полный Django-form-based редактор), жалоба «сделай модал, а не
+    перекидывай». По структуре — почти дубликат appointment_create_quick
+    (тот же формат payload/те же проверки overlap/schedule_violation), но
+    обновляет уже существующую запись вместо создания новой, и исключает САМУ
+    СЕБЯ из проверки пересечения (иначе запись всегда «пересекалась» бы сама
+    с собой на прежнем времени)."""
+    from apps.patients.models import Patient
+    from apps.services.models import Service
+    from apps.users.models import Branch
+    appt = get_object_or_404(Appointment, pk=pk)
+    try:
+        from django.utils import timezone as _tz
+        data = json.loads(request.body)
+        User = request.user.__class__
+        doctor = User.objects.get(pk=data["doctor_id"])
+        start = datetime.fromisoformat(data["start_at"])
+        if _tz.is_naive(start):
+            start = _tz.make_aware(start)
+        service_ids = data.get("service_ids") or ([data["service_id"]] if data.get("service_id") else [])
+        services = list(Service.objects.filter(pk__in=service_ids)) if service_ids else []
+        service = services[0] if services else None
+        if not service:
+            service, _ = Service.objects.get_or_create(
+                name="Визит к врачу", defaults={"price": 0, "duration": 60, "is_active": True}
+            )
+            services = [service]
+        duration = sum(s.duration for s in services) or 60
+        end = start + timedelta(minutes=int(data.get("duration") or duration))
+
+        overlap = Appointment.objects.filter(
+            doctor=doctor, start_at__lt=end, end_at__gt=start,
+        ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
+        if overlap:
+            ov_start = _tz.localtime(overlap.start_at)
+            ov_end = _tz.localtime(overlap.end_at)
+            return JsonResponse({
+                "error": "У врача уже есть запись на это время (%s–%s). Выберите другое время." % (
+                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"))
+            }, status=400)
+
+        sched_err = schedule_violation(doctor, start, end)
+        if sched_err:
+            return JsonResponse({"error": sched_err}, status=400)
+
+        appt.patient = Patient.objects.filter(pk=data.get("patient_id")).first()
+        if doctor.pk != appt.doctor_id:
+            appt.doctor = doctor
+            appt.branch = doctor.branches.first() or Branch.objects.first()
+        appt.service = service
+        appt.start_at = start
+        appt.end_at = end
+        appt.notes = data.get("notes", "")
+        appt.save(update_fields=["patient", "doctor", "branch", "service", "start_at", "end_at", "notes"])
+        appt.services.set(services)
+        gcal_push(appt)
+        return JsonResponse({"ok": True, "id": appt.pk})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
 def appointment_list(request):
     from .models import CancellationReason
     # Lazy-seed default cancellation reasons on first use
@@ -804,6 +870,14 @@ def appointment_detail_json(request, pk):
             "duration": f"{dur_min // 60}h {dur_min % 60}m",
             "doctor": appt.doctor.name if appt.doctor else "",
             "doctor_id": appt.doctor_id,
+            # date_iso/start_time/end_time/service_id — машиночитаемые поля для
+            # предзаполнения модалки редактирования (templates/newui/base.html::
+            # openApptEdit) — «date"/"time" выше человекочитаемые, для этого не
+            # годятся (переиспользуем тот же эндпоинт, что и просмотр записи).
+            "date_iso": start.date().isoformat(),
+            "start_time": f"{start:%H:%M}",
+            "end_time": f"{end:%H:%M}",
+            "service_id": appt.service_id,
             "status": appt.status,
             "status_display": appt.get_status_display(),
             "source": appt.source,
