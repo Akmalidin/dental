@@ -17,5 +17,24 @@
             </div>
           </div>
         </div>
+        <div class="card" style="margin-top:14px;">
+          <div class="card-head"><h3 data-i18n="w_revenue_trend">Выручка и расходы по дням</h3></div>
+          <div class="card-body" id="acctChart"></div>
+        </div>
+        <div class="grid-2" style="margin-top:14px;">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_revenue_by_service">Выручка по услугам</h3></div>
+            <div class="card-body" id="acctByService"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_revenue_by_doctor">Выручка по врачам</h3></div>
+            <div class="card-body" id="acctByDoctor"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px;">
+          <div class="card-head"><h3 data-i18n="w_charges_history">История начислений</h3></div>
+          <table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_object">Операция</th><th style="text-align:right;" data-i18n="w_sum">Сумма</th></tr></thead>
+          <tbody id="acctHistoryBody"></tbody></table>
+        </div>
       </div>
 {% endblock %}

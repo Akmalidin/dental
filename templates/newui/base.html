@@ -304,13 +304,25 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    перебить инлайновый style="height:NN%;", который ставит JS
    (buildDayRibbonHTML) для сжатия по умолчанию. */
 .sched-appt:hover{
-  height:auto !important;
-  min-height:64px;
   position:absolute !important;
   left:0; right:0; top:0;
   z-index:30;
   overflow:visible;
   box-shadow:0 8px 20px rgba(20,23,31,.22);
+}
+/* height:auto/min-height — ТОЛЬКО для коротких карточек (.compact, см. ниже
+   и buildDayRibbonHTML), которым реально нужно вырасти для читаемости.
+   Раньше это применялось ко ВСЕМ карточкам без разбора — у длинных приёмов
+   (например 2 часа, height:100% растянут на несколько строк грида) при
+   наведении height:auto схлопывал карточку до высоты её контента (3 короткие
+   строки текста), которая МЕНЬШЕ исходной высоты — визуально карточка на
+   ховере не «увеличивалась», а заметно УМЕНЬШАЛАСЬ (баг с прода: «другие
+   большие записи уменьшаются»). Обычные (не компактные) карточки при
+   наведении просто всплывают поверх соседей (z-index/shadow выше), не меняя
+   высоту — им и так хватает места для чтения. */
+.sched-appt.compact:hover{
+  height:auto !important;
+  min-height:64px;
 }
 .sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
 /* Компактная карточка (класс .compact, ставится в JS по фактической высоте
@@ -518,6 +530,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .hbar-track{flex:1;background:var(--cloud);border-radius:6px;height:10px;position:relative;overflow:hidden;}
 .hbar-fill{height:100%;border-radius:6px;}
 .hbar-value{width:100px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11.5px;flex-shrink:0;color:var(--ink-soft);}
+
+/* Бухгалтерия — график выручки/расходов по дням (SVG, без внешних библиотек). */
+.acct-chart-wrap{position:relative;}
+.acct-chart-legend{display:flex;gap:16px;margin-bottom:8px;}
+.acct-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);}
+.acct-legend-line{width:14px;height:2px;border-radius:1px;display:inline-block;}
+.acct-chart-svg{width:100%;height:auto;display:block;cursor:crosshair;}
+.acct-chart-tooltip{position:absolute;background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px;font-size:11.5px;pointer-events:none;box-shadow:0 8px 20px rgba(20,23,31,.25);min-width:130px;z-index:5;}
+.acct-tip-date{font-weight:700;margin-bottom:4px;}
+.acct-tip-row{display:flex;align-items:center;gap:6px;padding:1px 0;}
+.acct-tip-row b{margin-left:auto;font-family:'JetBrains Mono',monospace;}
+.acct-tip-key{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
 
 @media(max-width:1100px){.kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr 1fr;}.funnel{grid-template-columns:repeat(4,1fr);overflow-x:auto;}.sched-grid{grid-template-columns:52px repeat(3,1fr);}}
 
@@ -2753,6 +2777,105 @@ function buildDonutChart(data, suffix){
   }).join('');
   return `<div class="donut-wrap"><div class="donut-chart" style="background:conic-gradient(${stops});"></div><div class="donut-legend">${legend}</div></div>`;
 }
+// «Красивое» округление верхней границы шкалы графика (0/1000/2000/5000…) —
+// чтобы линии сетки стояли на круглых числах, а не на сыром максимуме данных.
+function niceCeil(v){
+  if(v<=0) return 1000;
+  const magnitude=Math.pow(10, Math.floor(Math.log10(v)));
+  const norm=v/magnitude;
+  let niceNorm;
+  if(norm<=1) niceNorm=1; else if(norm<=2) niceNorm=2; else if(norm<=5) niceNorm=5; else niceNorm=10;
+  return niceNorm*magnitude;
+}
+const ACCT_CHART_W=640, ACCT_CHART_H=200;
+// Бухгалтерия → график выручки/расходов по дням месяца — линии (2 серии,
+// общая ось Y, единая валюта, поэтому одна общая шкала без второй оси).
+// Свой SVG без внешних библиотек (как и остальные графики в этом файле —
+// buildBarChart/buildDonutChart), с курсором-«crosshair» и общим тултипом на
+// обе серии сразу (см. acctChartHover/acctChartLeave ниже).
+function buildDailyTrendChart(daily){
+  if(!daily || !daily.length) return `<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_no_data')}</div>`;
+  const W=ACCT_CHART_W, H=ACCT_CHART_H, padL=52, padR=12, padT=14, padB=28;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const n=daily.length;
+  const maxVal=Math.max(1, ...daily.map(d=>Math.max(d.revenue,d.expenses)));
+  const niceMax=niceCeil(maxVal);
+  const xAt=i=> padL + (n===1 ? innerW/2 : innerW*i/(n-1));
+  const yAt=v=> padT + innerH - (v/niceMax)*innerH;
+  const pathFor=key=>daily.map((d,i)=>`${i===0?'M':'L'}${xAt(i).toFixed(1)},${yAt(d[key]).toFixed(1)}`).join(' ');
+  const revenuePath=pathFor('revenue');
+  const expensePath=pathFor('expenses');
+  const areaPath=`${revenuePath} L${xAt(n-1).toFixed(1)},${(padT+innerH).toFixed(1)} L${xAt(0).toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+  const gridVals=[0, niceMax/2, niceMax];
+  const gridLines=gridVals.map(v=>{
+    const y=yAt(v);
+    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--mist-line)" stroke-width="1"/><text x="${padL-8}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--ink-faint)">${formatNum(v)}</text>`;
+  }).join('');
+  // Подписи по оси X — не теснее ~44px между собой (иначе на 30 днях
+  // накладываются друг на друга), но первый и последний день — всегда.
+  const labelStep=Math.max(1, Math.ceil(n / (innerW/44)));
+  const xLabels=daily.map((d,i)=>{
+    if(i!==0 && i!==n-1 && i%labelStep!==0) return '';
+    return `<text x="${xAt(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--ink-faint)">${d.date}</text>`;
+  }).join('');
+  return `<div class="acct-chart-wrap">
+    <div class="acct-chart-legend">
+      <span class="acct-legend-item"><span class="acct-legend-line" style="background:var(--teal);"></span>${t('w_revenue')}</span>
+      <span class="acct-legend-item"><span class="acct-legend-line" style="background:var(--coral);"></span>${t('w_expenses')}</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="acct-chart-svg" id="acctChartSvg" data-padl="${padL}" data-padt="${padT}" data-innerw="${innerW}" data-innerh="${innerH}" data-n="${n}" data-nicemax="${niceMax}" onmousemove="acctChartHover(event)" onmouseleave="acctChartLeave()">
+      ${gridLines}
+      <path d="${areaPath}" fill="var(--teal)" opacity="0.1" stroke="none"/>
+      <path d="${expensePath}" fill="none" stroke="var(--coral)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${revenuePath}" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${xLabels}
+      <g id="acctChartCrosshair" style="opacity:0;pointer-events:none;">
+        <line id="acctChartCrosshairLine" y1="${padT}" y2="${padT+innerH}" stroke="var(--ink-faint)" stroke-width="1"/>
+        <circle id="acctChartDotRevenue" r="4" fill="var(--teal)" stroke="var(--paper)" stroke-width="2"/>
+        <circle id="acctChartDotExpense" r="4" fill="var(--coral)" stroke="var(--paper)" stroke-width="2"/>
+      </g>
+    </svg>
+    <div id="acctChartTooltip" class="acct-chart-tooltip hidden"></div>
+  </div>`;
+}
+function acctChartHover(evt){
+  if(!accountingData || !accountingData.dailySeries) return;
+  const svg=evt.currentTarget;
+  const n=Number(svg.dataset.n), padL=Number(svg.dataset.padl), innerW=Number(svg.dataset.innerw),
+        padT=Number(svg.dataset.padt), innerH=Number(svg.dataset.innerh), niceMax=Number(svg.dataset.nicemax);
+  const rect=svg.getBoundingClientRect();
+  const scaleX=ACCT_CHART_W/rect.width;
+  const mouseXsvg=(evt.clientX-rect.left)*scaleX;
+  let idx=Math.round((mouseXsvg-padL)/(n>1 ? innerW/(n-1) : innerW));
+  idx=Math.max(0, Math.min(n-1, idx));
+  const d=accountingData.dailySeries[idx];
+  const x=padL + (n===1 ? innerW/2 : innerW*idx/(n-1));
+  const yRev=padT+innerH-(d.revenue/niceMax)*innerH;
+  const yExp=padT+innerH-(d.expenses/niceMax)*innerH;
+  document.getElementById('acctChartCrosshairLine').setAttribute('x1', x);
+  document.getElementById('acctChartCrosshairLine').setAttribute('x2', x);
+  document.getElementById('acctChartDotRevenue').setAttribute('cx', x);
+  document.getElementById('acctChartDotRevenue').setAttribute('cy', yRev);
+  document.getElementById('acctChartDotExpense').setAttribute('cx', x);
+  document.getElementById('acctChartDotExpense').setAttribute('cy', yExp);
+  document.getElementById('acctChartCrosshair').style.opacity='1';
+  const tip=document.getElementById('acctChartTooltip');
+  tip.classList.remove('hidden');
+  tip.innerHTML=`<div class="acct-tip-date">${d.date}</div>
+    <div class="acct-tip-row"><span class="acct-tip-key" style="background:var(--teal);"></span>${t('w_revenue')}<b>${formatNum(d.revenue)} ${CUR_SYM}</b></div>
+    <div class="acct-tip-row"><span class="acct-tip-key" style="background:var(--coral);"></span>${t('w_expenses')}<b>${formatNum(d.expenses)} ${CUR_SYM}</b></div>`;
+  const wrapRect=svg.parentElement.getBoundingClientRect();
+  const leftPx=(x/ACCT_CHART_W)*wrapRect.width;
+  const maxLeft=Math.max(0, wrapRect.width-150);
+  tip.style.left=Math.min(leftPx+8, maxLeft)+'px';
+  tip.style.top='4px';
+}
+function acctChartLeave(){
+  const g=document.getElementById('acctChartCrosshair');
+  const tip=document.getElementById('acctChartTooltip');
+  if(g) g.style.opacity='0';
+  if(tip) tip.classList.add('hidden');
+}
 function renderReportConstructor(){
   const dim=document.getElementById('rcDimension').value;
   const metric=document.getElementById('rcMetric').value;
@@ -3516,6 +3639,11 @@ const translations={
   w_acct_hint: {ru:'Реальная выручка и расходы по категориям, заведённым в клинике (модели зарплат/аренды отдельной проводкой в системе нет — только то, что реально внесено как расход).', ky:'Клиникада киргизилген категориялар боюнча реалдуу түшүм жана чыгашалар (эмгек акы/ижара боюнча өзүнчө модель системада жок — тек чыгаша катары чын эле киргизилгени гана).', en:'Real revenue and expenses by categories set up in the clinic (there\'s no separate salary/rent model in the system — only what\'s actually entered as an expense).', uz:'Klinikada kiritilgan toifalar bo\'yicha real tushum va xarajatlar (tizimda maosh/ijara uchun alohida model yo\'q — faqat xarajat sifatida haqiqatan kiritilgani).'},
   w_accruals: {ru:'Начисления', ky:'Эсептелген сумма', en:'Accruals', uz:'Hisoblanganlar'},
   w_total_profit: {ru:'Итого прибыль', ky:'Жалпы пайда', en:'Total profit', uz:'Jami foyda'},
+  w_revenue_trend: {ru:'Выручка и расходы по дням', ky:'Күн сайын түшүм жана чыгашалар', en:'Revenue and expenses by day', uz:'Kunlar bo\'yicha tushum va xarajatlar'},
+  w_revenue_by_service: {ru:'Выручка по услугам', ky:'Кызматтар боюнча түшүм', en:'Revenue by service', uz:'Xizmatlar bo\'yicha tushum'},
+  w_revenue_by_doctor: {ru:'Выручка по врачам', ky:'Врачтар боюнча түшүм', en:'Revenue by doctor', uz:'Shifokorlar bo\'yicha tushum'},
+  w_charges_history: {ru:'История начислений', ky:'Эсептелгендердин таржымалы', en:'Charges history', uz:'Hisoblanganlar tarixi'},
+  w_no_history_month: {ru:'За месяц ещё нет операций', ky:'Ай ичинде операциялар жок дагы', en:'No operations for the month yet', uz:'Oy uchun operatsiyalar hali yo\'q'},
   w_revenue_month: {ru:'Выручка за месяц', ky:'Айлык түшүм', en:'Revenue this month', uz:'Oylik tushum'},
   w_expenses_month: {ru:'Расходы за месяц', ky:'Айлык чыгашалар', en:'Expenses this month', uz:'Oylik xarajatlar'},
   w_expenses: {ru:'Расходы', ky:'Чыгашалар', en:'Expenses', uz:'Xarajatlar'},
@@ -4072,6 +4200,31 @@ function renderAccounting(){
   wrap.innerHTML=html;
   document.getElementById('acctProfit').textContent=Math.round(accountingData.profit).toLocaleString('ru-RU')+' '+CUR_SYM;
   document.getElementById('acctMargin').textContent=t('w_margin')+' '+accountingData.marginPct+'%';
+
+  const chartEl=document.getElementById('acctChart');
+  if(chartEl) chartEl.innerHTML=buildDailyTrendChart(accountingData.dailySeries);
+
+  const palette=['cobalt','teal','amber','coral'];
+  const svcEl=document.getElementById('acctByService');
+  if(svcEl) svcEl.innerHTML=buildBarChart(
+    (accountingData.revenueByService||[]).map((d,i)=>({label:d.name, value:d.amount, color:palette[i%4]})), ' '+CUR_SYM
+  );
+  const docEl=document.getElementById('acctByDoctor');
+  if(docEl) docEl.innerHTML=buildBarChart(
+    (accountingData.revenueByDoctor||[]).map((d,i)=>({label:d.name, value:d.amount, color:palette[i%4]})), ' '+CUR_SYM
+  );
+
+  const histBody=document.getElementById('acctHistoryBody');
+  if(histBody){
+    const rows=accountingData.historyRows||[];
+    histBody.innerHTML = rows.length===0
+      ? `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_history_month')}</td></tr>`
+      : rows.map(r=>{
+          const color = r.amount<0 ? 'var(--coral)' : 'var(--teal)';
+          const sign = r.amount<0 ? '−' : '+';
+          return `<tr><td class="mono">${r.date}</td><td>${r.label}</td><td class="mono" style="color:${color};text-align:right;">${sign}${Math.round(Math.abs(r.amount)).toLocaleString('ru-RU')} ${CUR_SYM}</td></tr>`;
+        }).join('');
+  }
 }
 
 /* ================= ЖУРНАЛ АУДИТА (реальная история изменений) ================= */

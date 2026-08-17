@@ -1078,10 +1078,26 @@ def _newui_accounting_data(clinic):
     """Бухгалтерия — реальная выручка (Payment) и расходы по реальным
     категориям клиники (ExpenseCategory/Expense) за месяц. В системе нет
     модели зарплат/аренды как отдельной проводки — показываем только то, что
-    реально заведено клиникой как категория расхода."""
+    реально заведено клиникой как категория расхода.
+
+    Дополнительно (по запросу «сделай более богатой страницей»):
+    - dailySeries — выручка/расходы по дням месяца, для графика тренда, а не
+      только итогового числа.
+    - revenueByService/revenueByDoctor — разбивка выручки. В системе нет
+      оплаты по отдельной позиции приёма (Payment↔Treatment — приём целиком,
+      см. PaymentAllocation), поэтому сумма оплаты распределяется по
+      позициям приёма (TreatmentCure) ПРОПОРЦИОНАЛЬНО их доле в общей
+      стоимости приёма — так сумма по всем услугам/врачам в итоге сходится к
+      реальной собранной выручке, а не показывает только "первую" услугу
+      приёма или гадает.
+    - historyRows — таблица последних начислений/расходов за месяц (не
+      только агрегированные суммы)."""
+    from collections import defaultdict
+    from datetime import timedelta
     from django.db.models import Sum
     from django.utils import timezone
-    from apps.finance.models import Payment, Expense
+    from apps.finance.models import Payment, Expense, PaymentAllocation
+    from apps.treatments.models import TreatmentCure
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
@@ -1101,6 +1117,82 @@ def _newui_accounting_data(clinic):
     expenses_total = sum(line["amount"] for line in expense_lines)
     profit = revenue_net - expenses_total
 
+    # ── График по дням месяца ──
+    daily_revenue = defaultdict(float)
+    for row in (Payment.objects.filter(created_at__date__gte=month_start)
+                .values("created_at__date", "type").annotate(s=Sum("amount"))):
+        sign = 1 if row["type"] == Payment.TYPE_INCOME else -1
+        daily_revenue[row["created_at__date"]] += sign * float(row["s"])
+    daily_expenses = defaultdict(float)
+    for row in Expense.objects.filter(date__gte=month_start).values("date").annotate(s=Sum("amount")):
+        daily_expenses[row["date"]] += float(row["s"])
+    daily_series = []
+    d = month_start
+    while d <= today:
+        daily_series.append({
+            "date": d.strftime("%d.%m"),
+            "revenue": round(daily_revenue.get(d, 0)),
+            "expenses": round(daily_expenses.get(d, 0)),
+        })
+        d += timedelta(days=1)
+
+    # ── Разбивка выручки по услугам/врачам ──
+    allocations = (PaymentAllocation.objects
+                   .filter(payment__created_at__date__gte=month_start, payment__type=Payment.TYPE_INCOME,
+                           payment__clinic=clinic)
+                   .select_related("treatment"))
+    treatment_ids = {a.treatment_id for a in allocations}
+    cures_by_treatment = defaultdict(list)
+    for c in TreatmentCure.objects.filter(treatment_id__in=treatment_ids).select_related("service", "doctor"):
+        billed = float(c.price) * c.quantity * (1 - float(c.discount) / 100)
+        cures_by_treatment[c.treatment_id].append((c, billed))
+    revenue_by_service = defaultdict(float)
+    revenue_by_doctor = defaultdict(float)
+    for alloc in allocations:
+        cures = cures_by_treatment.get(alloc.treatment_id) or []
+        total_billed = sum(b for _, b in cures)
+        if not cures or total_billed <= 0:
+            revenue_by_service["—"] += float(alloc.amount)
+            revenue_by_doctor["—"] += float(alloc.amount)
+            continue
+        for cure, billed in cures:
+            share = float(alloc.amount) * (billed / total_billed)
+            revenue_by_service[cure.service.name] += share
+            revenue_by_doctor[cure.doctor.name if cure.doctor else "—"] += share
+    revenue_by_service_list = sorted(
+        ({"name": k, "amount": round(v)} for k, v in revenue_by_service.items()),
+        key=lambda x: -x["amount"])[:10]
+    revenue_by_doctor_list = sorted(
+        ({"name": k, "amount": round(v)} for k, v in revenue_by_doctor.items()),
+        key=lambda x: -x["amount"])[:10]
+
+    # ── История начислений/расходов за месяц (таблица) ──
+    history_rows = []
+    for p in (Payment.objects.filter(created_at__date__gte=month_start)
+              .select_related("patient").order_by("-created_at")[:60]):
+        history_rows.append({
+            "date": timezone.localtime(p.created_at).strftime("%d.%m.%Y %H:%M"),
+            "kind": "income" if p.type == Payment.TYPE_INCOME else "refund",
+            "label": f"{'Оплата' if p.type == Payment.TYPE_INCOME else 'Возврат'} — {p.patient.full_name if p.patient else '—'}",
+            "amount": float(p.amount) * (1 if p.type == Payment.TYPE_INCOME else -1),
+            "sortKey": p.created_at,
+        })
+    for e in Expense.objects.filter(date__gte=month_start).select_related("category").order_by("-date")[:60]:
+        history_rows.append({
+            "date": e.date.strftime("%d.%m.%Y"),
+            "kind": "expense",
+            "label": f"Расход — {e.category.name if e.category else 'Без категории'}: {e.description or ''}".rstrip(": "),
+            "amount": -float(e.amount),
+            # sortKey сравнивается с Payment.created_at (timezone-aware, см.
+            # выше) — обязательно тоже делаем aware, иначе сравнение naive/
+            # aware datetime кидает TypeError при сортировке.
+            "sortKey": timezone.make_aware(timezone.datetime.combine(e.date, timezone.datetime.min.time())),
+        })
+    history_rows.sort(key=lambda r: r["sortKey"], reverse=True)
+    for r in history_rows:
+        del r["sortKey"]
+    history_rows = history_rows[:80]
+
     return {
         "monthLabel": month_label,
         "revenue": revenue_net,
@@ -1108,6 +1200,10 @@ def _newui_accounting_data(clinic):
         "expensesTotal": expenses_total,
         "profit": profit,
         "marginPct": round(profit / revenue_net * 100, 1) if revenue_net else 0.0,
+        "dailySeries": daily_series,
+        "revenueByService": revenue_by_service_list,
+        "revenueByDoctor": revenue_by_doctor_list,
+        "historyRows": history_rows,
     }
 
 
