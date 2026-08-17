@@ -209,15 +209,17 @@ OPENAI_ENABLED = os.environ.get("OPENAI_ENABLED", "") == "1"
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 # ─── YandexGPT (свободный вопрос-ответ «ИИ-помощник») — ключ только из env ───
-# Доступен из РФ без ограничений (в отличие от OpenAI). YANDEX_MODEL —
-# необязательно, по умолчанию "yandexgpt-lite" (дешевле/быстрее); можно
-# переключить на "yandexgpt" (полная модель) без правки кода. YANDEX_TTS_VOICE —
-# голос для озвучки ответов (Yandex SpeechKit, тот же ключ/аккаунт), по
-# умолчанию "alena" — см. полный список голосов в документации SpeechKit,
-# если нужен другой.
+# Доступен из РФ без ограничений (в отличие от OpenAI). YANDEX_MODEL — по
+# умолчанию "yandexgpt" (полная модель, не "-lite") — по просьбе пользователя
+# переключено с lite на полную ради более качественных и «умных» ответов;
+# дороже и чуть медленнее lite, но не требует правки .env на сервере — можно
+# переопределить обратно на "yandexgpt-lite" через env при необходимости.
+# YANDEX_TTS_VOICE — голос для озвучки ответов (Yandex SpeechKit, тот же
+# ключ/аккаунт), по умолчанию "alena" — см. полный список голосов в
+# документации SpeechKit, если нужен другой.
 YANDEX_API_KEY = os.environ.get("YANDEX_API_KEY", "")
 YANDEX_FOLDER_ID = os.environ.get("YANDEX_FOLDER_ID", "")
-YANDEX_MODEL = os.environ.get("YANDEX_MODEL", "yandexgpt-lite")
+YANDEX_MODEL = os.environ.get("YANDEX_MODEL", "yandexgpt")
 YANDEX_TTS_VOICE = os.environ.get("YANDEX_TTS_VOICE", "alena")
 
 # ─── Google Calendar (OAuth2) — ключи только из env ──────────────────────────
