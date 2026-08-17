@@ -5971,13 +5971,28 @@ function applyVoiceVisitIntent(data){
    странице в пределах уже загруженных там данных: patientsList почти везде,
    scheduleRealData только там, где расписание реально нужно (честно
    сообщаем, если данных нет, а не делаем вид, что искали). ---- */
-function fuzzyNameMatch(a, b){
-  // Русские фамилии/имена в разных падежах отличаются на 1-2 буквы в конце
-  // ("Иванова"/"Ивановой") — точное совпадение слишком строгое для голоса.
+function fuzzyWordMatch(a, b){
+  // Одно слово — русские падежные окончания отличаются на 1-3 буквы в конце
+  // ("Иванова"/"Ивановой"/"Иванову") — точное совпадение слишком строгое.
   if(!a || !b) return false;
   if(a.includes(b) || b.includes(a)) return true;
   const n=Math.min(a.length, b.length, 6);
   return n>=3 && a.slice(0,n)===b.slice(0,n);
+}
+function fuzzyNameMatch(a, b){
+  // ФИО целиком — сравниваем ПОСЛОВНО, без учёта порядка слов: patientsList
+  // хранит "Фамилия Имя Отчество", а голосом называют то в этом порядке, то
+  // в обратном ("Мадакимов Акмалидин" / "Акмалидин Мадакимов"), и почти
+  // всегда в другом падеже ("у Мадакимова Акмалидина" — родительный). Раньше
+  // сравнивалась строка целиком (includes/общий префикс) — ломалось от одной
+  // лишней буквы падежного окончания ИЛИ от смены порядка слов. Теперь: КАЖДОЕ
+  // слово запроса должно найти себе пару среди слов кандидата (в любом
+  // порядке, тем же fuzzyWordMatch на падежи).
+  if(!a || !b) return false;
+  const aWords=a.split(/\s+/).filter(Boolean);
+  const bWords=b.split(/\s+/).filter(Boolean);
+  if(!aWords.length || !bWords.length) return false;
+  return bWords.every(bw=>aWords.some(aw=>fuzzyWordMatch(aw, bw)));
 }
 function applyAssistantIntent(data){
   if(data.intent==='find_patient' && data.patient_name){
