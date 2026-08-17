@@ -1280,24 +1280,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
-<!-- Этап плана лечения -->
-<div class="modal-backdrop" id="m-treatplan">
-  <div class="modal">
-    <div class="modal-head"><h3 data-i18n="title_m_treatplan_stage">Этап плана лечения</h3><button class="modal-close" onclick="closeModal('m-treatplan')">✕</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_stage_name">Название этапа</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="Установка коронки"></div>
-      <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_tooth">Зуб</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" placeholder="26"></div>
-        <div class="form-group"><label data-i18n="w_doctor">Врач</label><select><option>Асанов Б.</option><option>Нурбекова С.</option></select></div>
-      </div>
-      <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_cost">Стоимость</label><input autocomplete="off" type="number" placeholder="0"></div>
-        <div class="form-group"><label data-i18n="w_status">Статус</label><select><option>Запланировано</option><option>Оплачено</option><option>Выполнено</option></select></div>
-      </div>
-    </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-treatplan')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="closeModal('m-treatplan')">Добавить этап</button></div>
-  </div>
-</div>
 
 <!-- Настройки CRM-воронки -->
 <div class="modal-backdrop" id="m-crmsettings">
@@ -2851,7 +2833,6 @@ const translations={
   title_m_templates: {ru:'Шаблоны сообщений', ky:'Билдирүү үлгүлөрү', en:'Message templates', uz:'Xabar shablonlari'},
   title_m_condition_edit: {ru:'Редактирование состояния', ky:'Абалды түзөтүү', en:'Edit condition', uz:'Holatni tahrirlash'},
   title_m_role: {ru:'Новая роль', ky:'Жаңы роль', en:'New role', uz:'Yangi rol'},
-  title_m_treatplan_stage: {ru:'Этап плана лечения', ky:'Дарылоо планынын этабы', en:'Treatment plan stage', uz:'Davolash rejasi bosqichi'},
   title_m_crmsettings: {ru:'Настройки воронки заявок', ky:'Кайрылуулар воронкасынын жөндөөлөрү', en:'Lead funnel settings', uz:'Murojaatlar voronkasi sozlamalari'},
   w_shift_not_open: {ru:'Смена не открыта', ky:'Смена ачылган эмес', en:'Shift not open', uz:'Smena ochilmagan'},
   w_shift_open: {ru:'Смена открыта', ky:'Смена ачык', en:'Shift open', uz:'Smena ochiq'},
@@ -2892,7 +2873,6 @@ const translations={
   w_branches: {ru:'Филиалы', ky:'Филиалдар', en:'Branches', uz:'Filiallar'},
   w_role_name: {ru:'Название роли', ky:'Ролдун аталышы', en:'Role name', uz:'Rol nomi'},
   w_permissions: {ru:'Права доступа', ky:'Кирүү укуктары', en:'Permissions', uz:'Kirish huquqlari'},
-  w_stage_name: {ru:'Название этапа', ky:'Этаптын аталышы', en:'Stage name', uz:'Bosqich nomi'},
   w_tooth: {ru:'Зуб', ky:'Тиш', en:'Tooth', uz:'Tish'},
   w_cost: {ru:'Стоимость', ky:'Наркы', en:'Cost', uz:'Narxi'},
   w_no_lead_if_exists: {ru:'Не создавать заявку, если пациент уже в базе', ky:'Бейтап базада болсо, кайрылуу түзбөө', en:'Don\'t create a lead if patient already exists', uz:'Agar bemor bazada bo\'lsa, murojaat yaratilmasin'},
@@ -2990,11 +2970,11 @@ const translations={
   w_open_file: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
   w_no_visits_yet: {ru:'Приёмов пока не было', ky:'Кабылдоолор азырынча болгон эмес', en:'No visits yet', uz:'Hozircha qabullar bo‘lmagan'},
   w_no_plans_yet: {ru:'Планов лечения пока нет', ky:'Дарылоо пландары азырынча жок', en:'No treatment plans yet', uz:'Hozircha davolash rejalari yo‘q'},
+  w_create_plan: {ru:'Создать', ky:'Түзүү', en:'Create', uz:'Yaratish'},
   w_no_payments_yet: {ru:'Платежей пока не было', ky:'Төлөмдөр азырынча болгон эмес', en:'No payments yet', uz:'Hozircha to‘lovlar bo‘lmagan'},
   w_total_paid: {ru:'Всего оплачено', ky:'Бардыгы төлөндү', en:'Total paid', uz:'Jami to‘langan'},
   w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
   w_docs_upload_old_ui_hint: {ru:'Договор, согласие на лечение, снимки — нажмите «Загрузить» выше', ky:'Келишим, дарылоого макулдук, сүрөттөр — жогорудагы «Жүктөө» баскычын басыңыз', en:'Contract, treatment consent, images — click «Upload» above', uz:'Shartnoma, davolashga rozilik, rasmlar — yuqoridagi «Yuklash» tugmasini bosing'},
-  w_add_stage: {ru:'Добавить этап', ky:'Этап кошуу', en:'Add stage', uz:'Bosqich qo‘shish'},
   w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
   w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
   w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
@@ -6331,10 +6311,33 @@ async function deleteTreatmentHistory(id){
 }
 function renderPatientCardPlan(d){
   const el=document.getElementById('pcPanelPlan');
-  if(!d.plans || d.plans.length===0){ el.innerHTML=PATIENT_TAB_EMPTY(t('w_no_plans_yet')); return; }
-  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3></div>
+  const createBtn=`<button class="btn btn-cobalt btn-sm" onclick="pcCreateTreatmentPlan()">+ <span data-i18n="w_create_plan">${t('w_create_plan')}</span></button>`;
+  if(!d.plans || d.plans.length===0){
+    el.innerHTML=`<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--ink-soft);">
+      <div style="margin-bottom:12px;">${t('w_no_plans_yet')}</div>${createBtn}
+    </div></div>`;
+    return;
+  }
+  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3>${createBtn}</div>
     <table><thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
     <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
+}
+// Создать новый план лечения для текущего пациента — пустой (без этапов/
+// услуг), сразу открываем его в полноценном редакторе (тот же
+// /treatments/plans/<id>/, куда уже вели клики по строкам таблицы — там
+// можно добавить этапы и услуги; своего редактора планов в новом интерфейсе
+// нет, дублировать его здесь не стали). Реальный бэкенд-эндпоинт
+// (apps.treatments.views.plan_create) уже используется старым интерфейсом
+// (templates/patients/detail.html) — просто переиспользуем его.
+async function pcCreateTreatmentPlan(){
+  if(!currentPatientCardId) return;
+  const res=await apiJson('/treatments/plans/create/', {patient_id: currentPatientCardId, items: []});
+  const data=await res.json().catch(()=>({}));
+  if(res.ok && data.ok && data.plan_id){
+    location.href='/treatments/plans/'+data.plan_id+'/';
+  } else {
+    showToast(data.error || t('w_save_failed'), 'error');
+  }
 }
 function renderPatientCardFinance(d){
   const el=document.getElementById('pcPanelFinance');
