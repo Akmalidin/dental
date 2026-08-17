@@ -18,7 +18,7 @@ from .views import (
     _newui_patients_data, _newui_patients_page_data, _newui_patient_by_pk, _newui_services_data, _newui_finance_data,
     _newui_lab_data, _newui_warehouse_data, _newui_reports_data,
     _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
-    _newui_visits_data, _newui_accounting_data, _newui_audit_data,
+    _newui_visits_data, _newui_accounting_data, _newui_audit_data, _newui_notifications_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
 )
@@ -314,6 +314,11 @@ def newui_visitcard(request, pk):
     ctx["waEnabled"] = wa_enabled()
     ctx["tgEnabled"] = tg_enabled()
     return _render(request, "visitcard", "visitcard.html", {"visitWizard": ctx})
+
+
+@login_required
+def newui_notifications(request):
+    return _render(request, "notifications", "notifications.html", {"notificationsData": _newui_notifications_data(request)})
 
 
 @login_required

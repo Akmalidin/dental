@@ -1,0 +1,15 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Уведомления{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="nav_уведомления">Уведомления</h1><div class="topbar-right"><button class="btn btn-ghost" id="notifMarkAllBtn" onclick="notifMarkAllRead()" data-i18n="w_mark_all_read">Прочитать всё</button></div></div>
+      <div class="page">
+        <div class="tab-strip" id="notifTabs">
+          <button class="active" data-type="all" onclick="notifSetFilter('all')" data-i18n="w_notif_filter_all">Все</button>
+          <button data-type="unread" onclick="notifSetFilter('unread')" data-i18n="w_notif_filter_unread">Непрочитанные</button>
+          <button data-type="appointment" onclick="notifSetFilter('appointment')" data-i18n="w_notif_filter_appointment">Записи</button>
+          <button data-type="payment" onclick="notifSetFilter('payment')" data-i18n="w_notif_filter_payment">Платежи</button>
+          <button data-type="wa" onclick="notifSetFilter('wa')" data-i18n="w_notif_filter_wa">Сообщения</button>
+        </div>
+        <div class="card"><div id="notifList"></div></div>
+      </div>
+{% endblock %}
