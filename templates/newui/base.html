@@ -752,19 +752,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
-        <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service" onchange="updateApptAvailabilityHint()"></select></div>
+        <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service" onchange="apptEndTimeTouched=false;updateApptAvailabilityHint()"></select></div>
       </div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
         <div class="form-group">
           <label data-i18n="w_time">Время</label>
-          <input autocomplete="off" type="time" id="appt-time" lang="ru" onchange="updateApptAvailabilityHint()">
-          <!-- Показывает реальный интервал приёма (с — до), посчитанный из
-               длительности выбранной услуги (60 минут по умолчанию, если
-               услуга не выбрана/без указанной длительности) — жалоба: «должно
-               показывать с 9:00 до .... автоматически 1 час», раньше было видно
-               только время НАЧАЛА. См. apptTimeRangeText()/updateApptAvailabilityHint(). -->
-          <div id="apptTimeRangeHint" style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;"></div>
+          <!-- Раньше окончание приёма только показывалось расчётной подсказкой
+               (авто, не редактируется) — жалоба: «должно спрашивать с какого
+               часа до какого, а не просто само расписывать». Теперь «до» —
+               настоящее поле ввода: предзаполняется расчётом (длительность
+               выбранной услуги, 60 минут по умолчанию), но пользователь может
+               свободно его поменять — apptEndTimeTouched отслеживает это и
+               останавливает автообновление поля после ручной правки, пока не
+               поменяется время начала/услуга (см. apptUpdateEndTimeDefault). -->
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input autocomplete="off" type="time" id="appt-time" lang="ru" style="flex:1;" onchange="apptEndTimeTouched=false;updateApptAvailabilityHint()">
+            <span style="color:var(--ink-soft);flex-shrink:0;">–</span>
+            <input autocomplete="off" type="time" id="appt-end-time" lang="ru" style="flex:1;" oninput="apptEndTimeTouched=true" onchange="updateApptAvailabilityHint()">
+          </div>
         </div>
       </div>
       <!-- Живая подсказка о занятости выбранного слота у выбранного врача —
@@ -2834,6 +2840,7 @@ const translations={
   w_offer_start_visit_now: {ru:'Пациент отмечен как пришедший. Начать приём сейчас?', ky:'Бейтап келди деп белгиленди. Кабыл алууну азыр баштайсызбы?', en:'Patient marked as arrived. Start the visit now?', uz:'Bemor keldi deb belgilandi. Qabulni hozir boshlaysizmi?'},
   w_start_visit_after_create: {ru:'Запись создана. Начать приём сейчас?', ky:'Жазуу түзүлдү. Кабыл алууну азыр баштайсызбы?', en:'Appointment created. Start the visit now?', uz:'Yozuv yaratildi. Qabulni hozir boshlaysizmi?'},
   w_appt_slot_free: {ru:'Время свободно — запись будет создана успешно.', ky:'Убакыт бош — жазуу ийгиликтүү түзүлөт.', en:'Time is free — the appointment will be created successfully.', uz:'Vaqt bo\'sh — yozuv muvaffaqiyatli yaratiladi.'},
+  w_appt_end_before_start: {ru:'Время окончания должно быть позже времени начала', ky:'Аяктоо убактысы башталуу убактысынан кийин болушу керек', en:'End time must be after start time', uz:'Tugash vaqti boshlanish vaqtidan keyin bo\'lishi kerak'},
   w_appt_slot_busy: {ru:'Это время у врача занято.', ky:'Бул убакытта дарыгер бош эмес.', en:'This time is already booked for this doctor.', uz:'Bu vaqtda shifokor band.'},
   w_appt_slot_suggest: {ru:'Ближайшее свободное — ', ky:'Эң жакын бош убакыт — ', en:'Nearest free slot — ', uz:'Eng yaqin bo\'sh vaqt — '},
   w_delete_history_confirm: {ru:'Удалить эту запись из истории приёмов? Действие можно отменить только через корзину.', ky:'Бул жазууну кабыл алуулар тарыхынан өчүрөсүзбү? Аракетти себеттен гана артка кайтарууга болот.', en:'Delete this entry from the visit history? This can only be undone from the trash.', uz:'Bu yozuvni qabullar tarixidan o\'chirasizmi? Amalni faqat savatdan qaytarish mumkin.'},
@@ -5333,7 +5340,8 @@ function openNewAppt(prefill){
     document.getElementById('appt-patient-search').value=prefill.patientName||'';
     document.getElementById('appt-patient-id').value=prefill.patientId;
   }
-  updateApptTimeRangeHint(); // сразу, не дожидаясь ensureScheduleDataLoaded() ниже — нужен только servicesList, он уже загружен
+  apptEndTimeTouched=false;
+  apptUpdateEndTimeDefault(); // сразу, не дожидаясь ensureScheduleDataLoaded() ниже — нужен только servicesList, он уже загружен
   openModal('m-appt');
   // Открываем модалку сразу (не ждём сеть) — подсказка о занятости слота
   // просто появится чуть позже, как только (и если) данные расписания
@@ -5414,23 +5422,42 @@ function apptServiceDurationMin(){
   const service=servicesList.find(s=>s.id===Number(serviceId));
   return (service && service.duration) || 60;
 }
-function updateApptTimeRangeHint(){
-  const hint=document.getElementById('apptTimeRangeHint');
-  if(!hint) return;
+// true, если пользователь сам вручную поправил поле «до» (см. oninput на
+// #appt-end-time) — тогда автозаполнение по длительности услуги
+// останавливается, пока не поменяются время начала или услуга (жалоба:
+// «должно СПРАШИВАТЬ с какого часа до какого, а не просто само расписывать» —
+// раньше «до» было нередактируемой подсказкой; теперь настоящее поле ввода,
+// с расчётным значением по умолчанию, но пользователь может его переписать).
+let apptEndTimeTouched=false;
+function apptUpdateEndTimeDefault(){
+  const endInput=document.getElementById('appt-end-time');
+  if(!endInput || apptEndTimeTouched) return;
   const timeLabel=document.getElementById('appt-time').value;
-  if(!timeLabel){ hint.textContent=''; return; }
-  const endLabel=minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1));
-  hint.textContent=timeLabel+'–'+endLabel;
+  if(!timeLabel){ endInput.value=''; return; }
+  endInput.value=minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1));
+}
+// Реальная длительность для проверки занятости/создания записи — от
+// вручную заданного «до», если пользователь его трогал (и оно позже
+// начала), иначе от длительности услуги (тот же дефолт, что и в
+// apptUpdateEndTimeDefault).
+function apptDurationMin(){
+  const startLabel=document.getElementById('appt-time').value;
+  const endLabel=document.getElementById('appt-end-time').value;
+  if(apptEndTimeTouched && startLabel && endLabel){
+    const diff=timeToMinutes(endLabel)-timeToMinutes(startLabel);
+    if(diff>0) return diff;
+  }
+  return apptServiceDurationMin();
 }
 function updateApptAvailabilityHint(){
-  updateApptTimeRangeHint();
+  apptUpdateEndTimeDefault();
   const hint=document.getElementById('apptAvailabilityHint');
   if(!hint) return;
   const docId=document.getElementById('appt-doctor').value;
   const dateIso=document.getElementById('appt-date').value;
   const timeLabel=document.getElementById('appt-time').value;
   if(!docId || !dateIso || !timeLabel){ hint.classList.add('hidden'); return; }
-  const dur=apptServiceDurationMin();
+  const dur=apptDurationMin();
   const free=schedSlotFree(dateIso, docId, timeLabel, dur);
   if(free){
     hint.className='';
@@ -5450,6 +5477,7 @@ function updateApptAvailabilityHint(){
 function apptApplySuggestedSlot(dateIso, timeLabel){
   document.getElementById('appt-date').value=dateIso;
   document.getElementById('appt-time').value=timeLabel;
+  apptEndTimeTouched=false; // новое время начала — пересчитать «до» заново, а не тащить старое ручное значение
   updateApptAvailabilityHint();
 }
 // «+ Новая запись» на вкладке «Зубная формула» карты пациента — тот же
@@ -5540,6 +5568,15 @@ async function submitNewAppt(){
   if(!doctorId || !date || !time){
     errBox.textContent='Выберите врача, дату и время'; errBox.classList.remove('hidden'); return;
   }
+  // «До» — теперь настоящее поле ввода (не только расчётная подсказка),
+  // поэтому проверяем, что оно вообще заполнено и позже начала, ПЕРЕД
+  // отправкой — иначе ушла бы отрицательная/нулевая длительность.
+  const endTime=document.getElementById('appt-end-time').value;
+  if(endTime && timeToMinutes(endTime)<=timeToMinutes(time)){
+    errBox.textContent=t('w_appt_end_before_start','Время окончания должно быть позже времени начала');
+    errBox.classList.remove('hidden');
+    return;
+  }
   const btn=document.getElementById('apptModalSaveBtn');
   btn.disabled=true;
   try{
@@ -5548,6 +5585,7 @@ async function submitNewAppt(){
       patient_id: patientId ? Number(patientId) : null,
       service_id: serviceId ? Number(serviceId) : null,
       start_at: date+'T'+time+':00',
+      duration: apptDurationMin(),
       notes: document.getElementById('appt-notes').value,
     });
     const data=await res.json();
@@ -5575,7 +5613,7 @@ async function submitNewAppt(){
           patientId: patientId?Number(patientId):null,
           patient: patient ? patient.fullName : 'Без пациента',
           service: service ? service.name : '',
-          status: 'cobalt', durationMin: (service && service.duration) || 60, movable: true,
+          status: 'cobalt', durationMin: apptDurationMin(), movable: true,
         });
         rebuildApptsByDateDoc();
         renderSchedule();
