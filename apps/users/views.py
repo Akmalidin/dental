@@ -1113,11 +1113,20 @@ def _newui_accounting_data(clinic):
 
 def _newui_audit_data(clinic):
     """Журнал аудита — реальная история изменений (django-simple-history) по
-    пациентам и приёмам лечения; это единственные модели с HistoricalRecords
-    в системе сейчас. Входы в систему и изменения в финансах отдельно не
-    логируются — честно ограничиваем раздел тем, что реально есть."""
+    пациентам и приёмам лечения, плюс факты приёма оплат/возвратов (Payment —
+    без HistoricalRecords, поэтому только события создания, без отката: у
+    платежа нет хранимого «предыдущего состояния», в отличие от пациента/
+    приёма). Входы в систему по-прежнему не логируются — честно ограничиваем
+    раздел тем, что реально есть.
+
+    historyId/model/canRevert — нужны фронтенду для кнопки отката (только
+    суперадминистратору, см. apps.users.newui_views.audit_revert): откатить
+    можно только запись пациента/приёма с реальной исторической записью
+    (history_type != "-" — до состояния удаления откатывать через эту кнопку
+    смысла нет, там нет корректного «предыдущего» состояния объекта)."""
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
+    from apps.finance.models import Payment
     from django.utils import timezone
 
     if not clinic:
@@ -1133,6 +1142,7 @@ def _newui_audit_data(clinic):
             "user": h.history_user.name if h.history_user else "—",
             "action": {"+": "Создание", "~": "Изменение", "-": "Удаление"}.get(h.history_type, h.history_type),
             "object": f"Пациент — {name}",
+            "model": "patient", "historyId": h.history_id, "canRevert": h.history_type != "-",
             "sortKey": h.history_date,
         })
     for h in (Treatment.history.filter(clinic=clinic)
@@ -1142,7 +1152,20 @@ def _newui_audit_data(clinic):
             "user": h.history_user.name if h.history_user else "—",
             "action": {"+": "Создание", "~": "Изменение", "-": "Удаление"}.get(h.history_type, h.history_type),
             "object": f"Приём №{h.number or h.pk} — {h.get_status_display()}",
+            "model": "treatment", "historyId": h.history_id, "canRevert": h.history_type != "-",
             "sortKey": h.history_date,
+        })
+    for p in (Payment.objects.filter(clinic=clinic)
+              .select_related("patient", "received_by").order_by("-created_at")[:60]):
+        method_label = dict(Payment.METHOD_CHOICES).get(p.method, p.method)
+        type_label = dict(Payment.TYPE_CHOICES).get(p.type, p.type)
+        events.append({
+            "time": timezone.localtime(p.created_at).strftime("%d.%m.%Y %H:%M"),
+            "user": p.received_by.name if p.received_by else "—",
+            "action": type_label,
+            "object": f"{p.patient.full_name if p.patient else '—'} — {round(p.amount)} сом ({method_label})",
+            "model": "payment", "historyId": None, "canRevert": False,
+            "sortKey": p.created_at,
         })
     events.sort(key=lambda e: e["sortKey"], reverse=True)
     for e in events:

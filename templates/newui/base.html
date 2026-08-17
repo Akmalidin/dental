@@ -3506,7 +3506,10 @@ const translations={
   w_bl_hint: {ru:'Общий для всей клиники — виден всем администраторам и врачам', ky:'Бүткүл клиника үчүн жалпы — бардык администраторлор жана дарыгерлер көрөт', en:'Shared clinic-wide — visible to all admins and doctors', uz:'Butun klinika uchun umumiy — barcha administratorlar va shifokorlarga ko\'rinadi'},
   w_back_to_patients: {ru:'Назад к пациентам', ky:'Бейтаптарга кайтуу', en:'Back to patients', uz:'Bemorlarga qaytish'},
   w_added_by: {ru:'Добавил', ky:'Кошкон', en:'Added by', uz:'Qo\'shgan'},
-  w_audit_hint: {ru:'Реальная история изменений карточек пациентов и приёмов (django-simple-history). Входы в систему и изменения в финансах отдельно пока не логируются.', ky:'Бейтап карталарынын жана кабыл алуулардын өзгөртүүлөрүнүн реалдуу таржымалы (django-simple-history). Тутумга кирүүлөр жана каржыдагы өзгөртүүлөр азырынча өзүнчө катталбайт.', en:'Real change history of patient records and visits (django-simple-history). Logins and finance changes aren\'t logged separately yet.', uz:'Bemor kartalari va qabullarning haqiqiy o\'zgarish tarixi (django-simple-history). Tizimga kirishlar va moliyaviy o\'zgarishlar hali alohida qayd etilmaydi.'},
+  w_audit_hint: {ru:'Реальная история изменений карточек пациентов и приёмов (django-simple-history) + факты приёма оплат/возвратов. Входы в систему и изменения уже принятых платежей отдельно пока не логируются.', ky:'Бейтап карталарынын жана кабыл алуулардын өзгөртүүлөрүнүн реалдуу таржымалы (django-simple-history) + төлөмдөрдү кабыл алуу фактылары. Тутумга кирүүлөр жана кабыл алынган төлөмдөрдүн өзгөртүүлөрү азырынча өзүнчө катталбайт.', en:'Real change history of patient records and visits (django-simple-history) + payment/refund events. Logins and edits to already-accepted payments aren\'t logged separately yet.', uz:'Bemor kartalari va qabullarning haqiqiy o\'zgarish tarixi (django-simple-history) + to\'lov/qaytarish faktlari. Tizimga kirishlar va qabul qilingan to\'lovlarning o\'zgarishlari hali alohida qayd etilmaydi.'},
+  w_audit_revert: {ru:'Откатить', ky:'Артка кайтаруу', en:'Revert', uz:'Ortga qaytarish'},
+  w_audit_revert_confirm: {ru:'Откатить эту запись к прежнему состоянию? Действие необратимо.', ky:'Бул жазууну мурунку абалына кайтарасызбы? Аракет кайтарылгыс.', en:'Revert this record to its previous state? This cannot be undone.', uz:'Bu yozuvni oldingi holatiga qaytarasizmi? Amalni bekor qilib bo\'lmaydi.'},
+  w_audit_reverted: {ru:'Откачено к предыдущему состоянию', ky:'Мурунку абалына кайтарылды', en:'Reverted to previous state', uz:'Oldingi holatiga qaytarildi'},
   w_user: {ru:'Пользователь', ky:'Колдонуучу', en:'User', uz:'Foydalanuvchi'},
   w_action: {ru:'Действие', ky:'Аракет', en:'Action', uz:'Amal'},
   w_object: {ru:'Объект', ky:'Объект', en:'Object', uz:'Obyekt'},
@@ -4078,10 +4081,27 @@ function renderAudit(){
   const q=(document.getElementById('auditSearchInput')?.value||'').toLowerCase();
   const list=auditEvents.filter(e=>e.user.toLowerCase().includes(q) || e.object.toLowerCase().includes(q));
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_events_found')}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_events_found')}</td></tr>`;
     return;
   }
-  body.innerHTML=list.map(e=>`<tr><td class="mono">${e.time}</td><td>${e.user}</td><td>${e.action}</td><td>${e.object}</td></tr>`).join('');
+  // Кнопка «Откатить» — необратимо перезаписывает текущее состояние объекта,
+  // поэтому видна только суперадминистратору (IS_SUPERADMIN) и только у
+  // записей, у которых реально есть что откатывать (e.canRevert — не у
+  // финансовых событий и не у записей об удалении, см. _newui_audit_data).
+  body.innerHTML=list.map(e=>`<tr><td class="mono">${e.time}</td><td>${e.user}</td><td>${e.action}</td><td>${e.object}</td><td>${IS_SUPERADMIN && e.canRevert ? `<button class="btn btn-ghost btn-sm" onclick="auditRevert('${e.model}',${e.historyId})">${t('w_audit_revert')}</button>` : ''}</td></tr>`).join('');
+}
+async function auditRevert(model, historyId){
+  if(!confirm(t('w_audit_revert_confirm'))) return;
+  const res=await fetch(`/new/audit/${model}/${historyId}/revert/`, {
+    method:'POST', credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken')},
+  });
+  const data=await res.json().catch(()=>({}));
+  if(res.ok && data.ok){
+    flashAndReload(t('w_audit_reverted'));
+  } else {
+    showToast(apiErrorMessage(data, t('w_save_failed')), 'error');
+  }
 }
 
 function openVisitResult(btnEl){
@@ -6683,7 +6703,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -6740,6 +6760,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false;
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
+    IS_SUPERADMIN=!!data.isSuperadmin;
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
