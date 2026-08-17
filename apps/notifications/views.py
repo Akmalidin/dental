@@ -1064,6 +1064,59 @@ def _enrich_schedule_intent(result, request):
                 .count()
             )
 
+    elif intent == "financial_summary":
+        from decimal import Decimal
+        from django.db.models import Sum
+        from apps.users.views import _newui_accounting_data
+        from apps.patients.models import Patient
+
+        acct = _newui_accounting_data(clinic)
+        result["monthLabel"] = acct["monthLabel"]
+        result["revenue"] = round(acct["revenue"])
+        result["expensesTotal"] = round(acct["expensesTotal"])
+        result["profit"] = round(acct["profit"])
+        # Долги — по balance (реальное денежное поле, debt — обёртка над ним,
+        # см. Patient.debt), а не через свойство (агрегация в БД быстрее).
+        total_debt = -(Patient.objects.filter(balance__lt=0).aggregate(s=Sum("balance"))["s"] or Decimal(0))
+        result["totalDebt"] = round(total_debt)
+        result["debtorsCount"] = Patient.objects.filter(balance__lt=0).count()
+
+    elif intent == "doctors_working" and result.get("date"):
+        from apps.appointments.models import Appointment
+        from apps.users.models import User as _User
+
+        doctor_ids = (Appointment.objects.filter(start_at__date=result["date"])
+                      .exclude(status=Appointment.STATUS_CANCELLED)
+                      .values_list("doctor_id", flat=True).distinct())
+        doctors = _User.objects.filter(pk__in=list(doctor_ids)).order_by("name")
+        result["doctors"] = [{"id": d.pk, "name": d.name} for d in doctors]
+        result["count"] = len(result["doctors"])
+
+    elif intent == "clinic_stats" and result.get("date"):
+        from apps.appointments.models import Appointment
+
+        qs = (Appointment.objects.filter(start_at__date=result["date"])
+              .exclude(status=Appointment.STATUS_CANCELLED))
+        result["appointmentsCount"] = qs.count()
+        result["patientsCount"] = qs.values_list("patient_id", flat=True).distinct().count()
+
+    elif intent == "clinic_info" and result.get("topic"):
+        topic = result["topic"]
+        if topic == "services":
+            from apps.services.models import Service
+
+            names = list(Service.objects.filter(is_active=True).order_by("name").values_list("name", flat=True)[:60])
+            result["items"] = names
+        elif topic == "doctors":
+            from apps.users.models import clinic_doctors
+
+            result["items"] = [d.name for d in clinic_doctors(clinic).order_by("name")]
+        elif topic == "branches":
+            from apps.users.models import Branch
+
+            result["items"] = list(Branch.objects.filter(clinic=clinic, is_active=True)
+                                    .order_by("name").values_list("name", flat=True))
+
     elif intent == "mark_status" and result.get("status"):
         from django.utils import timezone
         from apps.appointments.models import Appointment

@@ -308,6 +308,35 @@ _IDENTITY_PHRASES = (
     "чей ты", "кто тебя сделал", "кто тебя создал",
 )
 
+# «Знать всю информацию о системе» — финансовая сводка, общая статистика
+# клиники (не по конкретному пациенту/врачу — для этого уже есть find_patient/
+# doctor_appointments выше) и ответы про структуру клиники (услуги/врачи/
+# филиалы). Реальные данные подставляет _enrich_schedule_intent
+# (apps.notifications.views) — здесь только классификация намерения.
+_FINANCE_KEYWORDS = (
+    "выручка", "выручку", "доход", "доходы", "прибыль", "рентабельность",
+    "расходы клиники", "расход клиники", "должники", "должников",
+    "сумма долгов", "общий долг", "долги клиники",
+)
+_DOCTORS_WORKING_KEYWORDS = (
+    "сколько врачей работает", "сколько докторов работает", "сколько врачей сегодня",
+    "какие врачи работают", "кто из врачей работает", "кто сегодня работает",
+    "кто из докторов работает",
+)
+_CLINIC_INFO_SERVICES_KEYWORDS = ("какие услуги", "список услуг", "какие у вас услуги", "сколько услуг")
+_CLINIC_INFO_DOCTORS_KEYWORDS = (
+    "список врачей", "какие врачи есть", "все врачи", "сколько врачей в клинике", "сколько всего врачей",
+)
+_CLINIC_INFO_BRANCHES_KEYWORDS = ("какие филиалы", "список филиалов", "сколько филиалов")
+# Расширение _DOCTOR_COUNT_STOPWORDS (см. ниже, doctor_appointments) —
+# распространённые предлоги/формы глагола «записать», которые иначе
+# оставались бы «именем врача» и превращали общий вопрос про клинику
+# («сколько пациентов сегодня записано») в мусорный doctor_appointments.
+_CLINIC_STATS_EXTRA_STOPWORDS = {
+    "на", "в", "с", "из", "по", "всего", "записано", "записан", "записана",
+    "записаны", "клинике", "клинику",
+}
+
 
 def _extract_relative_date(text, today):
     if "послезавтра" in text:
@@ -368,12 +397,27 @@ def parse_schedule_command(transcript, today_iso):
     команда не подошли, см. handleAssistantCommand в base.html)."""
     text = transcript.lower()
     today = datetime.date.fromisoformat(today_iso)
-    empty = {"intent": "unknown", "date": None, "patient_name": None, "status": None, "doctor_name": None}
+    empty = {"intent": "unknown", "date": None, "patient_name": None, "status": None, "doctor_name": None, "topic": None}
 
     # «Как тебя зовут»/«кто ты» — проверяется первой, до всех остальных
     # намерений (см. комментарий у _IDENTITY_PHRASES выше).
     if any(p in text for p in _IDENTITY_PHRASES):
         return {**empty, "intent": "identity"}
+
+    # Финансовая сводка / статистика клиники / структура клиники — тоже
+    # проверяются рано, они не пересекаются по формулировкам с поиском
+    # конкретного пациента/врача ниже.
+    if any(kw in text for kw in _FINANCE_KEYWORDS):
+        return {**empty, "intent": "financial_summary"}
+    if any(kw in text for kw in _DOCTORS_WORKING_KEYWORDS):
+        date = _extract_relative_date(text, today) or today
+        return {**empty, "intent": "doctors_working", "date": date.isoformat()}
+    if any(kw in text for kw in _CLINIC_INFO_SERVICES_KEYWORDS):
+        return {**empty, "intent": "clinic_info", "topic": "services"}
+    if any(kw in text for kw in _CLINIC_INFO_DOCTORS_KEYWORDS):
+        return {**empty, "intent": "clinic_info", "topic": "doctors"}
+    if any(kw in text for kw in _CLINIC_INFO_BRANCHES_KEYWORDS):
+        return {**empty, "intent": "clinic_info", "topic": "branches"}
 
     # «найди пациента Иванова» / «открой визиты у Мадакимова Акмалидина» /
     # «покажи карточку Петровой» — раньше без реального поиска команда просто
@@ -399,12 +443,16 @@ def parse_schedule_command(transcript, today_iso):
             return {**empty, "intent": "open_patients_list"}
 
     # «сколько приёмов у Ивановой сегодня» — тоже реальные данные на клиенте
-    # (scheduleRealData), не вопрос к ИИ.
+    # (scheduleRealData), не вопрос к ИИ. Если имя врача не названо («сколько
+    # пациентов сегодня записано», «сколько записей на завтра») — это не
+    # ошибка распознавания, а другой, клиникообщий вопрос (clinic_stats),
+    # см. _CLINIC_STATS_EXTRA_STOPWORDS выше.
     if any(kw in text for kw in _DOCTOR_COUNT_KEYWORDS) and any(w in text for w in _DOCTOR_COUNT_TOPIC_WORDS):
-        doctor_name = _strip_words(transcript, _DOCTOR_COUNT_STOPWORDS)
+        doctor_name = _strip_words(transcript, _DOCTOR_COUNT_STOPWORDS | _CLINIC_STATS_EXTRA_STOPWORDS)
         date = _extract_relative_date(text, today) or today
         if doctor_name:
             return {**empty, "intent": "doctor_appointments", "doctor_name": doctor_name, "date": date.isoformat()}
+        return {**empty, "intent": "clinic_stats", "date": date.isoformat()}
 
     if "расписан" in text or "покажи" in text or "открой" in text:
         # Дата не названа явно («покажи расписание») — раньше это тоже
