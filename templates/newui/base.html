@@ -249,7 +249,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 /* Лента дней (дневной вид): подпись-дата над каждой группой врачей одного
    дня, и угловая ячейка колонки времени — теперь их ДВЕ (над строкой дат и
    над строкой врачей), :first-child уже не покрывает вторую. */
-.sched-day-group-label{text-align:center;font-size:12.5px;font-weight:700;color:var(--ink);background:var(--cloud);border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);}
+.sched-day-group-label{text-align:right;font-size:12.5px;font-weight:700;color:var(--ink);background:var(--cloud);border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);}
 .sched-day-group-label:first-of-type{border-left:none;}
 /* Подпись даты «прилипает» к видимой части своей группы колонок при
    горизонтальном скролле (но не вылезает за её границы — не пересекается с
@@ -313,6 +313,33 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
   box-shadow:0 8px 20px rgba(20,23,31,.22);
 }
 .sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
+/* Компактная карточка (класс .compact, ставится в JS по фактической высоте
+   — см. buildDayRibbonHTML) — вместо стека имя/время/услуга в несколько
+   строк (не помещается по высоте) — одна строка: имя слева (главное, не
+   ужимается), время справа. Пробовали чистый CSS (flex-shrink/@container) —
+   оба варианта либо обрезали не то (имя вместо времени), либо ужимали
+   время наполовину посреди символа вместо чистого скрытия. Решение — точный
+   замер текста через canvas ДО рендера (см. apptMeasureTextWidth), помещаются
+   ли имя+время в ширину колонки; если нет — время получает класс
+   .sched-appt-time-hide (ставится на саму карточку в JS), а не убирается из
+   разметки — нужно, чтобы при наведении (:not(:hover) ниже) снова появиться
+   вместе с обычной раскладкой (см. .sched-appt:hover выше). */
+.sched-appt.compact:not(:hover){
+  flex-direction:row;
+  align-items:center;
+  gap:6px;
+}
+.sched-appt.compact:not(:hover) .sched-appt-name{
+  flex:1 1 auto;
+  min-width:0;
+  padding-right:0;
+}
+.sched-appt.compact:not(:hover) .sched-appt-service{
+  display:none;
+}
+.sched-appt.sched-appt-time-hide:not(:hover) .sched-appt-time{
+  display:none;
+}
 /* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка в
    левом верхнем углу, сознательно не фон карточки (тот уже занят статусом). */
 .sched-appt-debt-dot{position:absolute;top:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
@@ -4862,6 +4889,19 @@ function ribbonInitialDates(){
 // врача своя плашка сверху.
 const SCHED_FALLBACK_DOC_COLORS=['#2C4BEA','#0E9C7D','#B8862E','#E85D2D','#7C3AED','#0EA5E9','#DB2777','#65A30D'];
 const SCHED_ROW_PX=76; // высота одного слота сетки (см. grid-template-rows ниже) — используется и там, и при расчёте минимальной высоты карточки записи (см. fillPct)
+// Точный замер ширины текста (через canvas, реальные метрики шрифта — не
+// прикидка на глаз) — для компактных (короткого приёма) карточек записи:
+// решаем, помещается ли время РЯДОМ с именем в одну строку, ДО рендера, а
+// не гадаем через flex-shrink (пробовали — при нехватке места ужимало
+// время наполовину, обрубленным посередине символа, а не чисто прятало,
+// см. .sched-appt.compact в CSS). Один и тот же <canvas> переиспользуется
+// между вызовами — создание нового на каждую карточку заметно медленнее.
+let _apptMeasureCtx=null;
+function apptMeasureTextWidth(text, font){
+  if(!_apptMeasureCtx) _apptMeasureCtx=document.createElement('canvas').getContext('2d');
+  _apptMeasureCtx.font=font;
+  return _apptMeasureCtx.measureText(text).width;
+}
 function buildDayRibbonHTML(){
   if(scheduleRibbonDates.length===0) scheduleRibbonDates=ribbonInitialDates();
   const visibleDocs=visibleScheduleDoctors();
@@ -4981,7 +5021,28 @@ function buildDayRibbonHTML(){
         const fillPct=Math.max(minPct, Math.min(100, Math.round((apptEndMin-apptStartMin)/(slotEndMin-slotStartMin)*100)));
         const leftoverMin=slotEndMin-apptEndMin;
         const apptStyle=`background:${apptBg};border-left-color:${statusHex};height:${fillPct}%;`;
-        html+=`<div class="sched-appt ${appt.status}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        // «Компактная» карточка (класс .compact) — когда реальная высота
+        // ниже удобной для обычной вертикальной раскладки имя/время/услуга
+        // (жалоба: «короткие записи показывай ФИО, а время справа если
+        // поместится, или скрой время, покажи только имя») — CSS переводит
+        // такую карточку в ОДНУ строку (имя + время рядом), а не в стек. При
+        // наведении .compact:hover сама отключается — карточка увеличивается
+        // (см. .sched-appt:hover) и снова показывает обычную раскладку.
+        const compact = Math.round(slotHeightPx*fillPct/100) < 60;
+        // Помещаются ли имя И время рядом в одну строку — точный замер
+        // (canvas), а не flex-shrink «на глаз» (пробовали — при нехватке
+        // места время обрезалось посередине символа, а не пряталось чисто).
+        // Если не помещаются — время не убирается из DOM (нужно для ховера,
+        // см. .sched-appt-time-hide ниже), просто скрывается CSS-классом,
+        // который снимается при :hover.
+        let timeHideClass='';
+        if(compact){
+          const nameW=apptMeasureTextWidth(appt.patient, '700 12.5px Inter, sans-serif');
+          const timeW=apptMeasureTextWidth(`${appt.time}–${endLabel}`, '600 11px Inter, sans-serif');
+          const availablePx=colWidth-6/*паддинг ячейки*/-16/*паддинг карточки*/-6/*gap*/-4/*запас*/;
+          if(nameW+timeW>availablePx) timeHideClass=' sched-appt-time-hide';
+        }
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
