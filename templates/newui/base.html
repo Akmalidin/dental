@@ -3769,6 +3769,14 @@ const translations={
   w_voice_type_hint: {ru:'Сообщение…', ky:'Билдирүү…', en:'Message…', uz:'Xabar…'},
   w_voice_opening_patients_list: {ru:'Открываю список пациентов', ky:'Пациенттер тизмесин ачам', en:'Opening patients list', uz:'Bemorlar ro\'yxati ochilmoqda'},
   w_voice_identity_answer: {ru:'Меня зовут {name}. Я — голосовой ассистент клиники на платформе AKM SOFT CLINIC, в приложении ODONTIS. Помогаю с расписанием, поиском пациентов и картой приёма.', ky:'Менин атым {name}. Мен — AKM SOFT CLINIC платформасында, ODONTIS колдонмосунда иштеген клиниканын добуштук ассистентимин. График, пациенттерди издөө жана кабыл алуу картасы менен жардам берем.', en:'My name is {name}. I\'m the clinic\'s voice assistant, running on the AKM SOFT CLINIC platform, inside the ODONTIS app. I help with the schedule, finding patients and the visit card.', uz:'Mening ismim {name}. Men — AKM SOFT CLINIC platformasida, ODONTIS ilovasida ishlaydigan klinikaning ovozli assistentiman. Jadval, bemorlarni qidirish va qabul kartasi bilan yordam beraman.'},
+  w_voice_financial_summary: {ru:'За {month}: выручка {revenue} сом, расходы {expenses} сом, прибыль {profit} сом. Должников: {debtorsCount}, на сумму {totalDebt} сом.', ky:'{month} үчүн: түшүм {revenue} сом, чыгашалар {expenses} сом, пайда {profit} сом. Карызчылар: {debtorsCount}, суммасы {totalDebt} сом.', en:'For {month}: revenue {revenue}, expenses {expenses}, profit {profit}. Debtors: {debtorsCount}, totaling {totalDebt}.', uz:'{month} uchun: tushum {revenue}, xarajatlar {expenses}, foyda {profit}. Qarzdorlar: {debtorsCount}, summasi {totalDebt}.'},
+  w_voice_doctors_working: {ru:'Работает {count} врачей: {list}', ky:'{count} врач иштейт: {list}', en:'{count} doctors working: {list}', uz:'{count} shifokor ishlayapti: {list}'},
+  w_voice_no_doctors_working: {ru:'На эту дату нет работающих врачей', ky:'Бул күнгө иштеген врач жок', en:'No doctors working on this date', uz:'Bu sanada ishlayotgan shifokor yo\'q'},
+  w_voice_clinic_stats: {ru:'На {date}: записей — {appointments}, пациентов — {patients}', ky:'{date} күнү: жазуулар — {appointments}, пациенттер — {patients}', en:'On {date}: appointments — {appointments}, patients — {patients}', uz:'{date} kuni: yozuvlar — {appointments}, bemorlar — {patients}'},
+  w_voice_clinic_info_services: {ru:'Услуги клиники: {list}', ky:'Клиниканын кызматтары: {list}', en:'Clinic services: {list}', uz:'Klinika xizmatlari: {list}'},
+  w_voice_clinic_info_doctors: {ru:'Врачи клиники: {list}', ky:'Клиниканын врачтары: {list}', en:'Clinic doctors: {list}', uz:'Klinika shifokorlari: {list}'},
+  w_voice_clinic_info_branches: {ru:'Филиалы клиники: {list}', ky:'Клиниканын филиалдары: {list}', en:'Clinic branches: {list}', uz:'Klinika filiallari: {list}'},
+  w_voice_clinic_info_empty: {ru:'Информация не найдена', ky:'Маалымат табылган жок', en:'No information found', uz:'Ma\'lumot topilmadi'},
   w_assistant_settings_title: {ru:'Настройки ассистента', ky:'Ассистент тууралоолору', en:'Assistant settings', uz:'Assistent sozlamalari'},
   w_assistant_name_label: {ru:'Имя ассистента', ky:'Ассистенттин аты', en:'Assistant name', uz:'Assistent nomi'},
   w_assistant_name_placeholder: {ru:'ODONTIS', ky:'ODONTIS', en:'ODONTIS', uz:'ODONTIS'},
@@ -6851,6 +6859,36 @@ function applyAssistantIntent(data){
   if(data.intent==='open_patients_list'){
     setTimeout(()=>{ location.href='/new/patients/'; }, 700);
     return t('w_voice_opening_patients_list');
+  }
+  // Финансовая сводка/статистика клиники/структура клиники — «знать всю
+  // информацию о системе» (запрос пользователя): реальные данные из БД,
+  // подставленные сервером (_enrich_schedule_intent), здесь только
+  // форматируем ответ.
+  if(data.intent==='financial_summary'){
+    return t('w_voice_financial_summary')
+      .replace('{month}', data.monthLabel||'')
+      .replace('{revenue}', Math.round(data.revenue||0).toLocaleString('ru-RU')+' '+CUR_SYM)
+      .replace('{expenses}', Math.round(data.expensesTotal||0).toLocaleString('ru-RU')+' '+CUR_SYM)
+      .replace('{profit}', Math.round(data.profit||0).toLocaleString('ru-RU')+' '+CUR_SYM)
+      .replace('{debtorsCount}', data.debtorsCount||0)
+      .replace('{totalDebt}', Math.round(data.totalDebt||0).toLocaleString('ru-RU')+' '+CUR_SYM);
+  }
+  if(data.intent==='doctors_working'){
+    const doctors=data.doctors||[];
+    if(doctors.length===0) return t('w_voice_no_doctors_working');
+    return t('w_voice_doctors_working').replace('{count}', doctors.length).replace('{list}', doctors.map(d=>d.name).join(', '));
+  }
+  if(data.intent==='clinic_stats'){
+    return t('w_voice_clinic_stats').replace('{date}', data.date||'').replace('{appointments}', data.appointmentsCount||0).replace('{patients}', data.patientsCount||0);
+  }
+  if(data.intent==='clinic_info'){
+    const items=data.items||[];
+    if(items.length===0) return t('w_voice_clinic_info_empty');
+    const list=items.join(', ');
+    const key = data.topic==='doctors' ? 'w_voice_clinic_info_doctors'
+      : data.topic==='branches' ? 'w_voice_clinic_info_branches'
+      : 'w_voice_clinic_info_services';
+    return t(key).replace('{list}', list);
   }
   // Поиск/подсчёт теперь делает СЕРВЕР по всей базе клиники (apps.notifications.
   // views._enrich_schedule_intent), не клиент по тому, что уже загружено на
