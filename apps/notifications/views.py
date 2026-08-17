@@ -959,6 +959,133 @@ def tg_broadcast(request):
     })
 
 
+def _voice_word_stems(word):
+    """Варианты укороченного слова для устойчивого поиска ФИО голосом —
+    сказанное почти всегда в другом падеже, чем хранится в БД («Мадакимова»
+    — родительный падеж, в БД «Мадакимов» — именительный), а падежные
+    окончания в русском обычно меняют/добавляют 1-2 последние буквы —
+    icontains с полным словом их не находит. Пробуем и укороченные варианты
+    (не короче 3 символов, иначе слишком много ложных совпадений)."""
+    stems = {word}
+    if len(word) > 4:
+        stems.add(word[:-1])
+    if len(word) > 5:
+        stems.add(word[:-2])
+    return stems
+
+
+def _voice_search_patients(name_query, limit=6):
+    """Реальный поиск пациента по ВСЕЙ базе клиники — Patient.objects уже
+    автоматически отфильтрован по текущей клинике (apps.tenancy.
+    ClinicSoftDeleteManager). Раньше голосовой поиск шёл по patientsList на
+    клиенте — компактному встроенному списку из последних 300 созданных
+    пациентов (см. apps.users.views._newui_patients_data, используется в
+    модалках записи/кассы) — из-за чего «найди пациента X» не находил
+    пациентов старше последних 300, хотя обычный поиск на /new/patients/
+    (настоящая серверная пагинация, apps.users.views._newui_patients_page_data)
+    их прекрасно находил. Баг с прода. Теперь ищем напрямую в БД."""
+    from django.db.models import Q
+    from apps.patients.models import Patient
+
+    words = [w for w in (name_query or "").lower().split() if w]
+    if not words:
+        return []
+    qs = Patient.objects.all()
+    for word in words:
+        word_q = Q(phone__icontains=word)
+        for stem in _voice_word_stems(word):
+            word_q |= (Q(first_name__icontains=stem) | Q(last_name__icontains=stem)
+                       | Q(middle_name__icontains=stem))
+        qs = qs.filter(word_q)
+    return list(qs.order_by("-created_at").distinct()[:limit])
+
+
+def _voice_fuzzy_word(a, b):
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    n = min(len(a), len(b), 6)
+    return n >= 3 and a[:n] == b[:n]
+
+
+def _voice_fuzzy_name(a, b):
+    """Пословное сравнение без учёта порядка слов и с допуском на падежные
+    окончания — те же правила, что и templates/newui/base.html::
+    fuzzyNameMatch (продублировано, а не переиспользовано: одна сторона на
+    Python для серверного поиска врача/пациента ниже, другая на JS для
+    клиентских случаев — общего рантайма между ними нет)."""
+    a_words = [w for w in a.split() if w]
+    b_words = [w for w in b.split() if w]
+    if not a_words or not b_words:
+        return False
+    return all(any(_voice_fuzzy_word(aw, bw) for aw in a_words) for bw in b_words)
+
+
+def _voice_search_doctors(clinic, name_query, limit=6):
+    """Врачей в клинике обычно немного (десятки максимум) — фильтруем в
+    Python той же fuzzy-логикой, что и раньше делал клиент; не нужен
+    Q-запрос по stem'ам, как для потенциально многотысячной базы пациентов
+    выше."""
+    from apps.users.models import clinic_doctors
+
+    q = (name_query or "").lower()
+    return [d for d in clinic_doctors(clinic) if _voice_fuzzy_name(d.name.lower(), q)][:limit]
+
+
+def _enrich_schedule_intent(result, request):
+    """Реальные данные из БД для намерений, которые раньше искали только по
+    тому, что уже загружено на ТЕКУЩЕЙ странице (patientsList/scheduleRealData/
+    scheduleDoctors в base.html) — из-за чего ассистент «не находил» пациента
+    вне последних 300 либо переставал понимать команды по расписанию/врачу
+    вне самой страницы расписания. Только ЧТЕНИЕ (поиск/подсчёт) — реальное
+    изменение (смена статуса записи) по-прежнему выполняет клиент через уже
+    существующий защищённый /appointments/<id>/status/ (см. templates/newui/
+    base.html::applyAssistantIntent), сервер здесь лишь подсказывает, какую
+    именно запись/пациента/врача имел в виду голос."""
+    from apps.tenancy import get_current_clinic
+
+    intent = result.get("intent")
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+
+    if intent == "find_patient" and result.get("patient_name"):
+        matches = _voice_search_patients(result["patient_name"])
+        result["patients"] = [{"id": p.pk, "fullName": p.full_name, "phone": p.phone} for p in matches]
+
+    elif intent == "doctor_appointments" and result.get("doctor_name"):
+        from apps.appointments.models import Appointment
+
+        doctors = _voice_search_doctors(clinic, result["doctor_name"])
+        result["doctors"] = [{"id": d.pk, "name": d.name} for d in doctors]
+        if len(doctors) == 1 and result.get("date"):
+            result["count"] = (
+                Appointment.objects.filter(doctor_id=doctors[0].pk, start_at__date=result["date"])
+                .exclude(status=Appointment.STATUS_CANCELLED)
+                .count()
+            )
+
+    elif intent == "mark_status" and result.get("status"):
+        from django.utils import timezone
+        from apps.appointments.models import Appointment
+
+        today = timezone.localdate()
+        qs = (Appointment.objects.filter(doctor=request.user, start_at__date=today)
+              .exclude(status__in=[Appointment.STATUS_COMPLETED, Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW])
+              .select_related("patient"))
+        appts = list(qs)
+        if result.get("patient_name"):
+            q = result["patient_name"].lower()
+            appts = [a for a in appts if a.patient and _voice_fuzzy_name(a.patient.full_name.lower(), q)]
+        result["appointments"] = [
+            {
+                "id": a.pk,
+                "patient": a.patient.full_name if a.patient else "",
+                "time": timezone.localtime(a.start_at).strftime("%H:%M"),
+            }
+            for a in appts
+        ]
+
+
 @login_required
 @require_POST
 def voice_command(request):
@@ -1034,6 +1161,7 @@ def voice_command(request):
     if mode == "schedule":
         today_iso = timezone.localdate().isoformat()
         result.update(parse_schedule_command(transcript, today_iso))
+        _enrich_schedule_intent(result, request)
     elif mode == "visit":
         result.update(parse_visit_command(transcript))
     return JsonResponse(result)
