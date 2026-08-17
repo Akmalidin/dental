@@ -5557,16 +5557,6 @@ function findNextFreeSlot(docId, durationMin, excludeApptId){
   return {date:isoDate(now), time:minutesToTime(idealMin), isNow:false, notFound:true};
 }
 // Длительность приёма для модалки «Новая запись» — из выбранной услуги
-// (servicesList[].duration, минуты), 60 минут по умолчанию, если услуга не
-// выбрана или её длительность не задана/нулевая (жалоба: раньше падало на
-// 30 минут — слишком коротко для «по умолчанию»). Тот же дефолт продублирован
-// на бэкенде (apps.appointments.views.appointment_create_quick) — там
-// отдельная копия, т.к. это два разных рантайма без общего кода.
-function apptServiceDurationMin(){
-  const serviceId=document.getElementById('appt-service').value;
-  const service=servicesList.find(s=>s.id===Number(serviceId));
-  return (service && service.duration) || 60;
-}
 // true, если пользователь сам вручную поправил поле «до» (см. oninput на
 // #appt-end-time) — тогда автозаполнение по длительности услуги
 // останавливается, пока не поменяются время начала или услуга (жалоба:
@@ -5581,16 +5571,22 @@ let apptEndTimeTouched=false;
 // перекидывай». submitNewAppt() смотрит на этот флаг и решает, какой AJAX-
 // эндпоинт дёрнуть — create-quick или update-quick.
 let apptModalEditId=null;
+// Дефолтная длительность приёма — из переключателя 30мин/1час (apptChipStepMin,
+// см. renderApptTimeChips ниже), НЕ из длительности выбранной услуги, как
+// было раньше. Жалоба с прода: поле «Время» показывало «09:00–09:30» (по
+// услуге), а кнопки-чипы снизу уже стояли на «1 час» — несовпадение,
+// приходилось кликать по чипу ещё раз, чтобы выровнять. Теперь оба места
+// читают один и тот же apptChipStepMin — при открытии модалки/смене времени
+// начала «до» сразу совпадает с тем, что подсвечено в чипах.
 function apptUpdateEndTimeDefault(){
   if(!document.getElementById('appt-end-time') || apptEndTimeTouched) return;
   const timeLabel=document.getElementById('appt-time').value;
   if(!timeLabel){ apptSetEndTimeField(''); return; }
-  apptSetEndTimeField(minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1)));
+  apptSetEndTimeField(minutesToTime(Math.min(timeToMinutes(timeLabel)+apptChipStepMin, 24*60-1)));
 }
 // Реальная длительность для проверки занятости/создания записи — от
 // вручную заданного «до», если пользователь его трогал (и оно позже
-// начала), иначе от длительности услуги (тот же дефолт, что и в
-// apptUpdateEndTimeDefault).
+// начала), иначе от того же дефолта, что и apptUpdateEndTimeDefault.
 function apptDurationMin(){
   const startLabel=document.getElementById('appt-time').value;
   const endLabel=document.getElementById('appt-end-time').value;
@@ -5598,7 +5594,7 @@ function apptDurationMin(){
     const diff=timeToMinutes(endLabel)-timeToMinutes(startLabel);
     if(diff>0) return diff;
   }
-  return apptServiceDurationMin();
+  return apptChipStepMin;
 }
 // Готовые кнопки-чипы с типовыми интервалами времени под полями «Дата»/
 // «Время» (запрос: «снизу даты и времени сделай кнопки готовые например
@@ -5613,6 +5609,11 @@ function apptDurationMin(){
 let apptChipStepMin=60;
 function apptSetChipStep(min){
   apptChipStepMin=min;
+  // Явная смена шага — пересчитать «до» заново по новому шагу (тот же
+  // принцип, что и при смене времени начала/услуги): иначе поле «Время»
+  // осталось бы с прежней длительностью, а чипы уже показывали бы новую.
+  apptEndTimeTouched=false;
+  apptUpdateEndTimeDefault();
   renderApptTimeChips();
 }
 function renderApptTimeChips(){
