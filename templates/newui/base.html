@@ -331,6 +331,12 @@ input[type=text],input[type=tel],input[type=number],input[type=date],select,text
   width:100%;padding:9px 12px;border:1px solid var(--mist);border-radius:8px;background:var(--paper);color:var(--ink);
 }
 input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);border-color:var(--cobalt);}
+/* Пикер времени в «Новая/Изменить запись» (см. #appt-time-h и соседние) —
+   4 select'а в половине ширины модалки с обычным паддингом 9px 12px
+   (24px только на паддинг с каждой стороны) не оставляли места для текста
+   самого значения ("09") — виден был только значок стрелки, жалоба «не
+   видно что выбрали». Паддинг уменьшен и текст отцентрован. */
+.appt-time-select{padding:9px 2px;text-align:center;text-align-last:center;}
 .toggle{display:flex;align-items:center;gap:9px;}
 .toggle input{width:36px;height:20px;-webkit-appearance:none;appearance:none;background:var(--mist);border-radius:100px;position:relative;cursor:pointer;transition:.15s;}
 .toggle input:checked{background:var(--cobalt);}
@@ -754,34 +760,37 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
         <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service" onchange="apptEndTimeTouched=false;updateApptAvailabilityHint()"></select></div>
       </div>
-      <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
-        <div class="form-group">
-          <label data-i18n="w_time">Время</label>
-          <!-- Раньше — нативный <input type="time">: жалоба «вообще не удобно
-               выбирать время» (фото — браузер на Windows/12-часовой AM/PM-пикер
-               со скроллом, независимо от lang="ru" на инпуте). Заменено на пару
-               <select> часы/минуты (24-часовой формат, минуты с шагом 5) —
-               предсказуемо на любой ОС/браузере, крупные клик-зоны. Реальное
-               значение хранится в скрытых #appt-time/#appt-end-time (то же имя
-               "HH:MM", что и раньше) — весь остальной код (чипы, проверка
-               занятости, отправка формы) их и читает, не в курсе, что теперь
-               источник — селекты, не текстовое поле. См. apptSetStartTime/
-               apptSetEndTimeField/apptTimeSelectChanged в JS. -->
-          <div style="display:flex;gap:6px;align-items:center;">
-            <div style="display:flex;gap:2px;flex:1;">
-              <select id="appt-time-h" onchange="apptTimeSelectChanged()"></select>
-              <select id="appt-time-m" onchange="apptTimeSelectChanged()"></select>
-            </div>
-            <span style="color:var(--ink-soft);flex-shrink:0;">–</span>
-            <div style="display:flex;gap:2px;flex:1;">
-              <select id="appt-end-time-h" onchange="apptEndTimeSelectChanged()"></select>
-              <select id="appt-end-time-m" onchange="apptEndTimeSelectChanged()"></select>
-            </div>
+      <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
+      <div class="form-group">
+        <label data-i18n="w_time">Время</label>
+        <!-- Раньше — нативный <input type="time">: жалоба «вообще не удобно
+             выбирать время» (фото — браузер на Windows/12-часовой AM/PM-пикер
+             со скроллом, независимо от lang="ru" на инпуте). Заменено на пару
+             <select> часы/минуты (24-часовой формат) — предсказуемо на любой
+             ОС/браузере, крупные клик-зоны. Реальное значение хранится в
+             скрытых #appt-time/#appt-end-time (то же имя "HH:MM", что и
+             раньше) — весь остальной код (чипы, проверка занятости, отправка
+             формы) их и читает, не в курсе, что теперь источник — селекты, не
+             текстовое поле. См. apptSetStartTime/apptSetEndTimeField/
+             apptTimeSelectChanged в JS.
+             Вынесено в СВОЙ ряд (не пополам с «Дата» в form-row2) и добавлен
+             класс .appt-time-select с уменьшенным паддингом — жалоба «не
+             видно что выбрали»: 4 select'а + тире в половине ширины модалки
+             сжимались настолько, что текст значения (не сама опция) не
+             помещался и был не виден, оставался только значок стрелки. -->
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div style="display:flex;gap:2px;flex:1;">
+            <select class="appt-time-select" id="appt-time-h" onchange="apptTimeSelectChanged()"></select>
+            <select class="appt-time-select" id="appt-time-m" onchange="apptTimeSelectChanged()"></select>
           </div>
-          <input type="hidden" id="appt-time">
-          <input type="hidden" id="appt-end-time">
+          <span style="color:var(--ink-soft);flex-shrink:0;">–</span>
+          <div style="display:flex;gap:2px;flex:1;">
+            <select class="appt-time-select" id="appt-end-time-h" onchange="apptEndTimeSelectChanged()"></select>
+            <select class="appt-time-select" id="appt-end-time-m" onchange="apptEndTimeSelectChanged()"></select>
+          </div>
         </div>
+        <input type="hidden" id="appt-time">
+        <input type="hidden" id="appt-end-time">
       </div>
       <!-- Готовые кнопки с типовыми интервалами времени (запрос: «снизу даты
            и времени сделай кнопки готовые например 12:00-12:30, 12:30-13:00») —
