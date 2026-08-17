@@ -4782,6 +4782,7 @@ function ribbonInitialDates(){
 // детерминированно), а не остаётся серой — как в референсе, где у каждого
 // врача своя плашка сверху.
 const SCHED_FALLBACK_DOC_COLORS=['#2C4BEA','#0E9C7D','#B8862E','#E85D2D','#7C3AED','#0EA5E9','#DB2777','#65A30D'];
+const SCHED_ROW_PX=76; // высота одного слота сетки (см. grid-template-rows ниже) — используется и там, и при расчёте минимальной высоты карточки записи (см. fillPct)
 function buildDayRibbonHTML(){
   if(scheduleRibbonDates.length===0) scheduleRibbonDates=ribbonInitialDates();
   const visibleDocs=visibleScheduleDoctors();
@@ -4803,7 +4804,7 @@ function buildDayRibbonHTML(){
   // зашита в разметку: жалоба «карточки слишком узкие» + прямой запрос дать
   // самим регулировать ширину.
   const colWidth=calSettings.colWidth||150;
-  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(${colWidth}px,1fr));grid-template-rows:auto auto repeat(${numSlots},76px);min-width:${60+totalCols*colWidth}px;">`;
+  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(${colWidth}px,1fr));grid-template-rows:auto auto repeat(${numSlots},${SCHED_ROW_PX}px);min-width:${60+totalCols*colWidth}px;">`;
   html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>';
   if(scheduleDoctors.length===0){
     return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
@@ -4891,7 +4892,14 @@ function buildDayRibbonHTML(){
         const slotEndMin=slotStartMin+span*interval;
         const apptStartMin=timeToMinutes(appt.time);
         const apptEndMin=Math.min(apptStartMin+(appt.durationMin||interval), slotEndMin);
-        const fillPct=Math.max(30, Math.min(100, Math.round((apptEndMin-apptStartMin)/(slotEndMin-slotStartMin)*100)));
+        // Минимум — не проценты от слота (жалоба: «не видно имени» — при
+        // большом интервале сетки (напр. час) короткий приём (напр. 30 мин)
+        // сжимался до 30% слота, это ~23px, куда имя пациента физически не
+        // помещается), а гарантированный минимум в пикселях: высота, где
+        // точно читаются имя + время (см. .sched-appt-name/.sched-appt-time).
+        const slotHeightPx=span*SCHED_ROW_PX;
+        const minPct=Math.min(100, Math.ceil(44/slotHeightPx*100));
+        const fillPct=Math.max(minPct, Math.min(100, Math.round((apptEndMin-apptStartMin)/(slotEndMin-slotStartMin)*100)));
         const leftoverMin=slotEndMin-apptEndMin;
         const apptStyle=`background:${apptBg};border-left-color:${statusHex};height:${fillPct}%;`;
         html+=`<div class="sched-appt ${appt.status}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
