@@ -8,6 +8,7 @@ urlpatterns = [
     path("create/", views.appointment_create, name="appointment_create"),
     path("create-quick/", views.appointment_create_quick, name="appointment_create_quick"),
     path("<int:pk>/edit/", views.appointment_edit, name="appointment_edit"),
+    path("<int:pk>/update-quick/", views.appointment_update_quick, name="appointment_update_quick"),
     path("<int:pk>/status/", views.appointment_status, name="appointment_status"),
     path("<int:pk>/finish/", views.appointment_finish, name="appointment_finish"),
     path("<int:pk>/move/", views.appointment_move, name="appointment_move"),

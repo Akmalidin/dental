@@ -738,7 +738,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 <!-- Новая запись -->
 <div class="modal-backdrop" id="m-appt">
   <div class="modal">
-    <div class="modal-head"><h3 data-i18n="title_m_appt">Новая запись</h3><button class="modal-close" onclick="closeModal('m-appt')">✕</button></div>
+    <div class="modal-head"><h3 id="apptModalTitle" data-i18n="title_m_appt">Новая запись</h3><button class="modal-close" onclick="closeModal('m-appt')">✕</button></div>
     <div class="modal-body">
       <div id="apptModalError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
       <div class="form-group" style="position:relative;">
@@ -758,26 +758,47 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
         <div class="form-group">
           <label data-i18n="w_time">Время</label>
-          <!-- Раньше окончание приёма только показывалось расчётной подсказкой
-               (авто, не редактируется) — жалоба: «должно спрашивать с какого
-               часа до какого, а не просто само расписывать». Теперь «до» —
-               настоящее поле ввода: предзаполняется расчётом (длительность
-               выбранной услуги, 60 минут по умолчанию), но пользователь может
-               свободно его поменять — apptEndTimeTouched отслеживает это и
-               останавливает автообновление поля после ручной правки, пока не
-               поменяется время начала/услуга (см. apptUpdateEndTimeDefault). -->
+          <!-- Раньше — нативный <input type="time">: жалоба «вообще не удобно
+               выбирать время» (фото — браузер на Windows/12-часовой AM/PM-пикер
+               со скроллом, независимо от lang="ru" на инпуте). Заменено на пару
+               <select> часы/минуты (24-часовой формат, минуты с шагом 5) —
+               предсказуемо на любой ОС/браузере, крупные клик-зоны. Реальное
+               значение хранится в скрытых #appt-time/#appt-end-time (то же имя
+               "HH:MM", что и раньше) — весь остальной код (чипы, проверка
+               занятости, отправка формы) их и читает, не в курсе, что теперь
+               источник — селекты, не текстовое поле. См. apptSetStartTime/
+               apptSetEndTimeField/apptTimeSelectChanged в JS. -->
           <div style="display:flex;gap:6px;align-items:center;">
-            <input autocomplete="off" type="time" id="appt-time" lang="ru" style="flex:1;" onchange="apptEndTimeTouched=false;updateApptAvailabilityHint()">
+            <div style="display:flex;gap:2px;flex:1;">
+              <select id="appt-time-h" onchange="apptTimeSelectChanged()"></select>
+              <select id="appt-time-m" onchange="apptTimeSelectChanged()"></select>
+            </div>
             <span style="color:var(--ink-soft);flex-shrink:0;">–</span>
-            <input autocomplete="off" type="time" id="appt-end-time" lang="ru" style="flex:1;" oninput="apptEndTimeTouched=true" onchange="updateApptAvailabilityHint()">
+            <div style="display:flex;gap:2px;flex:1;">
+              <select id="appt-end-time-h" onchange="apptEndTimeSelectChanged()"></select>
+              <select id="appt-end-time-m" onchange="apptEndTimeSelectChanged()"></select>
+            </div>
           </div>
+          <input type="hidden" id="appt-time">
+          <input type="hidden" id="appt-end-time">
         </div>
       </div>
       <!-- Готовые кнопки с типовыми интервалами времени (запрос: «снизу даты
            и времени сделай кнопки готовые например 12:00-12:30, 12:30-13:00») —
-           см. renderApptTimeChips()/apptPickTimeChip() ниже. -->
-      <div style="margin:-8px 0 14px;">
-        <div id="apptTimeChips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+           см. renderApptTimeChips()/apptPickTimeChip() ниже. Переключатель
+           30мин/1час — свой шаг для ЭТИХ кнопок (apptChipStepMin), не связан
+           с общим шагом сетки расписания (calSettings.interval); по умолчанию
+           1 час. Список чипов переносится на новую строку (flex-wrap), а не
+           прокручивается вбок в одну линию — жалоба «он должен уходить в низ». -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-8px 0 6px;">
+        <span style="font-size:11.5px;color:var(--ink-soft);" data-i18n="w_quick_slots">Быстрый выбор</span>
+        <div style="display:flex;gap:4px;">
+          <button type="button" class="chip" id="apptChipStep30" style="padding:4px 10px;font-size:11.5px;" onclick="apptSetChipStep(30)">30 <span data-i18n="w_minutes_short">мин</span></button>
+          <button type="button" class="chip" id="apptChipStep60" style="padding:4px 10px;font-size:11.5px;" onclick="apptSetChipStep(60)">1 <span data-i18n="w_hour_short">час</span></button>
+        </div>
+      </div>
+      <div style="margin:0 0 14px;">
+        <div id="apptTimeChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
       </div>
       <!-- Живая подсказка о занятости выбранного слота у выбранного врача —
            см. updateApptAvailabilityHint()/schedSlotFree(). Пересчитывается
@@ -817,7 +838,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     </div>
     <div class="modal-foot">
       <a class="btn btn-ghost" id="av-patient-link" href="#">Карта пациента</a>
-      <a class="btn btn-ghost" id="av-edit-link" href="#">Изменить</a>
+      <button type="button" class="btn btn-ghost" id="av-edit-link" data-i18n="w_edit">Изменить</button>
       <button class="btn btn-ghost" onclick="closeModal('m-appt-view')" style="margin-left:auto;"><span data-i18n="w_close">Закрыть</span></button>
     </div>
   </div>
@@ -2847,6 +2868,13 @@ const translations={
   w_start_visit_after_create: {ru:'Запись создана. Начать приём сейчас?', ky:'Жазуу түзүлдү. Кабыл алууну азыр баштайсызбы?', en:'Appointment created. Start the visit now?', uz:'Yozuv yaratildi. Qabulni hozir boshlaysizmi?'},
   w_appt_slot_free: {ru:'Время свободно — запись будет создана успешно.', ky:'Убакыт бош — жазуу ийгиликтүү түзүлөт.', en:'Time is free — the appointment will be created successfully.', uz:'Vaqt bo\'sh — yozuv muvaffaqiyatli yaratiladi.'},
   w_appt_end_before_start: {ru:'Время окончания должно быть позже времени начала', ky:'Аяктоо убактысы башталуу убактысынан кийин болушу керек', en:'End time must be after start time', uz:'Tugash vaqti boshlanish vaqtidan keyin bo\'lishi kerak'},
+  w_quick_slots: {ru:'Быстрый выбор', ky:'Тез тандоо', en:'Quick pick', uz:'Tezkor tanlov'},
+  w_create_appt_btn: {ru:'Создать запись', ky:'Жазуу түзүү', en:'Create appointment', uz:'Yozuv yaratish'},
+  w_save_appt_btn: {ru:'Сохранить', ky:'Сактоо', en:'Save', uz:'Saqlash'},
+  title_m_appt_edit: {ru:'Изменить запись', ky:'Жазууну өзгөртүү', en:'Edit appointment', uz:'Yozuvni tahrirlash'},
+  w_appt_load_failed: {ru:'Не удалось загрузить запись', ky:'Жазууну жүктөө мүмкүн болгон жок', en:'Failed to load appointment', uz:'Yozuvni yuklab bo\'lmadi'},
+  w_minutes_short: {ru:'мин', ky:'мүн', en:'min', uz:'daq'},
+  w_hour_short: {ru:'час', ky:'саат', en:'hr', uz:'soat'},
   w_appt_slot_busy: {ru:'Это время у врача занято.', ky:'Бул убакытта дарыгер бош эмес.', en:'This time is already booked for this doctor.', uz:'Bu vaqtda shifokor band.'},
   w_appt_slot_suggest: {ru:'Ближайшее свободное — ', ky:'Эң жакын бош убакыт — ', en:'Nearest free slot — ', uz:'Eng yaqin bo\'sh vaqt — '},
   w_delete_history_confirm: {ru:'Удалить эту запись из истории приёмов? Действие можно отменить только через корзину.', ky:'Бул жазууну кабыл алуулар тарыхынан өчүрөсүзбү? Аракетти себеттен гана артка кайтарууга болот.', en:'Delete this entry from the visit history? This can only be undone from the trash.', uz:'Bu yozuvni qabullar tarixidan o\'chirasizmi? Amalni faqat savatdan qaytarish mumkin.'},
@@ -3235,6 +3263,8 @@ const translations={
   w_network_error_retry: {ru:'Ошибка сети — попробуйте ещё раз', ky:'Тармак катасы — кайра аракет кылыңыз', en:'Network error — please try again', uz:'Tarmoq xatosi — qayta urinib ko‘ring'},
   w_appt_created: {ru:'Запись создана', ky:'Жазуу түзүлдү', en:'Appointment created', uz:'Yozuv yaratildi'},
   w_appt_create_failed: {ru:'Не удалось создать запись', ky:'Жазууну түзүү мүмкүн болгон жок', en:'Failed to create the appointment', uz:'Yozuvni yaratib bo‘lmadi'},
+  w_appt_updated: {ru:'Запись изменена', ky:'Жазуу өзгөртүлдү', en:'Appointment updated', uz:'Yozuv o‘zgartirildi'},
+  w_appt_update_failed: {ru:'Не удалось изменить запись', ky:'Жазууну өзгөртүү мүмкүн болгон жок', en:'Failed to update the appointment', uz:'Yozuvni o‘zgartirib bo‘lmadi'},
   w_appt_moved: {ru:'Запись перенесена', ky:'Жазуу жылдырылды', en:'Appointment moved', uz:'Yozuv ko‘chirildi'},
   w_appt_move_failed: {ru:'Не удалось перенести запись', ky:'Жазууну жылдыруу мүмкүн болгон жок', en:'Failed to move the appointment', uz:'Yozuvni ko‘chirib bo‘lmadi'},
   // — Переводы серверных ошибок (error_key из JsonResponse({"error":...,
@@ -4997,7 +5027,7 @@ async function openApptInfo(apptId){
 
   const patientLink=document.getElementById('av-patient-link');
   if(p.id){ patientLink.href='/new/patients/'+p.id+'/'; patientLink.classList.remove('hidden'); } else patientLink.classList.add('hidden');
-  document.getElementById('av-edit-link').href='/appointments/'+a.id+'/edit/';
+  document.getElementById('av-edit-link').onclick=()=>openApptEdit(a.id);
 
   document.getElementById('av-actions').innerHTML = apptActionsHtml(a, p, 'apptViewSetStatus', 'apptSendToCashier');
   openModal('m-appt-view');
@@ -5319,6 +5349,58 @@ function buildMonthHTML(){
   return html;
 }
 
+// Кастомный пикер времени (часы/минуты выпадающими списками, 24-часовой
+// формат, шаг минут 5) вместо нативного <input type="time"> — жалоба
+// «вообще не удобно выбирать время» (нативный пикер на части ОС/браузеров
+// показывает 12-часовой AM/PM-формат со скроллом, независимо от lang="ru"
+// на инпуте — фото с прода). Источник истины по-прежнему скрытые
+// #appt-time/#appt-end-time в формате "HH:MM", как и раньше, поэтому весь
+// остальной код (чипы, проверка занятости, отправка формы) их и читает, не
+// зная, что теперь значение приходит из <select>, а не текстового поля.
+// Шаг минут — 1 (не 5/10/...): при редактировании существующей записи с
+// «некруглым» временем (например, создана в старом интерфейсе или подвинута
+// драгом без привязки к сетке) округление до ближайшего шага молча сдвинуло
+// бы реальное время записи уже при открытии модалки, до какого-либо
+// действия пользователя — риск слишком велик ради чуть более короткого списка.
+const APPT_TIME_MINUTE_STEP=1;
+function apptFillTimeSelectOptions(){
+  const hourOpts=Array.from({length:24}, (_,h)=>{const v=String(h).padStart(2,'0'); return `<option value="${v}">${v}</option>`;}).join('');
+  const minOpts=Array.from({length:Math.ceil(60/APPT_TIME_MINUTE_STEP)}, (_,i)=>{const v=String(i*APPT_TIME_MINUTE_STEP).padStart(2,'0'); return `<option value="${v}">${v}</option>`;}).join('');
+  ['appt-time-h','appt-end-time-h'].forEach(id=>{ const el=document.getElementById(id); if(el && !el.options.length) el.innerHTML=hourOpts; });
+  ['appt-time-m','appt-end-time-m'].forEach(id=>{ const el=document.getElementById(id); if(el && !el.options.length) el.innerHTML=minOpts; });
+}
+// Синхронизирует видимые <select> с "HH:MM" — минута округляется вниз до
+// ближайшего шага селекта (значения в системе кратны 5/10/15/30/60, см.
+// «Настройки календаря» — округление тут просто подстраховка).
+function apptSyncTimeSelects(prefix, hhmm){
+  apptFillTimeSelectOptions();
+  const hSel=document.getElementById(prefix+'-h'), mSel=document.getElementById(prefix+'-m');
+  if(!hSel || !mSel || !hhmm) return;
+  const [h,m]=hhmm.split(':');
+  hSel.value=h;
+  mSel.value=String(Math.floor(Number(m)/APPT_TIME_MINUTE_STEP)*APPT_TIME_MINUTE_STEP).padStart(2,'0');
+}
+function apptReadTimeSelects(prefix){
+  return document.getElementById(prefix+'-h').value+':'+document.getElementById(prefix+'-m').value;
+}
+function apptSetStartTime(hhmm){
+  document.getElementById('appt-time').value=hhmm||'';
+  apptSyncTimeSelects('appt-time', hhmm);
+}
+function apptSetEndTimeField(hhmm){
+  document.getElementById('appt-end-time').value=hhmm||'';
+  apptSyncTimeSelects('appt-end-time', hhmm);
+}
+function apptTimeSelectChanged(){
+  document.getElementById('appt-time').value=apptReadTimeSelects('appt-time');
+  apptEndTimeTouched=false; // новое время начала — «до» пересчитывается заново по длительности услуги
+  updateApptAvailabilityHint();
+}
+function apptEndTimeSelectChanged(){
+  document.getElementById('appt-end-time').value=apptReadTimeSelects('appt-end-time');
+  apptEndTimeTouched=true;
+  updateApptAvailabilityHint();
+}
 function apptFillDoctorAndServiceOptions(){
   const docSel=document.getElementById('appt-doctor');
   const list=scheduleDoctors.length ? scheduleDoctors : doctorOptions;
@@ -5332,12 +5414,15 @@ function apptResetPatientPicker(){
   document.getElementById('appt-patient-suggestions').classList.add('hidden');
 }
 function openNewAppt(prefill){
+  apptModalEditId=null; // «Новая запись» — режим создания, не редактирования (см. openApptEdit)
+  document.getElementById('apptModalTitle').textContent=t('title_m_appt','Новая запись');
+  document.getElementById('apptModalSaveBtn').textContent=t('w_create_appt_btn','Создать запись');
   document.getElementById('apptModalError').classList.add('hidden');
   apptFillDoctorAndServiceOptions();
   apptResetPatientPicker();
   const dateIso = isoDate(dateAtOffset(currentDayOffset));
   document.getElementById('appt-date').value = (prefill && prefill.date) || dateIso;
-  document.getElementById('appt-time').value = (prefill && prefill.time) || '09:00';
+  apptSetStartTime((prefill && prefill.time) || '09:00');
   document.getElementById('appt-notes').value='';
   if(prefill && prefill.docId!==undefined && prefill.docId!==null){
     document.getElementById('appt-doctor').value=String(prefill.docId);
@@ -5347,6 +5432,7 @@ function openNewAppt(prefill){
     document.getElementById('appt-patient-id').value=prefill.patientId;
   }
   apptEndTimeTouched=false;
+  apptChipStepMin=60; // дефолт — 1 час, при каждом открытии заново
   apptUpdateEndTimeDefault(); // сразу, не дожидаясь ensureScheduleDataLoaded() ниже — нужен только servicesList, он уже загружен
   renderApptTimeChips(); // тоже сразу — до подгрузки расписания все чипы считаются свободными, перерисуются точнее в updateApptAvailabilityHint() ниже
   openModal('m-appt');
@@ -5355,6 +5441,45 @@ function openNewAppt(prefill){
   // подгрузятся: на самой странице /new/schedule/ они уже есть мгновенно,
   // на остальных страницах (карта пациента, дашборд, визиты) — см.
   // ensureScheduleDataLoaded() ниже.
+  document.getElementById('apptAvailabilityHint').classList.add('hidden');
+  ensureScheduleDataLoaded().then(updateApptAvailabilityHint);
+}
+// «Изменить» на просмотре записи (#av-edit-link) — раньше уводило на
+// страницу старого интерфейса (/appointments/<id>/edit/), жалоба «сделай
+// модал, а не перекидывай». Переиспользует ту же модалку m-appt, что и
+// «Новая запись» — заполняет её текущими данными записи (тот же JSON, что
+// уже используется для просмотра, apps.appointments.views.
+// appointment_detail_json, дополненный service_id/date_iso/start_time/end_time),
+// переключает заголовок/кнопку на «Изменить»/«Сохранить», submitNewAppt()
+// смотрит на apptModalEditId и шлёт PATCH-подобный update-quick вместо
+// create-quick.
+async function openApptEdit(apptId){
+  closeModal('m-appt-view');
+  const res=await fetch('/appointments/'+apptId+'/detail/');
+  const data=await res.json();
+  if(!res.ok || !data.ok){ showToast(t('w_appt_load_failed','Не удалось загрузить запись'), 'error'); return; }
+  const a=data.appointment, p=data.patient;
+  apptModalEditId=apptId;
+  document.getElementById('apptModalTitle').textContent=t('title_m_appt_edit','Изменить запись');
+  document.getElementById('apptModalSaveBtn').textContent=t('w_save_appt_btn','Сохранить');
+  document.getElementById('apptModalError').classList.add('hidden');
+  apptFillDoctorAndServiceOptions();
+  document.getElementById('appt-doctor').value=String(a.doctor_id||'');
+  document.getElementById('appt-service').value=String(a.service_id||'');
+  document.getElementById('appt-patient-search').value=(p && p.id) ? p.name : '';
+  document.getElementById('appt-patient-id').value=(p && p.id) || '';
+  document.getElementById('appt-patient-suggestions').classList.add('hidden');
+  document.getElementById('appt-date').value=a.date_iso||'';
+  apptSetStartTime(a.start_time||'');
+  // Реальные текущие время начала/конца записи — не пересчитывать «до» по
+  // умолчанию заново по услуге (apptEndTimeTouched=true, та же логика, что и
+  // у ручного ввода/выбора чипа).
+  apptEndTimeTouched=true;
+  apptSetEndTimeField(a.end_time||'');
+  document.getElementById('appt-notes').value=a.notes||'';
+  apptChipStepMin=60;
+  renderApptTimeChips();
+  openModal('m-appt');
   document.getElementById('apptAvailabilityHint').classList.add('hidden');
   ensureScheduleDataLoaded().then(updateApptAvailabilityHint);
 }
@@ -5384,10 +5509,14 @@ function ensureScheduleDataLoaded(){
    мгновенно при каждой смене врача/даты/времени. Финальную защиту от
    двойной записи всё равно делает бэкенд (appointment_create_quick) — это
    только подсказка, не блокировка отправки формы. */
-function schedSlotFree(dateIso, docId, timeLabel, durationMin){
+function schedSlotFree(dateIso, docId, timeLabel, durationMin, excludeApptId){
   const dur=durationMin||calSettings.interval;
   const startMin=timeToMinutes(timeLabel), endMin=startMin+dur;
   return !apptsFor(dateIso, Number(docId)).some(a=>{
+    // excludeApptId — сама редактируемая запись не должна считаться «занятой
+    // сама собой» (см. openApptEdit/apptModalEditId): без этого исключения
+    // модалка «Изменить» всегда показывала бы текущий слот записи как занятый.
+    if(excludeApptId && a.id===excludeApptId) return false;
     const aStart=timeToMinutes(a.time), aEnd=aStart+(a.durationMin||calSettings.interval);
     return startMin<aEnd && aStart<endMin;
   });
@@ -5396,7 +5525,7 @@ function schedSlotFree(dateIso, docId, timeLabel, durationMin){
 // «сейчас», округлённого вверх до шага сетки; если сегодня уже не влезает в
 // рабочие часы или всё занято — следующие дни, до RIBBON_MAX_DAYS вперёд,
 // то же окно, в котором вообще загружены приёмы).
-function findNextFreeSlot(docId, durationMin){
+function findNextFreeSlot(docId, durationMin, excludeApptId){
   const dur=durationMin||calSettings.interval;
   const interval=calSettings.interval;
   const startBoundMin=calSettings.start*60, endBoundMin=calSettings.end*60;
@@ -5409,7 +5538,7 @@ function findNextFreeSlot(docId, durationMin){
     const dayStartMin = dayOffset===0 ? idealMin : startBoundMin;
     for(let t=dayStartMin; t+dur<=endBoundMin; t+=interval){
       const timeLabel=minutesToTime(t);
-      if(schedSlotFree(dateIso, docId, timeLabel, dur)){
+      if(schedSlotFree(dateIso, docId, timeLabel, dur, excludeApptId)){
         return {date:dateIso, time:timeLabel, isNow: dayOffset===0 && t===idealMin};
       }
     }
@@ -5436,12 +5565,18 @@ function apptServiceDurationMin(){
 // раньше «до» было нередактируемой подсказкой; теперь настоящее поле ввода,
 // с расчётным значением по умолчанию, но пользователь может его переписать).
 let apptEndTimeTouched=false;
+// id редактируемой записи, если модалка m-appt открыта в режиме «Изменить»
+// (см. openApptEdit) — null, когда это обычное «Новая запись» (openNewAppt).
+// Раньше «Изменить» в просмотре записи (#av-edit-link) уводило на страницу
+// старого интерфейса (/appointments/<id>/edit/) — жалоба «сделай модал, а не
+// перекидывай». submitNewAppt() смотрит на этот флаг и решает, какой AJAX-
+// эндпоинт дёрнуть — create-quick или update-quick.
+let apptModalEditId=null;
 function apptUpdateEndTimeDefault(){
-  const endInput=document.getElementById('appt-end-time');
-  if(!endInput || apptEndTimeTouched) return;
+  if(!document.getElementById('appt-end-time') || apptEndTimeTouched) return;
   const timeLabel=document.getElementById('appt-time').value;
-  if(!timeLabel){ endInput.value=''; return; }
-  endInput.value=minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1));
+  if(!timeLabel){ apptSetEndTimeField(''); return; }
+  apptSetEndTimeField(minutesToTime(Math.min(timeToMinutes(timeLabel)+apptServiceDurationMin(), 24*60-1)));
 }
 // Реальная длительность для проверки занятости/создания записи — от
 // вручную заданного «до», если пользователь его трогал (и оно позже
@@ -5458,28 +5593,36 @@ function apptDurationMin(){
 }
 // Готовые кнопки-чипы с типовыми интервалами времени под полями «Дата»/
 // «Время» (запрос: «снизу даты и времени сделай кнопки готовые например
-// 12:00-12:30, 12:30-13:00») — по шагу сетки расписания (calSettings.interval)
-// в пределах рабочих часов клиники (calSettings.start–calSettings.end) на
+// 12:00-12:30, 12:30-13:00»). Шаг — свой, переключаемый (30 мин / 1 час,
+// по умолчанию 1 час — «добавь переключение 30минут или 1час, по умолчанию
+// 1 час»), не связан с общим шагом сетки расписания (calSettings.interval).
+// В пределах рабочих часов клиники (calSettings.start–calSettings.end) на
 // выбранную дату; занятые у выбранного врача — показаны серым/зачёркнутыми
 // (видно расписание сразу, не тыкаясь в «занято» уже после выбора), но не
-// кликабельны. Конец каждого чипа — по реальной длительности приёма
-// (apptDurationMin), не по шагу сетки — совпадает с тем, что реально
-// сохранится при клике.
+// кликабельны. Список переносится на новую строку (не прокручивается вбок в
+// одну линию — жалоба «он должен уходить в низ»).
+let apptChipStepMin=60;
+function apptSetChipStep(min){
+  apptChipStepMin=min;
+  renderApptTimeChips();
+}
 function renderApptTimeChips(){
   const box=document.getElementById('apptTimeChips');
+  const btn30=document.getElementById('apptChipStep30'), btn60=document.getElementById('apptChipStep60');
+  if(btn30) btn30.classList.toggle('active', apptChipStepMin===30);
+  if(btn60) btn60.classList.toggle('active', apptChipStepMin===60);
   if(!box) return;
   const dateIso=document.getElementById('appt-date').value;
   if(!dateIso){ box.innerHTML=''; return; }
   const docId=document.getElementById('appt-doctor').value;
-  const dur=apptDurationMin();
-  const interval=calSettings.interval;
+  const step=apptChipStepMin;
   const startMin=calSettings.start*60, endMin=calSettings.end*60;
   const currentStart=document.getElementById('appt-time').value;
   let html='';
-  for(let m=startMin; m+interval<=endMin; m+=interval){
+  for(let m=startMin; m+step<=endMin; m+=step){
     const label=minutesToTime(m);
-    const endLabel=minutesToTime(Math.min(m+dur, 24*60-1));
-    const busy=docId ? !schedSlotFree(dateIso, docId, label, dur) : false;
+    const endLabel=minutesToTime(Math.min(m+step, 24*60-1));
+    const busy=docId ? !schedSlotFree(dateIso, docId, label, step, apptModalEditId) : false;
     const active=!busy && label===currentStart;
     if(busy){
       html+=`<button type="button" class="chip" disabled style="flex-shrink:0;white-space:nowrap;opacity:.4;text-decoration:line-through;cursor:not-allowed;" title="${t('w_appt_slot_busy')}">${label}–${endLabel}</button>`;
@@ -5490,8 +5633,12 @@ function renderApptTimeChips(){
   box.innerHTML=html;
 }
 function apptPickTimeChip(label){
-  document.getElementById('appt-time').value=label;
-  apptEndTimeTouched=false; // новое время начала — «до» пересчитывается заново по длительности услуги
+  // Явный выбор готового слота — задаёт КОНКРЕТНЫЙ интервал (start, start+шаг),
+  // а не только начало с автопересчётом «до» по услуге, поэтому
+  // apptEndTimeTouched=true (как и при ручном вводе «до»).
+  apptSetStartTime(label);
+  apptSetEndTimeField(minutesToTime(Math.min(timeToMinutes(label)+apptChipStepMin, 24*60-1)));
+  apptEndTimeTouched=true;
   updateApptAvailabilityHint();
 }
 function updateApptAvailabilityHint(){
@@ -5504,13 +5651,13 @@ function updateApptAvailabilityHint(){
   const timeLabel=document.getElementById('appt-time').value;
   if(!docId || !dateIso || !timeLabel){ hint.classList.add('hidden'); return; }
   const dur=apptDurationMin();
-  const free=schedSlotFree(dateIso, docId, timeLabel, dur);
+  const free=schedSlotFree(dateIso, docId, timeLabel, dur, apptModalEditId);
   if(free){
     hint.className='';
     hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--teal-tint);color:var(--teal);';
     hint.textContent='✓ '+t('w_appt_slot_free','Время свободно — запись будет создана успешно.');
   } else {
-    const suggestion=findNextFreeSlot(docId, dur);
+    const suggestion=findNextFreeSlot(docId, dur, apptModalEditId);
     hint.className='';
     hint.style.cssText='font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;background:var(--amber-tint);color:var(--amber);';
     const suggDate=new Date(suggestion.date+'T00:00:00');
@@ -5625,8 +5772,10 @@ async function submitNewAppt(){
   }
   const btn=document.getElementById('apptModalSaveBtn');
   btn.disabled=true;
+  const editId=apptModalEditId; // сохраняем — apptModalEditId может измениться, пока запрос летит
+  const url=editId ? '/appointments/'+editId+'/update-quick/' : '/appointments/create-quick/';
   try{
-    const res=await apiJson('/appointments/create-quick/', {
+    const res=await apiJson(url, {
       doctor_id: Number(doctorId),
       patient_id: patientId ? Number(patientId) : null,
       service_id: serviceId ? Number(serviceId) : null,
@@ -5637,38 +5786,51 @@ async function submitNewAppt(){
     const data=await res.json();
     if(res.ok && data.ok){
       closeModal('m-appt');
+      const apptId=editId || data.id;
       // Запись на сегодня — предлагаем сразу перейти к приёму (актуально для
       // «Новая запись» с карточки пациента: подобрали ближайшее свободное
       // время и тут же начинают приём, без похода обратно в календарь).
       // Проверяем ДО локального обновления сетки/перезагрузки — при
       // подтверждении просто уходим на страницу приёма, остальное не нужно.
-      if(date===isoDate(new Date()) && confirm(t('w_start_visit_after_create','Запись создана. Начать приём сейчас?'))){
-        location.href='/new/visit/start/?appointment='+data.id;
+      // При редактировании такое предложение неуместно (запись уже
+      // существовала) — только для только что созданной.
+      if(!editId && date===isoDate(new Date()) && confirm(t('w_start_visit_after_create','Запись создана. Начать приём сейчас?'))){
+        location.href='/new/visit/start/?appointment='+apptId;
         return;
       }
       // Без полной перезагрузки страницы (location.reload() заново гоняет весь
       // Django-рендер + ±30-дневную выборку приёмов — заметная задержка на
       // календаре с большим числом записей). Собираем запись из уже известных
       // на клиенте данных (тех же, что только что ушли на сервер) и дорисовываем
-      // сетку локально — appointment_create_quick уже всё провалидировал.
+      // сетку локально — create-quick/update-quick уже всё провалидировали.
       if(scheduleRealData && scheduleRealData.appointments){
         const patient=patientsList.find(p=>p.id===Number(patientId));
         const service=servicesList.find(s=>s.id===Number(serviceId));
-        scheduleRealData.appointments.push({
-          id: data.id, date, time, docId: Number(doctorId),
+        const entry={
+          id: apptId, date, time, docId: Number(doctorId),
           patientId: patientId?Number(patientId):null,
           patient: patient ? patient.fullName : 'Без пациента',
           service: service ? service.name : '',
           status: 'cobalt', durationMin: apptDurationMin(), movable: true,
-        });
+        };
+        const idx=scheduleRealData.appointments.findIndex(a=>a.id===apptId);
+        if(idx>-1){
+          // Изменение существующей — сохраняем её реальный статус/цвет
+          // (statusRaw), а не сбрасываем на «cobalt», как у новой записи.
+          entry.status=scheduleRealData.appointments[idx].status;
+          entry.statusRaw=scheduleRealData.appointments[idx].statusRaw;
+          scheduleRealData.appointments[idx]=entry;
+        } else {
+          scheduleRealData.appointments.push(entry);
+        }
         rebuildApptsByDateDoc();
         renderSchedule();
-        showToast(t('w_appt_created','Запись создана'));
+        showToast(editId ? t('w_appt_updated','Запись изменена') : t('w_appt_created','Запись создана'));
       } else {
-        flashAndReload(t('w_appt_created','Запись создана'));
+        flashAndReload(editId ? t('w_appt_updated','Запись изменена') : t('w_appt_created','Запись создана'));
       }
     } else {
-      errBox.textContent=apiErrorMessage(data, t('w_appt_create_failed','Не удалось создать запись'));
+      errBox.textContent=apiErrorMessage(data, editId ? t('w_appt_update_failed','Не удалось изменить запись') : t('w_appt_create_failed','Не удалось создать запись'));
       errBox.classList.remove('hidden');
     }
   } catch(e){
