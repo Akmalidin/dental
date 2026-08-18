@@ -57,6 +57,49 @@ def entry_list(request):
     return render(request, "warehouse/entries.html", {"entries": entries})
 
 
+def _auto_expense_for_entry(entry, user):
+    """Закупка материалов — реальные деньги, потраченные клиникой, поэтому
+    каждое «Оприходовать» с ценой автоматически создаёт расход (категория
+    «Материалы», кассовый метод — в момент оплаты поставщику, а не в момент
+    использования материала на приёме). Раньше расход при приёмке никак не
+    отражался — «Расходы» в Отчётах считали только вручные записи, закупка
+    материалов проходила мимо, и прибыль клиники в отчётах оказывалась
+    завышена ровно на сумму купленных материалов. Best-effort — как и
+    автосписание материалов при завершении приёма, никогда не блокирует
+    сам приход."""
+    try:
+        from decimal import Decimal, InvalidOperation
+        from apps.finance.models import Expense, ExpenseCategory
+        from apps.users.models import Branch
+
+        def _dec(v):
+            # entry только что создан через .create(quantity=_num(...), price=_num(...))
+            # с сырыми строками — в этот момент атрибуты объекта ЕЩЁ не приведены
+            # к Decimal (это происходит только при чтении из БД), поэтому нельзя
+            # просто умножить entry.quantity * entry.price "в лоб".
+            try:
+                return Decimal(str(v)) if v not in (None, "") else Decimal(0)
+            except InvalidOperation:
+                return Decimal(0)
+
+        total = _dec(entry.quantity) * _dec(entry.price)
+        if total <= 0:
+            return
+        category, _created = ExpenseCategory.objects.get_or_create(name="Материалы")
+        branch = (Branch.objects.filter(is_main=True).first()
+                  or (getattr(user, "branches", None) and user.branches.first())
+                  or Branch.objects.first())
+        if not branch:
+            return
+        supplier_bit = f", поставщик {entry.supplier.name}" if entry.supplier_id else ""
+        Expense.objects.create(
+            category=category, amount=total, branch=branch, created_by=user, date=entry.date,
+            description=f"Приход материала «{entry.product.name}» × {entry.quantity} {entry.product.unit}{supplier_bit}",
+        )
+    except Exception:
+        pass
+
+
 @login_required
 def entry_create(request):
     from datetime import date as _date
@@ -73,11 +116,12 @@ def entry_create(request):
         count = 0
         for pid, qty, price in zip(products, quantities, prices):
             if pid and str(qty).strip():
-                WarehouseEntry.objects.create(
+                entry = WarehouseEntry.objects.create(
                     product_id=pid, quantity=_num(qty), price=_num(price or 0),
                     supplier_id=supplier_id, date=the_date,
                     created_by=request.user, notes=notes,
                 )
+                _auto_expense_for_entry(entry, request.user)
                 count += 1
         if count:
             messages.success(request, _("Зафиксировано поступлений: %(n)s") % {"n": count})
