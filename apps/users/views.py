@@ -550,6 +550,7 @@ def _newui_finance_data(clinic):
             "amount": float(p.amount) * (-1 if p.type == Payment.TYPE_REFUND else 1),
             "time": timezone.localtime(p.created_at).strftime("%d.%m %H:%M"),
             "paymentId": p.pk,
+            "expenseId": None,
         })
     for e in Expense.objects.select_related("category").order_by("-created_at")[:10]:
         txns.append({
@@ -557,6 +558,7 @@ def _newui_finance_data(clinic):
             "method": "—", "amount": -float(e.amount),
             "time": timezone.localtime(e.created_at).strftime("%d.%m %H:%M"),
             "paymentId": None,
+            "expenseId": e.pk,
         })
     txns.sort(key=lambda t: t["time"], reverse=True)
 

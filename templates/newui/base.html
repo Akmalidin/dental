@@ -3782,6 +3782,8 @@ const translations={
   w_task_updated: {ru:'Задача обновлена', ky:'Тапшырма жаңырды', en:'Task updated', uz:'Vazifa yangilandi'},
   w_task_deleted: {ru:'Задача удалена', ky:'Тапшырма өчүрүлдү', en:'Task deleted', uz:"Vazifa o'chirildi"},
   w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
+  w_confirm_delete_expense: {ru:'Удалить расход? Действие необратимо.', ky:'Чыгымды өчүрөсүзбү? Аракет кайтарылгыс.', en:'Delete this expense? This cannot be undone.', uz:"Xarajatni o'chirasizmi? Amalni bekor qilib bo'lmaydi."},
+  w_expense_deleted: {ru:'Расход удалён', ky:'Чыгым өчүрүлдү', en:'Expense deleted', uz:"Xarajat o'chirildi"},
   title_m_medicine_add: {ru:'Добавить лекарство', ky:'Дары кошуу', en:'Add medicine', uz:'Dori qo\'shish'},
   title_m_prescription_add: {ru:'Назначить лекарство', ky:'Дары дайындоо', en:'Prescribe medicine', uz:'Dori tayinlash'},
   w_med_name: {ru:'Название', ky:'Аталышы', en:'Name', uz:'Nomi'},
@@ -4742,7 +4744,14 @@ function renderFinance(){
   if(!body) return;
   body.innerHTML = d.transactions.length===0
     ? `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_transactions_yet')}</td></tr>`
-    : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td><td>${tx.paymentId?`<button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${tx.paymentId})">🖨</button>`:''}</td></tr>`).join('');
+    : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td><td>${tx.paymentId?`<button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${tx.paymentId})">🖨</button>`:''}${tx.expenseId?`<button class="btn btn-ghost btn-sm" style="color:var(--coral)" title="Удалить расход" onclick="deleteExpenseTx(${tx.expenseId})">🗑</button>`:''}</td></tr>`).join('');
+}
+
+async function deleteExpenseTx(expenseId){
+  if(!confirm(t('w_confirm_delete_expense'))) return;
+  const res = await postForm('/finance/expenses/'+expenseId+'/delete/', new FormData());
+  if(res.redirected){ flashAndReload(t('w_expense_deleted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 
 /* ================= ЛАБОРАТОРИЯ (apps.technicians) =================
