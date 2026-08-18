@@ -655,6 +655,19 @@ def expense_create(request):
 
 
 @login_required
+@require_permission("finance.manage_expenses")
+@require_POST
+def expense_delete(request, pk):
+    """Удалить расход безвозвратно (Expense — не soft-delete модель, в
+    отличие от Patient/Treatment/... — своей корзины у расходов нет).
+    Та же граница прав, что и у создания (finance.manage_expenses)."""
+    expense = get_object_or_404(Expense, pk=pk)
+    expense.delete()
+    messages.success(request, _("Расход удалён"))
+    return redirect("expense_list")
+
+
+@login_required
 def debtors_list(request):
     debtors = Patient.objects.filter(balance__lt=0).order_by("balance")
     return render(request, "finance/debtors.html", {"debtors": debtors})
