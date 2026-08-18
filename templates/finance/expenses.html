@@ -8,7 +8,7 @@
   </div>
   <div class="card overflow-hidden">
     <table class="data-table">
-      <thead><tr><th>Категория</th><th>Описание</th><th>Сумма</th><th>Филиал</th><th>Дата</th></tr></thead>
+      <thead><tr><th>Категория</th><th>Описание</th><th>Сумма</th><th>Филиал</th><th>Дата</th><th></th></tr></thead>
       <tbody>
         {% for e in expenses %}
         <tr>
@@ -17,9 +17,17 @@
           <td class="font-bold text-red-600">{{ e.amount|floatformat:0 }} {{ clinic_settings.currency_label }}</td>
           <td class="text-slate-500 text-xs">{{ e.branch.name }}</td>
           <td class="text-slate-400 text-xs">{{ e.date|date:"d.m.Y" }}</td>
+          <td class="text-right pr-3">
+            <form method="post" action="/finance/expenses/{{ e.pk }}/delete/" onsubmit="return confirm('Удалить расход {{ e.amount|floatformat:0 }} {{ clinic_settings.currency_label }} ({{ e.category.name }})? Действие необратимо.')">
+              {% csrf_token %}
+              <button class="btn btn-ghost btn-sm" style="color:var(--red)" title="Удалить расход">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+              </button>
+            </form>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="text-center py-12 text-slate-400">Нет расходов</td></tr>
+        <tr><td colspan="6" class="text-center py-12 text-slate-400">Нет расходов</td></tr>
         {% endfor %}
       </tbody>
     </table>
