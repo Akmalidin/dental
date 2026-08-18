@@ -499,7 +499,13 @@ def _newui_patients_page_data(request):
 
 
 def _newui_services_data():
-    """Услуги и категории для нового интерфейса — реальный прайс-лист."""
+    """Услуги и категории для нового интерфейса — реальный прайс-лист.
+    materialNorms — нормативы расхода материалов на списание (см.
+    apps.services.models.ServiceMaterialNorm), та же модель, что уже
+    используется автосписанием при завершении приёма (apps.treatments.
+    views._auto_writeoff_materials) — здесь просто отдаём их на просмотр/
+    редактирование, мутации идут через существующую вьюху старого
+    интерфейса apps.services.views.service_edit (action=add_norm/del_norm)."""
     from apps.services.models import Service, ServiceCategory
     categories = list(ServiceCategory.objects.order_by("sort_order", "name"))
     services = [{
@@ -508,7 +514,10 @@ def _newui_services_data():
         "price": float(s.price), "isActive": s.is_active, "duration": s.duration,
         "priceSecondary": float(s.price_secondary) if s.price_secondary is not None else None,
         "isLab": s.is_lab,
-    } for s in Service.objects.select_related("category").order_by("category__sort_order", "name")]
+        "materialNorms": [{"id": n.pk, "productId": n.product_id, "productName": n.product.name,
+                            "unit": n.product.unit, "quantity": float(n.quantity)}
+                           for n in s.material_norms.select_related("product").all()],
+    } for s in Service.objects.select_related("category").prefetch_related("material_norms__product").order_by("category__sort_order", "name")]
     return {
         "services": services,
         "categories": [{"id": c.pk, "name": c.name} for c in categories],
@@ -675,7 +684,7 @@ def _newui_warehouse_ops_data():
     множественные позиции одним запросом (getlist по product/quantity/...),
     как и в старом интерфейсе — бизнес-логика не дублируется."""
     from apps.warehouse.models import (
-        Product, Supplier, WarehouseEntry, WarehouseDistribution,
+        Product, ProductCategory, Supplier, WarehouseEntry, WarehouseDistribution,
         WarehouseTransfer, InventoryDocument,
     )
     from apps.users.models import Branch, User
@@ -715,6 +724,7 @@ def _newui_warehouse_ops_data():
         "inventories": inventories,
         "products": [{"id": p.pk, "name": p.name, "unit": p.unit, "quantity": float(p.quantity)}
                      for p in Product.objects.filter(is_active=True).order_by("name")],
+        "categories": [{"id": c.pk, "name": c.name} for c in ProductCategory.objects.order_by("name")],
         "suppliers": [{"id": s.pk, "name": s.name} for s in Supplier.objects.filter(is_active=True).order_by("name")],
         "branches": [{"id": b.pk, "name": b.name} for b in Branch.objects.filter(is_active=True).order_by("name")],
         # Лёгкий список сотрудников для «Кому выдано» (WarehouseDistribution.

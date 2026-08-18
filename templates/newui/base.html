@@ -1261,6 +1261,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
            сегодня» в карточке приёма по такой услуге можно оформить заказ
            зуботехнику (см. visitcard.html / apps.treatments.views_visit._create_lab_order). -->
       <div class="form-group toggle"><input autocomplete="off" type="checkbox" id="svc-is-lab"><span style="font-size:13px;margin-left:2px" data-i18n="w_service_requires_technician">Требуется техник (лабораторная работа)</span></div>
+      <!-- Нормативы расхода материалов — сколько какого материала списывается
+           со склада на каждое выполнение услуги (apps.services.models.
+           ServiceMaterialNorm), автосписание уже работает (apps.treatments.
+           views._auto_writeoff_materials срабатывает при завершении приёма) —
+           этот блок просто даёт настроить нормативы из нового интерфейса.
+           Виден только при редактировании уже сохранённой услуги — у новой,
+           ещё не сохранённой, нет service_id, привязывать норматив не к чему. -->
+      <div class="form-group hidden" id="svcNormsSection">
+        <label data-i18n="w_material_norms">Нормативы расхода материалов</label>
+        <div id="svcNormsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;align-items:flex-end;">
+          <select id="svcNormProduct" style="flex:1;"></select>
+          <input autocomplete="off" type="number" step="0.001" min="0" id="svcNormQty" placeholder="0" style="width:80px;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addServiceNorm()"><span data-i18n="w_add">Добавить</span></button>
+        </div>
+      </div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-service')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="svcModalSaveBtn" onclick="saveService()">Добавить услугу</button></div>
   </div>
@@ -1425,6 +1441,41 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="entry-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-entry-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitEntryForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Склад: новый материал/товар в справочник (apps.warehouse.Product,
+     ProductForm — раньше существовала, но нигде не была подключена, ни в
+     старом, ни в новом интерфейсе не было способа завести НОВЫЙ материал,
+     только приходовать остаток уже существующего). Начальный остаток — 0,
+     появляется через отдельное «Оприходовать». -->
+<div class="modal-backdrop" id="m-product-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_product_add">Новый материал</h3><button class="modal-close" onclick="closeModal('m-product-add')">✕</button></div>
+    <div class="modal-body">
+      <div id="productAddError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_material_name">Название</label><input autocomplete="off" type="text" id="prod-name"></div>
+        <div class="form-group"><label data-i18n="w_unit">Единица измерения</label><input autocomplete="off" type="text" id="prod-unit" placeholder="шт, мл, уп…"></div>
+      </div>
+      <div class="form-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label data-i18n="w_category" style="margin:0;">Категория</label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('prodNewCatWrap').classList.toggle('hidden')">+ <span data-i18n="w_new_category">Новая категория</span></button>
+        </div>
+        <select id="prod-category"><option value="">—</option></select>
+        <div id="prodNewCatWrap" class="hidden" style="display:flex;gap:8px;margin-top:8px;">
+          <input autocomplete="off" type="text" id="prod-new-cat-name" placeholder="Название категории" data-i18n-placeholder="w_category_name" style="flex:1;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="whAddProductCategory()"><span data-i18n="w_add">Добавить</span></button>
+        </div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_wh_supplier">Поставщик</label><select id="prod-supplier"><option value="">—</option></select></div>
+        <div class="form-group"><label data-i18n="w_min_stock">Мин. остаток</label><input autocomplete="off" type="number" step="0.001" min="0" id="prod-min-qty" value="0"></div>
+      </div>
+      <div class="form-group toggle"><input autocomplete="off" type="checkbox" id="prod-active" checked><span style="font-size:13px;margin-left:2px" data-i18n="w_active_f">Активна</span></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-product-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitProductForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
 </div>
 
@@ -4258,6 +4309,11 @@ const translations={
   w_role_system: {ru:'Системная', ky:'Тутумдук', en:'System', uz:'Tizim'},
   w_role_custom: {ru:'Своя', ky:'Өздүк', en:'Custom', uz:'Maxsus'},
   w_check_entered_data: {ru:'Проверьте введённые данные', ky:'Киргизилген маалыматты текшериңиз', en:'Please check the entered data', uz:'Kiritilgan ma\'lumotlarni tekshiring'},
+  w_fill_required_fields: {ru:'Заполните обязательные поля', ky:'Милдеттүү талааларды толтуруңуз', en:'Fill in the required fields', uz:'Majburiy maydonlarni to\'ldiring'},
+  w_material_added: {ru:'Материал добавлен', ky:'Материал кошулду', en:'Material added', uz:'Material qo\'shildi'},
+  w_material_norms: {ru:'Нормативы расхода материалов', ky:'Материал коромжуулоо ченемдери', en:'Material consumption norms', uz:'Material sarfi normalari'},
+  w_no_material_norms: {ru:'Нормативы не заданы', ky:'Ченемдер коюлган эмес', en:'No norms set', uz:'Normalar belgilanmagan'},
+  w_norm_saved: {ru:'Норматив сохранён', ky:'Ченем сакталды', en:'Norm saved', uz:'Norma saqlandi'},
   w_yesterday_colon: {ru:'вчера:', ky:'кечээ:', en:'yesterday:', uz:'kecha:'},
   w_of_which_new: {ru:'из них {n} новых', ky:'алардын {n} жаңы', en:'{n} of them new', uz:'ulardan {n} tasi yangi'},
   w_since_month_start: {ru:'с начала месяца', ky:'ай башынан бери', en:'since the start of the month', uz:'oy boshidan beri'},
@@ -4725,6 +4781,11 @@ const translations={
   w_stock: {ru:'Остаток', ky:'Калдык', en:'Stock', uz:'Qoldiq'},
   w_unit: {ru:'Ед.', ky:'Бирд.', en:'Unit', uz:'Birlik'},
   w_min_stock: {ru:'Мин. остаток', ky:'Мин. калдык', en:'Min. stock', uz:'Min. qoldiq'},
+  title_m_product_add: {ru:'Новый материал', ky:'Жаңы материал', en:'New material', uz:'Yangi material'},
+  w_add_material_btn: {ru:'Добавить материал', ky:'Материал кошуу', en:'Add material', uz:'Material qo\'shish'},
+  w_material_name: {ru:'Название', ky:'Аталышы', en:'Name', uz:'Nomi'},
+  w_new_category: {ru:'Новая категория', ky:'Жаңы категория', en:'New category', uz:'Yangi kategoriya'},
+  w_category_name: {ru:'Название категории', ky:'Категориянын аталышы', en:'Category name', uz:'Kategoriya nomi'},
   w_new_service: {ru:'Новая услуга', ky:'Жаңы кызмат', en:'New service', uz:'Yangi xizmat'},
   w_price: {ru:'Цена', ky:'Баасы', en:'Price', uz:'Narxi'},
   w_also_set_price2: {ru:'Указать цену и во второй валюте', ky:'Экинчи валютада да баа көрсөтүү', en:'Also set a price in the secondary currency', uz:'Ikkinchi valyutada ham narx belgilash'},
@@ -5061,6 +5122,9 @@ function openNewService(){
   document.getElementById('svcSecondaryPriceRow').classList.add('hidden');
   document.getElementById('svc-is-lab').checked=false;
   document.getElementById('svcModalError').classList.add('hidden');
+  // Нормативы расхода — только для уже сохранённой услуги (нет service_id
+  // у новой, привязывать норматив пока не к чему).
+  document.getElementById('svcNormsSection').classList.add('hidden');
   openModal('m-service');
 }
 function editService(id){
@@ -5081,7 +5145,59 @@ function editService(id){
   document.getElementById('svcSecondaryPriceRow').classList.toggle('hidden', !has2);
   document.getElementById('svc-is-lab').checked=!!s.isLab;
   document.getElementById('svcModalError').classList.add('hidden');
+  document.getElementById('svcNormsSection').classList.remove('hidden');
+  renderServiceNorms(s);
   openModal('m-service');
+}
+// «Нормативы расхода материалов» — сколько какого материала списывается со
+// склада на каждое выполнение услуги (apps.services.models.
+// ServiceMaterialNorm). Мутации идут через уже существующую вьюху старого
+// интерфейса apps.services.views.service_edit (action=add_norm/del_norm,
+// POST + res.redirected → flashAndReload) — бизнес-логика не дублируется,
+// автосписание при завершении приёма (_auto_writeoff_materials) уже
+// работает и без этого UI, здесь только настройка нормативов.
+function renderServiceNorms(s){
+  const list=document.getElementById('svcNormsList');
+  const norms=s.materialNorms||[];
+  list.innerHTML = norms.length===0
+    ? `<div style="font-size:12px;color:var(--ink-soft);">${t('w_no_material_norms')}</div>`
+    : norms.map(n=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;background:var(--cloud);border-radius:6px;padding:5px 8px;">
+        <span>${n.productName} × ${n.quantity} ${n.unit}</span>
+        <button type="button" class="btn btn-ghost btn-sm" style="padding:1px 6px;color:var(--coral);" onclick="deleteServiceNorm(${n.id})">✕</button>
+      </div>`).join('');
+  document.getElementById('svcNormProduct').innerHTML=(warehouseProductsLite||[]).map(p=>`<option value="${p.id}">${p.name} (${p.unit})</option>`).join('');
+}
+async function addServiceNorm(){
+  if(!editingServiceId) return;
+  const productId=document.getElementById('svcNormProduct').value;
+  const qty=document.getElementById('svcNormQty').value;
+  if(!productId || !qty || Number(qty)<=0) return;
+  const fd=new FormData();
+  fd.append('action', 'add_norm');
+  fd.append('product', productId);
+  fd.append('quantity', qty);
+  const res=await postForm(`/services/${editingServiceId}/edit/`, fd);
+  if(res.redirected){
+    const s=servicesList.find(x=>x.id===editingServiceId);
+    const prod=(warehouseProductsLite||[]).find(p=>String(p.id)===String(productId));
+    if(s && prod){
+      const existing=s.materialNorms.find(n=>n.productId===prod.id);
+      if(existing) existing.quantity=Number(qty);
+      else s.materialNorms.push({id:0, productId:prod.id, productName:prod.name, unit:prod.unit, quantity:Number(qty)});
+      renderServiceNorms(s);
+    }
+    document.getElementById('svcNormQty').value='';
+    showToast(t('w_norm_saved'));
+  } else { showToast(t('w_save_failed'), 'error'); }
+}
+async function deleteServiceNorm(normId){
+  if(!editingServiceId) return;
+  const fd=new FormData();
+  fd.append('action', 'del_norm');
+  fd.append('id', normId);
+  const res=await postForm(`/services/${editingServiceId}/edit/`, fd);
+  if(res.redirected){ flashAndReload(); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 async function saveService(){
   const name=document.getElementById('svc-name').value.trim();
@@ -5373,6 +5489,64 @@ function whInvRowProductChange(selEl){
   const row=selEl.closest('.form-row2');
   const prod=(warehouseOpsData.products||[]).find(p=>String(p.id)===String(selEl.value));
   row.querySelector('.inv-row-system').value = prod ? prod.quantity : 0;
+}
+
+// «Добавить материал» — новая карточка материала в справочнике склада
+// (apps.warehouse.views.product_create, раньше нигде не было подключено —
+// только приход остатка уже существующего материала). Остаток стартует с 0.
+function openProductAddModal(){
+  document.getElementById('productAddError').classList.add('hidden');
+  document.getElementById('prod-name').value='';
+  document.getElementById('prod-unit').value='';
+  document.getElementById('prod-category').innerHTML='<option value="">—</option>'+(warehouseOpsData.categories||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('prodNewCatWrap').classList.add('hidden');
+  document.getElementById('prod-new-cat-name').value='';
+  document.getElementById('prod-supplier').innerHTML='<option value="">—</option>'+(warehouseOpsData.suppliers||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('prod-min-qty').value='0';
+  document.getElementById('prod-active').checked=true;
+  openModal('m-product-add');
+}
+async function whAddProductCategory(){
+  const name=document.getElementById('prod-new-cat-name').value.trim();
+  if(!name) return;
+  const fd=new FormData();
+  fd.append('name', name);
+  const res=await fetch('/warehouse/product-categories/add/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  const data=await res.json().catch(()=>null);
+  if(data && data.ok){
+    warehouseOpsData.categories=warehouseOpsData.categories||[];
+    warehouseOpsData.categories.push({id:data.id, name:data.name});
+    const sel=document.getElementById('prod-category');
+    sel.innerHTML='<option value="">—</option>'+warehouseOpsData.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    sel.value=data.id;
+    document.getElementById('prodNewCatWrap').classList.add('hidden');
+    document.getElementById('prod-new-cat-name').value='';
+  } else {
+    showToast(t('w_save_failed'), 'error');
+  }
+}
+async function submitProductForm(){
+  const err=document.getElementById('productAddError');
+  err.classList.add('hidden');
+  const name=document.getElementById('prod-name').value.trim();
+  const unit=document.getElementById('prod-unit').value.trim();
+  if(!name || !unit){
+    err.textContent=t('w_fill_required_fields','Заполните обязательные поля'); err.classList.remove('hidden');
+    return;
+  }
+  const fd=new FormData();
+  fd.append('name', name);
+  fd.append('unit', unit);
+  fd.append('category', document.getElementById('prod-category').value);
+  fd.append('supplier', document.getElementById('prod-supplier').value);
+  fd.append('min_qty', document.getElementById('prod-min-qty').value || '0');
+  if(document.getElementById('prod-active').checked) fd.append('is_active', 'on');
+  const res=await postForm('/warehouse/products/create/', fd);
+  if(res.redirected){ closeModal('m-product-add'); flashAndReload(t('w_material_added')); }
+  else { err.textContent=await extractFormError(res); err.classList.remove('hidden'); }
 }
 
 function openEntryModal(){
@@ -7991,7 +8165,10 @@ function rebuildApptsByDateDoc(){
 let financeRealData=null;
 let labRealData=null;
 let warehouseRealData=null;
-let warehouseOpsData={entries:[], distributions:[], transfers:[], inventories:[], products:[], suppliers:[], branches:[], staff:[]};
+let warehouseOpsData={entries:[], distributions:[], transfers:[], inventories:[], products:[], categories:[], suppliers:[], branches:[], staff:[]};
+// Лёгкий список материалов — только для «Нормативы расхода» на странице
+// «Услуги» (см. newui_services), не путать с полным warehouseOpsData.products.
+let warehouseProductsLite=[];
 let reportsRealData=null;
 let salaryRealData=null;
 let profileRealData=null;
@@ -8622,10 +8799,11 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     scheduleDoctors=(scheduleRealData && scheduleRealData.doctors) || [];
     servicesList=(data.servicesData && data.servicesData.services) || [];
     serviceCategories=(data.servicesData && data.servicesData.categories) || [];
+    warehouseProductsLite=data.warehouseProductsLite || [];
     financeRealData=data.financeData || null;
     labRealData=data.labData || null;
     warehouseRealData=data.warehouseData || null;
-    warehouseOpsData=data.warehouseOpsData || {entries:[], distributions:[], transfers:[], inventories:[], products:[], suppliers:[], branches:[], staff:[]};
+    warehouseOpsData=data.warehouseOpsData || {entries:[], distributions:[], transfers:[], inventories:[], products:[], categories:[], suppliers:[], branches:[], staff:[]};
     reportsRealData=data.reportsData || null;
     salaryRealData=data.salaryData || null;
     profileRealData=data.profileData || null;

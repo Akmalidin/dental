@@ -267,7 +267,17 @@ def newui_schedule_data_json(request):
 
 @login_required
 def newui_services(request):
-    return _render(request, "services", "services.html", {"servicesData": _newui_services_data()})
+    # Лёгкий список материалов склада (id/название/ед.) — только для
+    # выпадающего списка в «Нормативы расхода» (материал → услуга, авто-
+    # списание), полный _newui_warehouse_ops_data() тяжелее и нужен только
+    # странице «Склад» (тот же паттерн, что и warehouseProducts у staff).
+    from apps.warehouse.models import Product
+    warehouse_products = [{"id": p.pk, "name": p.name, "unit": p.unit}
+                           for p in Product.objects.filter(is_active=True).order_by("name")]
+    return _render(request, "services", "services.html", {
+        "servicesData": _newui_services_data(),
+        "warehouseProductsLite": warehouse_products,
+    })
 
 
 @login_required

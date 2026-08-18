@@ -18,6 +18,9 @@
             <div class="card kpi b-teal"><span class="lbl" data-i18n="w_active_items">Активных позиций</span><b style="font-size:22px" id="wh-active">—</b></div>
           </div>
           <div class="card">
+            <div class="card-head" style="display:flex;justify-content:flex-end;align-items:center;border:none;padding:0 0 10px;">
+              <button class="btn btn-cobalt btn-sm" onclick="openProductAddModal()">+ <span data-i18n="w_add_material_btn">Добавить материал</span></button>
+            </div>
             <table>
               <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_stock">Остаток</th><th data-i18n="w_unit">Ед.</th><th data-i18n="w_min_stock">Мин. остаток</th><th data-i18n="w_status">Статус</th></tr></thead>
               <tbody id="wh-table"></tbody>

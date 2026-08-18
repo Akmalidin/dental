@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block page_title %}Новый материал{% endblock %}
+
+{% block content %}
+<div class="card card-pad">
+  <div class="mb-5">
+    <h3 class="font-bold text-lg" style="color:var(--text)">Новый материал</h3>
+    <p class="muted text-sm">Карточка материала на складе — остаток появится через «Оприходовать»</p>
+  </div>
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="badge-red px-4 py-3 rounded-xl text-sm">
+      {% for field in form %}{% for e in field.errors %}<p>{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="fld">Название *</label>{{ form.name }}</div>
+      <div><label class="fld">Единица измерения *</label>{{ form.unit }}</div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div><label class="fld">Категория</label>{{ form.category }}</div>
+      <div><label class="fld">Поставщик</label>{{ form.supplier }}</div>
+    </div>
+    <div><label class="fld">Минимальный остаток</label>{{ form.min_qty }}</div>
+    <label class="flex items-center gap-2 text-sm font-semibold mt-2" style="color:var(--text)">{{ form.is_active }} Активен</label>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <a href="/warehouse/" class="btn btn-ghost">Отмена</a>
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

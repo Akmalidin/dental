@@ -21,6 +21,37 @@ def warehouse_dashboard(request):
 
 
 @login_required
+def product_create(request):
+    """Добавить новый материал/товар в справочник склада (ProductForm уже
+    существовал, но нигде не был подключён — ни в старом, ни в новом
+    интерфейсе не было способа завести НОВЫЙ материал, только приходовать
+    остаток уже существующего). Начальный остаток — 0, он появляется через
+    отдельное «Оприходовать» (entry_create), как и для любого другого
+    материала — не смешиваем создание карточки материала с поступлением."""
+    form = ProductForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, _("Материал добавлен"))
+        return redirect("warehouse_dashboard")
+    return render(request, "warehouse/product_form.html", {"form": form})
+
+
+@login_required
+def product_category_add(request):
+    """Категория материала — тот же паттерн, что и apps.services.views.category_create."""
+    from django.http import JsonResponse
+    from .models import ProductCategory
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            cat = ProductCategory.objects.create(name=name)
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "id": cat.pk, "name": cat.name})
+            messages.success(request, _("Категория добавлена"))
+    return redirect(request.META.get("HTTP_REFERER", "warehouse_dashboard"))
+
+
+@login_required
 def entry_list(request):
     entries = WarehouseEntry.objects.select_related("product", "supplier", "created_by").order_by("-date")
     return render(request, "warehouse/entries.html", {"entries": entries})
