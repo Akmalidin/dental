@@ -52,10 +52,10 @@
   <p style="text-align:center;font-weight:700;margin:0">Чек платежа №{{ payment.pk }}</p>
 
   <div class="amount">
-    {% if payment.treatment and payment.treatment.discount %}
+    {% if payment.treatment and payment.treatment.total_discount %}
     <div style="font-size:11px;color:#666;margin-bottom:4px">
       К оплате: {{ payment.treatment.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }} &nbsp;·&nbsp;
-      скидка: <span style="color:#d97706">−{{ payment.treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
+      скидка: <span style="color:#d97706">−{{ payment.treatment.total_discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
     </div>
     {% endif %}
     <div class="n {% if payment.type != 'income' %}refund{% endif %}">{% if payment.type == 'income' %}+{% else %}−{% endif %}{{ payment.amount|floatformat:0 }} {{ clinic_settings.currency_label }}</div>
@@ -67,8 +67,8 @@
   <div class="row"><span class="k">Метод оплаты</span><span class="v">{{ payment.get_method_display }}</span></div>
   {% if payment.treatment %}
   <div class="row"><span class="k">Приём</span><span class="v">#{{ payment.treatment.pk }}</span></div>
-  {% if payment.treatment.discount %}
-  <div class="row"><span class="k">Скидка</span><span class="v" style="color:#d97706">−{{ payment.treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
+  {% if payment.treatment.total_discount %}
+  <div class="row"><span class="k">Скидка</span><span class="v" style="color:#d97706">−{{ payment.treatment.total_discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
   {% endif %}
   {% endif %}
   <div class="row"><span class="k">Филиал</span><span class="v">{{ payment.branch.name }}</span></div>

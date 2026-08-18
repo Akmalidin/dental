@@ -141,6 +141,27 @@ class Treatment(ClinicSoftDeleteModel):
             return Decimal(0)
         return max(Decimal(0), self.total_amount - self.discount)
 
+    @property
+    def cures_discount_amount(self):
+        """Сколько всего «съели» построчные скидки (TreatmentCure.discount, %)
+        — total_amount уже посчитан С УЧЁТОМ них (см. recalculate_total/
+        TreatmentCure.subtotal), поэтому это не вычитается повторно нигде,
+        а нужно только для того, чтобы показать скидку в чеке (Быстрая
+        продажа задаёт скидку именно на уровне позиций, а не общим полем
+        discount — без этого свойства чек её вообще не показывал)."""
+        total = Decimal(0)
+        for c in self.cures.all():
+            gross = c.price * c.quantity
+            total += gross * c.discount / Decimal(100)
+        return total
+
+    @property
+    def total_discount(self):
+        """Полная скидка приёма для чека: построчные скидки (%, из Быстрой
+        продажи) + фиксированная скидка (сумма, задаётся вручную в карточке
+        приёма) — то, что реально стоит показать пациенту как «вы сэкономили»."""
+        return self.cures_discount_amount + self.discount
+
     def build_report_text(self, clinic_name="Клиника", currency="сом", greet=True):
         """Текстовый отчёт по приёму (услуги, сумма, оплачено, долг) — общий для
         ручной отправки в WhatsApp/Telegram и для самообслуживания в боте.
@@ -152,8 +173,8 @@ class Treatment(ClinicSoftDeleteModel):
         for c in self.cures.select_related("service").all():
             lines.append("• %s x%s — %.0f %s" % (c.service.name, c.quantity, c.subtotal, currency))
         lines.append("Итого: %.0f %s" % (self.display_total, currency))
-        if self.discount:
-            lines.append("Скидка: %.0f %s" % (self.discount, currency))
+        if self.total_discount:
+            lines.append("Скидка: %.0f %s" % (self.total_discount, currency))
         lines.append("Оплачено: %.0f %s" % (self.paid_amount, currency))
         if self.debt > 0:
             lines.append("Долг: %.0f %s" % (self.debt, currency))

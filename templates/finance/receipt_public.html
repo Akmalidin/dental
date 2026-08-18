@@ -93,7 +93,7 @@
   <div class="sec">
     <p class="title">Выполненные услуги</p>
     <table>
-      <thead><tr><th>Услуга</th><th class="r">Кол-во</th><th class="r">Цена</th><th class="r">Сумма</th></tr></thead>
+      <thead><tr><th>Услуга</th><th class="r">Кол-во</th><th class="r">Цена</th><th class="r">Скидка</th><th class="r">Сумма</th></tr></thead>
       <tbody>
         {% for c in cures %}
         <tr>
@@ -103,6 +103,7 @@
           </td>
           <td class="r">{{ c.quantity }}</td>
           <td class="r">{{ c.price|floatformat:0 }}</td>
+          <td class="r">{% if c.discount %}−{{ c.discount|floatformat:0 }}%{% else %}—{% endif %}</td>
           <td class="r">{{ c.subtotal|floatformat:0 }}</td>
         </tr>
         {% endfor %}
@@ -110,7 +111,7 @@
     </table>
     {% if treatment %}
     <div class="tot"><span>Итого по приёму</span><span>{{ treatment.total_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
-    {% if treatment.discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>{% endif %}
+    {% if treatment.total_discount %}<div class="row"><span class="k">Скидка</span><span class="v">−{{ treatment.total_discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>{% endif %}
     <div class="row"><span class="k">Оплачено по приёму</span><span class="v" style="color:var(--green)">{{ treatment.paid_amount|floatformat:0 }} {{ clinic_settings.currency_label }}</span></div>
     {% endif %}
   </div>

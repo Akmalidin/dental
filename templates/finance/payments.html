@@ -29,8 +29,8 @@
             </button>
           </td>
           <td>
-            {% if p.treatment and p.treatment.discount %}
-              <span class="badge" style="background:#fef3c7;color:#92400e">−{{ p.treatment.discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
+            {% if p.treatment and p.treatment.total_discount %}
+              <span class="badge" style="background:#fef3c7;color:#92400e">−{{ p.treatment.total_discount|floatformat:0 }} {{ clinic_settings.currency_label }}</span>
             {% else %}
               <span class="text-slate-300 text-xs">—</span>
             {% endif %}
