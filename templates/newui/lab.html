@@ -6,6 +6,49 @@
         <div class="topbar-right"></div>
       </div>
       <div class="page">
-        <div class="kanban" id="labKanban"></div>
+        <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="chip active" id="labTabKanban" onclick="labTab('kanban')" data-i18n="w_lab_tab_kanban">Канбан</button>
+          <button class="chip" id="labTabTech" onclick="labTab('tech')" data-i18n="w_lab_tab_technicians">Техники</button>
+          <button class="chip" id="labTabPayouts" onclick="labTab('payouts')" data-i18n="w_lab_tab_payouts">Выплаты</button>
+        </div>
+
+        <div id="labPanelKanban">
+          <div class="kanban" id="labKanban"></div>
+        </div>
+
+        <div id="labPanelTech" class="hidden">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3 data-i18n="w_lab_tab_technicians">Техники</h3>
+              <button class="btn btn-cobalt btn-sm" onclick="openTechnicianAddModal()">+ <span data-i18n="title_m_technician_add">Добавить техника</span></button>
+            </div>
+            <table>
+              <thead><tr>
+                <th data-i18n="w_name">Название</th>
+                <th data-i18n="w_phone">Телефон</th>
+                <th data-i18n="w_tech_lab">Лаборатория</th>
+                <th data-i18n="w_tech_specialization">Специализация</th>
+                <th data-i18n="w_tech_open_orders">Открытых заказов</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="techniciansTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="labPanelPayouts" class="hidden">
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_lab_tab_payouts">Выплаты</h3></div>
+            <table>
+              <thead><tr>
+                <th data-i18n="w_tech_name">Техник</th>
+                <th data-i18n="w_tech_payable_count">Заказов к оплате</th>
+                <th data-i18n="w_tech_payable_sum">Сумма</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="technicianPayoutsBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 {% endblock %}

@@ -571,30 +571,70 @@ def _newui_finance_data(clinic):
 
 
 def _newui_lab_data():
-    """Заказы лаборатории — реальные данные (apps.technicians)."""
+    """Заказы лаборатории — реальные данные (apps.technicians), полный набор
+    статусов, как в канбане старого интерфейса (apps.technicians.views.
+    technician_kanban) — карточки перетаскиваются между колонками, смена
+    статуса идёт через ту же вьюху order_status (POST, без AJAX-ветки —
+    страница обновляет карточку локально и не перезагружается)."""
     from apps.technicians.models import TechnicianTask
-    status_col = {
-        TechnicianTask.STATUS_TRANSFERRED: "Принят",
-        TechnicianTask.STATUS_IN_PROGRESS: "В работе",
-        TechnicianTask.STATUS_FITTING: "В работе",
-        TechnicianTask.STATUS_CORRECTION: "В работе",
-        TechnicianTask.STATUS_READY: "Готово",
-        TechnicianTask.STATUS_INSTALLED: "Выдано · гарантия",
-    }
     orders = []
-    for t in (TechnicianTask.objects.exclude(status=TechnicianTask.STATUS_CANCELLED)
-              .select_related("patient", "service").order_by("-created_at")[:60]):
-        col = status_col.get(t.status)
-        if not col:
-            continue
+    for t in (TechnicianTask.objects.select_related("patient", "service", "technician")
+              .order_by("-created_at")[:200]):
         orders.append({
             "id": t.pk, "code": f"#L-{t.pk:04d}",
             "service": t.service.name if t.service else "",
             "patient": t.patient.full_name if t.patient else "—",
+            "patientId": t.patient_id,
             "detail": t.material or (t.tooth_number and f"Зуб {t.tooth_number}") or "",
-            "column": col,
+            "status": t.status,
+            "technicianName": t.technician.name if t.technician_id else "—",
+            "amount": float(t.amount),
+            "expectedReady": t.expected_ready.strftime("%d.%m.%Y") if t.expected_ready else "",
+            "isOverdue": t.is_overdue,
         })
-    return {"orders": orders}
+    return {
+        "orders": orders,
+        "statuses": [{"value": v, "label": l} for v, l in TechnicianTask.STATUS_CHOICES],
+    }
+
+
+def _newui_technicians_data():
+    """Техники: справочник + расчёты (apps.technicians) — та же видимость,
+    что и старый интерфейс (technician_list/technician_payouts). Полное
+    редактирование (прайс-лист по услугам, гарантийные случаи, история
+    заказов техника) — переход на реальную /technicians/<id>/ (та же
+    страница, что и у старого интерфейса, сложную форму с построчными
+    расценками и историей не переносим — как и с планами лечения)."""
+    from decimal import Decimal
+    from django.db.models import Sum
+    from apps.technicians.models import Technician, TechnicianTask
+
+    open_counts = {}
+    for tid in TechnicianTask.objects.filter(status__in=TechnicianTask.OPEN_STATUSES).values_list("technician_id", flat=True):
+        open_counts[tid] = open_counts.get(tid, 0) + 1
+
+    roster, payouts = [], []
+    for tech in Technician.objects.filter(is_active=True).order_by("name"):
+        roster.append({
+            "id": tech.pk,
+            "name": tech.name,
+            "phone": tech.phone,
+            "labName": tech.lab_name,
+            "specializationLabel": tech.get_specialization_display() if tech.specialization else "—",
+            "openOrders": open_counts.get(tech.pk, 0),
+            "balance": float(tech.balance),
+        })
+        payable = TechnicianTask.objects.filter(technician=tech, status=TechnicianTask.STATUS_INSTALLED, paid=False)
+        s = payable.aggregate(x=Sum("amount"))["x"] or Decimal(0)
+        cnt = payable.count()
+        if cnt:
+            payouts.append({"id": tech.pk, "name": tech.name, "sum": float(s), "count": cnt})
+
+    return {
+        "roster": roster,
+        "payouts": payouts,
+        "specializations": [{"value": v, "label": l} for v, l in Technician.SPEC_CHOICES],
+    }
 
 
 def _newui_warehouse_data():

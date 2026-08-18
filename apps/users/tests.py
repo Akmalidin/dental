@@ -670,10 +670,15 @@ class NewUIFinanceLabWarehouseTestCase(TestCase):
         self.assertIsInstance(fin["debtTotal"], float)
 
     def test_lab_kanban_reflects_real_order(self):
+        from apps.technicians.models import TechnicianTask
         resp = self.client.get("/new/lab/")
         data = _extract_newui_real_data(resp.content.decode())
-        cols = [o["column"] for o in data["labData"]["orders"]]
-        self.assertIn("В работе", cols)
+        statuses = [o["status"] for o in data["labData"]["orders"]]
+        self.assertIn("in_progress", statuses)
+        # Полный набор статусов канбана (для перетаскиваемых колонок), не
+        # урезанный до 4 условных групп, как раньше.
+        status_values = {s["value"] for s in data["labData"]["statuses"]}
+        self.assertEqual(status_values, set(dict(TechnicianTask.STATUS_CHOICES).keys()))
 
     def test_warehouse_reflects_real_low_stock_product(self):
         resp = self.client.get("/new/warehouse/")

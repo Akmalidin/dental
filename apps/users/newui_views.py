@@ -22,6 +22,7 @@ from .views import (
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
     _newui_tasks_data, _newui_medicines_data, _newui_recycle_data,
+    _newui_technicians_data,
 )
 
 
@@ -265,7 +266,10 @@ def newui_finance(request):
 
 @login_required
 def newui_lab(request):
-    return _render(request, "lab", "lab.html", {"labData": _newui_lab_data()})
+    return _render(request, "lab", "lab.html", {
+        "labData": _newui_lab_data(),
+        "techniciansData": _newui_technicians_data(),
+    })
 
 
 @login_required

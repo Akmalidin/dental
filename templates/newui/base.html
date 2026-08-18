@@ -1316,6 +1316,29 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
+<!-- Техник: добавить (apps.technicians.Technician) — редактирование
+     прайс-листа/гарантийных случаев/истории заказов остаётся на реальной
+     /technicians/<id>/, не дублируем здесь эту сложную форму. -->
+<div class="modal-backdrop" id="m-technician-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_technician_add">Добавить техника</h3><button class="modal-close" onclick="closeModal('m-technician-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label data-i18n="w_name">Название</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tech-name" placeholder="ФИО техника"></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_phone">Телефон</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="tel" id="tech-phone" placeholder="+996 ___ __ __ __"></div>
+        <div class="form-group"><label data-i18n="w_tech_specialization">Специализация</label><select id="tech-specialization"></select></div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_tech_lab">Лаборатория</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tech-lab-name"></div>
+        <div class="form-group"><label data-i18n="w_tech_lab_contact">Контакт лаборатории</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tech-lab-contact"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_tech_lead_days">Срок изготовления по умолчанию, дней</label><input autocomplete="off" type="number" min="1" id="tech-lead-days" value="5"></div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="tech-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-technician-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTechnicianForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
 <!-- Причина отмены/переноса -->
 <div class="modal-backdrop" id="m-cancel">
   <div class="modal">
@@ -4188,6 +4211,30 @@ const translations={
   w_lab_col_progress: {ru:'В работе', ky:'Иштелүүдө', en:'In progress', uz:'Bajarilmoqda'},
   w_lab_col_ready: {ru:'Готово', ky:'Даяр', en:'Ready', uz:'Tayyor'},
   w_lab_col_issued: {ru:'Выдано · гарантия', ky:'Берилди · кепилдик', en:'Issued · warranty', uz:'Berildi · kafolat'},
+  w_lab_col_transferred: {ru:'Передан в работу', ky:'Ишке өткөрүлдү', en:'Transferred', uz:'Ishga topshirildi'},
+  w_lab_col_fitting: {ru:'Примерка', ky:'Өлчөп көрүү', en:'Fitting', uz:'O\'lchab ko\'rish'},
+  w_lab_col_correction: {ru:'Коррекция', ky:'Коррекция', en:'Correction', uz:'Tuzatish'},
+  w_lab_col_installed: {ru:'Установлено', ky:'Орнотулду', en:'Installed', uz:'O\'rnatildi'},
+  w_lab_col_cancelled: {ru:'Отменено', ky:'Жокко чыгарылды', en:'Cancelled', uz:'Bekor qilindi'},
+  w_lab_tab_kanban: {ru:'Канбан', ky:'Канбан', en:'Kanban', uz:'Kanban'},
+  w_lab_tab_technicians: {ru:'Техники', ky:'Техниктер', en:'Technicians', uz:'Texniklar'},
+  w_lab_tab_payouts: {ru:'Выплаты', ky:'Төлөмдөр', en:'Payouts', uz:'To\'lovlar'},
+  title_m_technician_add: {ru:'Добавить техника', ky:'Техник кошуу', en:'Add technician', uz:'Texnik qo\'shish'},
+  w_tech_lab: {ru:'Лаборатория', ky:'Лаборатория', en:'Lab', uz:'Laboratoriya'},
+  w_tech_lab_contact: {ru:'Контакт лаборатории', ky:'Лабораториянын байланышы', en:'Lab contact', uz:'Laboratoriya kontakti'},
+  w_tech_specialization: {ru:'Специализация', ky:'Адистиги', en:'Specialization', uz:'Ixtisoslik'},
+  w_tech_lead_days: {ru:'Срок изготовления по умолчанию, дней', ky:'Даярдоо мөөнөтү (күн), демейки', en:'Default lead time, days', uz:'Standart tayyorlash muddati, kun'},
+  w_tech_open_orders: {ru:'Открытых заказов', ky:'Ачык заказдар', en:'Open orders', uz:'Ochiq buyurtmalar'},
+  w_tech_name: {ru:'Техник', ky:'Техник', en:'Technician', uz:'Texnik'},
+  w_tech_payable_count: {ru:'Заказов к оплате', ky:'Төлөнүүчү заказдар', en:'Orders to pay', uz:'To\'lanadigan buyurtmalar'},
+  w_tech_payable_sum: {ru:'Сумма', ky:'Суммасы', en:'Amount', uz:'Summasi'},
+  w_tech_nothing_to_pay: {ru:'Нет заказов к выплате', ky:'Төлөнүүчү заказ жок', en:'No orders to pay', uz:'To\'lanadigan buyurtma yo\'q'},
+  w_tech_pay: {ru:'Выплатить', ky:'Төлөө', en:'Pay out', uz:'To\'lash'},
+  w_confirm_tech_pay: {ru:'Выплатить технику все заказы к оплате?', ky:'Техникке бардык заказдарды төлөйсүзбү?', en:'Pay out all due orders to this technician?', uz:'Texnikka barcha to\'lanadigan buyurtmalarni to\'laysizmi?'},
+  w_tech_paid: {ru:'Выплачено', ky:'Төлөндү', en:'Paid out', uz:'To\'landi'},
+  w_tech_added: {ru:'Техник добавлен', ky:'Техник кошулду', en:'Technician added', uz:'Texnik qo\'shildi'},
+  w_open: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
+  w_overdue: {ru:'просрочен', ky:'мөөнөтү өттү', en:'overdue', uz:'muddati o\'tgan'},
   w_work: {ru:'Работа', ky:'Иш', en:'Work', uz:'Ish'},
   w_items_count: {ru:'позиций', ky:'позиция', en:'items', uz:'pozitsiya'},
   w_order_it: {ru:'Заказать', ky:'Заказ берүү', en:'Order', uz:'Buyurtma berish'},
@@ -4593,18 +4640,143 @@ function renderFinance(){
     : d.transactions.map(tx=>`<tr><td>${tx.who}</td><td>${tx.type}</td><td>${tx.method}</td><td class="mono" style="color:${tx.amount<0?'var(--coral)':'var(--teal)'}">${tx.amount<0?'−':'+'}${fmtSom(Math.abs(tx.amount))}</td><td>${tx.time}</td><td>${tx.paymentId?`<button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${tx.paymentId})">🖨</button>`:''}</td></tr>`).join('');
 }
 
-const LAB_COL_KEY={'Принят':'w_lab_col_accepted','В работе':'w_lab_col_progress','Готово':'w_lab_col_ready','Выдано · гарантия':'w_lab_col_issued'};
+/* ================= ЛАБОРАТОРИЯ (apps.technicians) =================
+   Канбан — те же статусы и та же вьюха смены статуса, что у старого
+   интерфейса (apps.technicians.views.technician_kanban / order_status).
+   Перетаскивание карточки между колонками шлёт POST на order_status и
+   обновляет labRealData локально (без перезагрузки страницы — иначе
+   drag&drop терял бы весь смысл). */
+const LAB_COL_I18N={
+  transferred:'w_lab_col_transferred', in_progress:'w_lab_col_progress',
+  fitting:'w_lab_col_fitting', correction:'w_lab_col_correction',
+  ready:'w_lab_col_ready', installed:'w_lab_col_installed', cancelled:'w_lab_col_cancelled',
+};
+function labTab(which){
+  ['kanban','tech','payouts'].forEach(tab=>{
+    const panel=document.getElementById('labPanel'+tab.charAt(0).toUpperCase()+tab.slice(1));
+    if(panel) panel.classList.toggle('hidden', tab!==which);
+    const chip=document.getElementById('labTab'+tab.charAt(0).toUpperCase()+tab.slice(1));
+    if(chip) chip.classList.toggle('active', tab===which);
+  });
+}
 function renderLabKanban(){
   if(!labRealData) return;
-  const cols=['Принят','В работе','Готово','Выдано · гарантия'];
   const wrap=document.getElementById('labKanban');
   if(!wrap) return;
-  wrap.innerHTML = cols.map(col=>{
-    const items=labRealData.orders.filter(o=>o.column===col);
-    return `<div class="kanban-col"><div class="kanban-col-head"><b data-i18n="${LAB_COL_KEY[col]}">${col}</b><span class="kanban-count">${items.length}</span></div>` +
-      items.map(o=>`<div class="kcard"><div class="kcard-top"><span>${o.code}</span><span class="pill cobalt">${o.service||t('w_work')}</span></div><b>${o.patient}</b><p>${o.detail||''}</p></div>`).join('') +
+  const statuses=labRealData.statuses||[];
+  wrap.innerHTML = statuses.map(s=>{
+    const items=(labRealData.orders||[]).filter(o=>o.status===s.value);
+    const label = t(LAB_COL_I18N[s.value]) || s.label;
+    return `<div class="kanban-col" data-status="${s.value}" ondragover="labColDragOver(event)" ondrop="labColDrop(event,'${s.value}')">
+      <div class="kanban-col-head"><b>${label}</b><span class="kanban-count">${items.length}</span></div>` +
+      items.map(o=>`<div class="kcard" draggable="true" ondragstart="labCardDragStart(event,${o.id})" style="${o.isOverdue?'border-color:var(--coral);':''}">
+        <div class="kcard-top"><span>${o.code}</span><span class="pill cobalt">${o.service||t('w_work')}</span></div>
+        <b>${o.patient}</b><p>${o.detail||''}</p>
+        <p style="font-size:11px;color:var(--ink-soft);">${o.technicianName}${o.expectedReady?' · '+o.expectedReady:''}${o.isOverdue?' · '+t('w_overdue'):''}</p>
+      </div>`).join('') +
       `</div>`;
   }).join('');
+}
+let labDragOrderId=null;
+function labCardDragStart(ev, orderId){
+  labDragOrderId=orderId;
+  ev.dataTransfer.effectAllowed='move';
+}
+function labColDragOver(ev){
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect='move';
+}
+async function labColDrop(ev, status){
+  ev.preventDefault();
+  const orderId=labDragOrderId;
+  labDragOrderId=null;
+  if(!orderId) return;
+  const order=(labRealData.orders||[]).find(o=>o.id===orderId);
+  if(!order || order.status===status) return;
+  const prevStatus=order.status;
+  order.status=status;           // оптимистичное обновление — карточка сразу в новой колонке
+  renderLabKanban();
+  const fd=new FormData();
+  fd.append('status', status);
+  try{
+    const res=await postForm(`/technicians/orders/${orderId}/status/`, fd);
+    if(!res.ok && !res.redirected){
+      order.status=prevStatus;   // не удалось — откатываем карточку назад
+      renderLabKanban();
+      showToast(t('w_save_failed'), 'error');
+    }
+  }catch(e){
+    order.status=prevStatus;
+    renderLabKanban();
+    showToast(t('w_save_failed_connection'), 'error');
+  }
+}
+function renderTechniciansRoster(){
+  const body=document.getElementById('techniciansTableBody');
+  if(!body) return;
+  const list=(techniciansData.roster||[]);
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    return;
+  }
+  body.innerHTML=list.map(tc=>`
+    <tr class="clickable" onclick="location.href='/technicians/${tc.id}/'">
+      <td><b>${tc.name}</b></td>
+      <td class="mono">${tc.phone||'—'}</td>
+      <td>${tc.labName||'—'}</td>
+      <td>${tc.specializationLabel}</td>
+      <td class="mono">${tc.openOrders}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();location.href='/technicians/${tc.id}/'">${t('w_open')}</button></td>
+    </tr>`).join('');
+}
+function renderTechnicianPayouts(){
+  const body=document.getElementById('technicianPayoutsBody');
+  if(!body) return;
+  const list=(techniciansData.payouts||[]);
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_tech_nothing_to_pay')}</td></tr>`;
+    return;
+  }
+  body.innerHTML=list.map(p=>`
+    <tr>
+      <td><b>${p.name}</b></td>
+      <td class="mono">${p.count}</td>
+      <td class="mono">${fmtSom(p.sum)}</td>
+      <td><button class="btn btn-cobalt btn-sm" onclick="technicianPay(${p.id})">${t('w_tech_pay')}</button></td>
+    </tr>`).join('');
+}
+async function technicianPay(id){
+  if(!confirm(t('w_confirm_tech_pay'))) return;
+  const res=await postForm(`/technicians/${id}/pay/`, new FormData());
+  if(res.redirected){ flashAndReload(t('w_tech_paid')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+function openTechnicianAddModal(){
+  document.getElementById('tech-name').value='';
+  document.getElementById('tech-phone').value='';
+  document.getElementById('tech-lab-name').value='';
+  document.getElementById('tech-lab-contact').value='';
+  document.getElementById('tech-lead-days').value='5';
+  document.getElementById('tech-notes').value='';
+  const specSel=document.getElementById('tech-specialization');
+  if(specSel) specSel.innerHTML='<option value="">—</option>'+(techniciansData.specializations||[]).map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
+  openModal('m-technician-add');
+}
+async function submitTechnicianForm(){
+  const name=document.getElementById('tech-name').value.trim();
+  if(!name){ document.getElementById('tech-name').focus(); return; }
+  const fd=new FormData();
+  fd.append('name', name);
+  fd.append('phone', document.getElementById('tech-phone').value.trim());
+  fd.append('lab_name', document.getElementById('tech-lab-name').value.trim());
+  fd.append('lab_contact', document.getElementById('tech-lab-contact').value.trim());
+  fd.append('specialization', document.getElementById('tech-specialization').value);
+  fd.append('default_lead_days', document.getElementById('tech-lead-days').value || '5');
+  fd.append('is_active', 'on');
+  fd.append('notes', document.getElementById('tech-notes').value.trim());
+  const res=await postForm('/technicians/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_tech_added')); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 
 function renderWarehouse(){
@@ -6966,6 +7138,7 @@ let auditEvents=[];
 let tasksData={tasks:[], staff:[]};
 let medicinesData={medicines:[], prescriptions:[]};
 let recycleData={items:[], cats:[], total:0};
+let techniciansData={roster:[], payouts:[], specializations:[]};
 let notificationsData=[];
 let notifFilter='all';
 let patientCardDetail=null;
@@ -7585,6 +7758,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     tasksData=data.tasksData || {tasks:[], staff:[]};
     medicinesData=data.medicinesData || {medicines:[], prescriptions:[]};
     recycleData=data.recycleData || {items:[], cats:[], total:0};
+    techniciansData=data.techniciansData || {roster:[], payouts:[], specializations:[]};
     notificationsData=data.notificationsData || [];
     messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
     initNavNotifBell();
@@ -8473,6 +8647,8 @@ renderServiceChips();
 renderServicesTable();
 renderFinance();
 renderLabKanban();
+renderTechniciansRoster();
+renderTechnicianPayouts();
 renderWarehouse();
 renderReportsKpi();
 renderTreatplans();
