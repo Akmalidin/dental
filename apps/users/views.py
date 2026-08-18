@@ -1218,7 +1218,13 @@ def _newui_recycle_data(request):
             })
     items.sort(key=lambda x: x["deletedAtRaw"], reverse=True)
     cats = [{"kind": k, "label": models[k][1], "count": counts.get(k, 0)} for k in models]
-    return {"items": items, "cats": cats, "total": sum(counts.values())}
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    return {
+        "items": items, "cats": cats, "total": sum(counts.values()),
+        "canToggle": bool(request.user.is_superadmin or request.user.is_admin_main),
+        "recycleBinStaff": bool(cs.recycle_bin_staff),
+    }
 
 
 def _newui_treatplans_data(clinic):
@@ -2208,9 +2214,37 @@ def _recycle_qs(Model):
     return qs
 
 
+def _recycle_bin_allowed(user):
+    """Корзина изначально скрыта ото ВСЕГО РЯДОВОГО ПЕРСОНАЛА (в отличие от
+    журнала посещений, который по умолчанию виден) — включается явно в
+    настройках клиники (ClinicSettings.recycle_bin_staff) тем же
+    superadmin/admin_main, которые сами видят корзину всегда (иначе — тупик:
+    директор не смог бы дойти до кнопки-переключателя, если бы сам себе
+    закрыл доступ по умолчанию). Обычная роль «Админ» (не admin_main) —
+    подчиняется тумблеру, как и остальной персонал."""
+    if user.is_superadmin or user.is_admin_main:
+        return True
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    return bool(getattr(cs, "recycle_bin_staff", False))
+
+
 @login_required
 @role_required("superadmin", "admin_main", "admin")
 def recycle_bin(request):
+    if not _recycle_bin_allowed(request.user):
+        messages.error(request, "Корзина скрыта администратором")
+        return redirect("/")
+    # Тот же паттерн переключателя видимости, что и у apps.patients.views.
+    # visits_journal (action=toggle_visibility) — только superadmin/admin_main
+    # решают, включать ли корзину рядовому персоналу.
+    if request.method == "POST" and request.POST.get("action") == "toggle_visibility":
+        if request.user.is_superadmin or request.user.is_admin_main:
+            from apps.settings_clinic.models import ClinicSettings
+            cs = ClinicSettings.get()
+            cs.recycle_bin_staff = not cs.recycle_bin_staff
+            cs.save(update_fields=["recycle_bin_staff", "updated_at"])
+        return redirect("recycle_bin")
     models = _recycle_models()
     current = request.GET.get("kind", "")
     items, counts = [], {}

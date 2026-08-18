@@ -47,6 +47,11 @@ class ClinicSettings(models.Model):
     tariff_plan = models.CharField(max_length=50, default="full", blank=True, verbose_name="Тарифный план")
     # Журнал посещений виден всему персоналу (директор управляет)
     visits_journal_staff = models.BooleanField(default=True, verbose_name="Журнал посещений виден персоналу")
+    # Корзина изначально скрыта от рядового персонала (роль «Админ», не
+    # директор) — в отличие от журнала посещений, по умолчанию ВЫКЛЮЧЕНО;
+    # директор (admin_main)/суперадмин видят корзину всегда и включают эту
+    # настройку явно, если хотят дать доступ остальному персоналу.
+    recycle_bin_staff = models.BooleanField(default=False, verbose_name="Корзина видна персоналу")
     # Формат чека
     RECEIPT_FORMAT_CHOICES = [
         ("thermal", "80мм термолента (с QR)"),

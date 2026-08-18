@@ -2796,6 +2796,11 @@ function recycleFilterTab(kind){
   renderRecycleList();
 }
 function renderRecycleList(){
+  const toggleBtn=document.getElementById('recycleToggleBtn');
+  if(toggleBtn){
+    toggleBtn.classList.toggle('hidden', !recycleData.canToggle);
+    toggleBtn.textContent = recycleData.recycleBinStaff ? t('w_vj_visible_staff') : t('w_vj_hidden_staff');
+  }
   const body=document.getElementById('recycleTableBody');
   if(!body) return;
   const list=(recycleData.items||[]).filter(it=>!recycleFilterKind || it.kind===recycleFilterKind);
@@ -2820,6 +2825,17 @@ async function recycleRestore(kind, pk){
   if(!confirm(t('w_confirm_restore'))) return;
   const res=await postForm(`/users/recycle-bin/${kind}/${pk}/restore/`, new FormData());
   if(res.redirected){ flashAndReload(t('w_restored')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+// Переключатель видимости корзины персоналу — та же схема, что и у
+// «Журнал посещений» (vjToggleVisibility): POST на существующую вьюху
+// старого интерфейса (action=toggle_visibility), бизнес-логика не
+// дублируется. Доступно только superadmin/admin_main (recycleData.canToggle).
+async function recycleToggleVisibility(){
+  const fd=new FormData();
+  fd.append('action', 'toggle_visibility');
+  const res=await postForm('/users/recycle-bin/', fd);
+  if(res.redirected){ flashAndReload(); }
   else { showToast(t('w_save_failed'), 'error'); }
 }
 
@@ -7944,7 +7960,7 @@ let accountingData=null;
 let auditEvents=[];
 let tasksData={tasks:[], staff:[]};
 let medicinesData={medicines:[], prescriptions:[]};
-let recycleData={items:[], cats:[], total:0};
+let recycleData={items:[], cats:[], total:0, canToggle:false, recycleBinStaff:false};
 let visitsJournalData={rows:[], totalVisits:0, visitsToday:0, uniqPatients:0, primaryCount:0, secondaryCount:0, canToggle:false, visitsJournalStaff:true};
 let vjFilter=''; // '' | 'primary' | 'secondary' — выбранная плитка KPI
 let vjSearchQuery='';
@@ -8617,9 +8633,14 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     // superadmin/admin_main/admin — hideRestrictedNavItems выше уже учла
     // личное ограничение allowed_sections, но не саму роль; комбинируем
     // оба условия здесь, а не в hideRestrictedNavItems, чтобы не плодить
-    // спецслучаи в общей функции ради одного пункта меню).
+    // спецслучаи в общей функции ради одного пункта меню). В отличие от
+    // журнала посещений — изначально скрыта от рядового персонала (роль
+    // «Админ», не admin_main), директор включает настройкой recycleBinStaff;
+    // superadmin/admin_main видят всегда (иначе директор не смог бы дойти
+    // до кнопки-переключателя на самой странице — apps.users.views.
+    // _recycle_bin_allowed).
     document.getElementById('navRecycle').classList.toggle('hidden',
-      !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
+      !(IS_SUPERADMIN || IS_ADMIN_MAIN || data.recycleBinStaff) || !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
     // Журнал посещений — виден суперадмину/директору (admin_main) всегда,
     // остальному персоналу (включая роль «Админ» — ресепшен/администратор
     // клиники) — только если включено в настройках клиники (visitsJournalStaff,
