@@ -294,7 +294,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-cell-leftover:hover{background:var(--cobalt-tint);}
 .sched-cell-leftover:hover::after{content:'+ Записать на ' attr(data-time);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1.1;color:var(--cobalt-dark);font-weight:600;pointer-events:none;text-align:center;padding:0 2px;overflow:hidden;}
 .sched-cell-leftover.drop-target{background:var(--cobalt-tint);}
-.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 21px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
+.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 27px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
 /* Имя пациента и время приёма — главное, что должно бросаться в глаза на
    карточке (жалоба: «имена, время записи должны явно выделяться»). */
 .sched-appt-name{display:block;color:var(--cobalt-dark);font-size:12.5px;font-weight:700;line-height:1.25;padding-right:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -369,20 +369,29 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-appt.coral .sched-appt-name,.sched-appt.coral .sched-appt-time,.sched-appt.coral .sched-appt-service{color:var(--coral);}
 .sched-appt.amber{background:var(--amber-tint);border-color:var(--amber);}
 .sched-appt.amber .sched-appt-name,.sched-appt.amber .sched-appt-time,.sched-appt.amber .sched-appt-service{color:var(--amber);}
-/* Бейдж статуса (ожидание/подтверждено/пришёл/оплачен/...) — маленький
-   цветной кружок с иконкой в верхнем левом углу карточки (см. референс от
-   пользователя: часы для «в ожидании»/«подтверждено», $ для оплаченного
-   приёма). Сама подсказка при наведении — отдельный плавающий элемент
-   #apptHoverTip, не CSS :hover — см. apptStatusBadgeHtml/schedApptHoverShow. */
-.sched-appt-status-badge{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}
-.sched-appt-status-badge svg{width:9px;height:9px;display:block;}
-.week-appt-chip .sched-appt-status-badge{position:static;margin-right:3px;box-shadow:none;flex-shrink:0;}
+/* Бейдж статуса (ожидание/подтверждено/пришёл/оплачен/...) — цветной кружок
+   с иконкой в верхнем левом углу карточки + маленький суб-бейдж в углу самого
+   кружка (✔ подтверждено / ? ещё не подтверждено), по уточнению пользователя:
+   часы (синие) для записан/подтверждён — отличаются только суб-бейджем; $
+   зелёный — завершён и оплачен; $ красный — завершён, есть долг. Сама
+   подсказка при наведении — отдельный плавающий элемент #apptHoverTip, не
+   CSS :hover — см. apptStatusBadgeHtml/schedApptHoverShow. */
+.sched-appt-status-badge{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.sched-appt-status-badge svg{width:13px;height:13px;display:block;}
+.sched-appt-status-sub{position:absolute;bottom:-3px;right:-3px;width:12px;height:12px;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1.5px #fff;display:flex;align-items:center;justify-content:center;}
+.sched-appt-status-sub svg{width:8px;height:8px;display:block;}
+.week-appt-chip .sched-appt-status-badge{position:relative;top:auto;left:auto;margin-right:5px;box-shadow:none;flex-shrink:0;}
+/* pointer-events не none (в отличие от первой версии) — жалоба: «хочу
+   скопировать данные, не успеваю, сразу закрывается»: подсказка теперь сама
+   ловит наведение (см. IIFE привязки #apptHoverTip ниже) и текст в ней можно
+   выделить/скопировать, пока курсор внутри неё. */
 .appt-hover-tip{position:fixed;z-index:520;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;
-  box-shadow:var(--shadow);padding:10px 13px;font-size:12px;line-height:1.55;min-width:220px;max-width:280px;pointer-events:none;}
+  box-shadow:var(--shadow);padding:10px 13px;font-size:12px;line-height:1.55;min-width:220px;max-width:280px;user-select:text;}
 .appt-hover-tip .aht-row{display:flex;gap:6px;}
 .appt-hover-tip .aht-row .k{color:var(--ink-soft);flex-shrink:0;}
-.appt-hover-tip .aht-row .v{color:var(--ink);font-weight:600;}
+.appt-hover-tip .aht-row .v{color:var(--ink);font-weight:600;user-select:text;}
 
 /* kanban lab */
 .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
@@ -6487,7 +6496,7 @@ function appendRibbonDays(count){
 const APPT_STATUS_PILL={scheduled:'cobalt', confirmed:'cobalt', arrived:'amber', in_progress:'amber', completed:'teal', no_show:'coral', cancelled:'coral'};
 let apptViewData=null;
 async function openApptInfo(apptId){
-  schedApptHoverHide();
+  schedApptHoverHideNow();
   document.getElementById('avError').classList.add('hidden');
   const res=await fetch('/appointments/'+apptId+'/detail/');
   const data=await res.json();
@@ -6590,23 +6599,26 @@ async function apptSendToCashier(){
    все нужные поля уже приходят в scheduleRealData.appointments (см.
    _newui_schedule_data), лежат в самой карточке — только достать по id. ---- */
 const APPT_STATUS_ICON={scheduled:'⏳',confirmed:'✅',arrived:'🚪',in_progress:'⚕️',completed:'🏁',no_show:'❌'};
-// Бейдж-иконка статуса на самой карточке (по референсу пользователя —
-// цветной кружок с иконкой в левом верхнем углу: часы для «в ожидании»,
-// часы-с-галочкой для «подтверждено»/«пришёл», $ для завершённого приёма
-// (зелёный — оплачен полностью, красный — есть долг), крестик для «не
-// пришёл»). Три SVG-глифа на все статусы — переиспользуются, не 6 разных.
+// Бейдж-иконка статуса на самой карточке — по прямому уточнению пользователя:
+// часы (СИНИЙ фон) и для «записан», и для «подтверждён» — разница между ними
+// только в маленьком суб-бейдже поверх кружка (белый кружок в углу): «?» —
+// ещё не подтверждено, «✔» — подтверждено. Для завершённого приёма — вместо
+// часов иконка $ на весь кружок, БЕЗ суб-бейджа: зелёный фон — оплачен
+// полностью, красный — есть долг. «Не пришёл» — крестик, красный.
 const APPT_BADGE_ICON_CLOCK='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>';
-const APPT_BADGE_ICON_CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16 9.3"/></svg>';
 const APPT_BADGE_ICON_DOLLAR='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M8.2 8c0-1.7 1.8-3 3.8-3s3.8 1.2 3.8 3-1.8 2.6-3.8 3.1c-2.4.6-3.8 1.5-3.8 3.2s1.8 3 3.8 3 3.8-1.3 3.8-3"/></svg>';
 const APPT_BADGE_ICON_X='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+// Суб-бейджи (маленький кружок поверх основного, белый фон + цветная иконка):
+const APPT_SUB_CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="#0e9c7d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5L19 7"/></svg>';
+const APPT_SUB_QUESTION='<svg viewBox="0 0 24 24" fill="none" stroke="#b8862e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9c0-2 1.6-3.3 3.4-3.3 1.9 0 3.3 1.2 3.3 3 0 2.6-3.2 2.6-3.4 5.1"/><circle cx="12.1" cy="18" r="0.6" fill="#b8862e" stroke="none"/></svg>';
 function apptStatusBadgeHtml(statusRaw, colorKey, title){
-  let bg=SCHED_STATUS_DEFAULT_COLORS.cobalt, icon=APPT_BADGE_ICON_CLOCK;
-  if(statusRaw==='scheduled'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CLOCK; }
-  else if(statusRaw==='confirmed'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CHECK; }
-  else if(statusRaw==='arrived' || statusRaw==='in_progress'){ bg=SCHED_STATUS_DEFAULT_COLORS.amber; icon=APPT_BADGE_ICON_CHECK; }
+  let bg=SCHED_STATUS_DEFAULT_COLORS.cobalt, icon=APPT_BADGE_ICON_CLOCK, sub='';
+  if(statusRaw==='scheduled'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CLOCK; sub=APPT_SUB_QUESTION; }
+  else if(statusRaw==='confirmed' || statusRaw==='arrived' || statusRaw==='in_progress'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CLOCK; sub=APPT_SUB_CHECK; }
   else if(statusRaw==='completed'){ bg=colorKey==='coral'?SCHED_STATUS_DEFAULT_COLORS.coral:SCHED_STATUS_DEFAULT_COLORS.teal; icon=APPT_BADGE_ICON_DOLLAR; }
   else if(statusRaw==='no_show'){ bg=SCHED_STATUS_DEFAULT_COLORS.coral; icon=APPT_BADGE_ICON_X; }
-  return `<span class="sched-appt-status-badge" style="background:${bg};" title="${title||''}">${icon}</span>`;
+  const subHtml = sub ? `<span class="sched-appt-status-sub">${sub}</span>` : '';
+  return `<span class="sched-appt-status-badge" style="background:${bg};" title="${title||''}">${icon}${subHtml}</span>`;
 }
 function apptById(apptId){
   return (scheduleRealData && scheduleRealData.appointments || []).find(a=>a.id===apptId);
@@ -6616,14 +6628,49 @@ function doctorNameById(docId){
   return d ? d.name : '—';
 }
 let apptHoverTimer=null;
+let apptHoverHideTimer=null;
 function schedApptHoverShow(event, apptId){
   clearTimeout(apptHoverTimer);
-  const rect=event.currentTarget.getBoundingClientRect();
-  apptHoverTimer=setTimeout(()=>renderApptHoverTip(rect, apptId), 220);
+  clearTimeout(apptHoverHideTimer);
+  // Элемент карточки, а не rect — геометрию меряем ПОСЛЕ задержки (внутри
+  // setTimeout), когда CSS :hover (карточка «всплывает» — см. .sched-appt:hover)
+  // уже точно применился. Раньше rect снимался тут же, синхронно, из-за чего
+  // при пограничных случаях подсказка могла спозиционироваться по «старому»
+  // месту карточки и визуально «улетать вверх» — жалоба пользователя.
+  const el=event.currentTarget;
+  apptHoverTimer=setTimeout(()=>{
+    if(!el.isConnected) return; // карточка могла уйти из DOM за это время (перерендер сетки)
+    renderApptHoverTip(el.getBoundingClientRect(), apptId);
+  }, 220);
 }
+// Закрытие с небольшой задержкой (а не мгновенно) — жалоба «хочу скопировать
+// данные, не успеваю, тултип сразу закрывается»: пока курсор физически летит
+// от карточки до самой подсказки (например чтобы выделить телефон), должно
+// остаться немного времени. Если курсор зашёл НА подсказку — см. IIFE ниже
+// (mouseenter на #apptHoverTip отменяет этот таймер), подсказка не закроется,
+// пока курсор внутри нёё.
 function schedApptHoverHide(){
   clearTimeout(apptHoverTimer);
+  clearTimeout(apptHoverHideTimer);
+  apptHoverHideTimer=setTimeout(schedApptHoverHideNow, 400);
+}
+function schedApptHoverHideNow(){
+  clearTimeout(apptHoverHideTimer);
   document.getElementById('apptHoverTip').classList.add('hidden');
+}
+/* Позиционирование ТОЛЬКО под карточкой (никогда не «переворачивается» наверх,
+   в отличие от clampFloatingPanelPos, которым пользуется меню из 3 точек) —
+   именно это пользователь имел в виду под «уходит вверх». Если снизу совсем
+   не остаётся места (карточка у нижнего края экрана) — просто поджимается
+   под нижнюю границу видимой области, а не перескакивает наверх карточки. */
+function positionApptHoverTip(anchorRect, tip){
+  const width=tip.offsetWidth||260, height=tip.offsetHeight||190, pad=6;
+  let left=anchorRect.left, top=anchorRect.bottom+pad;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  if(left+width>vw-8) left=vw-width-8;
+  if(left<8) left=8;
+  if(top+height>vh-8) top=Math.max(anchorRect.bottom>vh?8:top, vh-8-height);
+  return {left, top};
 }
 function renderApptHoverTip(anchorRect, apptId){
   const a=apptById(apptId);
@@ -6643,7 +6690,7 @@ function renderApptHoverTip(anchorRect, apptId){
     row(t('w_hover_card','Номер карты'), a.cardNumber ? '#'+a.cardNumber : ''),
   ].join('');
   tip.classList.remove('hidden');
-  const pos=clampFloatingPanelPos(anchorRect, 260, 190);
+  const pos=positionApptHoverTip(anchorRect, tip);
   tip.style.left=pos.left+'px'; tip.style.top=pos.top+'px';
 }
 
@@ -6657,7 +6704,7 @@ function closeSchedApptQuickMenu(){
   document.removeEventListener('click', closeSchedApptQuickMenu);
 }
 async function schedApptQuickMenu(event, apptId){
-  schedApptHoverHide();
+  schedApptHoverHideNow();
   // Тоггл, не только открытие: кнопка ⋮ вызывает event.stopPropagation()
   // ПЕРЕД этим вызовом (см. onclick в разметке карточки) — клик по кнопке
   // никогда не доходит до document, поэтому document-listener из предыдущего
@@ -8098,6 +8145,18 @@ function applyAssistantIntent(data){
 // интерфейса вроде calSettings). Обычный клик (без сдвига мыши/пальца больше
 // чем на 4px) обрабатывается тут же, в onUp — отдельного onclick на кнопке
 // нет, иначе клик после перетаскивания срабатывал бы дважды.
+// Подсказка при наведении на запись расписания (#apptHoverTip) сама тоже
+// ловит наведение курсора — пока он внутри неё, отменяем отложенное закрытие
+// (schedApptHoverHide уже поставило таймер при выходе с карточки), а при
+// выходе с самой подсказки закрываем сразу. Без этого выделить/скопировать
+// текст в подсказке (например телефон пациента) было физически невозможно —
+// курсор неизбежно на миг покидал карточку по пути к подсказке.
+(function initApptHoverTipStickiness(){
+  const tip=document.getElementById('apptHoverTip');
+  if(!tip) return;
+  tip.addEventListener('mouseenter', ()=>{ clearTimeout(apptHoverHideTimer); });
+  tip.addEventListener('mouseleave', schedApptHoverHideNow);
+})();
 (function initVoiceFabDrag(){
   const KEY='newui_voice_fab_pos';
   const fab=document.getElementById('voiceFab');
