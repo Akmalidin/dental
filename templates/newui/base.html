@@ -3264,6 +3264,23 @@ function renderCashdesk(){
   renderCashQueue();
   renderCashPayments();
 }
+// Поиск на «Кассе» — фильтрует и «Пациенты на сегодня» (renderCashTodayRow,
+// cashdesk.html), и «Ожидают оплаты» (renderCashQueue ниже) одним полем, по
+// прямому запросу пользователя. cashMatchesSearch ищет по имени пациента ИЛИ
+// телефону (телефон достаём из patientsList по id — в самих списках кассы
+// его нет).
+let cashSearchQuery='';
+function cashSearchChanged(q){
+  cashSearchQuery=(q||'').trim().toLowerCase();
+  renderCashQueue();
+  if(typeof renderCashTodayRow==='function') renderCashTodayRow();
+}
+function cashMatchesSearch(name, patientId){
+  if(!cashSearchQuery) return true;
+  if((name||'').toLowerCase().includes(cashSearchQuery)) return true;
+  const p=(patientsList||[]).find(x=>x.id===patientId);
+  return !!(p && (p.phone||'').includes(cashSearchQuery));
+}
 function cashdeskTab(which){
   if(!document.getElementById('cashMainPanel')) return; // элементы есть только на /new/cashdesk/
   document.getElementById('cashMainPanel').classList.toggle('hidden', which!=='main');
@@ -3347,20 +3364,31 @@ async function cashCloseShift(shiftId){
 function renderCashQueue(){
   const el=document.getElementById('cashQueueBody');
   if(!el || !cashdeskData) return;
-  const queue=cashdeskData.queue||[];
+  const queue=(cashdeskData.queue||[]).filter(item=>cashMatchesSearch(item.patientName, item.patientId));
   const countEl=document.getElementById('cashQueueCount');
   if(countEl) countEl.textContent=queue.length+' '+(queue.length===1?t('w_position_one'):t('w_items_count'));
   if(queue.length===0){
-    el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);">Пока ничего не отправлено в кассу</div>';
+    el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${cashSearchQuery ? t('w_nothing_found') : t('w_nothing_sent_cashier')}</div>`;
     return;
   }
-  el.innerHTML=queue.map(item=>`
+  // Раньше строка была готовым текстом с сервера (item.body, собран через
+  // Django _() без реальных .mo-каталогов uz/ky — по факту никогда не
+  // переводился, оставался на русском даже при узбекском интерфейсе).
+  // Теперь собираем фразу из сырых полей через тот же t()-словарь, что и
+  // остальной интерфейс.
+  el.innerHTML=queue.map(item=>{
+    const toPay=item.amount ? Number(item.amount) : item.debt;
+    const bodyText = `${t('w_patient')} ${item.patientName||'—'}. ${t('w_cq_to_pay')}: ${Math.round(toPay).toLocaleString('ru-RU')} ${CUR_SYM} (${t('w_debt').toLowerCase()} ${Math.round(item.debt).toLocaleString('ru-RU')}).`
+      + (item.treatmentNumber ? ` ${t('w_cq_from_visit')} №${item.treatmentNumber}.` : '')
+      + ` ${t('w_cq_referred_by')}: ${item.from}. ${t('w_cq_take_and_issue')}.`;
+    return `
     <div class="row">
-      <div class="row-main"><b>${item.body}</b><span>от ${item.from} · ${item.time}</span></div>
+      <div class="row-main"><b>${bodyText}</b><span>${t('w_from_short')} ${item.from} · ${item.time}</span></div>
       ${item.amount?`<span class="mono" style="margin-right:12px;">${Number(item.amount).toLocaleString('ru-RU')} ${CUR_SYM}</span>`:''}
-      ${item.patientId?`<a class="btn btn-ghost btn-sm" href="/new/patients/${item.patientId}/" style="margin-right:6px;">Карта пациента</a>`:''}
-      <button class="btn btn-cobalt btn-sm" onclick="${item.patientId?'openCashAcceptModal':'cashQueueDismiss'}(${item.id})">Принято</button>
-    </div>`).join('');
+      ${item.patientId?`<a class="btn btn-ghost btn-sm" href="/new/patients/${item.patientId}/" style="margin-right:6px;">${t('w_patient_card')}</a>`:''}
+      <button class="btn btn-cobalt btn-sm" onclick="${item.patientId?'openCashAcceptModal':'cashQueueDismiss'}(${item.id})">${t('w_cq_accepted_btn')}</button>
+    </div>`;
+  }).join('');
 }
 function removeFromCashQueue(notifId){
   cashdeskData.queue=cashdeskData.queue.filter(i=>i.id!==notifId);
@@ -4563,6 +4591,11 @@ const translations={
   w_debtors_count: {ru:'Должников', ky:'Карызкорлор саны', en:'Debtors', uz:'Qarzdorlar soni'},
   w_debtors_list: {ru:'Список должников', ky:'Карызкорлордун тизмеси', en:'Debtors list', uz:'Qarzdorlar ro\'yxati'},
   w_debt: {ru:'Долг', ky:'Карыз', en:'Debt', uz:'Qarz'},
+  w_cq_to_pay: {ru:'К оплате', ky:'Төлөнүүчү сумма', en:'To pay', uz:"To'lov summasi"},
+  w_cq_from_visit: {ru:'Из приёма', ky:'кабылдоодон', en:'from visit', uz:'qabuldan'},
+  w_cq_referred_by: {ru:'Направил', ky:'Жиберди', en:'Referred by', uz:"Yo'lladi"},
+  w_cq_take_and_issue: {ru:'Примите оплату и выдайте чек', ky:'Төлөмдү кабыл алып, чек бериңиз', en:'Accept payment and issue a receipt', uz:"To'lovni qabul qilib, chek bering"},
+  w_cq_accepted_btn: {ru:'Принято', ky:'Кабыл алынды', en:'Accepted', uz:'Qabul qilindi'},
   w_cancelled_visits_month: {ru:'Отменённые визиты · этот месяц', ky:'Жокко чыгарылган визиттер · бул ай', en:'Cancelled visits · this month', uz:'Bekor qilingan tashriflar · shu oy'},
   w_doctor_stats_month: {ru:'Статистика по врачам · этот месяц', ky:'Дарыгерлер боюнча статистика · бул ай', en:'Doctor stats · this month', uz:'Shifokorlar statistikasi · shu oy'},
   w_fill_rate: {ru:'Заполняемость', ky:'Толуктук', en:'Fill rate', uz:'To\'ldirilganlik'},
@@ -6723,8 +6756,18 @@ function buildDayRibbonHTML(){
         // календаря → Продвинутые настройки, по умолчанию — комментарий, по
         // прямому запросу пользователя); если выбранное поле у записи не
         // указано — строка просто не рисуется (пусто, без плейсхолдера).
-        const subline = calSettings.cardSubline==='service' ? (appt.service||'') : (appt.notes||'');
-        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${nameColor};">${appt.patient}</b><span class="sched-appt-time" style="color:${timeColor};">${appt.time}–${endLabel}</span>${subline?`<span class="sched-appt-service" style="color:${apptText};">${subline}</span>`:''}</div>`;
+        // Реальный долг пациента — В ПРИОРИТЕТЕ над этой строкой: жалоба —
+        // персонал годами вручную писал в комментарий к записи что-то вроде
+        // «Оплачено», это могло устареть (после отметки могли добавить ещё
+        // услуги/новый долг), и карточка вводила в заблуждение — сверху
+        // «оплачено», а по факту пациент висит в очереди кассы с реальным
+        // долгом. Реальный долг (пересчитывается на каждый рендер, из
+        // актуального Patient.balance) всегда достовернее старой заметки.
+        const subline = appt.debt>0
+          ? `${t('w_debt')}: ${Math.round(appt.debt).toLocaleString('ru-RU')} ${CUR_SYM}`
+          : (calSettings.cardSubline==='service' ? (appt.service||'') : (appt.notes||''));
+        const sublineColor = appt.debt>0 ? 'var(--coral)' : apptText;
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${nameColor};">${appt.patient}</b><span class="sched-appt-time" style="color:${timeColor};">${appt.time}–${endLabel}</span>${subline?`<span class="sched-appt-service" style="color:${sublineColor};font-weight:${appt.debt>0?'700':'400'};">${subline}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
@@ -6824,6 +6867,13 @@ function apptActionsHtml(a, p, setStatusFn, sendToCashierFn){
   // может быть долг за прошлый визит и на записи в любом другом статусе,
   // кассиру нужно отправить его в кассу независимо от статуса ЭТОЙ записи.
   if(p.id && p.debt>0){
+    // «Принять оплату» прямо из расписания (клик по карточке или меню из 3
+    // точек — обе точки входа проходят через эту функцию) — по прямому
+    // запросу пользователя: администратор не должен идти на «Кассу» отдельно
+    // и искать пациента заново. Переход на /new/cashdesk/?open_payment=ID —
+    // касса САМА открывает уже существующую модалку оплаты (см. extra_js
+    // cashdesk.html), бизнес-логика приёма платежа не дублируется здесь.
+    html+=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/cashdesk/?open_payment=${p.id}'">${t('w_accept_payment')} (${Math.round(p.debt).toLocaleString('ru-RU')} ${CUR_SYM})</button>`;
     html+=`<button class="btn btn-ghost btn-sm" onclick="${sendToCashierFn}()">Отправить в кассу (долг ${Math.round(p.debt).toLocaleString('ru-RU')} сом)</button>`;
   }
   return html;
@@ -8570,13 +8620,16 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     // спецслучаи в общей функции ради одного пункта меню).
     document.getElementById('navRecycle').classList.toggle('hidden',
       !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
-    // Журнал посещений — виден директору/админу/суперадмину всегда, рядовому
-    // персоналу — только если включено в настройках клиники
-    // (visitsJournalStaff, та же граница, что у apps.patients.views.
-    // _visits_journal_allowed). По умолчанию скрыт в разметке (класс hidden) —
-    // именно это «изначально скрыт, включается через настройки» из запроса.
+    // Журнал посещений — виден суперадмину/директору (admin_main) всегда,
+    // остальному персоналу (включая роль «Админ» — ресепшен/администратор
+    // клиники) — только если включено в настройках клиники (visitsJournalStaff,
+    // та же граница, что у apps.patients.views._visits_journal_allowed). По
+    // умолчанию скрыт в разметке (класс hidden) — «изначально скрыт,
+    // включается через настройки» из запроса. Раньше «Админ» тоже всегда
+    // обходил тумблер — по жалобе директора (тумблер выключен, а сотрудник с
+    // ролью «Администратор» всё равно видит журнал) сузили обход.
     document.getElementById('navVisitsJournal').classList.toggle('hidden',
-      !(IS_SUPERADMIN || IS_ADMIN || IS_ADMIN_MAIN || data.visitsJournalStaff) || !(data.navSections||[]).includes('patients'));
+      !(IS_SUPERADMIN || IS_ADMIN_MAIN || data.visitsJournalStaff) || !(data.navSections||[]).includes('patients'));
     // Настройки → «Карточка лечения» ведёт на /settings/emr-templates/,
     // которая доступна только superadmin/admin_main — прячем пункт у
     // остальных (иначе клик просто упёрся бы в 403).

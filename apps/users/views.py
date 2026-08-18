@@ -1694,6 +1694,7 @@ def _newui_cashdesk_data(request, clinic):
     from django.utils import timezone
     from apps.finance.models import CashShift, Payment
     from apps.notifications.models import Notification
+    from apps.patients.models import Patient
 
     branch = None
     if clinic:
@@ -1726,28 +1727,54 @@ def _newui_cashdesk_data(request, clinic):
     # без действия (apps.finance.views._notify_cashier_payment, link без
     # query-строки), которое иначе после каждого «Принято» тут же
     # воскрешало бы ту же заявку в очереди. В очередь берём только первое.
+    # Раньше строка заявки бралась готовым текстом (n.body), собранным на
+    # сервере через Django _() — по факту без скомпилированных .mo-каталогов
+    # для uz/ky это никогда не переводилось и всегда оставалось на русском,
+    # даже когда весь остальной интерфейс на узбекском (жалоба: «интерфейс на
+    # узбекском, а сообщения в очереди на русском»). Вместо готового текста
+    # отдаём сырые поля — фразу собирает JS через тот же t()-словарь, что и
+    # остальной интерфейс (см. renderCashQueue в base.html).
     queue = []
     seen_links = set()
     qset = Notification.objects.filter(type="payment", is_read=False, link__startswith="/finance/payments/?patient=")
     qset = qset.filter(clinic=clinic) if clinic else qset.filter(user=request.user)
+    raw_items = []
     for n in qset.select_related("actor").order_by("-created_at")[:100]:
         if n.link and n.link in seen_links:
             continue
         if n.link:
             seen_links.add(n.link)
+        raw_items.append(n)
+        if len(raw_items) >= 30:
+            break
+    pat_ids = set()
+    treat_ids = set()
+    parsed = []
+    for n in raw_items:
         qs = parse_qs(urlparse(n.link or "").query)
+        pid = int(qs["patient"][0]) if qs.get("patient") else None
+        tid = int(qs["treatment"][0]) if qs.get("treatment") else None
+        if pid: pat_ids.add(pid)
+        if tid: treat_ids.add(tid)
+        parsed.append((n, pid, tid, qs.get("amount", [""])[0]))
+    pat_map = {p.pk: p for p in Patient.objects.filter(pk__in=pat_ids)} if pat_ids else {}
+    from apps.treatments.models import Treatment as _Treatment
+    treat_map = {t.pk: t for t in _Treatment.objects.filter(pk__in=treat_ids)} if treat_ids else {}
+    for n, pid, tid, amount in parsed:
+        pat = pat_map.get(pid)
+        tr = treat_map.get(tid)
         queue.append({
             "id": n.pk,
-            "patientId": int(qs["patient"][0]) if qs.get("patient") else None,
-            "treatmentId": int(qs["treatment"][0]) if qs.get("treatment") else None,
-            "amount": qs.get("amount", [""])[0],
-            "body": n.body,
+            "patientId": pid,
+            "patientName": pat.full_name if pat else "",
+            "debt": float(pat.debt) if pat else 0,
+            "treatmentId": tid,
+            "treatmentNumber": tr.display_number if tr else None,
+            "amount": amount,
             "from": n.actor.name if n.actor else "—",
             "time": timezone.localtime(n.created_at).strftime("%d.%m %H:%M"),
             "link": n.link,
         })
-        if len(queue) >= 30:
-            break
 
     # ── «Пациенты на сегодня» — реальные приёмы сегодня с непогашенным долгом
     # по приёму (Treatment.appointment), сгруппированные по пациенту (если у
