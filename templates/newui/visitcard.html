@@ -607,6 +607,11 @@
         : '<div style="display:flex;flex-direction:column;gap:8px;">'+msgs.map(m=>`<div class="chat-bubble ${m.dir==='in'?'in':'out'}" style="max-width:100%;">${m.body||''}<span class="time">${m.time}</span></div>`).join('')+'</div>';
     }catch(e){}
   }
+  // На window — vcTab('msg') в base.html вызывает её напрямую при каждом
+  // переключении на вкладку «Сообщения», чтобы показывать актуальную
+  // историю, а не только один раз при первой загрузке страницы (и не
+  // затирать её демо-рендером старого «Карточка приёма» — см. base.html).
+  window.vwLoadVisitChatHistory = vwLoadVisitChatHistory;
   vwLoadVisitChatHistory();
 
   // ---- автосохранение ----
