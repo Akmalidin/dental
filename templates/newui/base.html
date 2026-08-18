@@ -758,10 +758,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>
       <span data-i18n="nav_услуги">Услуги</span>
     </a>
-    <a class="nav-item{% if active == 'tasks' %} active{% endif %}" data-view="tasks" href="{% url 'newui_tasks' %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="7" rx="1.5"/><path d="M4.5 7.5l1.5 1.5 2.5-2.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M13 6h8M13 10h8M13 17h8M13 17.5h5"/></svg>
-      <span data-i18n="nav_задачи">Задачи</span><span class="nav-badge hidden" id="tasksNavBadge"></span>
-    </a>
     <a class="nav-item{% if active == 'warehouse' %} active{% endif %}" data-view="warehouse" href="{% url 'newui_warehouse' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg>
       <span data-i18n="nav_склад">Склад</span>
