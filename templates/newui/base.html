@@ -758,6 +758,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>
       <span data-i18n="nav_услуги">Услуги</span>
     </a>
+    <a class="nav-item{% if active == 'tasks' %} active{% endif %}" data-view="tasks" href="{% url 'newui_tasks' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="7" rx="1.5"/><path d="M4.5 7.5l1.5 1.5 2.5-2.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M13 6h8M13 10h8M13 17h8M13 17.5h5"/></svg>
+      <span data-i18n="nav_задачи">Задачи</span><span class="nav-badge hidden" id="tasksNavBadge"></span>
+    </a>
     <a class="nav-item{% if active == 'warehouse' %} active{% endif %}" data-view="warehouse" href="{% url 'newui_warehouse' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg>
       <span data-i18n="nav_склад">Склад</span>
@@ -1039,6 +1043,36 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…" data-i18n-placeholder="w_describe_reason_own_words"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-blacklist-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="addToBlacklist()"><span data-i18n="btn_add_to_list">Добавить в список</span></button></div>
+  </div>
+</div>
+
+<!-- Задача: создание/редактирование (apps.tasks) -->
+<div class="modal-backdrop" id="m-task-edit">
+  <div class="modal">
+    <div class="modal-head"><h3 id="taskModalTitle" data-i18n="title_m_task_new">Новая задача</h3><button class="modal-close" onclick="closeModal('m-task-edit')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label data-i18n="w_task_title">Заголовок</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="task-title" placeholder="Например: Заказать материалы" data-i18n-placeholder="w_task_title_placeholder"></div>
+      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea rows="3" id="task-description" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_task_due">Срок</label><input autocomplete="off" type="datetime-local" id="task-due"></div>
+        <div class="form-group"><label data-i18n="w_priority">Приоритет</label>
+          <select id="task-priority">
+            <option value="low" data-i18n="w_priority_low">Низкий</option>
+            <option value="medium" selected data-i18n="w_priority_medium">Средний</option>
+            <option value="high" data-i18n="w_priority_high">Высокий</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label data-i18n="w_status">Статус</label>
+        <select id="task-status">
+          <option value="pending" data-i18n="w_task_status_pending">Ожидает</option>
+          <option value="in_progress" data-i18n="w_task_status_in_progress">В процессе</option>
+          <option value="done" data-i18n="w_task_status_done">Выполнена</option>
+        </select>
+      </div>
+      <div class="form-group"><label data-i18n="w_task_assignees">Исполнители</label><div id="task-assignees" style="display:flex;flex-wrap:wrap;gap:10px;"></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-task-edit')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTaskForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
 </div>
 
@@ -2115,6 +2149,107 @@ function updatePatientCardBlacklistState(){
   }
 }
 
+/* ================= ЗАДАЧИ (apps.tasks) =================
+   Список/создание/редактирование/готово/удаление идут через те же формы-
+   вьюхи старого интерфейса (POST + res.redirected → flashAndReload), что и
+   «Чёрный список»/«Персонал» — без дублирования бизнес-логики форм здесь. */
+let tasksFilterStatus='';
+let editingTaskId=null;
+function taskStatusLabel(s){
+  return s==='done' ? t('w_task_status_done') : s==='in_progress' ? t('w_task_status_in_progress') : t('w_task_status_pending');
+}
+function taskStatusPill(s){
+  return s==='done' ? 'teal' : s==='in_progress' ? 'cobalt' : 'grey';
+}
+function taskPriorityLabel(p){
+  return p==='high' ? t('w_priority_high') : p==='low' ? t('w_priority_low') : t('w_priority_medium');
+}
+function taskPriorityPill(p){
+  return p==='high' ? 'coral' : p==='low' ? 'grey' : 'amber';
+}
+function taskFilterTab(status){
+  tasksFilterStatus=status;
+  document.querySelectorAll('#tasksFilterChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.status===status));
+  renderTasksList();
+}
+function updateTasksNavBadge(){
+  const badge=document.getElementById('tasksNavBadge');
+  if(!badge) return;
+  const n=(tasksData.tasks||[]).filter(tsk=>tsk.status!=='done').length;
+  badge.textContent=n;
+  badge.classList.toggle('hidden', n===0);
+}
+function renderTasksList(){
+  const body=document.getElementById('tasksTableBody');
+  updateTasksNavBadge();
+  if(!body) return;
+  const q=(document.getElementById('taskSearchInput')?.value||'').toLowerCase();
+  let list=tasksData.tasks||[];
+  if(tasksFilterStatus) list=list.filter(tsk=>tsk.status===tasksFilterStatus);
+  if(q) list=list.filter(tsk=>tsk.title.toLowerCase().includes(q) || (tsk.description||'').toLowerCase().includes(q));
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    return;
+  }
+  body.innerHTML=list.map(tsk=>`
+    <tr>
+      <td><b>${tsk.title}</b>${tsk.description?`<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${tsk.description}</div>`:''}</td>
+      <td>${(tsk.assignedTo||[]).map(u=>u.name).join(', ') || '—'}</td>
+      <td class="mono" ${tsk.overdue?'style="color:var(--coral);font-weight:600;"':''}>${tsk.dueDateDisplay || '—'}</td>
+      <td><span class="pill ${taskPriorityPill(tsk.priority)}">${taskPriorityLabel(tsk.priority)}</span></td>
+      <td><span class="pill ${taskStatusPill(tsk.status)}">${taskStatusLabel(tsk.status)}</span></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${tsk.status!=='done' ? `<button class="btn btn-ghost btn-sm" onclick="taskMarkDone(${tsk.id})">${t('w_task_mark_done')}</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openTaskModal(${tsk.id})">${t('w_edit')}</button>
+        ${(IS_SUPERADMIN || IS_ADMIN || tsk.createdById===CURRENT_USER_ID) ? `<button class="btn btn-danger btn-sm" onclick="taskDeleteConfirm(${tsk.id})">${t('w_delete')}</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+function populateTaskAssignees(selectedIds){
+  selectedIds = selectedIds || [];
+  document.getElementById('task-assignees').innerHTML = (tasksData.staff||[]).map(u=>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input autocomplete="off" type="checkbox" value="${u.id}" class="task-assignee-cb" ${selectedIds.includes(u.id)?'checked':''}>${u.name}</label>`
+  ).join('');
+}
+function openTaskModal(id){
+  editingTaskId = id || null;
+  const tsk = id ? (tasksData.tasks||[]).find(x=>x.id===id) : null;
+  document.getElementById('taskModalTitle').textContent = tsk ? t('title_m_task_edit') : t('title_m_task_new');
+  document.getElementById('task-title').value = tsk ? tsk.title : '';
+  document.getElementById('task-description').value = tsk ? tsk.description : '';
+  document.getElementById('task-due').value = tsk ? tsk.dueDate : '';
+  document.getElementById('task-priority').value = tsk ? tsk.priority : 'medium';
+  document.getElementById('task-status').value = tsk ? tsk.status : 'pending';
+  populateTaskAssignees(tsk ? tsk.assignedTo.map(u=>u.id) : []);
+  openModal('m-task-edit');
+}
+async function submitTaskForm(){
+  const title=document.getElementById('task-title').value.trim();
+  if(!title){ document.getElementById('task-title').focus(); return; }
+  const fd=new FormData();
+  fd.append('title', title);
+  fd.append('description', document.getElementById('task-description').value.trim());
+  fd.append('due_date', document.getElementById('task-due').value);
+  fd.append('priority', document.getElementById('task-priority').value);
+  fd.append('status', document.getElementById('task-status').value);
+  document.querySelectorAll('.task-assignee-cb:checked').forEach(cb=>fd.append('assigned_to', cb.value));
+  const url = editingTaskId ? `/tasks/${editingTaskId}/edit/` : '/tasks/create/';
+  const res = await postForm(url, fd);
+  if(res.redirected){ flashAndReload(editingTaskId ? t('w_task_updated') : t('w_task_created')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+async function taskMarkDone(id){
+  const res = await postForm(`/tasks/${id}/done/`, new FormData());
+  if(res.redirected){ flashAndReload(t('w_task_updated')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+async function taskDeleteConfirm(id){
+  if(!confirm(t('w_confirm_task_delete'))) return;
+  const res = await postForm(`/tasks/${id}/delete/`, new FormData());
+  if(res.redirected){ flashAndReload(t('w_task_deleted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
 function openEditPatient(){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   if(!p) return;
@@ -3091,6 +3226,7 @@ const translations={
   nav_планы_лечения:  {ru:'Планы лечения',      ky:'Дарылоо пландары', en:'Treatment plans',   uz:'Davolash rejalari'},
   nav_персонал:       {ru:'Персонал',           ky:'Кызматкерлер',     en:'Staff',             uz:'Xodimlar'},
   nav_услуги:         {ru:'Услуги',             ky:'Кызматтар',        en:'Services',          uz:'Xizmatlar'},
+  nav_задачи:         {ru:'Задачи',             ky:'Тапшырмалар',      en:'Tasks',             uz:'Vazifalar'},
   nav_склад:          {ru:'Склад',              ky:'Кампа',            en:'Warehouse',         uz:'Ombor'},
   nav_лаборатория:    {ru:'Лаборатория',        ky:'Лаборатория',      en:'Lab',               uz:'Laboratoriya'},
   nav_касса:          {ru:'Касса',              ky:'Касса',            en:'Cash desk',         uz:'Kassa'},
@@ -3302,6 +3438,24 @@ const translations={
   w_template_name_placeholder: {ru:'Например: Средний кариес', ky:'Мисалы: Орточо кариес', en:'e.g. Moderate caries', uz:'Masalan: O\'rtacha karies'},
   w_template_name_required: {ru:'Укажите название шаблона', ky:'Үлгүнүн аталышын көрсөтүңүз', en:'Enter a template name', uz:'Shablon nomini kiriting'},
   w_template_saved: {ru:'Шаблон сохранён', ky:'Үлгү сакталды', en:'Template saved', uz:'Shablon saqlandi'},
+  title_m_task_new: {ru:'Новая задача', ky:'Жаңы тапшырма', en:'New task', uz:'Yangi vazifa'},
+  title_m_task_edit: {ru:'Редактировать задачу', ky:'Тапшырманы өзгөртүү', en:'Edit task', uz:'Vazifani tahrirlash'},
+  w_task_title: {ru:'Заголовок', ky:'Аталышы', en:'Title', uz:'Sarlavha'},
+  w_task_title_placeholder: {ru:'Например: Заказать материалы', ky:'Мисалы: Материал буюртма кылуу', en:'e.g. Order supplies', uz:'Masalan: Materiallarga buyurtma berish'},
+  w_task_due: {ru:'Срок', ky:'Мөөнөт', en:'Due date', uz:'Muddat'},
+  w_task_assignees: {ru:'Исполнители', ky:'Аткаруучулар', en:'Assignees', uz:'Bajaruvchilar'},
+  w_priority: {ru:'Приоритет', ky:'Артыкчылык', en:'Priority', uz:'Ustuvorlik'},
+  w_priority_low: {ru:'Низкий', ky:'Төмөн', en:'Low', uz:'Past'},
+  w_priority_medium: {ru:'Средний', ky:'Орточо', en:'Medium', uz:"O'rtacha"},
+  w_priority_high: {ru:'Высокий', ky:'Жогорку', en:'High', uz:'Yuqori'},
+  w_task_status_pending: {ru:'Ожидает', ky:'Күтүүдө', en:'Pending', uz:'Kutilmoqda'},
+  w_task_status_in_progress: {ru:'В процессе', ky:'Процессте', en:'In progress', uz:'Jarayonda'},
+  w_task_status_done: {ru:'Выполнена', ky:'Аткарылды', en:'Done', uz:'Bajarildi'},
+  w_task_mark_done: {ru:'Готово', ky:'Даяр', en:'Mark done', uz:'Bajarildi deb belgilash'},
+  w_task_created: {ru:'Задача создана', ky:'Тапшырма түзүлдү', en:'Task created', uz:'Vazifa yaratildi'},
+  w_task_updated: {ru:'Задача обновлена', ky:'Тапшырма жаңырды', en:'Task updated', uz:'Vazifa yangilandi'},
+  w_task_deleted: {ru:'Задача удалена', ky:'Тапшырма өчүрүлдү', en:'Task deleted', uz:"Vazifa o'chirildi"},
+  w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
   w_visit_completed: {ru:'Приём завершён', ky:'Кабыл алуу аяктады', en:'Visit completed', uz:'Qabul yakunlandi'},
   w_visit_completed_sent_to_cashier: {ru:'Приём завершён, долг отправлен в кассу', ky:'Кабыл алуу аяктады, карыз кассага жиберилди', en:'Visit completed, balance sent to the cashier', uz:'Qabul yakunlandi, qarz kassaga yuborildi'},
   w_visit_in_progress: {ru:'Приём идёт — завершить', ky:'Кабыл алуу жүрүп жатат — аяктоо', en:'Visit in progress — finish', uz:'Qabul davom etmoqda — yakunlash'},
@@ -3369,6 +3523,7 @@ const translations={
   w_search_by_name_phone: {ru:'Поиск по имени или телефону', ky:'Аты же телефону боюнча издөө', en:'Search by name or phone', uz:'Ism yoki telefon bo‘yicha qidirish'},
   w_from_short: {ru:'от', ky:'дан', en:'from', uz:'dan'},
   w_search_name_phone_dots: {ru:'Поиск по имени, телефону…', ky:'Аты, телефону боюнча издөө…', en:'Search by name, phone…', uz:'Ism, telefon bo‘yicha qidirish…'},
+  w_search_title_desc_dots: {ru:'Поиск по заголовку, описанию…', ky:'Аталышы, сүрөттөмөсү боюнча издөө…', en:'Search by title, description…', uz:'Sarlavha, tavsif bo‘yicha qidirish…'},
   w_write_message_dots: {ru:'Написать сообщение…', ky:'Билдирүү жазуу…', en:'Write a message…', uz:'Xabar yozish…'},
   w_search_user_object: {ru:'Пользователь, объект…', ky:'Колдонуучу, объект…', en:'User, object…', uz:'Foydalanuvchi, obyekt…'},
   w_search_patient_doctor: {ru:'Пациент, врач…', ky:'Бейтап, врач…', en:'Patient, doctor…', uz:'Bemor, shifokor…'},
@@ -4626,7 +4781,7 @@ const NAV_VIEW_TO_SECTION = {
   patients: 'patients', schedule: 'appointments', treatplans: 'treatments',
   staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
   cashdesk: 'finance', finance: 'finance', accounting: 'finance',
-  reports: 'reports', audit: 'reports', settings: 'settings',
+  reports: 'reports', audit: 'reports', settings: 'settings', tasks: 'tasks',
 };
 function hideRestrictedNavItems(navSections){
   const sidebar=document.querySelector('.sidebar');
@@ -6550,6 +6705,7 @@ let treatplansData=null;
 let visitsData=null;
 let accountingData=null;
 let auditEvents=[];
+let tasksData={tasks:[], staff:[]};
 let notificationsData=[];
 let notifFilter='all';
 let patientCardDetail=null;
@@ -7132,7 +7288,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false, IS_ADMIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -7166,6 +7322,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     visitsData=data.visitsData || null;
     accountingData=data.accountingData || null;
     auditEvents=data.auditEvents || [];
+    tasksData=data.tasksData || {tasks:[], staff:[]};
     notificationsData=data.notificationsData || [];
     messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
     initNavNotifBell();
@@ -7194,6 +7351,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     IS_SUPERADMIN=!!data.isSuperadmin;
+    IS_ADMIN=!!data.isAdmin;
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
@@ -8036,6 +8194,8 @@ renderCashdesk();
 renderFunnel();
 updateBlacklistBadge();
 renderBlacklist();
+updateTasksNavBadge();
+renderTasksList();
 renderServiceChips();
 renderServicesTable();
 renderFinance();

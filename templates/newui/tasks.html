@@ -1,0 +1,32 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Задачи{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="nav_задачи">Задачи</h1>
+        <div class="topbar-right">
+          <div class="search-box"><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="taskSearchInput" placeholder="Поиск по заголовку, описанию…" data-i18n-placeholder="w_search_title_desc_dots" oninput="renderTasksList()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <button class="btn btn-cobalt" onclick="openTaskModal()">+ <span data-i18n="title_m_task_new">Новая задача</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="toolbar-left" id="tasksFilterChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="chip active" data-status="" onclick="taskFilterTab('')" data-i18n="w_all">Все</button>
+          <button class="chip" data-status="pending" onclick="taskFilterTab('pending')" data-i18n="w_task_status_pending">Ожидает</button>
+          <button class="chip" data-status="in_progress" onclick="taskFilterTab('in_progress')" data-i18n="w_task_status_in_progress">В процессе</button>
+          <button class="chip" data-status="done" onclick="taskFilterTab('done')" data-i18n="w_task_status_done">Выполнена</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr>
+              <th data-i18n="w_task_title">Заголовок</th>
+              <th data-i18n="w_task_assignees">Исполнители</th>
+              <th data-i18n="w_task_due">Срок</th>
+              <th data-i18n="w_priority">Приоритет</th>
+              <th data-i18n="w_status">Статус</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="tasksTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

@@ -21,6 +21,7 @@ from .views import (
     _newui_visits_data, _newui_accounting_data, _newui_audit_data, _newui_notifications_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
+    _newui_tasks_data,
 )
 
 
@@ -108,6 +109,10 @@ def _shared_options(request, clinic):
         # текущее состояние объекта прошлым значением из истории, поэтому
         # только суперадминистратору (см. apps.users.newui_views.audit_revert).
         "isSuperadmin": bool(request.user.is_superadmin),
+        # Задачи → кнопка «Удалить» — та же проверка прав, что и в старом
+        # интерфейсе (apps.tasks.views.task_delete: автор, админ или
+        # суперадмин), прячем у остальных, чтобы не упираться в отказ.
+        "isAdmin": bool(request.user.is_admin),
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
@@ -297,6 +302,13 @@ def newui_funnel(request):
 @login_required
 def newui_blacklist(request):
     return _render(request, "blacklist", "blacklist.html", {"blacklistEntries": _newui_blacklist_data()})
+
+
+@login_required
+def newui_tasks(request):
+    from apps.tenancy import get_current_clinic
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    return _render(request, "tasks", "tasks.html", {"tasksData": _newui_tasks_data(request, clinic)})
 
 
 @login_required
