@@ -1003,6 +1003,43 @@ def _newui_tasks_data(request, clinic):
     return {"tasks": tasks, "staff": staff}
 
 
+def _newui_medicines_data(request):
+    """Лекарства — та же модель и те же права видимости, что и в старом
+    интерфейсе (apps.medicines.views.medicine_list): врач видит только свои
+    назначения, остальные — все. Добавление лекарства на склад/назначение
+    пациенту идут через те же вьюхи apps.medicines.views (POST +
+    res.redirected на клиенте — как «Задачи»/«Чёрный список»). Редактирования
+    и удаления нет и у старого интерфейса — не добавляем их и здесь."""
+    from apps.medicines.models import Medicine, PatientMedicine
+
+    medicines = [{
+        "id": m.pk,
+        "name": m.name,
+        "form": m.form,
+        "formLabel": m.get_form_display(),
+        "quantity": float(m.quantity),
+        "unit": m.unit,
+        "minQty": float(m.min_qty),
+        "low": m.quantity <= m.min_qty,
+    } for m in Medicine.objects.filter(is_active=True).order_by("name")]
+
+    presc_qs = PatientMedicine.objects.select_related("patient", "medicine", "doctor").order_by("-date")
+    if request.user.is_doctor:
+        presc_qs = presc_qs.filter(doctor=request.user)
+    prescriptions = [{
+        "id": p.pk,
+        "patientId": p.patient_id,
+        "patientName": p.patient.full_name,
+        "medicineName": p.medicine.name,
+        "dosage": p.dosage,
+        "duration": p.duration,
+        "doctorName": p.doctor.name if p.doctor_id else "—",
+        "date": p.date.strftime("%d.%m.%Y"),
+    } for p in presc_qs[:50]]
+
+    return {"medicines": medicines, "prescriptions": prescriptions}
+
+
 def _newui_treatplans_data(clinic):
     """Планы лечения — реальная модель TreatmentPlan (apps.treatments.models_plan),
     та же, что используется в редакторе плана старого интерфейса (plan_detail).

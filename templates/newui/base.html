@@ -770,6 +770,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>
       <span data-i18n="nav_лаборатория">Лаборатория</span>
     </a>
+    <a class="nav-item{% if active == 'medicines' %} active{% endif %}" data-view="medicines" href="{% url 'newui_medicines' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M12 12v5M9.5 14.5h5"/></svg>
+      <span data-i18n="nav_лекарства">Лекарства</span>
+    </a>
 
     <div class="nav-label">Деньги</div>
     <a class="nav-item{% if active == 'cashdesk' %} active{% endif %}" data-view="cashdesk" href="{% url 'newui_cashdesk' %}">
@@ -1073,6 +1077,60 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group"><label data-i18n="w_task_assignees">Исполнители</label><div id="task-assignees" style="display:flex;flex-wrap:wrap;gap:10px;"></div></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-task-edit')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTaskForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Лекарство: добавить на склад (apps.medicines.Medicine) -->
+<div class="modal-backdrop" id="m-medicine-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_medicine_add">Добавить лекарство</h3><button class="modal-close" onclick="closeModal('m-medicine-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label data-i18n="w_med_name">Название</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="med-name" placeholder="Например: Лидокаин 2%" data-i18n-placeholder="w_med_name_placeholder"></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_med_form">Форма</label>
+          <select id="med-form">
+            <option value="tablets" data-i18n="w_med_form_tablets">Таблетки</option>
+            <option value="capsules" data-i18n="w_med_form_capsules">Капсулы</option>
+            <option value="drops" data-i18n="w_med_form_drops">Капли</option>
+            <option value="ointment" data-i18n="w_med_form_ointment">Мазь</option>
+            <option value="solution" data-i18n="w_med_form_solution">Раствор</option>
+            <option value="other" data-i18n="w_med_form_other">Другое</option>
+          </select>
+        </div>
+        <div class="form-group"><label data-i18n="w_med_unit">Единица</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="med-unit" placeholder="шт / мл / уп"></div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_med_quantity">Остаток</label><input autocomplete="off" type="number" step="0.01" min="0" id="med-quantity" value="0"></div>
+        <div class="form-group"><label data-i18n="w_med_min_qty">Мин. остаток</label><input autocomplete="off" type="number" step="0.01" min="0" id="med-min-qty" value="0"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-medicine-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitMedicineForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Назначить лекарство пациенту (apps.medicines.PatientMedicine) -->
+<div class="modal-backdrop" id="m-prescription-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_prescription_add">Назначить лекарство</h3><button class="modal-close" onclick="closeModal('m-prescription-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" style="position:relative;">
+        <label data-i18n="w_patient">Пациент</label>
+        <input type="text" id="rx-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" readonly oninput="rxPatientSearch(this.value)" onfocus="this.removeAttribute('readonly');rxPatientSearch(this.value)">
+        <input autocomplete="off" type="hidden" id="rx-patient-id">
+        <div id="rx-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_medicine">Лекарство</label><select id="rx-medicine"></select></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_med_dosage">Дозировка</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="rx-dosage" placeholder="Например: 1 таблетка 2 раза в день"></div>
+        <div class="form-group"><label data-i18n="w_med_duration">Длительность</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="rx-duration" placeholder="Например: 5 дней"></div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="rx-doctor"></select></div>
+        <div class="form-group"><label data-i18n="w_med_date">Дата назначения</label><input autocomplete="off" type="date" id="rx-date"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="rx-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-prescription-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitPrescriptionForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
 </div>
 
@@ -2250,6 +2308,126 @@ async function taskDeleteConfirm(id){
   else { showToast(t('w_save_failed'), 'error'); }
 }
 
+/* ================= ЛЕКАРСТВА (apps.medicines) =================
+   Как и «Задачи» — список показывает реальные данные, добавление на склад и
+   назначение пациенту идут через те же вьюхи-формы старого интерфейса
+   (POST + res.redirected → flashAndReload). Ни редактирования, ни удаления
+   нет и у старого интерфейса (apps.medicines.views) — не добавляем их и
+   здесь, чтобы не изобретать поведение, которого нет в бизнес-логике. */
+function renderMedicinesList(){
+  const body=document.getElementById('medicinesTableBody');
+  if(!body) return;
+  const list=medicinesData.medicines||[];
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    return;
+  }
+  body.innerHTML=list.map(m=>`
+    <tr>
+      <td><b>${m.name}</b></td>
+      <td>${m.formLabel}</td>
+      <td class="mono" ${m.low?'style="color:var(--coral);font-weight:600;"':''}>${m.quantity} ${m.unit}${m.low?` · ${t('w_med_low_stock')}`:''}</td>
+      <td class="mono">${m.minQty} ${m.unit}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openPrescriptionModal(${m.id})">${t('title_m_prescription_add')}</button></td>
+    </tr>`).join('');
+}
+function renderPrescriptionsList(){
+  const body=document.getElementById('prescriptionsTableBody');
+  if(!body) return;
+  const list=medicinesData.prescriptions||[];
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    return;
+  }
+  body.innerHTML=list.map(p=>`
+    <tr>
+      <td><a href="/new/patients/${p.patientId}/" class="link-btn">${p.patientName}</a></td>
+      <td>${p.medicineName}</td>
+      <td>${p.dosage}</td>
+      <td>${p.duration}</td>
+      <td>${p.doctorName}</td>
+      <td class="mono">${p.date}</td>
+    </tr>`).join('');
+}
+function populateMedicineSelects(){
+  const medSel=document.getElementById('rx-medicine');
+  if(medSel) medSel.innerHTML=(medicinesData.medicines||[]).map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  const docSel=document.getElementById('rx-doctor');
+  if(docSel) docSel.innerHTML=(doctorOptions||[]).map(d=>`<option value="${d.id}" ${d.id===CURRENT_USER_ID?'selected':''}>${d.name}</option>`).join('');
+}
+function openMedicineAddModal(){
+  document.getElementById('med-name').value='';
+  document.getElementById('med-form').value='tablets';
+  document.getElementById('med-unit').value='';
+  document.getElementById('med-quantity').value='0';
+  document.getElementById('med-min-qty').value='0';
+  openModal('m-medicine-add');
+}
+async function submitMedicineForm(){
+  const name=document.getElementById('med-name').value.trim();
+  const unit=document.getElementById('med-unit').value.trim();
+  if(!name || !unit){ document.getElementById(name?'med-unit':'med-name').focus(); return; }
+  const fd=new FormData();
+  fd.append('name', name);
+  fd.append('form', document.getElementById('med-form').value);
+  fd.append('unit', unit);
+  fd.append('quantity', document.getElementById('med-quantity').value || '0');
+  fd.append('min_qty', document.getElementById('med-min-qty').value || '0');
+  const res=await postForm('/medicines/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_med_added')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+function rxPatientSearch(q){
+  const box=document.getElementById('rx-patient-suggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=(patientsList||[]).filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onclick="selectRxPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
+function selectRxPatient(id){
+  const p=(patientsList||[]).find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('rx-patient-search').value=p.fullName;
+  document.getElementById('rx-patient-id').value=p.id;
+  document.getElementById('rx-patient-suggestions').classList.add('hidden');
+}
+function openPrescriptionModal(medicineId){
+  document.getElementById('rx-patient-search').value='';
+  document.getElementById('rx-patient-id').value='';
+  document.getElementById('rx-patient-suggestions').classList.add('hidden');
+  document.getElementById('rx-dosage').value='';
+  document.getElementById('rx-duration').value='';
+  document.getElementById('rx-notes').value='';
+  document.getElementById('rx-date').value=isoDate(new Date());
+  populateMedicineSelects();
+  if(medicineId) document.getElementById('rx-medicine').value=medicineId;
+  openModal('m-prescription-add');
+}
+async function submitPrescriptionForm(){
+  const patientId=document.getElementById('rx-patient-id').value;
+  const medicineId=document.getElementById('rx-medicine').value;
+  const dosage=document.getElementById('rx-dosage').value.trim();
+  const duration=document.getElementById('rx-duration').value.trim();
+  if(!patientId || !medicineId || !dosage || !duration){
+    showToast(t('w_med_choose_patient_medicine'), 'error');
+    return;
+  }
+  const fd=new FormData();
+  fd.append('patient', patientId);
+  fd.append('medicine', medicineId);
+  fd.append('dosage', dosage);
+  fd.append('duration', duration);
+  fd.append('doctor', document.getElementById('rx-doctor').value);
+  fd.append('date', document.getElementById('rx-date').value);
+  fd.append('notes', document.getElementById('rx-notes').value.trim());
+  const res=await postForm('/medicines/prescriptions/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_prescription_added')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
 function openEditPatient(){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   if(!p) return;
@@ -3227,6 +3405,7 @@ const translations={
   nav_персонал:       {ru:'Персонал',           ky:'Кызматкерлер',     en:'Staff',             uz:'Xodimlar'},
   nav_услуги:         {ru:'Услуги',             ky:'Кызматтар',        en:'Services',          uz:'Xizmatlar'},
   nav_задачи:         {ru:'Задачи',             ky:'Тапшырмалар',      en:'Tasks',             uz:'Vazifalar'},
+  nav_лекарства:      {ru:'Лекарства',          ky:'Дарылар',          en:'Medicines',         uz:'Dorilar'},
   nav_склад:          {ru:'Склад',              ky:'Кампа',            en:'Warehouse',         uz:'Ombor'},
   nav_лаборатория:    {ru:'Лаборатория',        ky:'Лаборатория',      en:'Lab',               uz:'Laboratoriya'},
   nav_касса:          {ru:'Касса',              ky:'Касса',            en:'Cash desk',         uz:'Kassa'},
@@ -3456,6 +3635,30 @@ const translations={
   w_task_updated: {ru:'Задача обновлена', ky:'Тапшырма жаңырды', en:'Task updated', uz:'Vazifa yangilandi'},
   w_task_deleted: {ru:'Задача удалена', ky:'Тапшырма өчүрүлдү', en:'Task deleted', uz:"Vazifa o'chirildi"},
   w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
+  title_m_medicine_add: {ru:'Добавить лекарство', ky:'Дары кошуу', en:'Add medicine', uz:'Dori qo\'shish'},
+  title_m_prescription_add: {ru:'Назначить лекарство', ky:'Дары дайындоо', en:'Prescribe medicine', uz:'Dori tayinlash'},
+  w_med_name: {ru:'Название', ky:'Аталышы', en:'Name', uz:'Nomi'},
+  w_med_name_placeholder: {ru:'Например: Лидокаин 2%', ky:'Мисалы: Лидокаин 2%', en:'e.g. Lidocaine 2%', uz:'Masalan: Lidokain 2%'},
+  w_med_form: {ru:'Форма', ky:'Формасы', en:'Form', uz:'Shakli'},
+  w_med_form_tablets: {ru:'Таблетки', ky:'Таблеткалар', en:'Tablets', uz:'Tabletkalar'},
+  w_med_form_capsules: {ru:'Капсулы', ky:'Капсулалар', en:'Capsules', uz:'Kapsulalar'},
+  w_med_form_drops: {ru:'Капли', ky:'Тамчылар', en:'Drops', uz:'Tomchilar'},
+  w_med_form_ointment: {ru:'Мазь', ky:'Май', en:'Ointment', uz:'Malham'},
+  w_med_form_solution: {ru:'Раствор', ky:'Эритме', en:'Solution', uz:'Eritma'},
+  w_med_form_other: {ru:'Другое', ky:'Башка', en:'Other', uz:'Boshqa'},
+  w_med_unit: {ru:'Единица', ky:'Бирдик', en:'Unit', uz:'Birlik'},
+  w_med_quantity: {ru:'Остаток', ky:'Калдык', en:'Quantity', uz:'Qoldiq'},
+  w_med_min_qty: {ru:'Мин. остаток', ky:'Мин. калдык', en:'Min. quantity', uz:'Min. qoldiq'},
+  w_medicine: {ru:'Лекарство', ky:'Дары', en:'Medicine', uz:'Dori'},
+  w_med_dosage: {ru:'Дозировка', ky:'Дозасы', en:'Dosage', uz:'Dozasi'},
+  w_med_duration: {ru:'Длительность', ky:'Узактыгы', en:'Duration', uz:'Davomiyligi'},
+  w_med_date: {ru:'Дата назначения', ky:'Дайындалган күнү', en:'Prescribed on', uz:'Tayinlangan sana'},
+  w_notes: {ru:'Заметки', ky:'Эскертүүлөр', en:'Notes', uz:'Eslatmalar'},
+  w_med_added: {ru:'Лекарство добавлено', ky:'Дары кошулду', en:'Medicine added', uz:'Dori qo\'shildi'},
+  w_prescription_added: {ru:'Назначение создано', ky:'Дайындоо түзүлдү', en:'Prescription created', uz:'Tayinlash yaratildi'},
+  w_med_low_stock: {ru:'Заканчивается', ky:'Түгөнүп жатат', en:'Low stock', uz:'Tugab qolmoqda'},
+  w_med_choose_patient_medicine: {ru:'Выберите пациента и лекарство', ky:'Пациент менен дарыны тандаңыз', en:'Choose a patient and medicine', uz:'Bemor va dorini tanlang'},
+  w_prescriptions_list: {ru:'Назначения', ky:'Дайындоолор', en:'Prescriptions', uz:'Tayinlashlar'},
   w_visit_completed: {ru:'Приём завершён', ky:'Кабыл алуу аяктады', en:'Visit completed', uz:'Qabul yakunlandi'},
   w_visit_completed_sent_to_cashier: {ru:'Приём завершён, долг отправлен в кассу', ky:'Кабыл алуу аяктады, карыз кассага жиберилди', en:'Visit completed, balance sent to the cashier', uz:'Qabul yakunlandi, qarz kassaga yuborildi'},
   w_visit_in_progress: {ru:'Приём идёт — завершить', ky:'Кабыл алуу жүрүп жатат — аяктоо', en:'Visit in progress — finish', uz:'Qabul davom etmoqda — yakunlash'},
@@ -4782,6 +4985,7 @@ const NAV_VIEW_TO_SECTION = {
   staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
   cashdesk: 'finance', finance: 'finance', accounting: 'finance',
   reports: 'reports', audit: 'reports', settings: 'settings', tasks: 'tasks',
+  medicines: 'medicines',
 };
 function hideRestrictedNavItems(navSections){
   const sidebar=document.querySelector('.sidebar');
@@ -6706,6 +6910,7 @@ let visitsData=null;
 let accountingData=null;
 let auditEvents=[];
 let tasksData={tasks:[], staff:[]};
+let medicinesData={medicines:[], prescriptions:[]};
 let notificationsData=[];
 let notifFilter='all';
 let patientCardDetail=null;
@@ -7323,6 +7528,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     accountingData=data.accountingData || null;
     auditEvents=data.auditEvents || [];
     tasksData=data.tasksData || {tasks:[], staff:[]};
+    medicinesData=data.medicinesData || {medicines:[], prescriptions:[]};
     notificationsData=data.notificationsData || [];
     messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
     initNavNotifBell();
@@ -8196,6 +8402,8 @@ updateBlacklistBadge();
 renderBlacklist();
 updateTasksNavBadge();
 renderTasksList();
+renderMedicinesList();
+renderPrescriptionsList();
 renderServiceChips();
 renderServicesTable();
 renderFinance();
