@@ -148,6 +148,23 @@
         </div>
       </div>
 
+      <!-- Детали платежа — на что распределён (какие приёмы/услуги погашены),
+           плюс кто принял/когда/сумма. Переиспользует существующий
+           /finance/payments/<pk>/allocations/ (то же, что «Показать
+           распределение» в старом интерфейсе). -->
+      <div class="modal-backdrop" id="m-payment-details">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_payment_details">Детали платежа</h3><button class="modal-close" onclick="closeModal('m-payment-details')">✕</button></div>
+          <div class="modal-body">
+            <div id="pdSummary" style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;"></div>
+            <table><thead><tr>
+              <th data-i18n="w_visit_col">Приём</th><th data-i18n="w_date">Дата</th><th data-i18n="w_services">Услуги</th><th data-i18n="w_sum">Сумма</th>
+            </tr></thead><tbody id="pdRows"></tbody></table>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment-details')" data-i18n="w_close">Закрыть</button></div>
+        </div>
+      </div>
+
       <!-- Выдать чек? — после успешного приёма оплаты -->
       <div class="modal-backdrop" id="m-cash-receipt">
         <div class="modal">
