@@ -3322,10 +3322,45 @@ function renderCashPayments(){
     <td>${p.patientId?`<a href="/new/patients/${p.patientId}/" style="color:var(--cobalt);">${p.patientName}</a>`:p.patientName}</td>
     <td>${p.type}</td>
     <td>${p.method}</td>
-    <td class="mono" style="color:${p.isRefund?'var(--coral)':'var(--teal)'}">${p.isRefund?'−':'+'}${fmtSom(p.amount)}</td>
+    <td class="mono"><button style="color:${p.isRefund?'var(--coral)':'var(--teal)'};background:none;border:none;cursor:pointer;font:inherit;font-family:'JetBrains Mono',monospace;font-weight:600;padding:0;" onclick="showPaymentDetails(${p.id},'${(p.patientName||'').replace(/'/g,"\\'")}','${(p.receivedBy||'').replace(/'/g,"\\'")}','${p.time}',${p.amount})" title="${t('w_show_details')}">${p.isRefund?'−':'+'}${fmtSom(p.amount)}</button></td>
     <td>${p.receivedBy}</td>
-    <td><button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button></td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button>
+      <a class="btn btn-ghost btn-sm" href="/finance/payments/${p.id}/edit/">${t('w_edit')}</a>
+      ${IS_SUPERADMIN ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="deletePayment(${p.id})">${t('w_delete')}</button>` : ''}
+    </td>
   </tr>`).join('');
+}
+// «Показать детали» платежа — на что распределён (какие приёмы/услуги
+// погашены этим платежом), плюс кто принял/когда/сумма уже известны из
+// самой строки, передаём их напрямую (не второй запрос ради того, что уже
+// есть). Переиспользует существующий /finance/payments/<pk>/allocations/
+// (тот же, что и «Показать распределение» в старом интерфейсе) — бизнес-
+// логика распределения платежа по приёмам не дублируется.
+async function showPaymentDetails(pk, patientName, receivedBy, time, amount){
+  openModal('m-payment-details');
+  document.getElementById('pdSummary').innerHTML =
+    `<b>${patientName||'—'}</b><br>${t('w_received_by')}: ${receivedBy||'—'} · ${time} · <b class="mono">${fmtSom(amount)}</b>`;
+  document.getElementById('pdRows').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:14px;">…</td></tr>`;
+  try{
+    const res=await fetch('/finance/payments/'+pk+'/allocations/', {credentials:'same-origin'});
+    const d=await res.json();
+    document.getElementById('pdRows').innerHTML = (d.rows||[]).length===0
+      ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:14px;">${t('w_no_allocations')}</td></tr>`
+      : d.rows.map(r=>`<tr><td>${r.label}</td><td class="mono">${r.date||'—'}</td><td>${r.services||'—'}</td><td class="mono">${fmtSom(r.amount)}</td></tr>`).join('');
+  }catch(e){
+    document.getElementById('pdRows').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--coral);padding:14px;">${t('w_save_failed')}</td></tr>`;
+  }
+}
+// Удалить платёж — только superadmin (та же граница, что и в старом
+// интерфейсе, apps.finance.views.payment_delete: @require_permission
+// "finance.delete_payment"; кнопка скрыта у остальных, сервер — вторая
+// линия защиты, если кто-то дойдёт до эндпоинта в обход UI).
+async function deletePayment(pk){
+  if(!confirm(t('w_confirm_delete_payment'))) return;
+  const res=await postForm('/finance/payments/'+pk+'/delete/', new FormData());
+  if(res.redirected){ flashAndReload(t('w_deleted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 function renderCashShift(){
   const el=document.getElementById('shiftCard');
@@ -4405,6 +4440,7 @@ const translations={
   w_total: {ru:'Итого', ky:'Жыйынтыгы', en:'Total', uz:'Jami'},
   w_discount_pct: {ru:'Скидка %', ky:'Арзандатуу %', en:'Discount %', uz:'Chegirma %'},
   w_discount: {ru:'Скидка', ky:'Арзандатуу', en:'Discount', uz:'Chegirma'},
+  w_discount_on_visit: {ru:'Скидка на приём', ky:'Кабылдоого арзандатуу', en:'Discount on visit', uz:'Qabulga chegirma'},
   w_discount_sum: {ru:'Скидка (сумма)', ky:'Арзандатуу (сумма)', en:'Discount (amount)', uz:'Chegirma (summa)'},
   w_discount_toggle_mode: {ru:'Переключить % / сумма', ky:'% / сумма которуу', en:'Toggle % / amount', uz:'% / summa almashtirish'},
   w_weekday_sun: {ru:'Воскресенье', ky:'Жекшемби', en:'Sunday', uz:'Yakshanba'},
@@ -4718,6 +4754,11 @@ const translations={
   w_no_payments_yet_cashdesk: {ru:'Платежей пока нет', ky:'Азырынча төлөмдөр жок', en:'No payments yet', uz:'Hozircha to\'lovlar yo\'q'},
   w_search_payments_hint: {ru:'⌕ Пациент, телефон…', ky:'⌕ Бейтап, телефон…', en:'⌕ Patient, phone…', uz:'⌕ Bemor, telefon…'},
   w_received_by: {ru:'Принял', ky:'Кабыл алды', en:'Received by', uz:'Qabul qildi'},
+  w_show_details: {ru:'Показать детали', ky:'Чоо-жайын көрсөтүү', en:'Show details', uz:'Tafsilotlarni ko\'rsatish'},
+  w_payment_details: {ru:'Детали платежа', ky:'Төлөмдүн чоо-жайы', en:'Payment details', uz:'To\'lov tafsilotlari'},
+  w_visit_col: {ru:'Приём', ky:'Кабылдоо', en:'Visit', uz:'Qabul'},
+  w_no_allocations: {ru:'Платёж не распределён по приёмам', ky:'Төлөм кабылдоолорго бөлүштүрүлгөн эмес', en:'Payment not allocated to any visit', uz:'Toʻlov qabullarga taqsimlanmagan'},
+  w_confirm_delete_payment: {ru:'Удалить платёж? Действие необратимо.', ky:'Төлөмдү өчүрөсүзбү? Аракет кайтарылгыс.', en:'Delete this payment? This cannot be undone.', uz:'Toʻlovni oʻchirasizmi? Amalni bekor qilib boʻlmaydi.'},
   w_day: {ru:'День', ky:'Күн', en:'Day', uz:'Kun'},
   w_week: {ru:'Неделя', ky:'Жума', en:'Week', uz:'Hafta'},
   w_month: {ru:'Месяц', ky:'Ай', en:'Month', uz:'Oy'},

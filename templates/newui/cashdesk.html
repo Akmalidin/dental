@@ -77,6 +77,7 @@
                 </select>
               </div>
             </div>
+            <div class="form-group"><label data-i18n="w_discount_on_visit">Скидка на приём</label><input autocomplete="off" type="number" id="cv-discount" min="0" placeholder="0"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-visit')" data-i18n="w_cancel">Отмена</button>
@@ -101,6 +102,7 @@
                 <option value="online" data-i18n="w_online">Онлайн</option>
               </select>
             </div>
+            <div class="form-group"><label data-i18n="w_discount_on_visit">Скидка на приём</label><input autocomplete="off" type="number" id="cash-accept-discount" min="0" placeholder="0"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-accept')" data-i18n="w_cancel">Отмена</button>
@@ -137,11 +139,29 @@
                 </select>
               </div>
             </div>
+            <div class="form-group"><label data-i18n="w_discount_on_visit">Скидка на приём</label><input autocomplete="off" type="number" id="ag-discount" min="0" placeholder="0"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-accept-general')" data-i18n="w_cancel">Отмена</button>
             <button class="btn btn-cobalt" onclick="submitCashAcceptGeneral()" data-i18n="w_accept_payment">Принять оплату</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Детали платежа — на что распределён (какие приёмы/услуги погашены),
+           плюс кто принял/когда/сумма. Переиспользует существующий
+           /finance/payments/<pk>/allocations/ (то же, что «Показать
+           распределение» в старом интерфейсе). -->
+      <div class="modal-backdrop" id="m-payment-details">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_payment_details">Детали платежа</h3><button class="modal-close" onclick="closeModal('m-payment-details')">✕</button></div>
+          <div class="modal-body">
+            <div id="pdSummary" style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;"></div>
+            <table><thead><tr>
+              <th data-i18n="w_visit_col">Приём</th><th data-i18n="w_date">Дата</th><th data-i18n="w_services">Услуги</th><th data-i18n="w_sum">Сумма</th>
+            </tr></thead><tbody id="pdRows"></tbody></table>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment-details')" data-i18n="w_close">Закрыть</button></div>
         </div>
       </div>
 
@@ -215,6 +235,7 @@ function openCashAcceptModal(notifId){
   document.getElementById('cashAcceptWho').textContent=(item.patientName ? t('w_patient')+' '+item.patientName+' — ' : '')+t('w_from_short')+' '+item.from;
   document.getElementById('cash-accept-amount').value=item.amount || item.debt || '';
   document.getElementById('cash-accept-method').value='cash';
+  document.getElementById('cash-accept-discount').value='';
   openModal('m-cash-accept');
 }
 async function submitCashAccept(){
@@ -234,6 +255,11 @@ async function submitCashAccept(){
   if(cashAcceptItem.treatmentId) fd.append('treatment', cashAcceptItem.treatmentId);
   fd.append('amount', amount);
   fd.append('method', document.getElementById('cash-accept-method').value);
+  // Скидка на приём (необязательно) — payment_create() сам применяет её к
+  // приёму, за который проведён платёж (apps.finance.views._target_treatment_for_discount),
+  // тот же flat-discount, что и в старом интерфейсе (Treatment.discount).
+  const discount=document.getElementById('cash-accept-discount').value;
+  if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
   // X-Requested-With — payment_create() в ответ на него отдаёт JSON с id
@@ -268,6 +294,7 @@ function openCashAcceptGeneral(){
   document.getElementById('ag-patient-id').value='';
   document.getElementById('ag-amount').value='';
   document.getElementById('ag-method').value='cash';
+  document.getElementById('ag-discount').value='';
   document.getElementById('ag-debt-note').classList.add('hidden');
   openModal('m-cash-accept-general');
 }
@@ -310,6 +337,8 @@ async function submitCashAcceptGeneral(){
   fd.append('patient', patientId);
   fd.append('amount', amount);
   fd.append('method', document.getElementById('ag-method').value);
+  const discount=document.getElementById('ag-discount').value;
+  if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
   const res=await fetch('/finance/payments/create/', {
@@ -395,6 +424,7 @@ function openCashVisitModal(patientId){
       </div>`).join('');
   }
   document.getElementById('cv-method').value='cash';
+  document.getElementById('cv-discount').value='';
   openModal('m-cash-visit');
 }
 function toggleCashVisitItem(itemId){
@@ -434,6 +464,8 @@ async function submitCashVisitPayment(){
   fd.append('treatment', treatmentId);
   fd.append('amount', amount);
   fd.append('method', document.getElementById('cv-method').value);
+  const discount=document.getElementById('cv-discount').value;
+  if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
   const res=await fetch('/finance/payments/create/', {
