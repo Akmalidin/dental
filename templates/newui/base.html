@@ -813,6 +813,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       <span data-i18n="nav_настройки">Настройки</span>
     </a>
+    <!-- Корзина — те же права, что у старого /users/recycle-bin/ (superadmin/
+         admin_main/admin), скрыта по умолчанию (см. IS_SUPERADMIN||IS_ADMIN
+         в loadRealStaffData), как и «Зарплаты». -->
+    <a class="nav-item hidden{% if active == 'recycle' %} active{% endif %}" id="navRecycle" data-view="recycle" href="{% url 'newui_recycle' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>
+      <span data-i18n="nav_корзина">Корзина</span>
+    </a>
 
     <a class="nav-item" href="#" onclick="event.preventDefault();openMenuSettings();" style="margin-top:2px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
@@ -2428,6 +2435,46 @@ async function submitPrescriptionForm(){
   else { showToast(t('w_save_failed'), 'error'); }
 }
 
+/* ================= КОРЗИНА (apps.users.views.recycle_bin) =================
+   Восстановление — через ту же вьюху-форму старого интерфейса (POST +
+   res.redirected → flashAndReload). Безвозвратное удаление — ссылка на уже
+   существующую страницу-предупреждение старого интерфейса
+   (recycle_purge_confirm показывает связанные записи/долг перед необратимым
+   действием) — сознательно не дублируем эту логику здесь. */
+let recycleFilterKind='';
+function recycleFilterTab(kind){
+  recycleFilterKind=kind;
+  document.querySelectorAll('#recycleFilterChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.kind===kind));
+  renderRecycleList();
+}
+function renderRecycleList(){
+  const body=document.getElementById('recycleTableBody');
+  if(!body) return;
+  const list=(recycleData.items||[]).filter(it=>!recycleFilterKind || it.kind===recycleFilterKind);
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    return;
+  }
+  const canPurge = IS_SUPERADMIN || IS_ADMIN_MAIN;
+  body.innerHTML=list.map(it=>`
+    <tr>
+      <td><span class="pill grey">${it.label}</span></td>
+      <td><b>${it.title}</b></td>
+      <td class="mono">${it.deletedAt}</td>
+      <td>${it.deletedBy}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="recycleRestore('${it.kind}',${it.pk})">${t('w_restore')}</button>
+        ${canPurge ? `<a class="btn btn-danger btn-sm" href="/users/recycle-bin/${it.kind}/${it.pk}/purge/confirm/">${t('w_purge_forever')}</a>` : ''}
+      </td>
+    </tr>`).join('');
+}
+async function recycleRestore(kind, pk){
+  if(!confirm(t('w_confirm_restore'))) return;
+  const res=await postForm(`/users/recycle-bin/${kind}/${pk}/restore/`, new FormData());
+  if(res.redirected){ flashAndReload(t('w_restored')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
 function openEditPatient(){
   const p=patientsList.find(x=>x.id===currentPatientCardId);
   if(!p) return;
@@ -3406,6 +3453,7 @@ const translations={
   nav_услуги:         {ru:'Услуги',             ky:'Кызматтар',        en:'Services',          uz:'Xizmatlar'},
   nav_задачи:         {ru:'Задачи',             ky:'Тапшырмалар',      en:'Tasks',             uz:'Vazifalar'},
   nav_лекарства:      {ru:'Лекарства',          ky:'Дарылар',          en:'Medicines',         uz:'Dorilar'},
+  nav_корзина:        {ru:'Корзина',            ky:'Себет',            en:'Recycle bin',       uz:'Savat'},
   nav_склад:          {ru:'Склад',              ky:'Кампа',            en:'Warehouse',         uz:'Ombor'},
   nav_лаборатория:    {ru:'Лаборатория',        ky:'Лаборатория',      en:'Lab',               uz:'Laboratoriya'},
   nav_касса:          {ru:'Касса',              ky:'Касса',            en:'Cash desk',         uz:'Kassa'},
@@ -3659,6 +3707,12 @@ const translations={
   w_med_low_stock: {ru:'Заканчивается', ky:'Түгөнүп жатат', en:'Low stock', uz:'Tugab qolmoqda'},
   w_med_choose_patient_medicine: {ru:'Выберите пациента и лекарство', ky:'Пациент менен дарыны тандаңыз', en:'Choose a patient and medicine', uz:'Bemor va dorini tanlang'},
   w_prescriptions_list: {ru:'Назначения', ky:'Дайындоолор', en:'Prescriptions', uz:'Tayinlashlar'},
+  w_restore: {ru:'Восстановить', ky:'Калыбына келтирүү', en:'Restore', uz:'Qayta tiklash'},
+  w_purge_forever: {ru:'Удалить навсегда', ky:'Биротоло өчүрүү', en:'Delete forever', uz:'Butunlay o\'chirish'},
+  w_confirm_restore: {ru:'Восстановить эту запись?', ky:'Бул жазууну калыбына келтиресизби?', en:'Restore this record?', uz:'Bu yozuvni qayta tiklaysizmi?'},
+  w_restored: {ru:'Восстановлено', ky:'Калыбына келтирилди', en:'Restored', uz:'Qayta tiklandi'},
+  w_deleted_at: {ru:'Удалено', ky:'Өчүрүлдү', en:'Deleted', uz:'O\'chirilgan'},
+  w_deleted_by: {ru:'Кем', ky:'Ким тарабынан', en:'Deleted by', uz:'Kim tomonidan'},
   w_visit_completed: {ru:'Приём завершён', ky:'Кабыл алуу аяктады', en:'Visit completed', uz:'Qabul yakunlandi'},
   w_visit_completed_sent_to_cashier: {ru:'Приём завершён, долг отправлен в кассу', ky:'Кабыл алуу аяктады, карыз кассага жиберилди', en:'Visit completed, balance sent to the cashier', uz:'Qabul yakunlandi, qarz kassaga yuborildi'},
   w_visit_in_progress: {ru:'Приём идёт — завершить', ky:'Кабыл алуу жүрүп жатат — аяктоо', en:'Visit in progress — finish', uz:'Qabul davom etmoqda — yakunlash'},
@@ -4985,7 +5039,7 @@ const NAV_VIEW_TO_SECTION = {
   staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
   cashdesk: 'finance', finance: 'finance', accounting: 'finance',
   reports: 'reports', audit: 'reports', settings: 'settings', tasks: 'tasks',
-  medicines: 'medicines',
+  medicines: 'medicines', recycle: 'recycle',
 };
 function hideRestrictedNavItems(navSections){
   const sidebar=document.querySelector('.sidebar');
@@ -6911,6 +6965,7 @@ let accountingData=null;
 let auditEvents=[];
 let tasksData={tasks:[], staff:[]};
 let medicinesData={medicines:[], prescriptions:[]};
+let recycleData={items:[], cats:[], total:0};
 let notificationsData=[];
 let notifFilter='all';
 let patientCardDetail=null;
@@ -7493,7 +7548,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false, IS_ADMIN=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -7529,6 +7584,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     auditEvents=data.auditEvents || [];
     tasksData=data.tasksData || {tasks:[], staff:[]};
     medicinesData=data.medicinesData || {medicines:[], prescriptions:[]};
+    recycleData=data.recycleData || {items:[], cats:[], total:0};
     notificationsData=data.notificationsData || [];
     messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
     initNavNotifBell();
@@ -7558,6 +7614,14 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     IS_SUPERADMIN=!!data.isSuperadmin;
     IS_ADMIN=!!data.isAdmin;
+    IS_ADMIN_MAIN=!!data.isAdminMain;
+    // Корзина — те же права, что и у старого /users/recycle-bin/ (роль
+    // superadmin/admin_main/admin — hideRestrictedNavItems выше уже учла
+    // личное ограничение allowed_sections, но не саму роль; комбинируем
+    // оба условия здесь, а не в hideRestrictedNavItems, чтобы не плодить
+    // спецслучаи в общей функции ради одного пункта меню).
+    document.getElementById('navRecycle').classList.toggle('hidden',
+      !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
@@ -8404,6 +8468,7 @@ updateTasksNavBadge();
 renderTasksList();
 renderMedicinesList();
 renderPrescriptionsList();
+renderRecycleList();
 renderServiceChips();
 renderServicesTable();
 renderFinance();
