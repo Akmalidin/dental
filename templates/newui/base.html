@@ -369,6 +369,16 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-appt.coral .sched-appt-name,.sched-appt.coral .sched-appt-time,.sched-appt.coral .sched-appt-service{color:var(--coral);}
 .sched-appt.amber{background:var(--amber-tint);border-color:var(--amber);}
 .sched-appt.amber .sched-appt-name,.sched-appt.amber .sched-appt-time,.sched-appt.amber .sched-appt-service{color:var(--amber);}
+/* Иконка статуса (ожидание/подтверждено/пришёл/...) — верхний правый угол
+   карточки, рядом с кнопкой ⋮ (см. schedApptQuickMenu). Сама подсказка при
+   наведении — отдельный плавающий элемент #apptHoverTip, не CSS :hover. */
+.sched-appt-status-icon{position:absolute;top:3px;right:20px;font-size:10px;line-height:1;opacity:.85;}
+.week-appt-chip .sched-appt-status-icon{position:static;margin-right:2px;opacity:.9;}
+.appt-hover-tip{position:fixed;z-index:520;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;
+  box-shadow:var(--shadow);padding:10px 13px;font-size:12px;line-height:1.55;min-width:220px;max-width:280px;pointer-events:none;}
+.appt-hover-tip .aht-row{display:flex;gap:6px;}
+.appt-hover-tip .aht-row .k{color:var(--ink-soft);flex-shrink:0;}
+.appt-hover-tip .aht-row .v{color:var(--ink);font-weight:600;}
 
 /* kanban lab */
 .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
@@ -679,6 +689,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
      (initVoiceFabDrag) — там же отличает обычный клик от перетаскивания,
      поэтому здесь нет отдельного onclick. -->
 <button type="button" id="voiceFab" class="voice-fab hidden" title="Голосовой ввод">🤖</button>
+
+<!-- Подсказка при наведении на карточку записи в расписании — см.
+     schedApptHoverShow/renderApptHoverTip в base.html. Один элемент на всю
+     страницу (не создаётся заново на каждую карточку) — позиционируется
+     через clampFloatingPanelPos, как и меню из 3 точек (schedApptQuickMenu). -->
+<div id="apptHoverTip" class="appt-hover-tip hidden"></div>
 
 <!-- Панель ассистента — открывается кликом по #voiceFab (см. voiceFabClick/
      openVoiceChatPanel), когда нет сфокусированного текстового поля. Скрыта
@@ -3784,6 +3800,15 @@ const translations={
   w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
   w_confirm_delete_expense: {ru:'Удалить расход? Действие необратимо.', ky:'Чыгымды өчүрөсүзбү? Аракет кайтарылгыс.', en:'Delete this expense? This cannot be undone.', uz:"Xarajatni o'chirasizmi? Amalni bekor qilib bo'lmaydi."},
   w_expense_deleted: {ru:'Расход удалён', ky:'Чыгым өчүрүлдү', en:'Expense deleted', uz:"Xarajat o'chirildi"},
+  w_hover_type: {ru:'Тип записи', ky:'Жазуунун түрү', en:'Record type', uz:'Yozuv turi'},
+  w_hover_visit: {ru:'Приём', ky:'Кабыл алуу', en:'Visit', uz:'Qabul'},
+  w_hover_patient: {ru:'Пациент', ky:'Бейтап', en:'Patient', uz:'Bemor'},
+  w_hover_age: {ru:'Возраст', ky:'Жашы', en:'Age', uz:'Yoshi'},
+  w_hover_doctor: {ru:'Врач', ky:'Дарыгер', en:'Doctor', uz:'Shifokor'},
+  w_hover_added_by: {ru:'Кто добавил', ky:'Ким кошту', en:'Added by', uz:"Qo'shdi"},
+  w_hover_status: {ru:'Статус', ky:'Абалы', en:'Status', uz:'Holati'},
+  w_hover_card: {ru:'Номер карты', ky:'Карта номери', en:'Card number', uz:'Kartochka raqami'},
+  w_years_short: {ru:'лет', ky:'жаш', en:'y.o.', uz:'yosh'},
   title_m_medicine_add: {ru:'Добавить лекарство', ky:'Дары кошуу', en:'Add medicine', uz:'Dori qo\'shish'},
   title_m_prescription_add: {ru:'Назначить лекарство', ky:'Дары дайындоо', en:'Prescribe medicine', uz:'Dori tayinlash'},
   w_med_name: {ru:'Название', ky:'Аталышы', en:'Name', uz:'Nomi'},
@@ -6415,7 +6440,7 @@ function buildDayRibbonHTML(){
           const availablePx=colWidth-6/*паддинг ячейки*/-16/*паддинг карточки*/-6/*gap*/-4/*запас*/;
           if(nameW+timeW>availablePx) timeHideClass=' sched-appt-time-hide';
         }
-        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span><span class="sched-appt-status-icon" title="${appt.statusDisplay||''}">${APPT_STATUS_ICON[appt.statusRaw]||''}</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
@@ -6456,6 +6481,7 @@ function appendRibbonDays(count){
 const APPT_STATUS_PILL={scheduled:'cobalt', confirmed:'cobalt', arrived:'amber', in_progress:'amber', completed:'teal', no_show:'coral', cancelled:'coral'};
 let apptViewData=null;
 async function openApptInfo(apptId){
+  schedApptHoverHide();
   document.getElementById('avError').classList.add('hidden');
   const res=await fetch('/appointments/'+apptId+'/detail/');
   const data=await res.json();
@@ -6551,6 +6577,52 @@ async function apptSendToCashier(){
   else { document.getElementById('avError').textContent='Не удалось отправить в кассу'; document.getElementById('avError').classList.remove('hidden'); }
 }
 
+/* ---- Подсказка при наведении на карточку записи в расписании: тип записи,
+   пациент+телефон, возраст+дата рождения, врач, кто добавил запись, статус,
+   номер карты пациента — то же по смыслу, что открывает клик по карточке
+   (openApptInfo → полная модалка), но без сетевого запроса и без клика:
+   все нужные поля уже приходят в scheduleRealData.appointments (см.
+   _newui_schedule_data), лежат в самой карточке — только достать по id. ---- */
+const APPT_STATUS_ICON={scheduled:'⏳',confirmed:'✅',arrived:'🚪',in_progress:'⚕️',completed:'🏁',no_show:'❌'};
+function apptById(apptId){
+  return (scheduleRealData && scheduleRealData.appointments || []).find(a=>a.id===apptId);
+}
+function doctorNameById(docId){
+  const d=(scheduleDoctors||[]).find(x=>x.id===docId);
+  return d ? d.name : '—';
+}
+let apptHoverTimer=null;
+function schedApptHoverShow(event, apptId){
+  clearTimeout(apptHoverTimer);
+  const rect=event.currentTarget.getBoundingClientRect();
+  apptHoverTimer=setTimeout(()=>renderApptHoverTip(rect, apptId), 220);
+}
+function schedApptHoverHide(){
+  clearTimeout(apptHoverTimer);
+  document.getElementById('apptHoverTip').classList.add('hidden');
+}
+function renderApptHoverTip(anchorRect, apptId){
+  const a=apptById(apptId);
+  const tip=document.getElementById('apptHoverTip');
+  if(!a){ tip.classList.add('hidden'); return; }
+  const row=(k,v)=>v ? `<div class="aht-row"><span class="k">${k}:</span><span class="v">${v}</span></div>` : '';
+  const patientBit=a.patient + (a.patientPhone ? ` (${a.patientPhone})` : '');
+  const ageBit=(a.patientAge!=null) ? `${a.patientAge} ${t('w_years_short','лет')}` + (a.patientBirthDate?` (${a.patientBirthDate})`:'') : '';
+  const statusBit=(APPT_STATUS_ICON[a.statusRaw]||'') + ' ' + (a.statusDisplay||'');
+  tip.innerHTML = [
+    row(t('w_hover_type','Тип записи'), a.service || t('w_hover_visit','Приём')),
+    row(t('w_hover_patient','Пациент'), patientBit),
+    row(t('w_hover_age','Возраст'), ageBit),
+    row(t('w_hover_doctor','Врач'), doctorNameById(a.docId)),
+    row(t('w_hover_added_by','Кто добавил'), a.createdBy),
+    row(t('w_hover_status','Статус'), statusBit),
+    row(t('w_hover_card','Номер карты'), a.cardNumber ? '#'+a.cardNumber : ''),
+  ].join('');
+  tip.classList.remove('hidden');
+  const pos=clampFloatingPanelPos(anchorRect, 260, 190);
+  tip.style.left=pos.left+'px'; tip.style.top=pos.top+'px';
+}
+
 /* ---- меню из 3 точек на карточке визита в расписании: тот же набор
    действий, что и в полной модалке «Запись», но без её открытия — быстрый
    доступ прямо с сетки при наведении на визит. ---- */
@@ -6561,6 +6633,7 @@ function closeSchedApptQuickMenu(){
   document.removeEventListener('click', closeSchedApptQuickMenu);
 }
 async function schedApptQuickMenu(event, apptId){
+  schedApptHoverHide();
   // Тоггл, не только открытие: кнопка ⋮ вызывает event.stopPropagation()
   // ПЕРЕД этим вызовом (см. onclick в разметке карточки) — клик по кнопке
   // никогда не доходит до document, поэтому document-listener из предыдущего
@@ -6778,7 +6851,7 @@ function buildWeekHTML(){
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}">`;
         appts.forEach(a=>{
           const statusHex=schedStatusColor(a.status), chipText=darkenColor(statusHex, .72);
-          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
+          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})" onmouseenter="schedApptHoverShow(event,${a.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><span class="sched-appt-status-icon" title="${a.statusDisplay||''}">${APPT_STATUS_ICON[a.statusRaw]||''}</span><b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
         });
         html+='</td>';
       }
