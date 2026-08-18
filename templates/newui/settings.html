@@ -26,7 +26,13 @@
                  тост-заглушку — см. w_settings_hint выше. -->
             <button onclick="settingsNotWired()" data-i18n="w_visit_results">Результаты визита</button>
             <button id="setNavCancelreasons" onclick="setSettingsTab('cancelreasons')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
-            <button onclick="settingsNotWired()" data-i18n="title_m_treatplan_stage_card">Карточка лечения</button>
+            <!-- «Карточка лечения» — реальный справочник шаблонов ЭМК
+                 (apps.treatments.models_emr.MedicalRecordTemplate, тот же,
+                 что и «Сохранить как шаблон» на карте приёма) — сложная
+                 построчная форма на 7 разделов, не дублируем её здесь,
+                 ведём на реальную /settings/emr-templates/ (тот же
+                 admin_main/superadmin доступ, что и у самой страницы). -->
+            <button id="setNavTreatCard" onclick="location.href='/settings/emr-templates/'" data-i18n="title_m_treatplan_stage_card">Карточка лечения</button>
             <div class="grp" data-i18n="w_grp_money">Деньги</div>
             <button onclick="settingsNotWired()" data-i18n="w_payment_methods">Способы оплаты</button>
             <button onclick="settingsNotWired()" data-i18n="w_deposit_accounts">Депозитные счета</button>
