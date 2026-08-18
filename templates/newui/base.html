@@ -8117,6 +8117,11 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     // спецслучаи в общей функции ради одного пункта меню).
     document.getElementById('navRecycle').classList.toggle('hidden',
       !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
+    // Настройки → «Карточка лечения» ведёт на /settings/emr-templates/,
+    // которая доступна только superadmin/admin_main — прячем пункт у
+    // остальных (иначе клик просто упёрся бы в 403).
+    const setNavTreatCardEl=document.getElementById('setNavTreatCard');
+    if(setNavTreatCardEl) setNavTreatCardEl.classList.toggle('hidden', !(IS_SUPERADMIN || IS_ADMIN_MAIN));
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
