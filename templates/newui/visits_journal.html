@@ -1,0 +1,33 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Журнал посещений{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="nav_журнал_посещений">Журнал посещений</h1>
+        <div class="topbar-right">
+          <button class="btn btn-ghost hidden" id="vjToggleBtn" onclick="vjToggleVisibility()"></button>
+          <button class="btn btn-cobalt" onclick="vjOpenAdd()">+ <span data-i18n="w_mark_visit">Отметить посещение</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="kpi-grid">
+          <div class="card kpi kpi-click b-cobalt" id="vj-tile-total" onclick="vjSetFilter('')"><span class="lbl" data-i18n="w_vj_total">Всего посещений</span><b id="vj-total">—</b></div>
+          <div class="card kpi kpi-click b-teal" id="vj-tile-primary" onclick="vjSetFilter('primary')"><span class="lbl" data-i18n="w_vj_primary">Первичные</span><b id="vj-primary">—</b></div>
+          <div class="card kpi kpi-click b-amber" id="vj-tile-secondary" onclick="vjSetFilter('secondary')"><span class="lbl" data-i18n="w_vj_secondary">Вторичные</span><b id="vj-secondary">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_vj_today">Сегодня</span><b id="vj-today">—</b></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <input type="text" oninput="vjSearchChanged(this.value)" placeholder="Поиск: имя или телефон…" data-i18n-placeholder="w_vj_search_placeholder" style="max-width:320px;">
+          </div>
+          <table>
+            <thead><tr>
+              <th data-i18n="w_patient">Пациент</th>
+              <th data-i18n="w_vj_count">Посещений</th>
+              <th data-i18n="w_vj_last">Последнее</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="vjTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

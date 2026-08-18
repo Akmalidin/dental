@@ -23,6 +23,7 @@ from .views import (
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
     _newui_tasks_data, _newui_medicines_data, _newui_recycle_data,
     _newui_technicians_data, _newui_warehouse_ops_data,
+    _newui_visits_journal_data,
 )
 
 
@@ -118,6 +119,12 @@ def _shared_options(request, clinic):
         # (та же граница прав, что у apps.users.views.recycle_purge:
         # superadmin/admin_main, НЕ обычный admin).
         "isAdminMain": bool(request.user.is_admin_main),
+        # Журнал посещений — виден в сайдбаре по умолчанию всем (та же
+        # настройка, что и в старом интерфейсе, clinic_settings.visits_journal_staff),
+        # директор может скрыть его от рядового персонала кнопкой на самой
+        # странице (admin/admin_main/superadmin видят его всегда — см.
+        # apps.patients.views._visits_journal_allowed).
+        "visitsJournalStaff": bool(cs.visits_journal_staff),
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
@@ -313,6 +320,29 @@ def newui_funnel(request):
 @login_required
 def newui_blacklist(request):
     return _render(request, "blacklist", "blacklist.html", {"blacklistEntries": _newui_blacklist_data()})
+
+
+@login_required
+def newui_visits_journal(request):
+    """Журнал посещений — видимость страницы для не-админов проверяется
+    здесь же (та же граница, что у apps.patients.views._visits_journal_allowed);
+    SectionAccessMiddleware (apps/tenancy.py, секция "patients") — это доступ
+    к разделу вообще, а видимость самого журнала персоналу — отдельная
+    настройка клиники (ClinicSettings.visits_journal_staff), директор
+    включает/выключает её тут же, кнопкой на странице."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    from apps.tenancy import get_current_clinic
+    from apps.patients.views import _visits_journal_allowed
+    if not _visits_journal_allowed(request.user):
+        messages.error(request, "Журнал посещений скрыт администратором")
+        return redirect("/new/")
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    return _render(request, "visitsjournal", "visits_journal.html", {
+        "visitsJournalData": _newui_visits_journal_data(request, clinic),
+        "patients": _newui_patients_data(),
+        "servicesData": _newui_services_data(),
+    })
 
 
 @login_required
