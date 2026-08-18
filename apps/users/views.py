@@ -960,6 +960,49 @@ def _newui_blacklist_data():
     } for e in entries]
 
 
+def _newui_tasks_data(request, clinic):
+    """Задачи — та же модель и те же права видимости, что и в старом
+    интерфейсе (apps.tasks.views.task_list): админ/суперадмин видят все
+    задачи клиники, остальные — только свои (назначенные им или созданные
+    ими). Создание/редактирование/готово/удаление идут через те же вьюхи
+    apps.tasks.views (POST + res.redirected на клиенте, как «Чёрный список»
+    и «Персонал» — без дублирования бизнес-логики форм в новом интерфейсе)."""
+    from django.db.models import Q, F
+    from django.utils import timezone
+    from django.utils.timezone import localtime
+    from apps.tasks.models import Task
+    from apps.users.models import User
+
+    qs = Task.objects.prefetch_related("assigned_to").select_related("created_by")
+    if not request.user.is_superadmin and not request.user.is_admin:
+        qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user)).distinct()
+    qs = qs.order_by(F("due_date").asc(nulls_last=True), "-created_at")
+
+    tasks = [{
+        "id": tsk.pk,
+        "title": tsk.title,
+        "description": tsk.description,
+        "status": tsk.status,
+        "priority": tsk.priority,
+        "dueDate": tsk.due_date.strftime("%Y-%m-%dT%H:%M") if tsk.due_date else "",
+        "dueDateDisplay": localtime(tsk.due_date).strftime("%d.%m.%Y %H:%M") if tsk.due_date else "",
+        "overdue": bool(tsk.due_date and tsk.status != Task.STATUS_DONE and tsk.due_date < timezone.now()),
+        "assignedTo": [{"id": u.pk, "name": u.name} for u in tsk.assigned_to.all()],
+        "createdById": tsk.created_by_id,
+        "createdBy": tsk.created_by.name if tsk.created_by_id else "—",
+    } for tsk in qs]
+
+    # Себя не предлагаем в исполнители — так же, как старый интерфейс
+    # (apps.tasks.forms.TaskForm.__init__ строит queryset "assigned_to" без
+    # текущего пользователя): иначе выбор себя же на клиенте прошёл бы, а
+    # сервер бы его отклонил как невалидный выбор при сохранении формы.
+    staff_qs = User.objects.filter(is_active=True).exclude(pk=request.user.pk)
+    if clinic is not None:
+        staff_qs = staff_qs.filter(clinic=clinic)
+    staff = [{"id": u.pk, "name": u.name} for u in staff_qs.order_by("name")]
+    return {"tasks": tasks, "staff": staff}
+
+
 def _newui_treatplans_data(clinic):
     """Планы лечения — реальная модель TreatmentPlan (apps.treatments.models_plan),
     та же, что используется в редакторе плана старого интерфейса (plan_detail).

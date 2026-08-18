@@ -279,6 +279,7 @@ class SectionAccessMiddleware:
         ("/new/lab", "technicians"),
         ("/new/reports", "reports"),
         ("/new/audit", "reports"),
+        ("/new/tasks", "tasks"),
     ]
 
     def __init__(self, get_response):
