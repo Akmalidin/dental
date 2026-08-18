@@ -77,7 +77,7 @@
             <div class="card-head"><h3 data-i18n="w_procedures_plan">Процедуры и план</h3><button class="btn btn-ghost btn-sm" onclick="vwAddPlanRow()">+ <span data-i18n="w_add_service">Добавить услугу</span></button></div>
             <div class="card-body">
               <table>
-                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount">Скидка</th><th data-i18n="w_total">Итого</th><th data-i18n="w_done_today">Выполнено сегодня</th><th></th></tr></thead>
+                <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount">Скидка</th><th data-i18n="w_total">Итого</th><th></th></tr></thead>
                 <tbody id="vwPlanBody"></tbody>
               </table>
               <div id="vwPlanEmpty" style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;"><span data-i18n="w_no_procedures">Процедуры не добавлены</span></div>
@@ -431,7 +431,6 @@
           <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px;" title="${t('w_discount_toggle_mode')}" onclick="vwToggleDiscountMode(${i})">${it.discountMode==='sum'?CUR_SYM:'%'}</button>
         </div></td>
         <td class="mono" style="white-space:nowrap;">${fmtSom(vwPlanRowTotal(it))}</td>
-        <td style="text-align:center;"><input autocomplete="off" type="checkbox" ${it.done?'checked':''} onchange="vwPlanSetField(${i},'done',this.checked)"></td>
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
       </tr>`;
     }).join('');
