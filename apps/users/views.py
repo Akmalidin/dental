@@ -992,7 +992,7 @@ def _newui_schedule_data(clinic):
     appts_qs = (Appointment.objects
                 .filter(doctor_id__in=doctor_ids, start_at__date__gte=window_start, start_at__date__lte=window_end)
                 .exclude(status=Appointment.STATUS_CANCELLED)
-                .select_related("patient", "service").order_by("start_at"))
+                .select_related("patient", "service", "created_by").order_by("start_at"))
 
     status_color = {
         Appointment.STATUS_SCHEDULED: "cobalt", Appointment.STATUS_CONFIRMED: "cobalt",
@@ -1029,11 +1029,21 @@ def _newui_schedule_data(clinic):
         # командам расписания, чтобы отличать завершённые/отменённые записи
         # от активных без парсинга цвета.
         "statusRaw": a.status,
+        # Человекочитаемый статус (Appointment.STATUS_CHOICES) — для подсказки
+        # при наведении на карточку (statusRaw там же используется для иконки).
+        "statusDisplay": a.get_status_display(),
         "durationMin": max(int((a.end_at - a.start_at).total_seconds() // 60), 1),
         "movable": a.status not in (Appointment.STATUS_COMPLETED, Appointment.STATUS_NO_SHOW),
         # Общий долг пациента (Patient.debt, а не долг конкретно ЭТОГО приёма) —
         # для подсветки на сетке расписания, независимо от статуса приёма.
         "debt": float(a.patient.debt) if a.patient_id else 0,
+        # Всё ниже — только для подсказки при наведении на карточку записи
+        # (schedApptHoverShow), сама сетка это не использует.
+        "patientPhone": a.patient.phone if a.patient_id else "",
+        "patientAge": a.patient.age if a.patient_id else None,
+        "patientBirthDate": a.patient.birth_date.strftime("%d.%m.%Y") if (a.patient_id and a.patient.birth_date) else "",
+        "cardNumber": a.patient.display_number if a.patient_id else None,
+        "createdBy": a.created_by.name if a.created_by_id else "",
     } for a in appts_qs]
 
     return {
