@@ -1040,6 +1040,35 @@ def _newui_medicines_data(request):
     return {"medicines": medicines, "prescriptions": prescriptions}
 
 
+def _newui_recycle_data(request):
+    """Корзина — те же модели/данные, что и старый интерфейс
+    (apps.users.views.recycle_bin: _recycle_models()/_recycle_qs()).
+    Восстановление идёт через ту же вьюху POST-формы старого интерфейса
+    (res.redirected → flashAndReload). Безвозвратное удаление — ссылка на
+    существующую страницу-предупреждение старого интерфейса
+    (recycle_purge_confirm, показывает связанные записи/долг перед покупкой
+    необратимого действия) — не дублируем эту безопасность здесь заново."""
+    models = _recycle_models()
+    items = []
+    counts = {}
+    for kind, (Model, label) in models.items():
+        qs = _recycle_qs(Model)
+        counts[kind] = qs.count()
+        for obj in qs.order_by("-deleted_at")[:300]:
+            items.append({
+                "kind": kind,
+                "label": label,
+                "pk": obj.pk,
+                "title": str(obj),
+                "deletedAt": obj.deleted_at.strftime("%d.%m.%Y %H:%M") if obj.deleted_at else "",
+                "deletedAtRaw": obj.deleted_at.isoformat() if obj.deleted_at else "",
+                "deletedBy": obj.deleted_by.name if obj.deleted_by_id else "—",
+            })
+    items.sort(key=lambda x: x["deletedAtRaw"], reverse=True)
+    cats = [{"kind": k, "label": models[k][1], "count": counts.get(k, 0)} for k in models]
+    return {"items": items, "cats": cats, "total": sum(counts.values())}
+
+
 def _newui_treatplans_data(clinic):
     """Планы лечения — реальная модель TreatmentPlan (apps.treatments.models_plan),
     та же, что используется в редакторе плана старого интерфейса (plan_detail).

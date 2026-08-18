@@ -281,6 +281,7 @@ class SectionAccessMiddleware:
         ("/new/audit", "reports"),
         ("/new/tasks", "tasks"),
         ("/new/medicines", "medicines"),
+        ("/new/recycle", "recycle"),
     ]
 
     def __init__(self, get_response):

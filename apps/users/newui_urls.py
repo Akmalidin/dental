@@ -11,6 +11,7 @@ urlpatterns = [
     path("blacklist/", v.newui_blacklist, name="newui_blacklist"),
     path("tasks/", v.newui_tasks, name="newui_tasks"),
     path("medicines/", v.newui_medicines, name="newui_medicines"),
+    path("recycle/", v.newui_recycle, name="newui_recycle"),
     path("visits/", v.newui_visits, name="newui_visits"),
     path("schedule/", v.newui_schedule, name="newui_schedule"),
     path("schedule/data/", v.newui_schedule_data_json, name="newui_schedule_data"),

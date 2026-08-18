@@ -1,0 +1,25 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Корзина{% endblock %}
+{% block content %}
+      <div class="topbar"><h1 data-i18n="nav_корзина">Корзина</h1></div>
+      <div class="page">
+        <div class="toolbar-left" id="recycleFilterChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="chip active" data-kind="" onclick="recycleFilterTab('')" data-i18n="w_all">Все</button>
+          {% for c in recycleData.cats %}
+          <button class="chip" data-kind="{{ c.kind }}" onclick="recycleFilterTab('{{ c.kind }}')">{{ c.label }} · {{ c.count }}</button>
+          {% endfor %}
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr>
+              <th data-i18n="w_type">Тип</th>
+              <th data-i18n="w_name">Название</th>
+              <th data-i18n="w_deleted_at">Удалено</th>
+              <th data-i18n="w_deleted_by">Кем</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="recycleTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

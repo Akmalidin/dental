@@ -21,7 +21,7 @@ from .views import (
     _newui_visits_data, _newui_accounting_data, _newui_audit_data, _newui_notifications_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
-    _newui_tasks_data, _newui_medicines_data,
+    _newui_tasks_data, _newui_medicines_data, _newui_recycle_data,
 )
 
 
@@ -113,6 +113,10 @@ def _shared_options(request, clinic):
         # интерфейсе (apps.tasks.views.task_delete: автор, админ или
         # суперадмин), прячем у остальных, чтобы не упираться в отказ.
         "isAdmin": bool(request.user.is_admin),
+        # Корзина → «Удалить навсегда» — строже, чем просто is_admin
+        # (та же граница прав, что у apps.users.views.recycle_purge:
+        # superadmin/admin_main, НЕ обычный admin).
+        "isAdminMain": bool(request.user.is_admin_main),
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
@@ -321,6 +325,14 @@ def newui_medicines(request):
         # см. cashdesk/messages, тот же паттерн).
         "patients": _newui_patients_data(),
     })
+
+
+@login_required
+@role_required("superadmin", "admin_main", "admin")
+def newui_recycle(request):
+    """Корзина — те же права, что и старый /users/recycle-bin/
+    (apps.users.views.recycle_bin: superadmin/admin_main/admin)."""
+    return _render(request, "recycle", "recycle.html", {"recycleData": _newui_recycle_data(request)})
 
 
 @login_required
