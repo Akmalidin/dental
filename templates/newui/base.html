@@ -294,7 +294,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-cell-leftover:hover{background:var(--cobalt-tint);}
 .sched-cell-leftover:hover::after{content:'+ Записать на ' attr(data-time);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1.1;color:var(--cobalt-dark);font-weight:600;pointer-events:none;text-align:center;padding:0 2px;overflow:hidden;}
 .sched-cell-leftover.drop-target{background:var(--cobalt-tint);}
-.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 27px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
+.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 30px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
 /* Имя пациента и время приёма — главное, что должно бросаться в глаза на
    карточке (жалоба: «имена, время записи должны явно выделяться»). */
 .sched-appt-name{display:block;color:var(--cobalt-dark);font-size:12.5px;font-weight:700;line-height:1.25;padding-right:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -335,29 +335,26 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
 /* Компактная карточка (класс .compact, ставится в JS по фактической высоте
    — см. buildDayRibbonHTML) — вместо стека имя/время/услуга в несколько
-   строк (не помещается по высоте) — одна строка: имя слева (главное, не
-   ужимается), время справа. Пробовали чистый CSS (flex-shrink/@container) —
-   оба варианта либо обрезали не то (имя вместо времени), либо ужимали
-   время наполовину посреди символа вместо чистого скрытия. Решение — точный
-   замер текста через canvas ДО рендера (см. apptMeasureTextWidth), помещаются
-   ли имя+время в ширину колонки; если нет — время получает класс
-   .sched-appt-time-hide (ставится на саму карточку в JS), а не убирается из
-   разметки — нужно, чтобы при наведении (:not(:hover) ниже) снова появиться
-   вместе с обычной раскладкой (см. .sched-appt:hover выше). */
+   строк (не помещается по высоте) — одна строка: имя слева, время справа.
+   По прямому запросу пользователя время теперь ВСЕГДА показывается (раньше
+   пряталось целиком, если не помещалось рядом с именем) — вместо этого
+   ужимается/обрезается многоточием само имя (flex:1 1 auto + ellipsis из
+   базового .sched-appt-name), а время закреплено за правым краем
+   (flex-shrink:0 — никогда не обрезается посередине). */
 .sched-appt.compact:not(:hover){
   flex-direction:row;
   align-items:center;
-  gap:6px;
+  gap:8px;
 }
 .sched-appt.compact:not(:hover) .sched-appt-name{
   flex:1 1 auto;
   min-width:0;
   padding-right:0;
 }
-.sched-appt.compact:not(:hover) .sched-appt-service{
-  display:none;
+.sched-appt.compact:not(:hover) .sched-appt-time{
+  flex-shrink:0;
 }
-.sched-appt.sched-appt-time-hide:not(:hover) .sched-appt-time{
+.sched-appt.compact:not(:hover) .sched-appt-service{
   display:none;
 }
 /* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка
@@ -1546,6 +1543,24 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
             <span style="font-size:13px;">Завершена / оплачена</span>
             <input autocomplete="off" type="color" id="cs-color-teal" value="#0e9c7d" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
+        </div>
+      </div>
+      <!-- Цвет имени пациента и времени на карточке — по умолчанию считается
+           автоматически от цвета статуса (см. darkenColor в JS), этот блок
+           даёт задать СВОЙ цвет вместо авто, по прямому запросу пользователя. -->
+      <div class="form-group toggle" style="margin-top:10px;">
+        <input autocomplete="off" type="checkbox" id="cs-nametime-color-enabled"
+          onchange="document.getElementById('cs-nametime-color-wrap').classList.toggle('hidden', !this.checked)">
+        <span style="font-size:13px;" data-i18n="w_cs_nametime_color_enabled">Свой цвет имени пациента и времени (вместо автоматического)</span>
+      </div>
+      <div id="cs-nametime-color-wrap" class="hidden" style="display:flex;flex-direction:column;gap:10px;margin:8px 0 2px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:13px;" data-i18n="w_cs_name_color">Цвет имени пациента</span>
+          <input autocomplete="off" type="color" id="cs-color-name" value="#1c2430" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:13px;" data-i18n="w_cs_time_color">Цвет времени записи</span>
+          <input autocomplete="off" type="color" id="cs-color-time" value="#1c2430" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
         </div>
       </div>
       <div class="form-group toggle" style="margin-top:2px;">
@@ -3718,6 +3733,9 @@ const translations={
   w_grid_step: {ru:'Шаг сетки', ky:'Тор кадамы', en:'Grid step', uz:'Katak qadami'},
   w_default_view: {ru:'Вид по умолчанию', ky:'Демейки көрүнүш', en:'Default view', uz:'Standart ko\'rinish'},
   w_calendar_colors: {ru:'Цвета записей в календаре', ky:'Календардагы жазуулардын түстөрү', en:'Calendar entry colors', uz:'Kalendar yozuvlari rangi'},
+  w_cs_nametime_color_enabled: {ru:'Свой цвет имени пациента и времени (вместо автоматического)', ky:'Бейтаптын аты жана убакыттын өз түсү (автоматтыктын ордуна)', en:'Custom patient name & time color (instead of automatic)', uz:"Bemor ismi va vaqt uchun o'z rangi (avtomatik o'rniga)"},
+  w_cs_name_color: {ru:'Цвет имени пациента', ky:'Бейтаптын атынын түсү', en:'Patient name color', uz:'Bemor ismi rangi'},
+  w_cs_time_color: {ru:'Цвет времени записи', ky:'Жазуу убактысынын түсү', en:'Appointment time color', uz:'Yozuv vaqti rangi'},
   w_color: {ru:'Цвет', ky:'Түс', en:'Color', uz:'Rang'},
   w_fullname: {ru:'ФИО', ky:'Аты-жөнү', en:'Full name', uz:'F.I.Sh.'},
   w_login: {ru:'Логин', ky:'Логин', en:'Login', uz:'Login'},
@@ -5906,7 +5924,7 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430'};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
@@ -5963,6 +5981,13 @@ function loadCalSettings(){
     if(byId('cs-color-teal')) byId('cs-color-teal').value=calSettings.colors.teal;
     applyCalColors(calSettings.colors);
   }
+  // Свой цвет имени пациента/времени на карточке записи — по умолчанию
+  // выключено (цвет по-прежнему авто-подбирается по цвету статуса, см.
+  // apptStatusBadgeHtml/darkenColor), включается явно этим тумблером.
+  if(byId('cs-nametime-color-enabled')) byId('cs-nametime-color-enabled').checked=!!calSettings.nameTimeColorEnabled;
+  if(byId('cs-nametime-color-wrap')) byId('cs-nametime-color-wrap').classList.toggle('hidden', !calSettings.nameTimeColorEnabled);
+  if(byId('cs-color-name')) byId('cs-color-name').value=calSettings.nameColor||'#1c2430';
+  if(byId('cs-color-time')) byId('cs-color-time').value=calSettings.timeColor||'#1c2430';
 }
 loadCalSettings();
 
@@ -6409,6 +6434,11 @@ function buildDayRibbonHTML(){
         const statusHex=schedStatusColor(appt.status);
         const apptBg=hexToRgba(statusHex, .22);
         const apptText=darkenColor(statusHex, .72);
+        // Свой цвет имени/времени вместо авто-подобранного по статусу — по
+        // запросу пользователя, настраивается в «Настройки календаря»
+        // (cs-nametime-color-enabled/cs-color-name/cs-color-time).
+        const nameColor=calSettings.nameTimeColorEnabled ? (calSettings.nameColor||apptText) : apptText;
+        const timeColor=calSettings.nameTimeColorEnabled ? (calSettings.timeColor||apptText) : apptText;
         // Карточка занимает целые слоты (span выше округляет длительность
         // ВВЕРХ до границы слота — иначе приём «повисал» бы между строк
         // сетки), но если приём короче своих слотов (например, 20 минут при
@@ -6441,20 +6471,13 @@ function buildDayRibbonHTML(){
         // наведении .compact:hover сама отключается — карточка увеличивается
         // (см. .sched-appt:hover) и снова показывает обычную раскладку.
         const compact = Math.round(slotHeightPx*fillPct/100) < 60;
-        // Помещаются ли имя И время рядом в одну строку — точный замер
-        // (canvas), а не flex-shrink «на глаз» (пробовали — при нехватке
-        // места время обрезалось посередине символа, а не пряталось чисто).
-        // Если не помещаются — время не убирается из DOM (нужно для ховера,
-        // см. .sched-appt-time-hide ниже), просто скрывается CSS-классом,
-        // который снимается при :hover.
-        let timeHideClass='';
-        if(compact){
-          const nameW=apptMeasureTextWidth(appt.patient, '700 12.5px Inter, sans-serif');
-          const timeW=apptMeasureTextWidth(`${appt.time}–${endLabel}`, '600 11px Inter, sans-serif');
-          const availablePx=colWidth-6/*паддинг ячейки*/-16/*паддинг карточки*/-6/*gap*/-4/*запас*/;
-          if(nameW+timeW>availablePx) timeHideClass=' sched-appt-time-hide';
-        }
-        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        // Раньше время в компактной карточке СКРЫВАЛОСЬ, если не помещалось
+        // рядом с именем (точный замер через canvas) — по прямому запросу
+        // пользователя время теперь всегда показывается, прижатое к правому
+        // краю (см. .sched-appt.compact .sched-appt-time — flex-shrink:0),
+        // а вместо скрытия обрезается многоточием само имя (ему и так уже
+        // задан overflow:ellipsis — см. .sched-appt-name).
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${nameColor};">${appt.patient}</b><span class="sched-appt-time" style="color:${timeColor};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
@@ -6923,7 +6946,12 @@ function buildWeekHTML(){
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}">`;
         appts.forEach(a=>{
           const statusHex=schedStatusColor(a.status), chipText=darkenColor(statusHex, .72);
-          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})" onmouseenter="schedApptHoverShow(event,${a.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(a.statusRaw, a.status, a.statusDisplay)}<b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
+          // Тот же опциональный override цвета имени/времени, что и в дневном
+          // виде (calSettings.nameTimeColorEnabled) — контейнер красит имя
+          // (обычный текстовый узел ниже наследует его color), <b> — время.
+          const chipNameColor=calSettings.nameTimeColorEnabled ? (calSettings.nameColor||chipText) : chipText;
+          const chipTimeColor=calSettings.nameTimeColorEnabled ? (calSettings.timeColor||chipText) : chipText;
+          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipNameColor};" onclick="event.stopPropagation();openApptInfo(${a.id})" onmouseenter="schedApptHoverShow(event,${a.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(a.statusRaw, a.status, a.statusDisplay)}<b style="color:${chipTimeColor};">${a.time}</b>${a.patient}</div>`;
         });
         html+='</td>';
       }
@@ -7531,6 +7559,10 @@ function applyCalSettings(){
   applyCalColors(colorMap);
   calSettings.colors=colorMap;
 
+  calSettings.nameTimeColorEnabled=document.getElementById('cs-nametime-color-enabled').checked;
+  calSettings.nameColor=document.getElementById('cs-color-name').value;
+  calSettings.timeColor=document.getElementById('cs-color-time').value;
+
   calSettings.defaultView=document.getElementById('cs-defaultview').value;
   localStorage.setItem(CALSETTINGS_KEY, JSON.stringify(calSettings));
   // Сброс уже отрисованных дней ленты — если тумблер «прокрутка на след.
@@ -7560,8 +7592,12 @@ function resetCalSettings(){
   document.getElementById('cs-color-teal').value='#0e9c7d';
   document.getElementById('cs-col-width').value='150';
   document.getElementById('cs-col-width-value').textContent='150 px';
+  document.getElementById('cs-nametime-color-enabled').checked=false;
+  document.getElementById('cs-nametime-color-wrap').classList.add('hidden');
+  document.getElementById('cs-color-name').value='#1c2430';
+  document.getElementById('cs-color-time').value='#1c2430';
   localStorage.removeItem(CALSETTINGS_KEY);
-  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true};
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430'};
   applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
