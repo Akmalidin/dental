@@ -892,10 +892,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <input autocomplete="off" type="hidden" id="appt-patient-id">
         <div id="appt-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
       </div>
-      <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
-        <div class="form-group"><label data-i18n="w_service">Услуга</label><select id="appt-service" onchange="apptEndTimeTouched=false;updateApptAvailabilityHint()"></select></div>
-      </div>
+      <!-- Выбор услуги убран из этой модалки по прямому запросу пользователя —
+           запись создаётся без привязки к конкретной услуге (бэкенд сам
+           подставляет служебную "Визит к врачу", см. appointment_create_quick/
+           appointment_update_quick — там это уже было опционально и до этой
+           правки: пустой service_id и раньше обрабатывался тем же дефолтом). -->
+      <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="appt-doctor" onchange="updateApptAvailabilityHint()"></select></div>
       <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="appt-date" onchange="updateApptAvailabilityHint()"></div>
       <div class="form-group">
         <label data-i18n="w_time">Время</label>
@@ -3815,14 +3817,11 @@ const translations={
   w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
   w_confirm_delete_expense: {ru:'Удалить расход? Действие необратимо.', ky:'Чыгымды өчүрөсүзбү? Аракет кайтарылгыс.', en:'Delete this expense? This cannot be undone.', uz:"Xarajatni o'chirasizmi? Amalni bekor qilib bo'lmaydi."},
   w_expense_deleted: {ru:'Расход удалён', ky:'Чыгым өчүрүлдү', en:'Expense deleted', uz:"Xarajat o'chirildi"},
-  w_hover_type: {ru:'Тип записи', ky:'Жазуунун түрү', en:'Record type', uz:'Yozuv turi'},
-  w_hover_visit: {ru:'Приём', ky:'Кабыл алуу', en:'Visit', uz:'Qabul'},
-  w_hover_patient: {ru:'Пациент', ky:'Бейтап', en:'Patient', uz:'Bemor'},
-  w_hover_age: {ru:'Возраст', ky:'Жашы', en:'Age', uz:'Yoshi'},
-  w_hover_doctor: {ru:'Врач', ky:'Дарыгер', en:'Doctor', uz:'Shifokor'},
-  w_hover_added_by: {ru:'Кто добавил', ky:'Ким кошту', en:'Added by', uz:"Qo'shdi"},
+  w_hover_fio: {ru:'ФИО', ky:'ФАА', en:'Full name', uz:'F.I.Sh.'},
+  w_hover_appt_time: {ru:'Время записи', ky:'Жазуу убактысы', en:'Appointment time', uz:'Yozuv vaqti'},
+  w_hover_phone: {ru:'Номер телефона', ky:'Телефон номери', en:'Phone number', uz:'Telefon raqami'},
   w_hover_status: {ru:'Статус', ky:'Абалы', en:'Status', uz:'Holati'},
-  w_hover_card: {ru:'Номер карты', ky:'Карта номери', en:'Card number', uz:'Kartochka raqami'},
+  w_hover_comment: {ru:'Комментарий', ky:'Комментарий', en:'Comment', uz:'Izoh'},
   w_years_short: {ru:'лет', ky:'жаш', en:'y.o.', uz:'yosh'},
   title_m_medicine_add: {ru:'Добавить лекарство', ky:'Дары кошуу', en:'Add medicine', uz:'Dori qo\'shish'},
   title_m_prescription_add: {ru:'Назначить лекарство', ky:'Дары дайындоо', en:'Prescribe medicine', uz:'Dori tayinlash'},
@@ -6677,17 +6676,19 @@ function renderApptHoverTip(anchorRect, apptId){
   const tip=document.getElementById('apptHoverTip');
   if(!a){ tip.classList.add('hidden'); return; }
   const row=(k,v)=>v ? `<div class="aht-row"><span class="k">${k}:</span><span class="v">${v}</span></div>` : '';
-  const patientBit=a.patient + (a.patientPhone ? ` (${a.patientPhone})` : '');
-  const ageBit=(a.patientAge!=null) ? `${a.patientAge} ${t('w_years_short','лет')}` + (a.patientBirthDate?` (${a.patientBirthDate})`:'') : '';
+  // Ровно 5 полей по прямому запросу пользователя (раньше было больше —
+  // тип записи/возраст/врач/кто добавил/номер карты убраны): ФИО, время
+  // записи, телефон, статус, комментарий.
+  const endLabel=minutesToTime(Math.min(timeToMinutes(a.time)+(a.durationMin||0), 24*60-1));
+  const dateLabel=a.date ? formatDMY(new Date(a.date+'T00:00:00')) : '';
+  const timeBit=`${dateLabel}, ${a.time}–${endLabel}`;
   const statusBit=(APPT_STATUS_ICON[a.statusRaw]||'') + ' ' + (a.statusDisplay||'');
   tip.innerHTML = [
-    row(t('w_hover_type','Тип записи'), a.service || t('w_hover_visit','Приём')),
-    row(t('w_hover_patient','Пациент'), patientBit),
-    row(t('w_hover_age','Возраст'), ageBit),
-    row(t('w_hover_doctor','Врач'), doctorNameById(a.docId)),
-    row(t('w_hover_added_by','Кто добавил'), a.createdBy),
+    row(t('w_hover_fio','ФИО'), a.patient),
+    row(t('w_hover_appt_time','Время записи'), timeBit),
+    row(t('w_hover_phone','Номер телефона'), a.patientPhone),
     row(t('w_hover_status','Статус'), statusBit),
-    row(t('w_hover_card','Номер карты'), a.cardNumber ? '#'+a.cardNumber : ''),
+    row(t('w_hover_comment','Комментарий'), a.notes),
   ].join('');
   tip.classList.remove('hidden');
   const pos=positionApptHoverTip(anchorRect, tip);
@@ -7018,11 +7019,11 @@ function apptEndTimeSelectChanged(){
   updateApptAvailabilityHint();
 }
 function apptFillDoctorAndServiceOptions(){
+  // Имя не переименовано (хотя услуги в модалке «Новая запись» больше нет —
+  // убрана по запросу пользователя) — чтобы не менять оба места вызова.
   const docSel=document.getElementById('appt-doctor');
   const list=scheduleDoctors.length ? scheduleDoctors : doctorOptions;
   docSel.innerHTML = list.map(d=>`<option value="${d.id}">${d.name}</option>`).join('') || `<option value="">${t('w_no_doctors')}</option>`;
-  const svcSel=document.getElementById('appt-service');
-  svcSel.innerHTML = servicesList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('') || `<option value="">${t('w_no_services')}</option>`;
 }
 function apptResetPatientPicker(){
   document.getElementById('appt-patient-search').value='';
@@ -7081,7 +7082,6 @@ async function openApptEdit(apptId){
   document.getElementById('apptModalError').classList.add('hidden');
   apptFillDoctorAndServiceOptions();
   document.getElementById('appt-doctor').value=String(a.doctor_id||'');
-  document.getElementById('appt-service').value=String(a.service_id||'');
   document.getElementById('appt-patient-search').value=(p && p.id) ? p.name : '';
   document.getElementById('appt-patient-id').value=(p && p.id) || '';
   document.getElementById('appt-patient-suggestions').classList.add('hidden');
@@ -7373,7 +7373,9 @@ async function submitNewAppt(){
   errBox.classList.add('hidden');
   const patientId=document.getElementById('appt-patient-id').value;
   const doctorId=document.getElementById('appt-doctor').value;
-  const serviceId=document.getElementById('appt-service').value;
+  // Поля выбора услуги в этой модалке больше нет (убрана по запросу) —
+  // всегда null, бэкенд сам подставляет служебную услугу "Визит к врачу".
+  const serviceId='';
   const date=document.getElementById('appt-date').value;
   const time=document.getElementById('appt-time').value;
   if(!doctorId || !date || !time){

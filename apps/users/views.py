@@ -1044,6 +1044,7 @@ def _newui_schedule_data(clinic):
         "patientBirthDate": a.patient.birth_date.strftime("%d.%m.%Y") if (a.patient_id and a.patient.birth_date) else "",
         "cardNumber": a.patient.display_number if a.patient_id else None,
         "createdBy": a.created_by.name if a.created_by_id else "",
+        "notes": a.notes or "",
     } for a in appts_qs]
 
     return {
