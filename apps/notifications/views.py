@@ -182,25 +182,41 @@ def mark_all_read(request):
 
 @login_required
 def message_templates(request):
-    """Управление редактируемыми шаблонами WhatsApp-сообщений."""
+    """Управление редактируемыми шаблонами WhatsApp-сообщений.
+
+    Новый интерфейс (templates/newui/base.html::addTemplate) шлёт тот же
+    POST через fetch() с X-Requested-With — раньше этот заголовок не
+    проверялся вообще, эндпоинт всегда отвечал redirect() на страницу
+    старого интерфейса, из-за чего шаблоны в новом интерфейсе жили только в
+    памяти вкладки (addTemplate/deleteTemplate просто мутировали JS-массив)
+    и терялись при обновлении страницы — баг с прода. Теперь при AJAX-
+    запросе отдаём JSON вместо redirect, старое поведение (redirect для
+    обычной формы старого интерфейса) не меняется."""
     from django.contrib import messages
+    from django.http import JsonResponse
     from .models import MessageTemplate
     from .whatsapp import seed_default_templates
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     if request.method == "POST":
         pk = request.POST.get("id")
         name = (request.POST.get("name") or "").strip()
         kind = request.POST.get("kind") or "manual"
         body = (request.POST.get("body") or "").strip()
-        if name and body:
-            if pk:
-                t = MessageTemplate.objects.filter(pk=pk).first()
-                if t:
-                    t.name, t.kind, t.body = name, kind, body
-                    t.is_active = bool(request.POST.get("is_active"))
-                    t.save()
-            else:
-                MessageTemplate.objects.create(name=name, kind=kind, body=body)
-            messages.success(request, "Шаблон сохранён")
+        if not (name and body):
+            if is_ajax:
+                return JsonResponse({"ok": False, "error": "Заполните название и текст шаблона"}, status=400)
+            return redirect("message_templates")
+        if pk:
+            t = MessageTemplate.objects.filter(pk=pk).first()
+            if t:
+                t.name, t.kind, t.body = name, kind, body
+                t.is_active = bool(request.POST.get("is_active", True))
+                t.save()
+        else:
+            t = MessageTemplate.objects.create(name=name, kind=kind, body=body)
+        messages.success(request, "Шаблон сохранён")
+        if is_ajax:
+            return JsonResponse({"ok": True, "id": t.pk, "name": t.name, "kind": t.kind, "body": t.body})
         return redirect("message_templates")
     if not MessageTemplate.objects.exists():
         try:
@@ -208,6 +224,11 @@ def message_templates(request):
         except Exception:
             pass
     tpls = list(MessageTemplate.objects.all())
+    if is_ajax:
+        return JsonResponse({"templates": [
+            {"id": t.pk, "name": t.name, "kind": t.kind, "body": t.body, "is_active": t.is_active}
+            for t in tpls
+        ]})
     return render(request, "notifications/templates.html", {
         "templates": tpls,
         "templates_json": [{"id": t.pk, "name": t.name, "kind": t.kind,
@@ -219,10 +240,16 @@ def message_templates(request):
 @login_required
 def message_template_delete(request, pk):
     from django.contrib import messages
+    from django.http import JsonResponse
     from .models import MessageTemplate
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     if request.method == "POST":
         MessageTemplate.objects.filter(pk=pk).delete()
         messages.success(request, "Шаблон удалён")
+        if is_ajax:
+            return JsonResponse({"ok": True})
+    elif is_ajax:
+        return JsonResponse({"ok": False, "error": "Метод не поддерживается"}, status=405)
     return redirect("message_templates")
 
 

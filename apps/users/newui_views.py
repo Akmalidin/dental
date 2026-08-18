@@ -24,6 +24,21 @@ from .views import (
 )
 
 
+def _message_templates_queryset():
+    """Реальные шаблоны сообщений (apps.notifications.models.MessageTemplate),
+    с тем же ленивым сидированием набора по умолчанию, что и у старого
+    интерфейса (apps.notifications.views.message_templates) — если у клиники
+    ещё нет ни одного шаблона, создаём стандартный набор при первом заходе."""
+    from apps.notifications.models import MessageTemplate
+    from apps.notifications.whatsapp import seed_default_templates
+    if not MessageTemplate.objects.exists():
+        try:
+            seed_default_templates()
+        except Exception:
+            pass
+    return MessageTemplate.objects.all()
+
+
 def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
@@ -66,6 +81,18 @@ def _shared_options(request, clinic):
         ],
         "doctorOptions": [{"id": u.pk, "name": u.name} for u in clinic_doctors(clinic).order_by("name")],
         "sourceOptions": [{"id": s.pk, "name": s.name} for s in LeadSource.objects.all().order_by("name")],
+        # Шаблоны сообщений (Мессенджеры → «Шаблоны», карта приёма → выбор
+        # шаблона) — реальные MessageTemplate из БД, общие со старым
+        # интерфейсом (apps.notifications.views.message_templates). Раньше
+        # addTemplate/deleteTemplate в новом интерфейсе мутировали только
+        # JS-массив, ничего не сохраняя на сервере — шаблоны терялись при
+        # перезагрузке страницы (баг с прода). Название полей (title/text,
+        # не name/body) — под уже существующий JS-код нового интерфейса,
+        # который их так и использует.
+        "messageTemplates": [
+            {"id": t.pk, "title": t.name, "text": t.body}
+            for t in _message_templates_queryset()
+        ],
         # Расписание: подсказка «начать приём» после отметки «Пришёл» должна
         # предлагаться только врачу, не администратору/ресепшену.
         "isDoctor": bool(request.user.is_doctor),

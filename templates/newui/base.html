@@ -2288,18 +2288,27 @@ function vcTab(which){
   }
   if(which==='msg'){
     renderVcTemplateOptions();
-    renderVcMsgHistory();
+    // vwLoadVisitChatHistory (window-глобальная, см. visitcard.html) — РЕАЛЬНАЯ
+    // история переписки (fetch /patients/<id>/wa-messages/), уже подставленная
+    // при загрузке страницы. Раньше здесь безусловно вызывался
+    // renderVcMsgHistory() — рендер демо-раздела «Карточка приёма» (см.
+    // openVisitCard выше, полностью не подключён к бэкенду) поверх ТОГО ЖЕ
+    // контейнера #vcMsgHistory — при каждом клике на вкладку «Сообщения» на
+    // реальной странице /new/visitcard/<pk>/ настоящая история стиралась и
+    // подменялась пустым «Переписки пока нет» (баг с прода). Демо-рендер —
+    // только запасной путь, если реальной функции на странице нет вообще.
+    if(typeof window.vwLoadVisitChatHistory==='function') window.vwLoadVisitChatHistory();
+    else renderVcMsgHistory();
   }
 }
 
 /* ================= MESSAGES: WhatsApp / Telegram ================= */
-let messageTemplates=[
-  {id:1, title:'Напоминание о визите', text:'Здравствуйте! Напоминаем о вашем визите завтра в клинику ODONTIS. Ждём вас!'},
-  {id:2, title:'Инструкция после лечения', text:'После сегодняшнего лечения рекомендуем не есть и не пить горячее в течение 2 часов. Если появится боль — свяжитесь с нами.'},
-  {id:3, title:'Поздравление с днём рождения', text:'С днём рождения! Клиника ODONTIS желает вам крепкого здоровья и красивой улыбки 🎉'},
-  {id:4, title:'Напоминание об оплате', text:'Напоминаем, что по вашему лечению остался небольшой остаток к оплате. Будем рады видеть вас в клинике.'},
-  {id:5, title:'Подтверждение записи', text:'Ваша запись подтверждена. Ждём вас в клинике ODONTIS в назначенное время!'},
-];
+// Реальные шаблоны (apps.notifications.models.MessageTemplate) — подставлены
+// сервером в loadRealStaffData() (data.messageTemplates, см. apps.users.
+// newui_views._shared_options). Раньше это был захардкоженный демо-массив,
+// а addTemplate/deleteTemplate его просто мутировали в памяти — сохранённые
+// пользователем шаблоны терялись при перезагрузке страницы (баг с прода).
+let messageTemplates=[];
 function renderTemplatesList(){
   const el=document.getElementById('templatesList');
   if(!el) return;
@@ -2312,18 +2321,33 @@ function renderTemplatesList(){
       </div>
     </div>`).join('');
 }
-function addTemplate(){
-  const title=document.getElementById('tpl-title').value.trim();
-  const text=document.getElementById('tpl-text').value.trim();
+async function addTemplate(){
+  const titleEl=document.getElementById('tpl-title'), textEl=document.getElementById('tpl-text');
+  const title=titleEl.value.trim();
+  const text=textEl.value.trim();
   if(!title || !text) return;
-  messageTemplates.push({id:Date.now(), title, text});
-  document.getElementById('tpl-title').value='';
-  document.getElementById('tpl-text').value='';
+  const fd=new FormData();
+  fd.append('name', title);
+  fd.append('body', text);
+  fd.append('kind', 'manual');
+  const res=await fetch('/notifications/templates/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok || !data.ok){ showToast(apiErrorMessage(data, t('w_save_failed')), 'error'); return; }
+  messageTemplates.push({id:data.id, title:data.name, text:data.body});
+  titleEl.value='';
+  textEl.value='';
   renderTemplatesList();
   renderVcTemplateOptions();
   renderChatTemplateOptions();
 }
-function deleteTemplate(id){
+async function deleteTemplate(id){
+  const res=await fetch(`/notifications/templates/${id}/delete/`, {
+    method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')},
+  });
+  if(!res.ok){ showToast(t('w_save_failed'), 'error'); return; }
   messageTemplates=messageTemplates.filter(t=>t.id!==id);
   renderTemplatesList();
   renderVcTemplateOptions();
@@ -2924,7 +2948,7 @@ function renderOverviewCharts(){
 }
 
 const aiInsights=[
-  {type:'warn', icon:'⚠️', title:'Загрузка Джумабековой А. упала до 31%', text:'За последние 2 недели у гигиениста заметно меньше записей, чем у остальных врачов. Свободные окна простаивают.', action:'Открыть расписание →', onclick:"location.href='/new'schedule/'"},
+  {type:'warn', icon:'⚠️', title:'Загрузка Джумабековой А. упала до 31%', text:'За последние 2 недели у гигиениста заметно меньше записей, чем у остальных врачов. Свободные окна простаивают.', action:'Открыть расписание →', onclick:"location.href='/new/schedule/'"},
   {type:'warn', icon:'📉', title:'Конверсия заявок в визит снизилась до 61%', text:'Раньше было в среднем 71%. Больше всего теряем на заявках из WhatsApp/Telegram — среднее время ответа выросло.', action:'Открыть заявки →', onclick:"location.href='/new/funnel/'"},
   {type:'good', icon:'💰', title:'Пятница — самый прибыльный день недели', text:'Стабильно на 30–40% выше среднего. Стоит рассмотреть добавление ещё одного врача в пятничную смену.', action:'Открыть расписание →', onclick:"location.href='/new/schedule/'"},
   {type:'warn', icon:'🕐', title:'14 пациентов не были в клинике более 6 месяцев', text:'Хороший кандидат для реактивационной рассылки — обычно возвращает 10–15% от базы.', action:'Открыть шаблоны рассылок →', onclick:"location.href='/new/marketing/'"},
@@ -7077,6 +7101,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     accountingData=data.accountingData || null;
     auditEvents=data.auditEvents || [];
     notificationsData=data.notificationsData || [];
+    messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
     initNavNotifBell();
     updateNotifBadge();
     patientCardDetail=data.patientCardDetail || null;
