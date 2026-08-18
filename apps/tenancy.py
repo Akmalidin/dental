@@ -271,6 +271,7 @@ class SectionAccessMiddleware:
         ("/new/treatplans", "treatments"),
         ("/new/patients", "patients"),
         ("/new/blacklist", "patients"),
+        ("/new/visits-journal", "patients"),
         ("/new/services", "services"),
         ("/new/finance", "finance"),
         ("/new/accounting", "finance"),

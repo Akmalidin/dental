@@ -132,6 +132,9 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .kpi-delta.down{background:var(--coral-tint);color:var(--coral);}
 .kpi b{display:block;font-family:'JetBrains Mono',monospace;font-size:23px;}
 .kpi span.lbl{font-size:12px;color:var(--ink-soft);}
+.kpi.kpi-click{cursor:pointer;transition:box-shadow .12s,transform .12s;}
+.kpi.kpi-click:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.kpi.kpi-active{box-shadow:inset 0 0 0 2px var(--cobalt);}
 
 .grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:14px;}
 .bars{display:flex;align-items:flex-end;gap:9px;height:140px;padding-top:8px;}
@@ -764,6 +767,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
       <span data-i18n="nav_пациенты">Пациенты</span>
     </a>
+    <!-- Скрыт по умолчанию, если директор не разрешил (visitsJournalStaff) —
+         сам класс hidden ставится/снимается в loadRealStaffData (см. ниже),
+         как и у navRecycle/navSalary; admin/admin_main/superadmin видят
+         всегда, независимо от этой настройки. -->
+    <a class="nav-item hidden{% if active == 'visitsjournal' %} active{% endif %}" id="navVisitsJournal" data-view="visitsjournal" href="{% url 'newui_visits_journal' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><rect x="3" y="4" width="13" height="16" rx="2"/><path d="M8 9h4M8 13h2"/></svg>
+      <span data-i18n="nav_журнал_посещений">Журнал посещений</span>
+    </a>
     <a class="nav-item{% if active == 'visits' %} active{% endif %}" data-view="visits" href="{% url 'newui_visits' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9M14 17H5M17 3l4 4-4 4M7 21l-4-4 4-4"/></svg>
       <span data-i18n="nav_визиты">Визиты</span>
@@ -1163,6 +1174,40 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="rx-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-prescription-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitPrescriptionForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Журнал посещений: отметить посещение — та же вьюха, что и старый
+     интерфейс (/patients/journal/, POST action=add), см. vjSubmitAdd. -->
+<div class="modal-backdrop" id="m-visit-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="w_mark_visit">Отметить посещение</h3><button class="modal-close" onclick="closeModal('m-visit-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" style="position:relative;">
+        <label data-i18n="w_patient">Пациент</label>
+        <input type="text" id="vj-add-patient-search" placeholder="Поиск по имени или телефону" data-i18n-placeholder="w_search_by_name_phone" autocomplete="off" readonly oninput="vjPatientSearch(this.value)" onfocus="this.removeAttribute('readonly');vjPatientSearch(this.value)">
+        <input autocomplete="off" type="hidden" id="vj-add-patient-id">
+        <div id="vj-add-patient-suggestions" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_datetime">Дата и время</label><input autocomplete="off" type="datetime-local" id="vj-add-when"></div>
+      <div class="form-group"><label data-i18n="w_services_optional">Услуги (необязательно)</label><select id="vj-add-services" multiple style="min-height:88px;"></select></div>
+      <div class="form-group"><label data-i18n="w_reason_optional">Причина (необязательно)</label><textarea rows="2" id="vj-add-reason" placeholder="например, консультация"></textarea></div>
+      <div id="vjAddError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-visit-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="vjSubmitAdd()"><span data-i18n="w_mark_visit">Отметить</span></button></div>
+  </div>
+</div>
+
+<!-- Журнал посещений: даты одного пациента (GET /patients/journal/<pk>/dates/, тот же JSON, что и старый интерфейс). -->
+<div class="modal-backdrop" id="m-visit-dates">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="w_visit_dates">Даты посещений</h3><button class="modal-close" onclick="closeModal('m-visit-dates')">✕</button></div>
+    <div class="modal-body">
+      <table><thead><tr>
+        <th data-i18n="w_date">Дата</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_reason_services">Причина / услуги</th><th data-i18n="w_source">Источник</th><th></th>
+      </tr></thead><tbody id="vj-dates-body"></tbody></table>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-visit-dates')"><span data-i18n="w_close">Закрыть</span></button></div>
   </div>
 </div>
 
@@ -2581,6 +2626,145 @@ async function submitPrescriptionForm(){
   else { showToast(t('w_save_failed'), 'error'); }
 }
 
+/* ================= ЖУРНАЛ ПОСЕЩЕНИЙ (apps.patients.views.visits_journal) =================
+   Только чтение (KPI + строки-агрегаты по пациенту) считается на бэкенде
+   (_newui_visits_journal_data) и передаётся сюда готовым в visitsJournalData.
+   Все мутации (отметить/удалить посещение, переключить видимость персоналу)
+   идут через ту же вьюху старого интерфейса (/patients/journal/, POST +
+   res.redirected → flashAndReload), бизнес-логика не дублируется. */
+function vjSetFilter(f){
+  vjFilter = (vjFilter===f) ? '' : f; // повторный клик по той же плитке снимает фильтр
+  renderVisitsJournal();
+}
+function vjSearchChanged(q){
+  vjSearchQuery=(q||'').trim().toLowerCase();
+  renderVisitsJournal();
+}
+function renderVisitsJournal(){
+  const d=visitsJournalData;
+  const setText=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  setText('vj-total', d.totalVisits);
+  setText('vj-primary', d.primaryCount);
+  setText('vj-secondary', d.secondaryCount);
+  setText('vj-today', d.visitsToday);
+  ['vj-tile-total','vj-tile-primary','vj-tile-secondary'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.classList.remove('kpi-active');
+  });
+  const activeTile = vjFilter==='primary' ? 'vj-tile-primary' : vjFilter==='secondary' ? 'vj-tile-secondary' : 'vj-tile-total';
+  const activeEl=document.getElementById(activeTile); if(activeEl) activeEl.classList.add('kpi-active');
+  const toggleBtn=document.getElementById('vjToggleBtn');
+  if(toggleBtn){
+    toggleBtn.classList.toggle('hidden', !d.canToggle);
+    toggleBtn.textContent = d.visitsJournalStaff ? t('w_vj_visible_staff') : t('w_vj_hidden_staff');
+  }
+  let rows=d.rows||[];
+  if(vjFilter==='primary') rows=rows.filter(r=>r.primary);
+  else if(vjFilter==='secondary') rows=rows.filter(r=>!r.primary);
+  if(vjSearchQuery) rows=rows.filter(r=>r.patientName.toLowerCase().includes(vjSearchQuery) || (r.patientPhone||'').includes(vjSearchQuery));
+  const body=document.getElementById('vjTableBody');
+  if(!body) return;
+  body.innerHTML = rows.length===0
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_vj_no_records')}</td></tr>`
+    : rows.map(r=>`<tr>
+        <td><a href="/new/patients/${r.patientId}/" style="font-weight:600;">${r.patientName}</a><div style="font-size:11.5px;color:var(--ink-soft);">${r.patientPhone||''}</div></td>
+        <td><span class="badge">${r.count}</span> <span class="badge" style="background:${r.primary?'var(--teal-tint)':'var(--amber-tint)'};color:${r.primary?'var(--teal)':'var(--amber)'};">${r.primary?t('w_vj_primary'):t('w_vj_secondary')}</span></td>
+        <td class="mono" style="color:var(--ink-soft);">${r.last}</td>
+        <td style="text-align:right;">
+          <button class="btn btn-ghost btn-sm" onclick="vjShowDates(${r.patientId})">▸ ${t('w_visit_dates')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="vjOpenAdd(${r.patientId},'${(r.patientName||'').replace(/'/g,"\\'")}')">+ ${t('w_mark_visit')}</button>
+        </td>
+      </tr>`).join('');
+}
+function vjPatientSearch(q){
+  const box=document.getElementById('vj-add-patient-suggestions');
+  const query=(q||'').trim().toLowerCase();
+  if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  const matches=(patientsList||[]).filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  box.innerHTML = matches.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onclick="selectVjPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
+function selectVjPatient(id){
+  const p=(patientsList||[]).find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('vj-add-patient-search').value=p.fullName;
+  document.getElementById('vj-add-patient-id').value=p.id;
+  document.getElementById('vj-add-patient-suggestions').classList.add('hidden');
+}
+function vjNowLocal(){
+  const d=new Date();
+  d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
+}
+function vjOpenAdd(patientId, patientName){
+  document.getElementById('vjAddError').classList.add('hidden');
+  document.getElementById('vj-add-patient-search').value=patientName||'';
+  document.getElementById('vj-add-patient-id').value=patientId||'';
+  document.getElementById('vj-add-patient-suggestions').classList.add('hidden');
+  document.getElementById('vj-add-when').value=vjNowLocal();
+  document.getElementById('vj-add-reason').value='';
+  const svcSel=document.getElementById('vj-add-services');
+  svcSel.innerHTML=(servicesList||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  svcSel.selectedIndex=-1;
+  openModal('m-visit-add');
+}
+async function vjSubmitAdd(){
+  const errBox=document.getElementById('vjAddError');
+  const patientId=document.getElementById('vj-add-patient-id').value;
+  if(!patientId){
+    errBox.textContent=t('w_choose_patient'); errBox.classList.remove('hidden');
+    return;
+  }
+  errBox.classList.add('hidden');
+  const fd=new FormData();
+  fd.append('action', 'add');
+  fd.append('patient', patientId);
+  fd.append('visited_at', document.getElementById('vj-add-when').value);
+  fd.append('reason', document.getElementById('vj-add-reason').value.trim());
+  Array.from(document.getElementById('vj-add-services').selectedOptions).forEach(o=>fd.append('services', o.value));
+  const res=await postForm('/patients/journal/', fd);
+  if(res.redirected){ closeModal('m-visit-add'); flashAndReload(t('w_vj_marked')); }
+  else { errBox.textContent=t('w_save_failed'); errBox.classList.remove('hidden'); }
+}
+async function vjShowDates(patientId){
+  const body=document.getElementById('vj-dates-body');
+  body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:14px;">…</td></tr>`;
+  openModal('m-visit-dates');
+  try{
+    const res=await fetch(`/patients/journal/${patientId}/dates/`, {credentials:'same-origin'});
+    const data=await res.json();
+    const items=data.items||[];
+    body.innerHTML = items.length===0
+      ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:14px;">${t('w_vj_no_dates')}</td></tr>`
+      : items.map(it=>`<tr>
+          <td class="mono">${it.date}</td>
+          <td>${it.doctor||'—'}</td>
+          <td style="white-space:pre-line;">${it.note||'—'}</td>
+          <td style="color:var(--ink-soft);">${it.source}</td>
+          <td style="text-align:right;"><button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="vjDeleteVisit(${it.id})" title="${t('w_delete')}">🗑</button></td>
+        </tr>`).join('');
+  }catch(e){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--coral);padding:14px;">${t('w_save_failed')}</td></tr>`;
+  }
+}
+async function vjDeleteVisit(id){
+  if(!confirm(t('w_confirm_delete_visit'))) return;
+  const fd=new FormData();
+  fd.append('action', 'delete');
+  fd.append('id', id);
+  const res=await postForm('/patients/journal/', fd);
+  if(res.redirected){ flashAndReload(t('w_vj_deleted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+async function vjToggleVisibility(){
+  const fd=new FormData();
+  fd.append('action', 'toggle_visibility');
+  const res=await postForm('/patients/journal/', fd);
+  if(res.redirected){ flashAndReload(); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
 /* ================= КОРЗИНА (apps.users.views.recycle_bin) =================
    Восстановление — через ту же вьюху-форму старого интерфейса (POST +
    res.redirected → flashAndReload). Безвозвратное удаление — ссылка на уже
@@ -3661,6 +3845,28 @@ const translations={
   w_address:      {ru:'Адрес',             ky:'Дареги',                en:'Address',            uz:'Manzil'},
   w_gender:       {ru:'Пол',               ky:'Жынысы',                en:'Gender',             uz:'Jinsi'},
   w_source:       {ru:'Источник',          ky:'Булак',                 en:'Source',             uz:'Manba'},
+  nav_журнал_посещений: {ru:'Журнал посещений', ky:'Баруу журналы', en:'Visits journal', uz:'Tashriflar jurnali'},
+  w_mark_visit: {ru:'Отметить посещение', ky:'Барууну белгилөө', en:'Mark visit', uz:'Tashrifni belgilash'},
+  w_datetime: {ru:'Дата и время', ky:'Дата жана убакыт', en:'Date and time', uz:'Sana va vaqt'},
+  w_services_optional: {ru:'Услуги (необязательно)', ky:'Кызматтар (милдеттүү эмес)', en:'Services (optional)', uz:'Xizmatlar (ixtiyoriy)'},
+  w_reason_optional: {ru:'Причина (необязательно)', ky:'Себеп (милдеттүү эмес)', en:'Reason (optional)', uz:'Sabab (ixtiyoriy)'},
+  w_reason_services: {ru:'Причина / услуги', ky:'Себеп / кызматтар', en:'Reason / services', uz:'Sabab / xizmatlar'},
+  w_visit_dates: {ru:'Даты посещений', ky:'Баруу даталары', en:'Visit dates', uz:'Tashrif sanalari'},
+  w_vj_total: {ru:'Всего посещений', ky:'Баары болуп баруулар', en:'Total visits', uz:'Jami tashriflar'},
+  w_vj_primary: {ru:'Первичные', ky:'Биринчилик', en:'First-time', uz:'Birlamchi'},
+  w_vj_secondary: {ru:'Вторичные', ky:'Кайталама', en:'Repeat', uz:'Takroriy'},
+  w_vj_today: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
+  w_vj_count: {ru:'Посещений', ky:'Баруулар', en:'Visits', uz:'Tashriflar'},
+  w_vj_last: {ru:'Последнее', ky:'Акыркысы', en:'Last', uz:'Oxirgisi'},
+  w_vj_search_placeholder: {ru:'Поиск: имя или телефон…', ky:'Издөө: аты же телефону…', en:'Search: name or phone…', uz:'Qidiruv: ism yoki telefon…'},
+  w_vj_no_records: {ru:'Посещений нет', ky:'Баруулар жок', en:'No visits', uz:'Tashriflar yoʻq'},
+  w_vj_no_dates: {ru:'Нет записей', ky:'Жазуулар жок', en:'No records', uz:'Yozuvlar yoʻq'},
+  w_vj_visible_staff: {ru:'👁 Виден персоналу', ky:'👁 Персоналга көрүнөт', en:'👁 Visible to staff', uz:'👁 Xodimlarga koʻrinadi'},
+  w_vj_hidden_staff: {ru:'🚫 Скрыт от персонала', ky:'🚫 Персоналдан жашырылган', en:'🚫 Hidden from staff', uz:'🚫 Xodimlardan yashirilgan'},
+  w_vj_marked: {ru:'Посещение отмечено', ky:'Баруу белгиленди', en:'Visit marked', uz:'Tashrif belgilandi'},
+  w_vj_deleted: {ru:'Посещение удалено', ky:'Баруу өчүрүлдү', en:'Visit deleted', uz:'Tashrif oʻchirildi'},
+  w_confirm_delete_visit: {ru:'Удалить это посещение?', ky:'Бул барууну өчүрөсүзбү?', en:'Delete this visit?', uz:'Bu tashrifni oʻchirasizmi?'},
+  w_choose_patient: {ru:'Выберите пациента', ky:'Бейтапты тандаңыз', en:'Choose a patient', uz:'Bemorni tanlang'},
   w_respdoctor:   {ru:'Ответственный врач',ky:'Жооптуу дарыгер',       en:'Responsible doctor', uz:"Mas'ul shifokor"},
   w_birthdate:    {ru:'Дата рождения',     ky:'Туулган күнү',          en:'Birth date',         uz:'Tug\'ilgan sana'},
   w_note:         {ru:'Примечание',        ky:'Эскертүү',              en:'Note',               uz:'Izoh'},
@@ -5588,7 +5794,7 @@ function applyMenuPrefs(){
 // ограничивает через allowed_sections — не прячем и его тут, иначе сайдбар
 // врал бы о том, что реально заблокировано.
 const NAV_VIEW_TO_SECTION = {
-  patients: 'patients', schedule: 'appointments', treatplans: 'treatments',
+  patients: 'patients', visitsjournal: 'patients', schedule: 'appointments', treatplans: 'treatments',
   staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
   cashdesk: 'finance', finance: 'finance', accounting: 'finance',
   reports: 'reports', audit: 'reports', settings: 'settings', tasks: 'tasks',
@@ -7646,6 +7852,9 @@ let auditEvents=[];
 let tasksData={tasks:[], staff:[]};
 let medicinesData={medicines:[], prescriptions:[]};
 let recycleData={items:[], cats:[], total:0};
+let visitsJournalData={rows:[], totalVisits:0, visitsToday:0, uniqPatients:0, primaryCount:0, secondaryCount:0, canToggle:false, visitsJournalStaff:true};
+let vjFilter=''; // '' | 'primary' | 'secondary' — выбранная плитка KPI
+let vjSearchQuery='';
 let techniciansData={roster:[], payouts:[], specializations:[]};
 let notificationsData=[];
 let notifFilter='all';
@@ -8279,6 +8488,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     tasksData=data.tasksData || {tasks:[], staff:[]};
     medicinesData=data.medicinesData || {medicines:[], prescriptions:[]};
     recycleData=data.recycleData || {items:[], cats:[], total:0};
+    visitsJournalData=data.visitsJournalData || visitsJournalData;
     techniciansData=data.techniciansData || {roster:[], payouts:[], specializations:[]};
     notificationsData=data.notificationsData || [];
     messageTemplates=(data.messageTemplates || []).map(x=>({id:x.id, title:x.title, text:x.text}));
@@ -8317,6 +8527,13 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     // спецслучаи в общей функции ради одного пункта меню).
     document.getElementById('navRecycle').classList.toggle('hidden',
       !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
+    // Журнал посещений — виден директору/админу/суперадмину всегда, рядовому
+    // персоналу — только если включено в настройках клиники
+    // (visitsJournalStaff, та же граница, что у apps.patients.views.
+    // _visits_journal_allowed). По умолчанию скрыт в разметке (класс hidden) —
+    // именно это «изначально скрыт, включается через настройки» из запроса.
+    document.getElementById('navVisitsJournal').classList.toggle('hidden',
+      !(IS_SUPERADMIN || IS_ADMIN || IS_ADMIN_MAIN || data.visitsJournalStaff) || !(data.navSections||[]).includes('patients'));
     // Настройки → «Карточка лечения» ведёт на /settings/emr-templates/,
     // которая доступна только superadmin/admin_main — прячем пункт у
     // остальных (иначе клик просто упёрся бы в 403).
@@ -9169,6 +9386,7 @@ renderTasksList();
 renderMedicinesList();
 renderPrescriptionsList();
 renderRecycleList();
+renderVisitsJournal();
 renderServiceChips();
 renderServicesTable();
 renderFinance();

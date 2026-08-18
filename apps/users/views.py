@@ -1071,6 +1071,47 @@ def _newui_blacklist_data():
     } for e in entries]
 
 
+def _newui_visits_journal_data(request, clinic):
+    """Журнал посещений — та же модель и та же агрегация, что и в старом
+    интерфейсе (apps.patients.views.visits_journal): по каждому пациенту —
+    сколько раз был и когда последний, первичные (1 раз)/вторичные (2+).
+    Мутации (добавить/удалить посещение, переключить видимость персоналу)
+    идут через тот же view (/patients/journal/, POST + res.redirected), эта
+    функция — только чтение, дублирования бизнес-логики нет. Видимость самой
+    страницы персоналу — apps.patients.views._visits_journal_allowed."""
+    from django.db.models import Count, Max
+    from django.utils import timezone
+    from apps.patients.models import Patient, PatientVisit
+    from apps.settings_clinic.models import ClinicSettings
+
+    agg = list(PatientVisit.objects.values("patient")
+               .annotate(cnt=Count("id"), last=Max("visited_at")).order_by("-last"))
+    pat_ids = [a["patient"] for a in agg]
+    pmap = {p.pk: p for p in Patient.objects.filter(pk__in=pat_ids)}
+    rows = []
+    for a in agg:
+        p = pmap.get(a["patient"])
+        if not p:
+            continue
+        rows.append({
+            "patientId": p.pk, "patientName": p.full_name, "patientPhone": p.phone or "",
+            "count": a["cnt"], "primary": a["cnt"] == 1,
+            "last": timezone.localtime(a["last"]).strftime("%d.%m.%Y %H:%M"),
+        })
+    today = timezone.localdate()
+    cs = ClinicSettings.get()
+    return {
+        "rows": rows,
+        "totalVisits": PatientVisit.objects.count(),
+        "visitsToday": PatientVisit.objects.filter(visited_at__date=today).count(),
+        "uniqPatients": len(pat_ids),
+        "primaryCount": sum(1 for a in agg if a["cnt"] == 1),
+        "secondaryCount": sum(1 for a in agg if a["cnt"] > 1),
+        "canToggle": bool(request.user.is_superadmin or request.user.is_admin_main),
+        "visitsJournalStaff": bool(cs.visits_journal_staff),
+    }
+
+
 def _newui_tasks_data(request, clinic):
     """Задачи — та же модель и те же права видимости, что и в старом
     интерфейсе (apps.tasks.views.task_list): админ/суперадмин видят все
