@@ -302,7 +302,7 @@
         <div class="accordion-body ${i===0?'open':''}">
           <textarea rows="2" placeholder="${t(s.labelKey)}" id="vw-field-${s.id}" onblur="vwAutosave()" ${readOnlyClosed?'disabled':''}>${s.get()||''}</textarea>
           <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-            <button class="btn btn-ghost btn-sm" ${readOnlyClosed?'disabled':''} data-i18n="w_save_as_template">${t('w_save_as_template')}</button>
+            <button class="btn btn-ghost btn-sm" ${readOnlyClosed?'disabled':''} onclick="vwOpenSaveAsTemplate()" data-i18n="w_save_as_template">${t('w_save_as_template')}</button>
           </div>
         </div>
       </div>`).join('');
@@ -656,6 +656,29 @@
     } catch(e){
       showToast(t('w_save_failed_connection'), 'error');
     } finally { vwSaving=false; }
+  };
+  // «Сохранить как шаблон» под разделами ЭМК — раньше кнопка была без
+  // обработчика вообще (баг из аудита — декоративная). Сохраняет ЦЕЛИКОМ
+  // текущую ЭМК приёма (не один раздел — поля MedicalRecordTemplate так же
+  // устроены) как новый шаблон в общем справочнике «Карточка лечения»
+  // (apps.treatments.models_emr.MedicalRecordTemplate, тот же, что и
+  // Настройки → Карточка лечения, и «Применить шаблон» в старом интерфейсе).
+  window.vwOpenSaveAsTemplate = function(){
+    const nameEl=document.getElementById('emrTplName');
+    if(nameEl) nameEl.value='';
+    openModal('m-emr-save-template');
+    if(nameEl) nameEl.focus();
+  };
+  window.vwConfirmSaveAsTemplate = async function(){
+    const nameEl=document.getElementById('emrTplName');
+    const name=(nameEl.value||'').trim();
+    if(!name){ showToast(t('w_template_name_required'), 'error'); return; }
+    await vwAutosave(); // текущие значения полей должны попасть в ЭМК до сохранения шаблона
+    const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/save-as-template/', {name});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok || !data.ok){ showToast(apiErrorMessage(data, t('w_save_failed')), 'error'); return; }
+    closeModal('m-emr-save-template');
+    showToast(t('w_template_saved'));
   };
   async function vwSaveTeeth(teeth){
     await apiJson('/treatments/visit/'+vw.treatmentId+'/save/', {teeth});
