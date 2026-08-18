@@ -1546,6 +1546,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_calsettings">Настройки календаря</h3><button class="modal-close" onclick="closeModal('m-calsettings')">✕</button></div>
     <div class="modal-body">
+      <div class="tab-strip" style="margin-bottom:14px;">
+        <button class="active" id="csTabBtnBasic" onclick="csTab('basic')" data-i18n="w_cs_tab_basic">Основные</button>
+        <button id="csTabBtnAdvanced" onclick="csTab('advanced')" data-i18n="w_cs_tab_advanced">Продвинутые настройки</button>
+      </div>
+      <div id="csPanelBasic">
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_day_start">Начало дня</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="cs-start" value="09:00"></div>
         <div class="form-group"><label data-i18n="w_day_end">Конец дня</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="cs-end" value="18:00"></div>
@@ -1590,10 +1595,34 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           </div>
         </div>
       </div>
+      <div class="form-group toggle" style="margin-top:2px;">
+        <input autocomplete="off" type="checkbox" id="cs-offer-start-visit" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_offer_start_visit">Предлагать начать приём при отметке «Пришёл» (только для врача)</span>
+      </div>
+      <div class="form-group toggle" style="margin-top:10px;">
+        <input autocomplete="off" type="checkbox" id="cs-highlight-debt" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_highlight_debt">Подсвечивать пациентов с долгом</span>
+      </div>
+      <div class="form-group toggle" style="margin-top:10px;">
+        <input autocomplete="off" type="checkbox" id="cs-ribbon-scroll" checked>
+        <span style="font-size:13px;" data-i18n="w_cs_ribbon_scroll">Прокрутка ленты дней колёсиком/свайпом на следующий день</span>
+      </div>
+      </div>
+      <div id="csPanelAdvanced" class="hidden">
+      <!-- Что показывать под именем пациента на карточке — услугу или
+           комментарий к записи, по прямому запросу пользователя (раньше
+           всегда была услуга). -->
+      <div class="form-group">
+        <label data-i18n="w_cs_card_subline">Что показывать под именем на карточке</label>
+        <select id="cs-card-subline">
+          <option value="notes" data-i18n="w_cs_card_subline_notes">Комментарий к записи</option>
+          <option value="service" data-i18n="w_cs_card_subline_service">Название услуги</option>
+        </select>
+      </div>
       <!-- Цвет имени пациента и времени на карточке — по умолчанию считается
            автоматически от цвета статуса (см. darkenColor в JS), этот блок
            даёт задать СВОЙ цвет вместо авто, по прямому запросу пользователя. -->
-      <div class="form-group toggle" style="margin-top:10px;">
+      <div class="form-group toggle" style="margin-top:14px;">
         <input autocomplete="off" type="checkbox" id="cs-nametime-color-enabled"
           onchange="document.getElementById('cs-nametime-color-wrap').classList.toggle('hidden', !this.checked)">
         <span style="font-size:13px;" data-i18n="w_cs_nametime_color_enabled">Свой цвет имени пациента и времени (вместо автоматического)</span>
@@ -1608,17 +1637,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <input autocomplete="off" type="color" id="cs-color-time" value="#1c2430" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
         </div>
       </div>
-      <div class="form-group toggle" style="margin-top:2px;">
-        <input autocomplete="off" type="checkbox" id="cs-offer-start-visit" checked>
-        <span style="font-size:13px;" data-i18n="w_cs_offer_start_visit">Предлагать начать приём при отметке «Пришёл» (только для врача)</span>
-      </div>
-      <div class="form-group toggle" style="margin-top:10px;">
-        <input autocomplete="off" type="checkbox" id="cs-highlight-debt" checked>
-        <span style="font-size:13px;" data-i18n="w_cs_highlight_debt">Подсвечивать пациентов с долгом</span>
-      </div>
-      <div class="form-group toggle" style="margin-top:10px;">
-        <input autocomplete="off" type="checkbox" id="cs-ribbon-scroll" checked>
-        <span style="font-size:13px;" data-i18n="w_cs_ribbon_scroll">Прокрутка ленты дней колёсиком/свайпом на следующий день</span>
       </div>
     </div>
     <div class="modal-foot">
@@ -3942,6 +3960,11 @@ const translations={
   w_cs_nametime_color_enabled: {ru:'Свой цвет имени пациента и времени (вместо автоматического)', ky:'Бейтаптын аты жана убакыттын өз түсү (автоматтыктын ордуна)', en:'Custom patient name & time color (instead of automatic)', uz:"Bemor ismi va vaqt uchun o'z rangi (avtomatik o'rniga)"},
   w_cs_name_color: {ru:'Цвет имени пациента', ky:'Бейтаптын атынын түсү', en:'Patient name color', uz:'Bemor ismi rangi'},
   w_cs_time_color: {ru:'Цвет времени записи', ky:'Жазуу убактысынын түсү', en:'Appointment time color', uz:'Yozuv vaqti rangi'},
+  w_cs_tab_basic: {ru:'Основные', ky:'Негизги', en:'Basic', uz:'Asosiy'},
+  w_cs_tab_advanced: {ru:'Продвинутые настройки', ky:'Өркүндөтүлгөн жөндөөлөр', en:'Advanced settings', uz:'Kengaytirilgan sozlamalar'},
+  w_cs_card_subline: {ru:'Что показывать под именем на карточке', ky:'Карточкада ат астында эмне көрсөтүлсүн', en:'What to show under the name on the card', uz:'Kartochkada ism ostida nima ko\'rsatilsin'},
+  w_cs_card_subline_notes: {ru:'Комментарий к записи', ky:'Жазууга комментарий', en:'Appointment comment', uz:'Yozuvga izoh'},
+  w_cs_card_subline_service: {ru:'Название услуги', ky:'Кызматтын аталышы', en:'Service name', uz:'Xizmat nomi'},
   w_color: {ru:'Цвет', ky:'Түс', en:'Color', uz:'Rang'},
   w_fullname: {ru:'ФИО', ky:'Аты-жөнү', en:'Full name', uz:'F.I.Sh.'},
   w_login: {ru:'Логин', ky:'Логин', en:'Login', uz:'Login'},
@@ -6130,7 +6153,7 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430'};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
@@ -6194,8 +6217,20 @@ function loadCalSettings(){
   if(byId('cs-nametime-color-wrap')) byId('cs-nametime-color-wrap').classList.toggle('hidden', !calSettings.nameTimeColorEnabled);
   if(byId('cs-color-name')) byId('cs-color-name').value=calSettings.nameColor||'#1c2430';
   if(byId('cs-color-time')) byId('cs-color-time').value=calSettings.timeColor||'#1c2430';
+  // Что показывать под именем на карточке — комментарий к записи (по
+  // умолчанию, прямой запрос пользователя) или название услуги (как было
+  // раньше), переключается в «Продвинутые настройки».
+  if(byId('cs-card-subline')) byId('cs-card-subline').value = calSettings.cardSubline==='service' ? 'service' : 'notes';
 }
 loadCalSettings();
+// Вкладки модалки «Настройки календаря» — «Основные»/«Продвинутые настройки»,
+// та же схема toggle-hidden-панелей, что и у staffTab.
+function csTab(which){
+  document.getElementById('csPanelBasic').classList.toggle('hidden', which!=='basic');
+  document.getElementById('csPanelAdvanced').classList.toggle('hidden', which!=='advanced');
+  document.getElementById('csTabBtnBasic').classList.toggle('active', which==='basic');
+  document.getElementById('csTabBtnAdvanced').classList.toggle('active', which==='advanced');
+}
 
 /* ================= Фильтр видимости врачей в расписании =================
    Чисто локальный (localStorage), мгновенно применяемый рабочий фильтр —
@@ -6683,7 +6718,13 @@ function buildDayRibbonHTML(){
         // краю (см. .sched-appt.compact .sched-appt-time — flex-shrink:0),
         // а вместо скрытия обрезается многоточием само имя (ему и так уже
         // задан overflow:ellipsis — см. .sched-appt-name).
-        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${nameColor};">${appt.patient}</b><span class="sched-appt-time" style="color:${timeColor};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        // Строка под именем — комментарий к записи или название услуги, по
+        // настройке «Что показывать под именем на карточке» (Настройки
+        // календаря → Продвинутые настройки, по умолчанию — комментарий, по
+        // прямому запросу пользователя); если выбранное поле у записи не
+        // указано — строка просто не рисуется (пусто, без плейсхолдера).
+        const subline = calSettings.cardSubline==='service' ? (appt.service||'') : (appt.notes||'');
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${nameColor};">${appt.patient}</b><span class="sched-appt-time" style="color:${timeColor};">${appt.time}–${endLabel}</span>${subline?`<span class="sched-appt-service" style="color:${apptText};">${subline}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
@@ -7768,6 +7809,7 @@ function applyCalSettings(){
   calSettings.nameTimeColorEnabled=document.getElementById('cs-nametime-color-enabled').checked;
   calSettings.nameColor=document.getElementById('cs-color-name').value;
   calSettings.timeColor=document.getElementById('cs-color-time').value;
+  calSettings.cardSubline=document.getElementById('cs-card-subline').value;
 
   calSettings.defaultView=document.getElementById('cs-defaultview').value;
   localStorage.setItem(CALSETTINGS_KEY, JSON.stringify(calSettings));
@@ -7802,8 +7844,9 @@ function resetCalSettings(){
   document.getElementById('cs-nametime-color-wrap').classList.add('hidden');
   document.getElementById('cs-color-name').value='#1c2430';
   document.getElementById('cs-color-time').value='#1c2430';
+  document.getElementById('cs-card-subline').value='notes';
   localStorage.removeItem(CALSETTINGS_KEY);
-  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430'};
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
   applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
