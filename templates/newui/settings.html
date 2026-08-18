@@ -16,7 +16,15 @@
                  «Настроить меню» в сайдбаре, но сохраняет в ClinicSettings.menu_prefs. -->
             <button id="setNavClinicMenu" class="hidden" onclick="openMenuSettings('clinic')" data-i18n="w_clinic_menu_settings">Меню клиники</button>
             <div class="grp" data-i18n="w_grp_reception">Приём пациентов</div>
-            <button onclick="openModal('m-visitresult')" data-i18n="w_visit_results">Результаты визита</button>
+            <!-- «Результаты визита» здесь — НЕ настройка (M-visitresult — модалка
+                 действия «отметить результат приёма» с открытой строкой пациента,
+                 у неё нет смысла вне контекста конкретной записи). Раньше кнопка
+                 звала openModal('m-visitresult') напрямую, минуя openVisitResult(rowBtn) —
+                 currentResultRow оставался null, и «Сохранить результат» молча
+                 ничего не делал (баг из аудита). Как и остальные пункты слева без
+                 реального бэкенда для раздела «Настройки», честно ведёт на тот же
+                 тост-заглушку — см. w_settings_hint выше. -->
+            <button onclick="settingsNotWired()" data-i18n="w_visit_results">Результаты визита</button>
             <button id="setNavCancelreasons" onclick="setSettingsTab('cancelreasons')" data-i18n="w_cancel_reasons_settings">Причины отмены</button>
             <button onclick="settingsNotWired()" data-i18n="title_m_treatplan_stage_card">Карточка лечения</button>
             <div class="grp" data-i18n="w_grp_money">Деньги</div>

@@ -1203,6 +1203,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
+<!-- Сохранить ЭМК приёма как переиспользуемый шаблон — кнопка «Сохранить как
+     шаблон» под разделами карты приёма (/new/visitcard/<pk>/). Создаёт
+     MedicalRecordTemplate — тот же справочник, что и «Карточка лечения» в
+     Настройках. -->
+<div class="modal-backdrop" id="m-emr-save-template">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="w_save_as_template">Сохранить как шаблон</h3><button class="modal-close" onclick="closeModal('m-emr-save-template')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label data-i18n="w_template_name">Название шаблона</label><input autocomplete="off" type="text" id="emrTplName" placeholder="Например: Средний кариес" data-i18n-placeholder="w_template_name_placeholder"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-emr-save-template')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="vwConfirmSaveAsTemplate()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
 <!-- Причина отмены/переноса -->
 <div class="modal-backdrop" id="m-cancel">
   <div class="modal">
@@ -2672,8 +2686,11 @@ function acceptCashierPayment(id){
 }
 
 /* ================= REPORTS: tabs + charts + AI assistant ================= */
+let reportsActiveTab='overview';
+const REPORTS_TAB_IDMAP={overview:'Overview', expenses:'Expenses', debtors:'Debtors', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
 function reportsTab(which){
-  const idMap={overview:'Overview', expenses:'Expenses', debtors:'Debtors', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
+  reportsActiveTab=which;
+  const idMap=REPORTS_TAB_IDMAP;
   Object.keys(idMap).forEach(t=>{
     const suffix=idMap[t];
     const panel=document.getElementById('rp'+suffix);
@@ -2690,6 +2707,51 @@ function reportsTab(which){
   if(which==='cancelled') renderReportsCancelled();
   if(which==='repeat') renderReportsRepeat();
   if(which==='sources') renderReportsSources();
+}
+/* ---- Экспорт активной вкладки отчётов в CSV (открывается Excel'ем) и печать
+   страницы. Раньше кнопки «Excel»/«Печать» были без onclick вообще (баг из
+   аудита — декоративные). Печать — обычный window.print(). Excel — берём
+   таблицу(ы) видимой сейчас вкладки и строим CSV на клиенте (без бэкенда —
+   данные уже загружены на странице); для вкладок без таблиц (Общий отчёт,
+   ИИ-помощник) экспортируем видимые KPI-плашки. ---- */
+function csvEscapeCell(v){
+  v = (v===null || v===undefined) ? '' : String(v);
+  if(/[";\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
+  return v;
+}
+function downloadCsv(filename, rows){
+  const csv = rows.map(r=>r.map(csvEscapeCell).join(';')).join('\r\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function exportReportsExcel(){
+  const suffix = REPORTS_TAB_IDMAP[reportsActiveTab] || 'Overview';
+  const panel = document.getElementById('rp'+suffix);
+  if(!panel) return;
+  const tables = panel.querySelectorAll('table');
+  let rows=[];
+  if(tables.length){
+    tables.forEach((table,i)=>{
+      if(i>0) rows.push([]);
+      table.querySelectorAll('tr').forEach(tr=>{
+        rows.push(Array.from(tr.querySelectorAll('th,td')).map(cell=>cell.textContent.trim()));
+      });
+    });
+  } else {
+    panel.querySelectorAll('.kpi').forEach(kpi=>{
+      const lbl=kpi.querySelector('.lbl'), val=kpi.querySelector('b');
+      if(lbl && val) rows.push([lbl.textContent.trim(), val.textContent.trim()]);
+    });
+  }
+  if(!rows.length){ showToast(t('w_no_data'), 'error'); return; }
+  downloadCsv('report_'+reportsActiveTab+'_'+isoDate(new Date())+'.csv', rows);
+}
+function printReportsPage(){
+  window.print();
 }
 /* ---- Расходы/Должники/Отменённые/Врачи/Источники — реальные данные из
    _newui_reports_data() (apps/users/views.py), за текущий месяц. ---- */
@@ -3236,6 +3298,10 @@ const translations={
   w_xray_lab_data: {ru:'Данные рентгеновских, лабораторных исследований', ky:'Рентген, лабораториялык изилдөөлөрдүн маалыматтары', en:'X-ray & lab findings', uz:'Rentgen, laboratoriya tekshiruvlari ma\'lumotlari'},
   w_doctor_visit_desc: {ru:'Описание визита врачом', ky:'Дарыгердин визит сүрөттөмөсү', en:'Doctor\'s visit description', uz:'Shifokorning tashrif tavsifi'},
   w_save_as_template: {ru:'Сохранить как шаблон', ky:'Үлгү катары сактоо', en:'Save as template', uz:'Shablon sifatida saqlash'},
+  w_template_name: {ru:'Название шаблона', ky:'Үлгүнүн аталышы', en:'Template name', uz:'Shablon nomi'},
+  w_template_name_placeholder: {ru:'Например: Средний кариес', ky:'Мисалы: Орточо кариес', en:'e.g. Moderate caries', uz:'Masalan: O\'rtacha karies'},
+  w_template_name_required: {ru:'Укажите название шаблона', ky:'Үлгүнүн аталышын көрсөтүңүз', en:'Enter a template name', uz:'Shablon nomini kiriting'},
+  w_template_saved: {ru:'Шаблон сохранён', ky:'Үлгү сакталды', en:'Template saved', uz:'Shablon saqlandi'},
   w_visit_completed: {ru:'Приём завершён', ky:'Кабыл алуу аяктады', en:'Visit completed', uz:'Qabul yakunlandi'},
   w_visit_completed_sent_to_cashier: {ru:'Приём завершён, долг отправлен в кассу', ky:'Кабыл алуу аяктады, карыз кассага жиберилди', en:'Visit completed, balance sent to the cashier', uz:'Qabul yakunlandi, qarz kassaga yuborildi'},
   w_visit_in_progress: {ru:'Приём идёт — завершить', ky:'Кабыл алуу жүрүп жатат — аяктоо', en:'Visit in progress — finish', uz:'Qabul davom etmoqda — yakunlash'},

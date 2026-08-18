@@ -1,7 +1,7 @@
 {% extends "newui/base.html" %}
 {% block page_title %}Отчёты{% endblock %}
 {% block content %}
-      <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost"><span data-i18n="w_print">Печать</span></button></div></div>
+      <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost" onclick="exportReportsExcel()"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost" onclick="printReportsPage()"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
         <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Всё, включая Конструктор сравнения, — реальные данные. Демонстрационный пока только «ИИ-помощник».</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">

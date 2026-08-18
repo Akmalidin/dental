@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from django.utils.translation import gettext_lazy as _
 
 from .models import Treatment, TreatmentCure, TreatmentFile
-from .models_emr import MedicalRecord
+from .models_emr import MedicalRecord, MedicalRecordTemplate
 from .models_teeth import (
     ToothStatus, ToothCondition, DEFAULT_TOOTH_STATUSES, REAL_TO_JS_TOOTH_CODE,
     ToothSurfaceStatus, ToothGumStatus, ToothSurfaceCondition, ToothGumCondition,
@@ -369,6 +369,40 @@ def visit_save(request, pk):
     if isinstance(data.get("plan"), list):
         _apply_plan(treatment, data["plan"], request.user, do_writeoff=False)
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def visit_save_as_template(request, pk):
+    """«Сохранить как шаблон» на карте приёма (/new/visitcard/<pk>/) — берёт
+    уже сохранённую (vwAutosave вызывается на клиенте перед этим запросом)
+    ЭМК текущего приёма и создаёт новый apps.treatments.models_emr.
+    MedicalRecordTemplate с этим содержимым — тот же справочник шаблонов,
+    что и «Карточка лечения» в Настройках (apps.settings_clinic.views.
+    emr_template_edit), только заполняется не вручную, а из реального приёма.
+    Раньше кнопка вообще не имела обработчика (баг из аудита — декоративная)."""
+    treatment = get_object_or_404(Treatment, pk=pk)
+    emr = getattr(treatment, "emr", None)
+    if emr is None:
+        return JsonResponse({"error": "Сначала заполните карту приёма", "error_key": "generic_emr_empty"}, status=400)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        data = {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "Укажите название шаблона", "error_key": "generic_name_required"}, status=400)
+    tpl = MedicalRecordTemplate.objects.create(
+        name=name,
+        complaints=emr.complaints,
+        anamnesis=emr.anamnesis,
+        external_exam=emr.external_exam,
+        objective=emr.objective,
+        diagnosis=emr.diagnosis,
+        treatment=emr.treatment_text,
+        recommendations=emr.recommendations,
+    )
+    return JsonResponse({"ok": True, "id": tpl.pk, "name": tpl.name})
 
 
 @login_required
