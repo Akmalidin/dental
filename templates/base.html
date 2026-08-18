@@ -238,10 +238,12 @@
       </a>
       {% endif %}
       {% if 'recycle' in user_sections %}
+      {% if user.is_superadmin or user.is_admin_main or clinic_settings.recycle_bin_staff %}
       <a href="/users/recycle-bin/" class="nav-item {% if 'recycle' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
         <span class="nav-label">Корзина</span>
       </a>
+      {% endif %}
       {% endif %}
       {% if user.is_admin_main and user.clinic_id %}
       <a href="/users/clinic/{{ user.clinic_id }}/overview/" class="nav-item {% if 'clinic_overview' in u %}active{% endif %}">

@@ -3,9 +3,17 @@
 
 {% block content %}
 <div class="card">
-  <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
-    <h3 class="font-bold">Корзина</h3>
-    <p class="muted text-sm mt-0.5">Удалённые записи можно восстановить или удалить безвозвратно.</p>
+  <div class="px-5 py-4 flex items-start justify-between gap-3" style="border-bottom:1px solid var(--border)">
+    <div>
+      <h3 class="font-bold">Корзина</h3>
+      <p class="muted text-sm mt-0.5">Удалённые записи можно восстановить или удалить безвозвратно.</p>
+    </div>
+    {% if user.is_superadmin or user.is_admin_main %}
+    <form method="post" action="/users/recycle-bin/">{% csrf_token %}
+      <input type="hidden" name="action" value="toggle_visibility">
+      <button class="btn btn-sm">{% if clinic_settings.recycle_bin_staff %}👁 Видна персоналу{% else %}🚫 Скрыта от персонала{% endif %}</button>
+    </form>
+    {% endif %}
   </div>
   <div class="px-5 py-3 flex flex-wrap gap-2" style="border-bottom:1px solid var(--border)">
     <a href="/users/recycle-bin/" class="pill-tab {% if not current_kind %}active{% endif %}">Все ({{ total }})</a>

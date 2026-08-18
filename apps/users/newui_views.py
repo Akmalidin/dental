@@ -125,6 +125,12 @@ def _shared_options(request, clinic):
         # странице (admin/admin_main/superadmin видят его всегда — см.
         # apps.patients.views._visits_journal_allowed).
         "visitsJournalStaff": bool(cs.visits_journal_staff),
+        # Корзина — в отличие от журнала посещений, изначально скрыта ото
+        # всех (та же настройка, что и в старом интерфейсе,
+        # clinic_settings.recycle_bin_staff, по умолчанию False), директор
+        # включает явно. superadmin — всегда (см. apps.users.views.
+        # _recycle_bin_allowed).
+        "recycleBinStaff": bool(cs.recycle_bin_staff),
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
@@ -368,7 +374,15 @@ def newui_medicines(request):
 @role_required("superadmin", "admin_main", "admin")
 def newui_recycle(request):
     """Корзина — те же права, что и старый /users/recycle-bin/
-    (apps.users.views.recycle_bin: superadmin/admin_main/admin)."""
+    (apps.users.views.recycle_bin: superadmin/admin_main/admin), плюс та же
+    граница видимости — изначально скрыта ото всех, включается настройкой
+    клиники (apps.users.views._recycle_bin_allowed)."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    from apps.users.views import _recycle_bin_allowed
+    if not _recycle_bin_allowed(request.user):
+        messages.error(request, "Корзина скрыта администратором")
+        return redirect("/new/")
     return _render(request, "recycle", "recycle.html", {"recycleData": _newui_recycle_data(request)})
 
 
