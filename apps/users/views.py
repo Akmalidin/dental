@@ -664,6 +664,64 @@ def _newui_warehouse_data():
     }
 
 
+def _newui_warehouse_ops_data():
+    """Операции склада — поступления/списания/перемещения/инвентаризации
+    (apps.warehouse), для отдельных вкладок страницы «Склад» в новом
+    интерфейсе. Создание идёт через ТЕ ЖЕ вьюхи-формы старого интерфейса
+    (apps.warehouse.views: entry_create/distribution_create/transfer_create/
+    inventory_create — POST + res.redirected → flashAndReload), включая
+    множественные позиции одним запросом (getlist по product/quantity/...),
+    как и в старом интерфейсе — бизнес-логика не дублируется."""
+    from apps.warehouse.models import (
+        Product, Supplier, WarehouseEntry, WarehouseDistribution,
+        WarehouseTransfer, InventoryDocument,
+    )
+    from apps.users.models import Branch, User
+
+    entries = [{
+        "id": e.pk, "product": e.product.name if e.product_id else "—",
+        "quantity": float(e.quantity), "unit": e.product.unit if e.product_id else "",
+        "price": float(e.price), "supplier": e.supplier.name if e.supplier_id else "—",
+        "date": e.date.strftime("%d.%m.%Y"),
+    } for e in WarehouseEntry.objects.select_related("product", "supplier").order_by("-date", "-id")[:100]]
+
+    distributions = [{
+        "id": d.pk, "product": d.product.name if d.product_id else "—",
+        "quantity": float(d.quantity), "unit": d.product.unit if d.product_id else "",
+        "branch": d.branch.name if d.branch_id else "—",
+        "issuedTo": d.issued_to.name if d.issued_to_id else "—",
+        "date": d.date.strftime("%d.%m.%Y"),
+    } for d in WarehouseDistribution.objects.select_related("product", "branch", "issued_to").order_by("-date", "-id")[:100]]
+
+    transfers = [{
+        "id": tr.pk, "fromBranch": tr.from_branch.name if tr.from_branch_id else "—",
+        "toBranch": tr.to_branch.name if tr.to_branch_id else "—",
+        "date": tr.date.strftime("%d.%m.%Y"),
+        "items": [{"product": it.product.name if it.product_id else "—", "quantity": float(it.quantity)} for it in tr.items.select_related("product").all()],
+    } for tr in WarehouseTransfer.objects.select_related("from_branch", "to_branch").prefetch_related("items__product").order_by("-date", "-id")[:100]]
+
+    inventories = [{
+        "id": inv.pk, "branch": inv.branch.name if inv.branch_id else "—",
+        "date": inv.date.strftime("%d.%m.%Y"), "status": inv.status,
+        "statusLabel": inv.get_status_display(),
+    } for inv in InventoryDocument.objects.select_related("branch").order_by("-date", "-id")[:100]]
+
+    return {
+        "entries": entries,
+        "distributions": distributions,
+        "transfers": transfers,
+        "inventories": inventories,
+        "products": [{"id": p.pk, "name": p.name, "unit": p.unit, "quantity": float(p.quantity)}
+                     for p in Product.objects.filter(is_active=True).order_by("name")],
+        "suppliers": [{"id": s.pk, "name": s.name} for s in Supplier.objects.filter(is_active=True).order_by("name")],
+        "branches": [{"id": b.pk, "name": b.name} for b in Branch.objects.filter(is_active=True).order_by("name")],
+        # Лёгкий список сотрудников для «Кому выдано» (WarehouseDistribution.
+        # issued_to) — полный _newui_staff_data() тяжелее и нужен только
+        # странице «Персонал».
+        "staff": [{"id": u.pk, "name": u.name} for u in User.objects.filter(is_active=True).order_by("name")],
+    }
+
+
 def _newui_reports_data():
     """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта», графики
     на нём же (выручка по неделям, загрузка врачей, источники заявок, причины

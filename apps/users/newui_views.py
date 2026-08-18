@@ -22,7 +22,7 @@ from .views import (
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
     _newui_tasks_data, _newui_medicines_data, _newui_recycle_data,
-    _newui_technicians_data,
+    _newui_technicians_data, _newui_warehouse_ops_data,
 )
 
 
@@ -274,7 +274,10 @@ def newui_lab(request):
 
 @login_required
 def newui_warehouse(request):
-    return _render(request, "warehouse", "warehouse.html", {"warehouseData": _newui_warehouse_data()})
+    return _render(request, "warehouse", "warehouse.html", {
+        "warehouseData": _newui_warehouse_data(),
+        "warehouseOpsData": _newui_warehouse_ops_data(),
+    })
 
 
 @login_required

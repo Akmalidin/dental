@@ -3,16 +3,78 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_warehouse">Склад материалов</h1><div class="topbar-right"></div></div>
       <div class="page">
-        <div class="kpi-grid">
-          <div class="card kpi b-coral"><span class="lbl" data-i18n="w_running_low">Заканчиваются</span><b style="font-size:22px" id="wh-low">—</b></div>
-          <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_warehouse_value">Стоимость склада</span><b style="font-size:22px" id="wh-value">—</b></div>
-          <div class="card kpi b-teal"><span class="lbl" data-i18n="w_active_items">Активных позиций</span><b style="font-size:22px" id="wh-active">—</b></div>
+        <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="chip active" id="whTabStock" onclick="whTab('stock')" data-i18n="w_wh_tab_stock">Остатки</button>
+          <button class="chip" id="whTabEntries" onclick="whTab('entries')" data-i18n="w_wh_tab_entries">Поступления</button>
+          <button class="chip" id="whTabDist" onclick="whTab('dist')" data-i18n="w_wh_tab_distributions">Списания</button>
+          <button class="chip" id="whTabTransfers" onclick="whTab('transfers')" data-i18n="w_wh_tab_transfers">Перемещения</button>
+          <button class="chip" id="whTabInventory" onclick="whTab('inventory')" data-i18n="w_wh_tab_inventory">Инвентаризация</button>
         </div>
-        <div class="card">
-          <table>
-            <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_stock">Остаток</th><th data-i18n="w_unit">Ед.</th><th data-i18n="w_min_stock">Мин. остаток</th><th data-i18n="w_status">Статус</th></tr></thead>
-            <tbody id="wh-table"></tbody>
-          </table>
+
+        <div id="whPanelStock">
+          <div class="kpi-grid">
+            <div class="card kpi b-coral"><span class="lbl" data-i18n="w_running_low">Заканчиваются</span><b style="font-size:22px" id="wh-low">—</b></div>
+            <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_warehouse_value">Стоимость склада</span><b style="font-size:22px" id="wh-value">—</b></div>
+            <div class="card kpi b-teal"><span class="lbl" data-i18n="w_active_items">Активных позиций</span><b style="font-size:22px" id="wh-active">—</b></div>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_stock">Остаток</th><th data-i18n="w_unit">Ед.</th><th data-i18n="w_min_stock">Мин. остаток</th><th data-i18n="w_status">Статус</th></tr></thead>
+              <tbody id="wh-table"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="whPanelEntries" class="hidden">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3 data-i18n="w_wh_tab_entries">Поступления</h3>
+              <button class="btn btn-cobalt btn-sm" onclick="openEntryModal()">+ <span data-i18n="title_m_entry_add">Оприходовать</span></button>
+            </div>
+            <table>
+              <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_wh_qty">Кол-во</th><th data-i18n="w_wh_price">Цена</th><th data-i18n="w_wh_supplier">Поставщик</th><th data-i18n="w_date">Дата</th></tr></thead>
+              <tbody id="whEntriesBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="whPanelDist" class="hidden">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3 data-i18n="w_wh_tab_distributions">Списания</h3>
+              <button class="btn btn-cobalt btn-sm" onclick="openDistributionModal()">+ <span data-i18n="title_m_distribution_add">Списать/выдать</span></button>
+            </div>
+            <table>
+              <thead><tr><th data-i18n="w_material">Материал</th><th data-i18n="w_wh_qty">Кол-во</th><th data-i18n="w_branch">Филиал</th><th data-i18n="w_wh_issued_to">Кому выдано</th><th data-i18n="w_date">Дата</th></tr></thead>
+              <tbody id="whDistBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="whPanelTransfers" class="hidden">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3 data-i18n="w_wh_tab_transfers">Перемещения</h3>
+              <button class="btn btn-cobalt btn-sm" onclick="openTransferModal()">+ <span data-i18n="title_m_transfer_add">Переместить</span></button>
+            </div>
+            <table>
+              <thead><tr><th data-i18n="w_wh_from">Откуда</th><th data-i18n="w_wh_to">Куда</th><th data-i18n="w_wh_items">Позиции</th><th data-i18n="w_date">Дата</th></tr></thead>
+              <tbody id="whTransfersBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="whPanelInventory" class="hidden">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3 data-i18n="w_wh_tab_inventory">Инвентаризация</h3>
+              <button class="btn btn-cobalt btn-sm" onclick="openInventoryModal()">+ <span data-i18n="title_m_inventory_add">Новая инвентаризация</span></button>
+            </div>
+            <table>
+              <thead><tr><th data-i18n="w_branch">Филиал</th><th data-i18n="w_date">Дата</th><th data-i18n="w_status">Статус</th><th></th></tr></thead>
+              <tbody id="whInventoriesBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 {% endblock %}
