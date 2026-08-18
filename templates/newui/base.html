@@ -1339,6 +1339,86 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
+<!-- Склад: поступление (apps.warehouse.WarehouseEntry, несколько позиций
+     за раз — как и старый интерфейс, apps.warehouse.views.entry_create) -->
+<div class="modal-backdrop" id="m-entry-add">
+  <div class="modal wide">
+    <div class="modal-head"><h3 data-i18n="title_m_entry_add">Оприходовать</h3><button class="modal-close" onclick="closeModal('m-entry-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_wh_supplier">Поставщик</label><select id="entry-supplier"><option value="">—</option></select></div>
+        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="entry-date"></div>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
+      <div id="entryRows"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="whAddEntryRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="entry-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-entry-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitEntryForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Склад: списание/выдача (apps.warehouse.WarehouseDistribution, одна
+     позиция — как и WarehouseDistributionForm старого интерфейса) -->
+<div class="modal-backdrop" id="m-distribution-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_distribution_add">Списать/выдать</h3><button class="modal-close" onclick="closeModal('m-distribution-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label data-i18n="w_material">Материал</label><select id="dist-product"></select></div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_wh_qty">Количество</label><input autocomplete="off" type="number" step="0.001" min="0" id="dist-quantity"></div>
+        <div class="form-group"><label data-i18n="w_branch">Филиал</label><select id="dist-branch"></select></div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_wh_issued_to">Кому выдано</label><select id="dist-issued-to"><option value="">—</option></select></div>
+        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="dist-date"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="dist-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-distribution-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitDistributionForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Склад: перемещение между филиалами (apps.warehouse.WarehouseTransfer,
+     несколько позиций — как и apps.warehouse.views.transfer_create) -->
+<div class="modal-backdrop" id="m-transfer-add">
+  <div class="modal wide">
+    <div class="modal-head"><h3 data-i18n="title_m_transfer_add">Переместить</h3><button class="modal-close" onclick="closeModal('m-transfer-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_wh_from">Откуда</label><select id="transfer-from"></select></div>
+        <div class="form-group"><label data-i18n="w_wh_to">Куда</label><select id="transfer-to"></select></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="transfer-date"></div>
+      <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
+      <div id="transferRows"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="whAddTransferRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="transfer-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-transfer-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTransferForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
+<!-- Склад: инвентаризация (apps.warehouse.InventoryDocument, несколько
+     позиций — как и apps.warehouse.views.inventory_create) -->
+<div class="modal-backdrop" id="m-inventory-add">
+  <div class="modal wide">
+    <div class="modal-head"><h3 data-i18n="title_m_inventory_add">Новая инвентаризация</h3><button class="modal-close" onclick="closeModal('m-inventory-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_branch">Филиал</label><select id="inv-branch"></select></div>
+        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="inv-date"></div>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
+      <div id="inventoryRows"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="whAddInventoryRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="inv-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group toggle" style="margin-top:6px;"><input autocomplete="off" type="checkbox" id="inv-post-now"><span style="font-size:13px;margin-left:2px" data-i18n="w_wh_post_now">Провести сразу (скорректировать остатки)</span></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-inventory-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitInventoryForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
 <!-- Причина отмены/переноса -->
 <div class="modal-backdrop" id="m-cancel">
   <div class="modal">
@@ -4235,6 +4315,35 @@ const translations={
   w_tech_added: {ru:'Техник добавлен', ky:'Техник кошулду', en:'Technician added', uz:'Texnik qo\'shildi'},
   w_open: {ru:'Открыть', ky:'Ачуу', en:'Open', uz:'Ochish'},
   w_overdue: {ru:'просрочен', ky:'мөөнөтү өттү', en:'overdue', uz:'muddati o\'tgan'},
+  w_wh_tab_stock: {ru:'Остатки', ky:'Калдыктар', en:'Stock', uz:'Qoldiqlar'},
+  w_wh_tab_entries: {ru:'Поступления', ky:'Кабыл алуулар', en:'Entries', uz:'Kirimlar'},
+  w_wh_tab_distributions: {ru:'Списания', ky:'Чыгашалар', en:'Distributions', uz:'Chiqimlar'},
+  w_wh_tab_transfers: {ru:'Перемещения', ky:'Которуулар', en:'Transfers', uz:'Ko\'chirishlar'},
+  w_wh_tab_inventory: {ru:'Инвентаризация', ky:'Инвентаризация', en:'Inventory', uz:'Inventarizatsiya'},
+  title_m_entry_add: {ru:'Оприходовать', ky:'Кабыл алуу', en:'Receive goods', uz:'Kirim qilish'},
+  title_m_distribution_add: {ru:'Списать/выдать', ky:'Чыгаруу/берүү', en:'Distribute/write off', uz:'Chiqarish/berish'},
+  title_m_transfer_add: {ru:'Переместить', ky:'Которуу', en:'Transfer', uz:'Ko\'chirish'},
+  title_m_inventory_add: {ru:'Новая инвентаризация', ky:'Жаңы инвентаризация', en:'New inventory', uz:'Yangi inventarizatsiya'},
+  w_wh_supplier: {ru:'Поставщик', ky:'Жеткирүүчү', en:'Supplier', uz:'Yetkazib beruvchi'},
+  w_wh_qty: {ru:'Количество', ky:'Саны', en:'Quantity', uz:'Miqdori'},
+  w_wh_price: {ru:'Цена', ky:'Баасы', en:'Price', uz:'Narxi'},
+  w_wh_issued_to: {ru:'Кому выдано', ky:'Кимге берилди', en:'Issued to', uz:'Kimga berildi'},
+  w_wh_from: {ru:'Откуда', ky:'Кайдан', en:'From', uz:'Qayerdan'},
+  w_wh_to: {ru:'Куда', ky:'Кайда', en:'To', uz:'Qayerga'},
+  w_wh_items: {ru:'Позиции', ky:'Позициялар', en:'Items', uz:'Pozitsiyalar'},
+  w_wh_add_row: {ru:'Добавить строку', ky:'Сап кошуу', en:'Add row', uz:'Qator qo\'shish'},
+  w_wh_system_qty: {ru:'По системе', ky:'Система боюнча', en:'System qty', uz:'Tizim bo\'yicha'},
+  w_wh_actual_qty: {ru:'Фактически', ky:'Иш жүзүндө', en:'Actual qty', uz:'Amalda'},
+  w_wh_post_now: {ru:'Провести сразу (скорректировать остатки)', ky:'Дароо өткөрүү (калдыктарды тууралоо)', en:'Post immediately (adjust stock)', uz:'Darhol o\'tkazish (qoldiqlarni tuzatish)'},
+  w_wh_post: {ru:'Провести', ky:'Өткөрүү', en:'Post', uz:'O\'tkazish'},
+  w_wh_add_at_least_one: {ru:'Добавьте хотя бы одну позицию', ky:'Жок дегенде бир позиция кошуңуз', en:'Add at least one item', uz:'Kamida bitta pozitsiya qo\'shing'},
+  w_wh_entry_saved: {ru:'Поступление зафиксировано', ky:'Кабыл алуу катталды', en:'Entry recorded', uz:'Kirim qayd etildi'},
+  w_wh_dist_saved: {ru:'Списание зафиксировано', ky:'Чыгаша катталды', en:'Distribution recorded', uz:'Chiqim qayd etildi'},
+  w_wh_transfer_saved: {ru:'Перемещение создано', ky:'Которуу түзүлдү', en:'Transfer created', uz:'Ko\'chirish yaratildi'},
+  w_wh_inventory_saved: {ru:'Инвентаризация сохранена', ky:'Инвентаризация сакталды', en:'Inventory saved', uz:'Inventarizatsiya saqlandi'},
+  w_wh_choose_diff_branches: {ru:'Выберите разные филиалы', ky:'Ар кандай филиалдарды тандаңыз', en:'Choose different branches', uz:'Turli filiallarni tanlang'},
+  w_confirm_inventory_post: {ru:'Провести инвентаризацию и скорректировать остатки?', ky:'Инвентаризацияны өткөрүп, калдыктарды тууралайсызбы?', en:'Post inventory and adjust stock?', uz:'Inventarizatsiyani o\'tkazib, qoldiqlarni tuzatasizmi?'},
+  w_wh_inventory_posted: {ru:'Инвентаризация проведена', ky:'Инвентаризация өткөрүлдү', en:'Inventory posted', uz:'Inventarizatsiya o\'tkazildi'},
   w_work: {ru:'Работа', ky:'Иш', en:'Work', uz:'Ish'},
   w_items_count: {ru:'позиций', ky:'позиция', en:'items', uz:'pozitsiya'},
   w_order_it: {ru:'Заказать', ky:'Заказ берүү', en:'Order', uz:'Buyurtma berish'},
@@ -4794,6 +4903,216 @@ function renderWarehouse(){
       const [color,labelKey]=statusPill[p.status];
       return `<tr><td>${p.name}</td><td class="mono">${p.quantity}</td><td>${p.unit}</td><td class="mono">${p.minQty}</td><td><span class="pill ${color}" data-i18n="${labelKey}">${t(labelKey)}</span></td></tr>`;
     }).join('');
+}
+
+/* ================= СКЛАД: операции (apps.warehouse) =================
+   Поступления/списания/перемещения/инвентаризации — создание идёт через ТЕ
+   ЖЕ вьюхи-формы старого интерфейса (POST + res.redirected → flashAndReload),
+   включая множественные позиции одним запросом (повторяющиеся поля
+   product/quantity/... — getlist на бэкенде), как и в старом интерфейсе. */
+function whTab(which){
+  ['stock','entries','dist','transfers','inventory'].forEach(tab=>{
+    const panel=document.getElementById('whPanel'+tab.charAt(0).toUpperCase()+tab.slice(1));
+    if(panel) panel.classList.toggle('hidden', tab!==which);
+    const chip=document.getElementById('whTab'+tab.charAt(0).toUpperCase()+tab.slice(1));
+    if(chip) chip.classList.toggle('active', tab===which);
+  });
+}
+function whProductOptions(selected){
+  return (warehouseOpsData.products||[]).map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${p.name} (${p.unit})</option>`).join('');
+}
+function renderWhEntries(){
+  const body=document.getElementById('whEntriesBody');
+  if(!body) return;
+  const list=warehouseOpsData.entries||[];
+  body.innerHTML = list.length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_list_empty')}</td></tr>`
+    : list.map(e=>`<tr><td><b>${e.product}</b></td><td class="mono">${e.quantity} ${e.unit}</td><td class="mono">${fmtSom(e.price)}</td><td>${e.supplier}</td><td class="mono">${e.date}</td></tr>`).join('');
+}
+function renderWhDistributions(){
+  const body=document.getElementById('whDistBody');
+  if(!body) return;
+  const list=warehouseOpsData.distributions||[];
+  body.innerHTML = list.length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_list_empty')}</td></tr>`
+    : list.map(d=>`<tr><td><b>${d.product}</b></td><td class="mono">${d.quantity} ${d.unit}</td><td>${d.branch}</td><td>${d.issuedTo}</td><td class="mono">${d.date}</td></tr>`).join('');
+}
+function renderWhTransfers(){
+  const body=document.getElementById('whTransfersBody');
+  if(!body) return;
+  const list=warehouseOpsData.transfers||[];
+  body.innerHTML = list.length===0
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_list_empty')}</td></tr>`
+    : list.map(tr=>`<tr><td>${tr.fromBranch}</td><td>${tr.toBranch}</td><td>${tr.items.map(it=>`${it.product} × ${it.quantity}`).join(', ')}</td><td class="mono">${tr.date}</td></tr>`).join('');
+}
+function renderWhInventories(){
+  const body=document.getElementById('whInventoriesBody');
+  if(!body) return;
+  const list=warehouseOpsData.inventories||[];
+  body.innerHTML = list.length===0
+    ? `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_list_empty')}</td></tr>`
+    : list.map(inv=>`<tr><td>${inv.branch}</td><td class="mono">${inv.date}</td><td><span class="pill ${inv.status==='posted'?'teal':'grey'}">${inv.statusLabel}</span></td><td>${inv.status==='draft'?`<button class="btn btn-ghost btn-sm" onclick="inventoryPost(${inv.id})">${t('w_wh_post')}</button>`:''}</td></tr>`).join('');
+}
+
+function whAddEntryRow(){
+  const row=document.createElement('div');
+  row.className='form-row2';
+  row.style.cssText='grid-template-columns:2fr 1fr 1fr auto;align-items:end;gap:8px;margin-bottom:6px;';
+  row.innerHTML=`
+    <div class="form-group" style="margin:0;"><select class="entry-row-product">${whProductOptions()}</select></div>
+    <div class="form-group" style="margin:0;"><input autocomplete="off" type="number" step="0.001" min="0" class="entry-row-qty" placeholder="${t('w_wh_qty')}"></div>
+    <div class="form-group" style="margin:0;"><input autocomplete="off" type="number" step="0.01" min="0" class="entry-row-price" placeholder="${t('w_wh_price')}"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.form-row2').remove()">✕</button>`;
+  document.getElementById('entryRows').appendChild(row);
+}
+function whAddTransferRow(){
+  const row=document.createElement('div');
+  row.className='form-row2';
+  row.style.cssText='grid-template-columns:2fr 1fr auto;align-items:end;gap:8px;margin-bottom:6px;';
+  row.innerHTML=`
+    <div class="form-group" style="margin:0;"><select class="transfer-row-product">${whProductOptions()}</select></div>
+    <div class="form-group" style="margin:0;"><input autocomplete="off" type="number" step="0.001" min="0" class="transfer-row-qty" placeholder="${t('w_wh_qty')}"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.form-row2').remove()">✕</button>`;
+  document.getElementById('transferRows').appendChild(row);
+}
+function whAddInventoryRow(){
+  const row=document.createElement('div');
+  row.className='form-row2';
+  row.style.cssText='grid-template-columns:2fr 1fr 1fr auto;align-items:end;gap:8px;margin-bottom:6px;';
+  const sel=`inv-row-product-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+  row.innerHTML=`
+    <div class="form-group" style="margin:0;"><select class="inv-row-product" id="${sel}" onchange="whInvRowProductChange(this)">${whProductOptions()}</select></div>
+    <div class="form-group" style="margin:0;"><input autocomplete="off" type="number" step="0.001" readonly class="inv-row-system" placeholder="${t('w_wh_system_qty')}"></div>
+    <div class="form-group" style="margin:0;"><input autocomplete="off" type="number" step="0.001" min="0" class="inv-row-actual" placeholder="${t('w_wh_actual_qty')}"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.form-row2').remove()">✕</button>`;
+  document.getElementById('inventoryRows').appendChild(row);
+  whInvRowProductChange(document.getElementById(sel));
+}
+function whInvRowProductChange(selEl){
+  const row=selEl.closest('.form-row2');
+  const prod=(warehouseOpsData.products||[]).find(p=>String(p.id)===String(selEl.value));
+  row.querySelector('.inv-row-system').value = prod ? prod.quantity : 0;
+}
+
+function openEntryModal(){
+  document.getElementById('entry-supplier').innerHTML='<option value="">—</option>'+(warehouseOpsData.suppliers||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('entry-date').value=isoDate(new Date());
+  document.getElementById('entry-notes').value='';
+  document.getElementById('entryRows').innerHTML='';
+  whAddEntryRow();
+  openModal('m-entry-add');
+}
+async function submitEntryForm(){
+  const rows=[...document.querySelectorAll('#entryRows .form-row2')];
+  const fd=new FormData();
+  fd.append('supplier', document.getElementById('entry-supplier').value);
+  fd.append('date', document.getElementById('entry-date').value);
+  fd.append('notes', document.getElementById('entry-notes').value.trim());
+  let count=0;
+  rows.forEach(row=>{
+    const pid=row.querySelector('.entry-row-product').value;
+    const qty=row.querySelector('.entry-row-qty').value;
+    const price=row.querySelector('.entry-row-price').value;
+    if(pid && qty){
+      fd.append('product', pid); fd.append('quantity', qty); fd.append('price', price||'0');
+      count++;
+    }
+  });
+  if(!count){ showToast(t('w_wh_add_at_least_one'), 'error'); return; }
+  const res=await postForm('/warehouse/entries/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_wh_entry_saved')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
+function openDistributionModal(){
+  document.getElementById('dist-product').innerHTML=whProductOptions();
+  document.getElementById('dist-quantity').value='';
+  document.getElementById('dist-branch').innerHTML=(warehouseOpsData.branches||[]).map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('dist-issued-to').innerHTML='<option value="">—</option>'+(warehouseOpsData.staff||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('dist-date').value=isoDate(new Date());
+  document.getElementById('dist-notes').value='';
+  openModal('m-distribution-add');
+}
+async function submitDistributionForm(){
+  const qty=document.getElementById('dist-quantity').value;
+  if(!qty){ document.getElementById('dist-quantity').focus(); return; }
+  const fd=new FormData();
+  fd.append('product', document.getElementById('dist-product').value);
+  fd.append('quantity', qty);
+  fd.append('branch', document.getElementById('dist-branch').value);
+  fd.append('issued_to', document.getElementById('dist-issued-to').value);
+  fd.append('date', document.getElementById('dist-date').value);
+  fd.append('notes', document.getElementById('dist-notes').value.trim());
+  const res=await postForm('/warehouse/distributions/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_wh_dist_saved')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
+function openTransferModal(){
+  const opts=(warehouseOpsData.branches||[]).map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('transfer-from').innerHTML=opts;
+  document.getElementById('transfer-to').innerHTML=opts;
+  document.getElementById('transfer-date').value=isoDate(new Date());
+  document.getElementById('transfer-notes').value='';
+  document.getElementById('transferRows').innerHTML='';
+  whAddTransferRow();
+  openModal('m-transfer-add');
+}
+async function submitTransferForm(){
+  const fromB=document.getElementById('transfer-from').value;
+  const toB=document.getElementById('transfer-to').value;
+  if(!fromB || !toB || fromB===toB){ showToast(t('w_wh_choose_diff_branches'), 'error'); return; }
+  const rows=[...document.querySelectorAll('#transferRows .form-row2')];
+  const fd=new FormData();
+  fd.append('from_branch', fromB);
+  fd.append('to_branch', toB);
+  fd.append('date', document.getElementById('transfer-date').value);
+  fd.append('notes', document.getElementById('transfer-notes').value.trim());
+  let count=0;
+  rows.forEach(row=>{
+    const pid=row.querySelector('.transfer-row-product').value;
+    const qty=row.querySelector('.transfer-row-qty').value;
+    if(pid && qty){ fd.append('product', pid); fd.append('quantity', qty); count++; }
+  });
+  if(!count){ showToast(t('w_wh_add_at_least_one'), 'error'); return; }
+  const res=await postForm('/warehouse/transfers/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_wh_transfer_saved')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+
+function openInventoryModal(){
+  document.getElementById('inv-branch').innerHTML=(warehouseOpsData.branches||[]).map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('inv-date').value=isoDate(new Date());
+  document.getElementById('inv-notes').value='';
+  document.getElementById('inv-post-now').checked=false;
+  document.getElementById('inventoryRows').innerHTML='';
+  whAddInventoryRow();
+  openModal('m-inventory-add');
+}
+async function submitInventoryForm(){
+  const rows=[...document.querySelectorAll('#inventoryRows .form-row2')];
+  const fd=new FormData();
+  fd.append('branch', document.getElementById('inv-branch').value);
+  fd.append('date', document.getElementById('inv-date').value);
+  fd.append('notes', document.getElementById('inv-notes').value.trim());
+  if(document.getElementById('inv-post-now').checked) fd.append('post', '1');
+  let count=0;
+  rows.forEach(row=>{
+    const pid=row.querySelector('.inv-row-product').value;
+    const actual=row.querySelector('.inv-row-actual').value;
+    const system=row.querySelector('.inv-row-system').value;
+    if(pid && actual!==''){ fd.append('product', pid); fd.append('system_qty', system||'0'); fd.append('actual_qty', actual); count++; }
+  });
+  if(!count){ showToast(t('w_wh_add_at_least_one'), 'error'); return; }
+  const res=await postForm('/warehouse/inventories/create/', fd);
+  if(res.redirected){ flashAndReload(t('w_wh_inventory_saved')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+}
+async function inventoryPost(id){
+  if(!confirm(t('w_confirm_inventory_post'))) return;
+  const res=await postForm(`/warehouse/inventories/${id}/post/`, new FormData());
+  if(res.redirected){ flashAndReload(t('w_wh_inventory_posted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 
 function renderReportsKpi(){
@@ -7128,6 +7447,7 @@ function rebuildApptsByDateDoc(){
 let financeRealData=null;
 let labRealData=null;
 let warehouseRealData=null;
+let warehouseOpsData={entries:[], distributions:[], transfers:[], inventories:[], products:[], suppliers:[], branches:[], staff:[]};
 let reportsRealData=null;
 let salaryRealData=null;
 let profileRealData=null;
@@ -7746,6 +8066,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     financeRealData=data.financeData || null;
     labRealData=data.labData || null;
     warehouseRealData=data.warehouseData || null;
+    warehouseOpsData=data.warehouseOpsData || {entries:[], distributions:[], transfers:[], inventories:[], products:[], suppliers:[], branches:[], staff:[]};
     reportsRealData=data.reportsData || null;
     salaryRealData=data.salaryData || null;
     profileRealData=data.profileData || null;
@@ -8650,6 +8971,10 @@ renderLabKanban();
 renderTechniciansRoster();
 renderTechnicianPayouts();
 renderWarehouse();
+renderWhEntries();
+renderWhDistributions();
+renderWhTransfers();
+renderWhInventories();
 renderReportsKpi();
 renderTreatplans();
 renderVisits();
