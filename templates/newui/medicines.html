@@ -1,0 +1,40 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Лекарства{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="nav_лекарства">Лекарства</h1>
+        <div class="topbar-right">
+          <button class="btn btn-ghost" onclick="openPrescriptionModal()">+ <span data-i18n="title_m_prescription_add">Назначить лекарство</span></button>
+          <button class="btn btn-cobalt" onclick="openMedicineAddModal()">+ <span data-i18n="title_m_medicine_add">Добавить лекарство</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-head"><h3 data-i18n="nav_лекарства">Лекарства</h3></div>
+          <table>
+            <thead><tr>
+              <th data-i18n="w_med_name">Название</th>
+              <th data-i18n="w_med_form">Форма</th>
+              <th data-i18n="w_med_quantity">Остаток</th>
+              <th data-i18n="w_med_min_qty">Мин. остаток</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="medicinesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3 data-i18n="w_prescriptions_list">Назначения</h3></div>
+          <table>
+            <thead><tr>
+              <th data-i18n="w_patient">Пациент</th>
+              <th data-i18n="w_medicine">Лекарство</th>
+              <th data-i18n="w_med_dosage">Дозировка</th>
+              <th data-i18n="w_med_duration">Длительность</th>
+              <th data-i18n="w_doctor">Врач</th>
+              <th data-i18n="w_med_date">Дата</th>
+            </tr></thead>
+            <tbody id="prescriptionsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}

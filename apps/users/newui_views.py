@@ -21,7 +21,7 @@ from .views import (
     _newui_visits_data, _newui_accounting_data, _newui_audit_data, _newui_notifications_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
-    _newui_tasks_data,
+    _newui_tasks_data, _newui_medicines_data,
 )
 
 
@@ -309,6 +309,18 @@ def newui_tasks(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     return _render(request, "tasks", "tasks.html", {"tasksData": _newui_tasks_data(request, clinic)})
+
+
+@login_required
+def newui_medicines(request):
+    return _render(request, "medicines", "medicines.html", {
+        "medicinesData": _newui_medicines_data(request),
+        # Поиск пациента в модалке «Назначить лекарство» (rxPatientSearch,
+        # base.html) — использует общий patientsList, но он не входит в
+        # _shared_options (страница пациентов сама решает, кому он нужен —
+        # см. cashdesk/messages, тот же паттерн).
+        "patients": _newui_patients_data(),
+    })
 
 
 @login_required
