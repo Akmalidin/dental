@@ -83,7 +83,7 @@
         <span class="nav-label">Пациенты</span>
         {% if dupe_patients_count %}<span class="nav-label badge-dupe-blink text-xs font-bold px-1.5 rounded-full" style="margin-left:auto;background:#F59E0B;color:#fff" title="Возможные дубли пациентов (по телефону)">{{ dupe_patients_count }}</span>{% endif %}
       </a>
-      {% if user.is_superadmin or user.is_admin or user.is_admin_main or clinic_settings.visits_journal_staff %}
+      {% if user.is_superadmin or user.is_admin_main or clinic_settings.visits_journal_staff %}
       <a href="/patients/journal/" class="nav-item {% if 'journal' in u %}active{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><rect x="3" y="4" width="13" height="16" rx="2"/><path d="M8 9h4M8 13h2"/></svg>
         <span class="nav-label">Журнал посещений</span>

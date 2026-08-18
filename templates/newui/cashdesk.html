@@ -14,6 +14,12 @@
         <div id="cashMainPanel">
           <div class="card" style="margin-bottom:14px;" id="shiftCard"></div>
 
+          <!-- Поиск по пациенту — фильтрует и «Пациенты на сегодня», и
+               «Ожидают оплаты» одновременно (по прямому запросу пользователя). -->
+          <div class="search-box" style="max-width:320px;margin-bottom:14px;">
+            <input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="cashSearchInput" placeholder="⌕ Пациент, телефон…" data-i18n-placeholder="w_search_by_name_phone" oninput="cashSearchChanged(this.value)" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;">
+          </div>
+
           <!-- Пациенты сегодня с непогашенным долгом по приёму (Treatment.appointment) —
                не нужно ждать, пока врач явно нажмёт «Отправить в кассу» ниже. -->
           <div class="card-head" style="padding:0 0 10px;border:none;"><h3 data-i18n="w_todays_patients">Пациенты на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);" id="cashTodayCount"></span></div>
@@ -206,8 +212,8 @@ function openCashAcceptModal(notifId){
   if(!item) return;
   cashAcceptItem=item;
   document.getElementById('cashAcceptError').classList.add('hidden');
-  document.getElementById('cashAcceptWho').textContent=item.body || (t('w_from_short')+' '+item.from);
-  document.getElementById('cash-accept-amount').value=item.amount || '';
+  document.getElementById('cashAcceptWho').textContent=(item.patientName ? t('w_patient')+' '+item.patientName+' — ' : '')+t('w_from_short')+' '+item.from;
+  document.getElementById('cash-accept-amount').value=item.amount || item.debt || '';
   document.getElementById('cash-accept-method').value='cash';
   openModal('m-cash-accept');
 }
@@ -338,10 +344,10 @@ function renderCashTodayRow(){
   const el=document.getElementById('cashTodayRow');
   const countEl=document.getElementById('cashTodayCount');
   if(!el || !cashdeskData) return;
-  const list=cashdeskData.todayPatients||[];
+  const list=(cashdeskData.todayPatients||[]).filter(c=>cashMatchesSearch(c.patient, c.patientId));
   if(countEl) countEl.textContent = list.filter(c=>!c.paid).length+' '+t('w_awaiting_payment_short','ожидают оплаты');
   if(list.length===0){
-    el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_no_visits_today','Сегодня приёмов с оплатой нет')}</div>`;
+    el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${cashSearchQuery ? t('w_nothing_found') : t('w_no_visits_today','Сегодня приёмов с оплатой нет')}</div>`;
     return;
   }
   el.innerHTML=list.map(c=>{
@@ -448,6 +454,22 @@ async function submitCashVisitPayment(){
 // renderCashdesk() (base.html, общий скрипт) выполняется РАНЬШЕ этого extra_js-блока
 // и не может звать renderCashTodayRow — она определена только здесь. Дорисовываем сами.
 renderCashTodayRow();
+
+// «Принять оплату» из расписания (клик по карточке записи или меню из 3
+// точек, см. apptActionsHtml в base.html) переходит сюда с ?open_payment=ID —
+// сразу открываем уже существующую модалку оплаты, без повторного поиска
+// пациента на кассе. Если пациент есть в «Пациентах на сегодня» (обычно так
+// и есть — оплата принимается за сегодняшний приём) — открываем ту же
+// модалку, что и по клику на его карточку там; иначе (долг за прошлый визит)
+// падаем на общую модалку «Принять оплату» с пациентом уже выбранным.
+(function openPaymentFromScheduleQuery(){
+  const pid=Number(new URLSearchParams(location.search).get('open_payment'));
+  if(!pid) return;
+  history.replaceState(null, '', location.pathname);
+  const inTodayQueue=((cashdeskData && cashdeskData.todayPatients) || []).some(c=>c.patientId===pid);
+  if(inTodayQueue){ openCashVisitModal(pid); }
+  else { openCashAcceptGeneral(); agSelectPatient(pid); }
+})();
 
 /* ================= «Быстрая продажа» ================= */
 if(document.getElementById('qsOpenBtn')) document.getElementById('qsOpenBtn').classList.toggle('hidden', !CAN_QUICK_SALE);

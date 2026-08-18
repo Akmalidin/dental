@@ -847,8 +847,13 @@ def patient_blacklist_toggle(request, pk):
 
 
 def _visits_journal_allowed(user):
-    """Кому виден общий журнал: всегда директор/админ/суперадмин; персоналу — если разрешил директор."""
-    if user.is_superadmin or getattr(user, "is_admin", False) or getattr(user, "is_admin_main", False):
+    """Кому виден общий журнал: всегда суперадмин/директор (admin_main); остальному
+    персоналу — включая роль «Админ» (ресепшен/администратор клиники) — только
+    если разрешил директор тумблером. Раньше «Админ» тоже всегда обходил
+    тумблер — по жалобе директора (тумблер выключен, а персонал с ролью
+    «Администратор» всё равно видит журнал) сузили обход только до
+    superadmin/admin_main."""
+    if user.is_superadmin or getattr(user, "is_admin_main", False):
         return True
     from apps.settings_clinic.models import ClinicSettings
     cs = ClinicSettings.get()
