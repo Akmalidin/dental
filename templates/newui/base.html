@@ -294,7 +294,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-cell-leftover:hover{background:var(--cobalt-tint);}
 .sched-cell-leftover:hover::after{content:'+ Записать на ' attr(data-time);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1.1;color:var(--cobalt-dark);font-weight:600;pointer-events:none;text-align:center;padding:0 2px;overflow:hidden;}
 .sched-cell-leftover.drop-target{background:var(--cobalt-tint);}
-.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
+.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 21px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
 /* Имя пациента и время приёма — главное, что должно бросаться в глаза на
    карточке (жалоба: «имена, время записи должны явно выделяться»). */
 .sched-appt-name{display:block;color:var(--cobalt-dark);font-size:12.5px;font-weight:700;line-height:1.25;padding-right:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -360,20 +360,24 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
 .sched-appt.sched-appt-time-hide:not(:hover) .sched-appt-time{
   display:none;
 }
-/* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка в
-   левом верхнем углу, сознательно не фон карточки (тот уже занят статусом). */
-.sched-appt-debt-dot{position:absolute;top:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
+/* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка
+   внизу слева (верхний левый угол теперь занят бейджем статуса ниже). */
+.sched-appt-debt-dot{position:absolute;bottom:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
 .sched-appt.teal{background:var(--teal-tint);border-color:var(--teal);}
 .sched-appt.teal .sched-appt-name,.sched-appt.teal .sched-appt-time,.sched-appt.teal .sched-appt-service{color:var(--teal);}
 .sched-appt.coral{background:var(--coral-tint);border-color:var(--coral);}
 .sched-appt.coral .sched-appt-name,.sched-appt.coral .sched-appt-time,.sched-appt.coral .sched-appt-service{color:var(--coral);}
 .sched-appt.amber{background:var(--amber-tint);border-color:var(--amber);}
 .sched-appt.amber .sched-appt-name,.sched-appt.amber .sched-appt-time,.sched-appt.amber .sched-appt-service{color:var(--amber);}
-/* Иконка статуса (ожидание/подтверждено/пришёл/...) — верхний правый угол
-   карточки, рядом с кнопкой ⋮ (см. schedApptQuickMenu). Сама подсказка при
-   наведении — отдельный плавающий элемент #apptHoverTip, не CSS :hover. */
-.sched-appt-status-icon{position:absolute;top:3px;right:20px;font-size:10px;line-height:1;opacity:.85;}
-.week-appt-chip .sched-appt-status-icon{position:static;margin-right:2px;opacity:.9;}
+/* Бейдж статуса (ожидание/подтверждено/пришёл/оплачен/...) — маленький
+   цветной кружок с иконкой в верхнем левом углу карточки (см. референс от
+   пользователя: часы для «в ожидании»/«подтверждено», $ для оплаченного
+   приёма). Сама подсказка при наведении — отдельный плавающий элемент
+   #apptHoverTip, не CSS :hover — см. apptStatusBadgeHtml/schedApptHoverShow. */
+.sched-appt-status-badge{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+.sched-appt-status-badge svg{width:9px;height:9px;display:block;}
+.week-appt-chip .sched-appt-status-badge{position:static;margin-right:3px;box-shadow:none;flex-shrink:0;}
 .appt-hover-tip{position:fixed;z-index:520;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;
   box-shadow:var(--shadow);padding:10px 13px;font-size:12px;line-height:1.55;min-width:220px;max-width:280px;pointer-events:none;}
 .appt-hover-tip .aht-row{display:flex;gap:6px;}
@@ -927,6 +931,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div style="display:flex;gap:4px;">
           <button type="button" class="chip" id="apptChipStep30" style="padding:4px 10px;font-size:11.5px;" onclick="apptSetChipStep(30)">30 <span data-i18n="w_minutes_short">мин</span></button>
           <button type="button" class="chip" id="apptChipStep60" style="padding:4px 10px;font-size:11.5px;" onclick="apptSetChipStep(60)">1 <span data-i18n="w_hour_short">час</span></button>
+          <button type="button" class="chip" id="apptChipStep120" style="padding:4px 10px;font-size:11.5px;" onclick="apptSetChipStep(120)">2 <span data-i18n="w_hours_short_2">часа</span></button>
         </div>
       </div>
       <div style="margin:0 0 14px;">
@@ -3663,6 +3668,7 @@ const translations={
   w_appt_load_failed: {ru:'Не удалось загрузить запись', ky:'Жазууну жүктөө мүмкүн болгон жок', en:'Failed to load appointment', uz:'Yozuvni yuklab bo\'lmadi'},
   w_minutes_short: {ru:'мин', ky:'мүн', en:'min', uz:'daq'},
   w_hour_short: {ru:'час', ky:'саат', en:'hr', uz:'soat'},
+  w_hours_short_2: {ru:'часа', ky:'саат', en:'hrs', uz:'soat'},
   w_appt_slot_busy: {ru:'Это время у врача занято.', ky:'Бул убакытта дарыгер бош эмес.', en:'This time is already booked for this doctor.', uz:'Bu vaqtda shifokor band.'},
   w_appt_slot_suggest: {ru:'Ближайшее свободное — ', ky:'Эң жакын бош убакыт — ', en:'Nearest free slot — ', uz:'Eng yaqin bo\'sh vaqt — '},
   w_delete_history_confirm: {ru:'Удалить эту запись из истории приёмов? Действие можно отменить только через корзину.', ky:'Бул жазууну кабыл алуулар тарыхынан өчүрөсүзбү? Аракетти себеттен гана артка кайтарууга болот.', en:'Delete this entry from the visit history? This can only be undone from the trash.', uz:'Bu yozuvni qabullar tarixidan o\'chirasizmi? Amalni faqat savatdan qaytarish mumkin.'},
@@ -6440,7 +6446,7 @@ function buildDayRibbonHTML(){
           const availablePx=colWidth-6/*паддинг ячейки*/-16/*паддинг карточки*/-6/*gap*/-4/*запас*/;
           if(nameW+timeW>availablePx) timeHideClass=' sched-appt-time-hide';
         }
-        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span><span class="sched-appt-status-icon" title="${appt.statusDisplay||''}">${APPT_STATUS_ICON[appt.statusRaw]||''}</span>${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
+        html+=`<div class="sched-appt ${appt.status}${compact?' compact':''}${timeHideClass}" style="${apptStyle}" data-id="${appt.id}" draggable="${appt.movable!==false}" ondragstart="schedDragStart(event,${appt.id},${appt.movable!==false})" onclick="openApptInfo(${appt.id})" onmouseenter="schedApptHoverShow(event,${appt.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${appt.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(appt.statusRaw, appt.status, appt.statusDisplay)}${debtDot}<b class="sched-appt-name" style="color:${apptText};">${appt.patient}</b><span class="sched-appt-time" style="color:${apptText};">${appt.time}–${endLabel}</span>${appt.service?`<span class="sched-appt-service" style="color:${apptText};">${appt.service}</span>`:''}</div>`;
         if(leftoverMin>=10){
           const leftoverLabel=minutesToTime(apptEndMin);
           html+=`<div class="sched-cell-leftover" style="height:${100-fillPct}%;" data-time="${leftoverLabel}" data-doc="${d.id}" data-date="${dateIso}" title="Записать на ${leftoverLabel}" onclick="event.stopPropagation();schedCellClick('${dateIso}','${leftoverLabel}',${d.id})" ondragover="event.preventDefault();event.stopPropagation();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="event.stopPropagation();schedDrop(event,'${dateIso}','${leftoverLabel}',${d.id})"></div>`;
@@ -6584,6 +6590,24 @@ async function apptSendToCashier(){
    все нужные поля уже приходят в scheduleRealData.appointments (см.
    _newui_schedule_data), лежат в самой карточке — только достать по id. ---- */
 const APPT_STATUS_ICON={scheduled:'⏳',confirmed:'✅',arrived:'🚪',in_progress:'⚕️',completed:'🏁',no_show:'❌'};
+// Бейдж-иконка статуса на самой карточке (по референсу пользователя —
+// цветной кружок с иконкой в левом верхнем углу: часы для «в ожидании»,
+// часы-с-галочкой для «подтверждено»/«пришёл», $ для завершённого приёма
+// (зелёный — оплачен полностью, красный — есть долг), крестик для «не
+// пришёл»). Три SVG-глифа на все статусы — переиспользуются, не 6 разных.
+const APPT_BADGE_ICON_CLOCK='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>';
+const APPT_BADGE_ICON_CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16 9.3"/></svg>';
+const APPT_BADGE_ICON_DOLLAR='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M8.2 8c0-1.7 1.8-3 3.8-3s3.8 1.2 3.8 3-1.8 2.6-3.8 3.1c-2.4.6-3.8 1.5-3.8 3.2s1.8 3 3.8 3 3.8-1.3 3.8-3"/></svg>';
+const APPT_BADGE_ICON_X='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+function apptStatusBadgeHtml(statusRaw, colorKey, title){
+  let bg=SCHED_STATUS_DEFAULT_COLORS.cobalt, icon=APPT_BADGE_ICON_CLOCK;
+  if(statusRaw==='scheduled'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CLOCK; }
+  else if(statusRaw==='confirmed'){ bg=SCHED_STATUS_DEFAULT_COLORS.cobalt; icon=APPT_BADGE_ICON_CHECK; }
+  else if(statusRaw==='arrived' || statusRaw==='in_progress'){ bg=SCHED_STATUS_DEFAULT_COLORS.amber; icon=APPT_BADGE_ICON_CHECK; }
+  else if(statusRaw==='completed'){ bg=colorKey==='coral'?SCHED_STATUS_DEFAULT_COLORS.coral:SCHED_STATUS_DEFAULT_COLORS.teal; icon=APPT_BADGE_ICON_DOLLAR; }
+  else if(statusRaw==='no_show'){ bg=SCHED_STATUS_DEFAULT_COLORS.coral; icon=APPT_BADGE_ICON_X; }
+  return `<span class="sched-appt-status-badge" style="background:${bg};" title="${title||''}">${icon}</span>`;
+}
 function apptById(apptId){
   return (scheduleRealData && scheduleRealData.appointments || []).find(a=>a.id===apptId);
 }
@@ -6851,7 +6875,7 @@ function buildWeekHTML(){
         html+=`<td class="week-cell-empty" onclick="schedWeekCellClick('${isoDate(dt)}',${d.id})" title="${t('w_new_appt')}">`;
         appts.forEach(a=>{
           const statusHex=schedStatusColor(a.status), chipText=darkenColor(statusHex, .72);
-          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})" onmouseenter="schedApptHoverShow(event,${a.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span><span class="sched-appt-status-icon" title="${a.statusDisplay||''}">${APPT_STATUS_ICON[a.statusRaw]||''}</span><b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
+          html+=`<div class="week-appt-chip ${a.status}" style="background:${hexToRgba(statusHex, .22)};color:${chipText};" onclick="event.stopPropagation();openApptInfo(${a.id})" onmouseenter="schedApptHoverShow(event,${a.id})" onmouseleave="schedApptHoverHide()"><span class="sched-appt-menu-btn" onclick="event.stopPropagation();schedApptQuickMenu(event,${a.id})" title="Действия">⋮</span>${apptStatusBadgeHtml(a.statusRaw, a.status, a.statusDisplay)}<b style="color:${chipText};">${a.time}</b>${a.patient}</div>`;
         });
         html+='</td>';
       }
@@ -7154,9 +7178,10 @@ function apptSetChipStep(min){
 }
 function renderApptTimeChips(){
   const box=document.getElementById('apptTimeChips');
-  const btn30=document.getElementById('apptChipStep30'), btn60=document.getElementById('apptChipStep60');
+  const btn30=document.getElementById('apptChipStep30'), btn60=document.getElementById('apptChipStep60'), btn120=document.getElementById('apptChipStep120');
   if(btn30) btn30.classList.toggle('active', apptChipStepMin===30);
   if(btn60) btn60.classList.toggle('active', apptChipStepMin===60);
+  if(btn120) btn120.classList.toggle('active', apptChipStepMin===120);
   if(!box) return;
   const dateIso=document.getElementById('appt-date').value;
   if(!dateIso){ box.innerHTML=''; return; }
