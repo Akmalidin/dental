@@ -45,7 +45,19 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 
 /* ===== APP SHELL ===== */
 .app-shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
-.sidebar{background:var(--ink);color:#fff;padding:20px 14px;display:flex;flex-direction:column;}
+/* min-height:0 — без него грид-ячейка по умолчанию min-height:auto, т.е. не
+   сжимается меньше своего содержимого: длинный список разделов в сайдбаре
+   (много пунктов меню) растягивал саму ячейку и весь .app-shell выше 100vh,
+   несмотря на явный height:100vh на контейнере (grid его не обрезает без
+   min-height:0 на ребёнке) — итог: у страницы появлялся ВТОРОЙ, внешний
+   скролл документа поверх уже собственного скролла .main (жалоба «нужно
+   убрать один из этих скролов», два скроллбара рядом на скриншоте с
+   Windows — там скроллбары всегда видимы, в отличие от оверлейных на Mac/
+   мобильных, где эта же проблема была, просто незаметна). overflow-y:auto —
+   сам сайдбар получает свой скролл, если пунктов меню больше, чем помещается
+   по высоте, вместо распирания всей страницы. Мобильный .sidebar (media
+   query ниже, position:fixed) не задет — там сайдбар уже не часть грида. */
+.sidebar{background:var(--ink);color:#fff;padding:20px 14px;display:flex;flex-direction:column;min-height:0;overflow-y:auto;}
 /* Кнопка-гамбургер и подложка для мобильного меню — скрыты по умолчанию,
    показываются только ниже брейкпоинта (см. @media(max-width:900px) ниже).
    Кнопка зафиксирована в углу экрана независимо от разметки topbar конкретной
@@ -6718,6 +6730,17 @@ function updateVisibleDayLabelFromScroll(){
   // ней сейчас в фокусе (все подписи выглядели одинаково). Снимаем класс со
   // всех, кроме найденной — на всю ленту одновременно активен только один день.
   groups.forEach(g=>{ g.classList.toggle('sched-day-group-current', g===current); });
+  // Та же подсветка — в «плавающей» копии шапки (см. syncFixedScheduleHeader):
+  // это отдельный DOM (не тот же самый #schedGrid), классы выше на неё не
+  // распространяются сами по себе. Без этого при прокрутке страницы вниз
+  // (копия видна) число и день переставали подсвечиваться совсем — жалоба
+  // «при прокрутке число и день не выделяется».
+  const shadowInner=document.getElementById('schedFixedHeaderInner');
+  if(shadowInner){
+    shadowInner.querySelectorAll('.sched-day-group-label').forEach(g=>{
+      g.classList.toggle('sched-day-group-current', g.dataset.date===iso);
+    });
+  }
 }
 
 // Кнопка «Сегодня» — возвращает ленту на текущую дату (currentDayOffset=0),
@@ -6804,10 +6827,6 @@ function renderSchedule(){
   if(calView==='day'){
     updateDayDateLabel();
     c.innerHTML = buildDayRibbonHTML();
-    // Подсветить якорный (первый) день сразу, не дожидаясь скролла —
-    // иначе после каждой перерисовки (смена дня/фильтра врачей) лента на
-    // мгновение оставалась без активной подсветки.
-    updateVisibleDayLabelFromScroll();
     positionScheduleNowLine();
   }
   else if(calView==='week'){
@@ -6824,6 +6843,15 @@ function renderSchedule(){
   // ветке calView==='day' выше.
   renderFixedScheduleHeaderContent();
   syncFixedScheduleHeader();
+  // Подсветить якорный (первый/текущий в фокусе) день сразу, не дожидаясь
+  // скролла — иначе после каждой перерисовки (смена дня/фильтра врачей)
+  // лента на мгновение оставалась без активной подсветки. Обязательно
+  // ПОСЛЕ renderFixedScheduleHeaderContent() выше: та безусловно
+  // перестраивает innerHTML «плавающей» копии шапки заново (без классов
+  // подсветки), поэтому синхронизация подсветки (см. конец
+  // updateVisibleDayLabelFromScroll) должна идти следующим шагом, иначе
+  // копия окажется на мгновение неподсвеченной до первого скролла.
+  if(calView==='day') updateVisibleDayLabelFromScroll();
 }
 function updateWeekDateLabel(){
   document.getElementById('schedViewLabel').textContent=t('w_view_week','Вид: неделя');
@@ -7282,6 +7310,10 @@ function appendRibbonDays(count){
   positionScheduleNowLine();
   renderFixedScheduleHeaderContent();
   syncFixedScheduleHeader();
+  // renderFixedScheduleHeaderContent() выше безусловно перестроило «плавающую»
+  // копию шапки без подсветки текущего дня — восстанавливаем её (см. конец
+  // updateVisibleDayLabelFromScroll).
+  updateVisibleDayLabelFromScroll();
 }
 
 /* ---- Запись: просмотр + действия (та же логика, что в старом интерфейсе:
