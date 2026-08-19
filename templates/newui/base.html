@@ -6718,6 +6718,7 @@ function goToScheduleToday(){
     const c=document.getElementById('scheduleContent');
     if(c) c.scrollLeft=0;
     updateDayDateLabel();
+    positionScheduleNowLine();
     return;
   }
   changeDay(delta);
@@ -7131,24 +7132,29 @@ function positionScheduleNowLine(){
   const startMin=calSettings.start*60, endMin=calSettings.end*60, interval=calSettings.interval;
   if(nowMin<startMin || nowMin>endMin) return; // сейчас вне рабочих часов клиники
   const todayIso=isoDate(now);
-  const cells=[...grid.querySelectorAll(`[data-date="${todayIso}"]`)];
-  if(cells.length===0) return; // сегодня сейчас не в видимой части ленты
+  // Ширина — от подписи-даты дня (ровно ОДИН элемент на день, с явным
+  // grid-column:span N на всю его группу врачей, см. buildDayRibbonHTML) —
+  // а не агрегацией по всем ячейкам с этой датой: если бы сегодняшняя дата
+  // почему-то встретилась в ленте больше одного раза, querySelectorAll по
+  // ячейкам растянул бы линию от первого до последнего вхождения, через
+  // чужие дни между ними. querySelector (в единственном числе) берёт только
+  // первое совпадение — линия физически не может растянуться шире одной
+  // группы дня.
+  const dayLabel=grid.querySelector(`.sched-day-group-label[data-date="${todayIso}"]`);
+  if(!dayLabel) return; // сегодня сейчас не в видимой части ленты
   const firstSlotCell=grid.querySelector('.sched-time');
   if(!firstSlotCell) return;
   const gridRect=grid.getBoundingClientRect();
   const slotTop=firstSlotCell.getBoundingClientRect().top - gridRect.top;
-  let minLeft=Infinity, maxRight=-Infinity;
-  cells.forEach(c=>{
-    const r=c.getBoundingClientRect();
-    minLeft=Math.min(minLeft, r.left - gridRect.left);
-    maxRight=Math.max(maxRight, r.right - gridRect.left);
-  });
+  const labelRect=dayLabel.getBoundingClientRect();
+  const leftPx=labelRect.left - gridRect.left;
+  const widthPx=labelRect.width;
   const topPx=slotTop + (nowMin-startMin)/interval*SCHED_ROW_PX;
   const line=document.createElement('div');
   line.className='sched-now-line';
   line.style.top=topPx+'px';
-  line.style.left=minLeft+'px';
-  line.style.width=(maxRight-minLeft)+'px';
+  line.style.left=leftPx+'px';
+  line.style.width=widthPx+'px';
   grid.appendChild(line);
 }
 // Пересчитываем раз в минуту, чтобы линия ползла вниз, пока страница
