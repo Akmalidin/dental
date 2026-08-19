@@ -1,6 +1,7 @@
 import React from "react";
 import { Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { theme } from "./theme";
+import { AnimatedCursor, CursorPoint } from "./AnimatedCursor";
 
 // Реальный скриншот страницы системы (см. public/screens/*.jpg, генерируются
 // screenshot.js в scratchpad — не абстрактный макет, а настоящий /new/* UI)
@@ -18,7 +19,8 @@ export const PageFrame: React.FC<{
   zoomTo?: number;
   panXPct?: number; // % ширины изображения — лёгкий боковой пан
   focusTop?: boolean; // true = якорь кадрирования сверху (для длинных списков)
-}> = ({ file, duration, width = 1360, zoomFrom = 1.07, zoomTo = 1.0, panXPct = 0, focusTop = true }) => {
+  cursorPoints?: CursorPoint[]; // 1–2 точки клика (% от области скриншота)
+}> = ({ file, duration, width = 1360, zoomFrom = 1.07, zoomTo = 1.0, panXPct = 0, focusTop = true, cursorPoints }) => {
   const frame = useCurrentFrame();
   const t = Math.min(1, frame / Math.max(duration - 1, 1));
   const scale = interpolate(t, [0, 1], [zoomFrom, zoomTo]);
@@ -54,6 +56,7 @@ export const PageFrame: React.FC<{
               transformOrigin: focusTop ? "top center" : "center",
             }}
           />
+          {cursorPoints && <AnimatedCursor points={cursorPoints} duration={duration} />}
         </div>
       </div>
     </div>
