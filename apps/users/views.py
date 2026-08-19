@@ -532,8 +532,9 @@ def _newui_finance_data(clinic):
     from datetime import timedelta
     from django.db.models import Sum
     from django.utils import timezone
-    from apps.finance.models import Payment, Expense, PatientAdvance
+    from apps.finance.models import Payment, Expense, PatientAdvance, ExpenseCategory
     from apps.patients.models import Patient
+    from apps.users.models import Branch
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
@@ -571,6 +572,9 @@ def _newui_finance_data(clinic):
         })
     txns.sort(key=lambda t: t["time"], reverse=True)
 
+    branches = [{"id": b.pk, "name": b.name} for b in Branch.objects.filter(is_active=True).order_by("-is_main", "name")]
+    expense_categories = [{"id": c.pk, "name": c.name} for c in ExpenseCategory.objects.order_by("name")]
+
     return {
         "revenueMonth": revenue_month,
         "expensesMonth": expenses_month,
@@ -578,6 +582,8 @@ def _newui_finance_data(clinic):
         "debtTotal": debt_total,
         "debtCount": debt_count,
         "transactions": txns[:12],
+        "branches": branches,
+        "expenseCategories": expense_categories,
     }
 
 

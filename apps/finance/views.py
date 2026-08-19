@@ -634,9 +634,10 @@ def expense_create(request):
     if request.method == "POST" and form.is_valid():
         expense = form.save(commit=False)
         expense.created_by = request.user
-        # категория — авто (поле убрано из формы)
-        cat, _x = ExpenseCategory.objects.get_or_create(name="Прочее")
-        expense.category = cat
+        # категория необязательна в форме — если не выбрана, «Прочее» по умолчанию
+        if not expense.category_id:
+            cat, _x = ExpenseCategory.objects.get_or_create(name="Прочее")
+            expense.category = cat
         if not expense.branch_id:
             from apps.users.models import Branch
             from apps.tenancy import get_current_clinic
@@ -652,6 +653,22 @@ def expense_create(request):
         messages.success(request, _("Расход добавлен"))
         return redirect("expense_list")
     return render(request, "finance/expense_form.html", {"form": form})
+
+
+@login_required
+@require_permission("finance.manage_expenses")
+def expense_category_add(request):
+    """Категория расхода — тот же паттерн, что и apps.services.views.category_create
+    / apps.warehouse.views.product_category_add (инлайн-добавление из модалки)."""
+    from django.http import JsonResponse
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            cat, _created = ExpenseCategory.objects.get_or_create(name=name)
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "id": cat.pk, "name": cat.name})
+            messages.success(request, _("Категория добавлена"))
+    return redirect(request.META.get("HTTP_REFERER", "expense_list"))
 
 
 @login_required
