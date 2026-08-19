@@ -262,6 +262,19 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    пересчитывается в JS (positionScheduleNowLine), CSS только рисует. */
 .sched-now-line{position:absolute;height:0;border-top:2px solid var(--coral);z-index:6;pointer-events:none;}
 .sched-now-line::before{content:'';position:absolute;left:-5px;top:-5px;width:9px;height:9px;border-radius:50%;background:var(--coral);}
+/* «Плавающая» копия шапки (подписи дат + врачи, только дневной вид) —
+   position:fixed поверх страницы при прокрутке вниз, см. JS
+   syncFixedScheduleHeader/renderFixedScheduleHeaderContent. Не сам элемент
+   #schedGrid через position:sticky — внутри .sched-wrap с overflow-x:auto
+   (горизонтальная лента дней) sticky по вертикали физически не может
+   «прилипнуть» к скроллу .main: overflow-x создаёт свой контекст скролла,
+   который перехватывает stickiness раньше, чем она дошла бы до страницы.
+   overflow:hidden обрезает копию по видимой ширине ленты — сама колонка
+   внутри (.sched-fixed-header-inner) шире и сдвигается влево/вправо через
+   translateX синхронно с scrollLeft настоящей ленты (см. JS). */
+.sched-fixed-header{position:fixed;overflow:hidden;z-index:20;background:var(--paper);border-bottom:1px solid var(--mist);box-shadow:0 3px 10px rgba(0,0,0,.08);display:none;}
+.sched-fixed-header.show{display:block;}
+.sched-fixed-header-inner{display:grid;grid-template-rows:auto auto;}
 .sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
 .sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
 /* Лента дней (дневной вид): подпись-дата над каждой группой врачей одного
@@ -286,7 +299,7 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    (см. buildDayRibbonHTML) под конкретный фон, статикой в CSS это не выразить. */
 .sched-doc{display:flex;flex-direction:column;align-items:center;gap:4px;}
 .sched-doc .av{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
-.sched-doc b{font-size:13px;}
+.sched-doc b{font-size:11px;}
 .sched-doc span{font-size:10.5px;}
 /* Ячейки крупнее (56px→76px) — имя и время записи должны читаться сразу,
    без прищуривания. */
@@ -6719,6 +6732,7 @@ function goToScheduleToday(){
     if(c) c.scrollLeft=0;
     updateDayDateLabel();
     positionScheduleNowLine();
+    syncFixedScheduleHeader();
     return;
   }
   changeDay(delta);
@@ -6805,6 +6819,11 @@ function renderSchedule(){
     c.innerHTML = buildMonthHTML();
   }
   attachScheduleScrollWatcher();
+  // «Плавающая» копия шапки (см. syncFixedScheduleHeader) — сама скрывает
+  // себя вне дневного вида, поэтому вызывается безусловно, а не только в
+  // ветке calView==='day' выше.
+  renderFixedScheduleHeaderContent();
+  syncFixedScheduleHeader();
 }
 function updateWeekDateLabel(){
   document.getElementById('schedViewLabel').textContent=t('w_view_week','Вид: неделя');
@@ -6940,6 +6959,42 @@ function apptMeasureTextWidth(text, font){
   _apptMeasureCtx.font=font;
   return _apptMeasureCtx.measureText(text).width;
 }
+// Строки 1-2 сетки дня (подписи дат + шапка врачей) — вынесены в отдельную
+// функцию, т.к. используются ДВАЖДЫ: один раз в самом #schedGrid (обычный
+// поток), второй раз в «плавающей» копии-шапке (#schedFixedHeader), которая
+// становится видна поверх страницы при прокрутке вниз, когда родная шапка
+// уходит наверх за топбар (см. syncFixedScheduleHeader) — по прямому запросу
+// «сделай position fixed». Копия — не сам элемент через position:fixed
+// (внутри .sched-wrap с overflow-x:auto для горизонтальной ленты дней
+// position:sticky/fixed по вертикали физически не может «прилипнуть» к
+// внешнему скроллу страницы — overflow-x создаёт свой контекст скролла,
+// который перехватывает stickiness раньше, чем она доходит до .main), а
+// отдельный fixed-блок с тем же grid-template-columns, который синхронизирует
+// свой transform:translateX с scrollLeft настоящей ленты — стандартный приём
+// для «заморозки» шапки в горизонтально скроллящихся таблицах.
+function buildDayHeaderRowsHTML(visibleDocs, n, docColorOf){
+  let html='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>';
+  // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
+  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
+    const d=new Date(dateIso+'T00:00:00');
+    const colStart=2+dayIdx*n;
+    html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:${colStart} / span ${n};grid-row:1;"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
+  });
+  // Шапка врачей — повторяется под каждым днём ленты. Сплошная плашка цвета
+  // врача (не тонкая полоска) — цвет из карточки сотрудника виден сразу,
+  // текст/аватар подстраиваются под контраст (contrastTextColor).
+  html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:2;"></div>';
+  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
+    visibleDocs.forEach((d, docIdx)=>{
+      const col=2+dayIdx*n+docIdx;
+      const docColor=docColorOf[d.id];
+      const txt=contrastTextColor(docColor);
+      const avBg=txt==='#ffffff' ? 'rgba(255,255,255,.24)' : 'rgba(0,0,0,.12)';
+      html+=`<div class="sched-head" style="grid-column:${col};grid-row:2;background:${docColor};"><div class="sched-doc" style="color:${txt};"><div class="av" style="background:${avBg};color:${txt};">${d.init}</div><b style="color:${txt};">${d.name}</b><span style="color:${txt};opacity:.85;">${d.role}</span></div></div>`;
+    });
+  });
+  return html;
+}
 function buildDayRibbonHTML(){
   if(scheduleRibbonDates.length===0) scheduleRibbonDates=ribbonInitialDates();
   const visibleDocs=visibleScheduleDoctors();
@@ -6961,37 +7016,19 @@ function buildDayRibbonHTML(){
   // зашита в разметку: жалоба «карточки слишком узкие» + прямой запрос дать
   // самим регулировать ширину.
   const colWidth=calSettings.colWidth||150;
-  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:60px repeat(${totalCols},minmax(${colWidth}px,1fr));grid-template-rows:auto auto repeat(${numSlots},${SCHED_ROW_PX}px);min-width:${60+totalCols*colWidth}px;">`;
-  html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>';
+  const gridTemplateColumns=`60px repeat(${totalCols},minmax(${colWidth}px,1fr))`;
+  let html=`<div class="sched-grid sched-grid-ribbon" id="schedGrid" style="grid-template-columns:${gridTemplateColumns};grid-template-rows:auto auto repeat(${numSlots},${SCHED_ROW_PX}px);min-width:${60+totalCols*colWidth}px;">`;
   if(scheduleDoctors.length===0){
-    return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
+    return html+'<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>'+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_no_doctors_clinic')}</div>`;
   }
   if(visibleDocs.length===0){
-    return html+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</div>`;
+    return html+'<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:1;"></div>'+`</div><div style="padding:30px;text-align:center;color:var(--ink-soft);">${t('w_sched_all_doctors_hidden')}</div>`;
   }
   // Цвет на врача — считаем один раз (по id), используется и в шапке, и в
   // подсветке ячеек его колонки ниже.
   const docColorOf={};
   visibleDocs.forEach((d,idx)=>{ docColorOf[d.id]=d.color || SCHED_FALLBACK_DOC_COLORS[idx % SCHED_FALLBACK_DOC_COLORS.length]; });
-  // Строка дат — по одной подписи на день, растянутой на всю его группу врачей.
-  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
-    const d=new Date(dateIso+'T00:00:00');
-    const colStart=2+dayIdx*n;
-    html+=`<div class="sched-day-group-label" data-date="${dateIso}" style="grid-column:${colStart} / span ${n};grid-row:1;"><span>${formatDMY(d)}, ${weekdayFullName(d)}</span></div>`;
-  });
-  // Шапка врачей — повторяется под каждым днём ленты. Сплошная плашка цвета
-  // врача (не тонкая полоска) — цвет из карточки сотрудника виден сразу,
-  // текст/аватар подстраиваются под контраст (contrastTextColor).
-  html+='<div class="sched-head sched-head-corner" style="grid-column:1;grid-row:2;"></div>';
-  scheduleRibbonDates.forEach((dateIso, dayIdx)=>{
-    visibleDocs.forEach((d, docIdx)=>{
-      const col=2+dayIdx*n+docIdx;
-      const docColor=docColorOf[d.id];
-      const txt=contrastTextColor(docColor);
-      const avBg=txt==='#ffffff' ? 'rgba(255,255,255,.24)' : 'rgba(0,0,0,.12)';
-      html+=`<div class="sched-head" style="grid-column:${col};grid-row:2;background:${docColor};"><div class="sched-doc" style="color:${txt};"><div class="av" style="background:${avBg};color:${txt};">${d.init}</div><b style="color:${txt};">${d.name}</b><span style="color:${txt};opacity:.85;">${d.role}</span></div></div>`;
-    });
-  });
+  html+=buildDayHeaderRowsHTML(visibleDocs, n, docColorOf);
   // Колонка времени слева — по одной ячейке на слот, всегда одна строка высотой.
   for(let s=0;s<numSlots;s++){
     html+=`<div class="sched-time" style="grid-column:1;grid-row:${3+s};">${minutesToTime(startMin+s*interval)}</div>`;
@@ -7111,6 +7148,70 @@ function buildDayRibbonHTML(){
   html+='</div>';
   return html;
 }
+// «Плавающая» копия шапки (подписи дат + шапка врачей) — становится видна
+// (position:fixed) поверх страницы, когда родная шапка сетки уходит вверх
+// за топбар при прокрутке страницы вниз — прямой запрос «сделай position
+// fixed». Разбито на две функции: содержимое (HTML) обновляется РЕЖЕ —
+// только когда меняются дни/врачи ленты (те же места, что и
+// positionScheduleNowLine — renderSchedule/appendRibbonDays); позиция и
+// видимость (top/left/width/translateX) пересчитываются ЧАЩЕ — на каждый
+// скролл страницы (.main) и самой ленты (#scheduleContent), см. привязку
+// обработчиков ниже.
+function renderFixedScheduleHeaderContent(){
+  const inner=document.getElementById('schedFixedHeaderInner');
+  if(!inner) return;
+  if(calView!=='day'){ inner.innerHTML=''; return; }
+  const grid=document.getElementById('schedGrid');
+  if(!grid){ inner.innerHTML=''; return; }
+  const visibleDocs=visibleScheduleDoctors();
+  const n=Math.max(visibleDocs.length,1);
+  if(scheduleDoctors.length===0 || visibleDocs.length===0){ inner.innerHTML=''; return; }
+  const docColorOf={};
+  visibleDocs.forEach((d,idx)=>{ docColorOf[d.id]=d.color || SCHED_FALLBACK_DOC_COLORS[idx % SCHED_FALLBACK_DOC_COLORS.length]; });
+  inner.style.gridTemplateColumns=grid.style.gridTemplateColumns;
+  inner.style.gridTemplateRows='auto auto';
+  inner.innerHTML=buildDayHeaderRowsHTML(visibleDocs, n, docColorOf);
+  // Ширина копии = реальная scrollWidth настоящей сетки (не пересчёт «на
+  // глаз» — те же minmax(...,1fr) колонки должны получить пиксельно тот же
+  // размер, что и в оригинале, иначе translateX ниже в syncFixedScheduleHeader
+  // будет чуть промахиваться мимо настоящих колонок при горизонтальной
+  // прокрутке ленты).
+  inner.style.width=grid.scrollWidth+'px';
+}
+function syncFixedScheduleHeader(){
+  const outer=document.getElementById('schedFixedHeader');
+  if(!outer) return;
+  const grid=document.getElementById('schedGrid');
+  const wrap=document.getElementById('scheduleContent');
+  const topbar=document.querySelector('.topbar');
+  if(calView!=='day' || !grid || !wrap || !topbar){ outer.classList.remove('show'); return; }
+  const topbarBottom=topbar.getBoundingClientRect().bottom;
+  const gridRect=grid.getBoundingClientRect();
+  // Показываем копию, только когда родная шапка (верх сетки — там же
+  // начинаются строки дат/врачей) уже скрылась под топбаром.
+  if(gridRect.top < topbarBottom){
+    outer.classList.add('show');
+    outer.style.top=topbarBottom+'px';
+    const wrapRect=wrap.getBoundingClientRect();
+    outer.style.left=wrapRect.left+'px';
+    outer.style.width=wrapRect.width+'px';
+    const inner=document.getElementById('schedFixedHeaderInner');
+    if(inner) inner.style.transform='translateX('+(-wrap.scrollLeft)+'px)';
+  } else {
+    outer.classList.remove('show');
+  }
+}
+let _fixedHeaderSyncTicking=false;
+function requestSyncFixedScheduleHeader(){
+  if(_fixedHeaderSyncTicking) return;
+  _fixedHeaderSyncTicking=true;
+  requestAnimationFrame(()=>{ syncFixedScheduleHeader(); _fixedHeaderSyncTicking=false; });
+}
+(function initFixedScheduleHeaderScroll(){
+  const mainEl=document.querySelector('main.main');
+  if(mainEl) mainEl.addEventListener('scroll', requestSyncFixedScheduleHeader, {passive:true});
+  window.addEventListener('resize', requestSyncFixedScheduleHeader);
+})();
 // Красная линия «сейчас» — только дневной вид (у недели/месяца нет часовой
 // сетки со слотами, см. buildWeekHTML/buildMonthHTML — там просто список
 // карточек на день, без вертикальной оси времени). Показывается, только
@@ -7179,6 +7280,8 @@ function appendRibbonDays(count){
   el.innerHTML=buildDayRibbonHTML();
   el.scrollLeft=prevScrollLeft;
   positionScheduleNowLine();
+  renderFixedScheduleHeaderContent();
+  syncFixedScheduleHeader();
 }
 
 /* ---- Запись: просмотр + действия (та же логика, что в старом интерфейсе:
@@ -7588,6 +7691,11 @@ function attachScheduleScrollWatcher(){
       labelTicking=true;
       requestAnimationFrame(()=>{ updateVisibleDayLabelFromScroll(); labelTicking=false; });
     }
+    // Горизонтальная прокрутка ленты — синхронизируем translateX «плавающей»
+    // копии шапки (см. syncFixedScheduleHeader), иначе при видимой копии
+    // (уже проскроллили страницу вниз) её колонки разъедутся с настоящими
+    // под ней при скролле ленты вбок.
+    requestSyncFixedScheduleHeader();
   });
 }
 
