@@ -1,5 +1,5 @@
 from django import forms
-from .models import Payment, Expense
+from .models import Payment, Expense, ExpenseCategory
 
 
 class PaymentForm(forms.ModelForm):
@@ -38,7 +38,7 @@ class PaymentForm(forms.ModelForm):
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
-        fields = ["amount", "description", "branch", "date"]  # категория — авто
+        fields = ["category", "amount", "description", "branch", "date"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 2}),
@@ -55,3 +55,8 @@ class ExpenseForm(forms.ModelForm):
             qs = qs.filter(clinic=clinic)
         self.fields["branch"].queryset = qs.order_by("-is_main", "name")
         self.fields["branch"].required = False
+        # Категория необязательна на уровне формы — если не выбрана, view
+        # проставит «Прочее» (см. expense_create), как и раньше, когда поля
+        # вообще не было. ExpenseCategory уже clinic-scoped менеджером.
+        self.fields["category"].queryset = ExpenseCategory.objects.order_by("name")
+        self.fields["category"].required = False

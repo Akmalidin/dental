@@ -15,6 +15,7 @@ urlpatterns = [
     path("payments/<int:pk>/receipt/", views.payment_receipt, name="payment_receipt"),
     path("expenses/", views.expense_list, name="expense_list"),
     path("expenses/create/", views.expense_create, name="expense_create"),
+    path("expenses/category/add/", views.expense_category_add, name="expense_category_add"),
     path("expenses/<int:pk>/delete/", views.expense_delete, name="expense_delete"),
     path("debtors/", views.debtors_list, name="debtors_list"),
 ]

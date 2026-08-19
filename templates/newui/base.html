@@ -1479,6 +1479,36 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
+<!-- Финансы: ручной расход (apps.finance.Expense/ExpenseCategory,
+     apps.finance.views.expense_create — та же вьюха, что и у старого
+     интерфейса, категория теперь выбирается, а не всегда «Прочее»). -->
+<div class="modal-backdrop" id="m-expense-add">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="title_m_expense_add">Новый расход</h3><button class="modal-close" onclick="closeModal('m-expense-add')">✕</button></div>
+    <div class="modal-body">
+      <div id="expenseAddError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+      <div class="form-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label data-i18n="w_category" style="margin:0;">Категория</label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('expNewCatWrap').classList.toggle('hidden')">+ <span data-i18n="w_new_category">Новая категория</span></button>
+        </div>
+        <select id="exp-category"><option value="">—</option></select>
+        <div id="expNewCatWrap" class="hidden" style="display:flex;gap:8px;margin-top:8px;">
+          <input autocomplete="off" type="text" id="exp-new-cat-name" placeholder="Название категории" data-i18n-placeholder="w_category_name" style="flex:1;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="finAddExpenseCategory()"><span data-i18n="w_add">Добавить</span></button>
+        </div>
+      </div>
+      <div class="form-row2">
+        <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" step="0.01" min="0" id="exp-amount"></div>
+        <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="exp-date"></div>
+      </div>
+      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea rows="2" id="exp-description"></textarea></div>
+      <div class="form-group"><label data-i18n="w_branch">Филиал</label><select id="exp-branch"></select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-expense-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitExpenseForm()"><span data-i18n="w_save">Сохранить</span></button></div>
+  </div>
+</div>
+
 <!-- Склад: списание/выдача (apps.warehouse.WarehouseDistribution, одна
      позиция — как и WarehouseDistributionForm старого интерфейса) -->
 <div class="modal-backdrop" id="m-distribution-add">
@@ -4311,6 +4341,9 @@ const translations={
   w_check_entered_data: {ru:'Проверьте введённые данные', ky:'Киргизилген маалыматты текшериңиз', en:'Please check the entered data', uz:'Kiritilgan ma\'lumotlarni tekshiring'},
   w_fill_required_fields: {ru:'Заполните обязательные поля', ky:'Милдеттүү талааларды толтуруңуз', en:'Fill in the required fields', uz:'Majburiy maydonlarni to\'ldiring'},
   w_material_added: {ru:'Материал добавлен', ky:'Материал кошулду', en:'Material added', uz:'Material qo\'shildi'},
+  w_add_expense_btn: {ru:'Добавить расход', ky:'Чыгым кошуу', en:'Add expense', uz:'Xarajat qo\'shish'},
+  title_m_expense_add: {ru:'Новый расход', ky:'Жаңы чыгым', en:'New expense', uz:'Yangi xarajat'},
+  w_expense_added: {ru:'Расход добавлен', ky:'Чыгым кошулду', en:'Expense added', uz:'Xarajat qo\'shildi'},
   w_material_norms: {ru:'Нормативы расхода материалов', ky:'Материал коромжуулоо ченемдери', en:'Material consumption norms', uz:'Material sarfi normalari'},
   w_no_material_norms: {ru:'Нормативы не заданы', ky:'Ченемдер коюлган эмес', en:'No norms set', uz:'Normalar belgilanmagan'},
   w_norm_saved: {ru:'Норматив сохранён', ky:'Ченем сакталды', en:'Norm saved', uz:'Norma saqlandi'},
@@ -5244,6 +5277,60 @@ async function deleteExpenseTx(expenseId){
   const res = await postForm('/finance/expenses/'+expenseId+'/delete/', new FormData());
   if(res.redirected){ flashAndReload(t('w_expense_deleted')); }
   else { showToast(t('w_save_failed'), 'error'); }
+}
+
+function openExpenseModal(){
+  const d=financeRealData || {branches:[], expenseCategories:[]};
+  document.getElementById('expenseAddError').classList.add('hidden');
+  document.getElementById('exp-category').innerHTML='<option value="">—</option>'+(d.expenseCategories||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('expNewCatWrap').classList.add('hidden');
+  document.getElementById('exp-new-cat-name').value='';
+  document.getElementById('exp-amount').value='';
+  document.getElementById('exp-date').value=isoDate(new Date());
+  document.getElementById('exp-description').value='';
+  document.getElementById('exp-branch').innerHTML=(d.branches||[]).map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  openModal('m-expense-add');
+}
+async function finAddExpenseCategory(){
+  const name=document.getElementById('exp-new-cat-name').value.trim();
+  if(!name) return;
+  const fd=new FormData();
+  fd.append('name', name);
+  const res=await fetch('/finance/expenses/category/add/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  const data=await res.json().catch(()=>null);
+  if(data && data.ok){
+    financeRealData=financeRealData||{};
+    financeRealData.expenseCategories=financeRealData.expenseCategories||[];
+    financeRealData.expenseCategories.push({id:data.id, name:data.name});
+    const sel=document.getElementById('exp-category');
+    sel.innerHTML='<option value="">—</option>'+financeRealData.expenseCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    sel.value=data.id;
+    document.getElementById('expNewCatWrap').classList.add('hidden');
+    document.getElementById('exp-new-cat-name').value='';
+  } else {
+    showToast(t('w_save_failed'), 'error');
+  }
+}
+async function submitExpenseForm(){
+  const err=document.getElementById('expenseAddError');
+  err.classList.add('hidden');
+  const amount=document.getElementById('exp-amount').value;
+  if(!amount || Number(amount)<=0){
+    err.textContent=t('w_fill_required_fields'); err.classList.remove('hidden');
+    return;
+  }
+  const fd=new FormData();
+  fd.append('category', document.getElementById('exp-category').value);
+  fd.append('amount', amount);
+  fd.append('description', document.getElementById('exp-description').value.trim());
+  fd.append('branch', document.getElementById('exp-branch').value);
+  fd.append('date', document.getElementById('exp-date').value);
+  const res=await postForm('/finance/expenses/create/', fd);
+  if(res.redirected){ closeModal('m-expense-add'); flashAndReload(t('w_expense_added')); }
+  else { err.textContent=await extractFormError(res); err.classList.remove('hidden'); }
 }
 
 /* ================= ЛАБОРАТОРИЯ (apps.technicians) =================
