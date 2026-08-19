@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "render": "remotion render src/index.ts StomAd out/stom-asia-ad.mp4",
-    "render:tour": "remotion render src/index.ts StomTour out/stom-asia-tour.mp4"
+    "render:tour": "remotion render src/index.ts StomTour out/stom-asia-tour.mp4",
+    "render:short": "remotion render src/index.ts OdontisShort out/odontis-short.mp4"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.513",
