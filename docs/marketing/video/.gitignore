@@ -1,0 +1,7 @@
+node_modules/
+out/
+public/
+src/embeddedFonts.ts
+src/fontManifest.json
+fonts.css
+audio/
