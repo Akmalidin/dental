@@ -1,6 +1,7 @@
 node_modules/
 out/
 public/
+screens-raw/
 src/embeddedFonts.ts
 src/fontManifest.json
 fonts.css

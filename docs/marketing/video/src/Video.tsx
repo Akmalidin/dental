@@ -20,25 +20,24 @@ export type SceneMeta = {
   id: string;
   Component: React.FC;
   frames: number;
-  voLeadIn: number; // кадры до начала VO внутри сцены
-  voDur: number; // кадры длительности VO-файла
 };
 
-// Тайминги — см. docs/marketing/advertising_video_script.md (таймкоды сцен).
-// Длительность каждой сцены = отступ до реплики + длина реплики (espeak) + хвост.
+// Без озвучки — темп сцен подобран под комфортное чтение подписи в кадре
+// (Caption/чипы), а не под длину реплики диктора. См.
+// docs/marketing/advertising_video_script.md за исходным сценарием/таймкодами.
 export const SCENES: SceneMeta[] = [
-  { id: "01", Component: Scene01, frames: 165, voLeadIn: 18, voDur: 128 },
-  { id: "02", Component: Scene02, frames: 246, voLeadIn: 18, voDur: 210 },
-  { id: "03", Component: Scene03, frames: 130, voLeadIn: 27, voDur: 82 },
-  { id: "04", Component: Scene04, frames: 135, voLeadIn: 18, voDur: 99 },
-  { id: "05", Component: Scene05, frames: 132, voLeadIn: 18, voDur: 97 },
-  { id: "06", Component: Scene06, frames: 195, voLeadIn: 18, voDur: 158 },
-  { id: "07", Component: Scene07, frames: 180, voLeadIn: 18, voDur: 143 },
-  { id: "08", Component: Scene08, frames: 150, voLeadIn: 18, voDur: 115 },
-  { id: "09", Component: Scene09, frames: 135, voLeadIn: 18, voDur: 98 },
-  { id: "10", Component: Scene10, frames: 144, voLeadIn: 18, voDur: 108 },
-  { id: "11", Component: Scene11, frames: 150, voLeadIn: 18, voDur: 114 },
-  { id: "12", Component: Scene12, frames: 240, voLeadIn: 18, voDur: 189 },
+  { id: "01", Component: Scene01, frames: 100 },
+  { id: "02", Component: Scene02, frames: 140 },
+  { id: "03", Component: Scene03, frames: 95 },
+  { id: "04", Component: Scene04, frames: 100 },
+  { id: "05", Component: Scene05, frames: 95 },
+  { id: "06", Component: Scene06, frames: 105 },
+  { id: "07", Component: Scene07, frames: 100 },
+  { id: "08", Component: Scene08, frames: 95 },
+  { id: "09", Component: Scene09, frames: 85 },
+  { id: "10", Component: Scene10, frames: 95 },
+  { id: "11", Component: Scene11, frames: 110 },
+  { id: "12", Component: Scene12, frames: 130 },
 ];
 
 export const TOTAL_FRAMES = SCENES.reduce((s, x) => s + x.frames, 0);
@@ -58,9 +57,6 @@ export const StomAd: React.FC = () => {
       {SCENES.map((s, i) => (
         <Sequence key={s.id} from={SCENE_STARTS[i]} durationInFrames={s.frames} name={`scene-${s.id}`}>
           <s.Component />
-          <Sequence from={s.voLeadIn} durationInFrames={s.voDur} name={`vo-${s.id}`}>
-            <Audio src={staticFile(`audio/${s.id}.wav`)} volume={1} />
-          </Sequence>
         </Sequence>
       ))}
     </AbsoluteFill>

@@ -46,8 +46,8 @@ export const Scene02: React.FC = () => {
         }}
       >
         <Alert text="Забыли напомнить" frame={frame} start={4} />
-        <Alert text="Касса не сходится" frame={frame} start={70} />
-        <Alert text="Кто менял карточку?" frame={frame} start={140} />
+        <Alert text="Касса не сходится" frame={frame} start={46} />
+        <Alert text="Кто менял карточку?" frame={frame} start={88} />
       </div>
     </SceneShell>
   );

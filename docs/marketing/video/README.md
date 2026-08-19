@@ -1,57 +1,90 @@
-# Рекламный ролик stom.asia — исходники (Remotion)
+# Видео stom.asia — исходники (Remotion)
 
-Код 2D motion-ролика по сценарию из `docs/marketing/advertising_video_script.md`
-(12 сцен, ~67 сек). Собран на [Remotion](https://remotion.dev) — React-компоненты
-рендерятся в mp4 через headless Chromium + ffmpeg, без сторонних AI-видео-сервисов.
+Два ролика, один Remotion-проект (`Root.tsx` регистрирует обе композиции):
 
-Озвучка и музыка тоже сгенерированы локально (offline), без ElevenLabs/Suno:
-- **Озвучка** — `espeak-ng` (русский голос) + ffmpeg-обработка (компрессор, лёгкое
-  эхо/реверб, нормализация громкости). Черновой уровень, годится для тайминга и
-  предпросмотра — для финальной версии эту дорожку стоит заменить на запись
-  живого диктора (см. промпты для ElevenLabs в истории задачи/чате).
-- **Музыка** — процедурный синтез на numpy (без сэмплов): бас, пэд-аккорды,
-  арпеджио, хай-хэты, риз и «импакт»-удар на выходе бренда — уложены по
-  таймкодам сцен.
+- **`StomAd`** — рекламный ролик ~42 сек по сценарию из
+  `docs/marketing/advertising_video_script.md` (12 сцен: боль → бренд →
+  модули → было/стало → CTA). Без озвучки — только музыка и подписи в кадре.
+- **`StomTour`** — обзорный ролик «как устроена система» (~84 сек, 18
+  реальных страниц `/new/*` подряд: от заявки до отчёта). Тоже без озвучки.
+
+Никаких сторонних AI-видео/озвучка-сервисов — всё собрано локально:
+
+- **UI в кадре** — не макеты, а настоящие скриншоты приложения (`/new/schedule/`,
+  `/new/patients/<id>/`, `/new/cashdesk/` и т.д.), снятые Playwright с
+  демо-клиникой (см. «Пересобрать с нуля» ниже). Обрамлены в рамку окна
+  браузера и оживлены медленным Ken Burns zoom/pan (`PageFrame.tsx`).
+- **Музыка** — процедурный синтез на numpy (бас, пэд-аккорды, арпеджио,
+  хай-хэты, риз/импакт), без сэмплов. Отдельный трек под каждый ролик
+  (`gen_music.py` / `gen_music_tour.py`), т.к. они разной длины.
 - **Шрифты** (Manrope/Inter/JetBrains Mono, кириллица) — скачиваются с Google
-  Fonts один раз и встраиваются в бандл как `data:` URI (см. `embed_fonts.py`) —
+  Fonts один раз и встраиваются в бандл как `data:` URI (`embed_fonts.py`) —
   рендер не зависит от сети.
 
 ## Структура
 
 ```
 src/
-  theme.ts          — цвета/шрифты (те же токены, что на лендинге stom.asia)
-  SceneShell.tsx     — общие анимационные хелперы (fade/rise), Caption, Chip
-  FeatureShell.tsx   — общий каркас для сцен-модулей (04–10): FDI-код, чип, подпись
-  Fonts.tsx          — встроенные шрифты (embeddedFonts.ts, генерируется)
-  Video.tsx          — таймлайн: SCENES[] (кадры/тайминг VO), музыка, монтаж сцен
-  Root.tsx, index.ts — регистрация композиции Remotion
-  scenes/Scene01..12.tsx — покадровая раскадровка (см. сценарий)
+  theme.ts            — цвета/шрифты (токены лендинга stom.asia)
+  SceneShell.tsx       — общие анимационные хелперы (fade/rise), Caption, Chip
+  FeatureShell.tsx      — каркас сцен-модулей рекламного ролика (04–10): FDI-код, чип, подпись
+  TourShell.tsx          — каркас карточки обзорного ролика: группа/индекс «03 / 18», заголовок, подпись
+  PageFrame.tsx           — рамка «окна браузера» с реальным скриншотом + Ken Burns (общий для обоих роликов)
+  Fonts.tsx               — встроенные шрифты (embeddedFonts.ts, генерируется)
+  Video.tsx / TourVideo.tsx — таймлайны роликов (SCENES[] / PAGES[], монтаж, музыка)
+  Root.tsx, index.ts       — регистрация композиций StomAd + StomTour
+  scenes/Scene01..12.tsx   — покадровая раскадровка рекламного ролика
+  scenes/TourIntro.tsx, TourOutro.tsx — бренд-заставка и CTA обзорного ролика
 ```
 
 ## Пересобрать с нуля
 
+Из корня репозитория (`dental/`):
+
 ```bash
+# 0) окружение (если ещё не установлено)
+pip install -r requirements.txt
+apt-get install -y espeak-ng ffmpeg   # ffmpeg обязателен, espeak-ng — не нужен (озвучки нет)
+
+# 1) демо-данные (реалистичная демо-клиника для скриншотов)
+export DJANGO_SETTINGS_MODULE=config.settings.development
+export SECRET_KEY=dev-secret
+python3 manage.py migrate
+python3 manage.py shell < docs/marketing/video/seed_demo.py
+python3 manage.py shell < docs/marketing/video/seed_demo2.py   # заявки, задачи, план лечения, лаборатория
+python3 manage.py runserver 127.0.0.1:8000 &
+
+# 2) скриншоты реальных страниц (Playwright, headless Chromium)
+cd docs/marketing/video
+npm install playwright-core   # разово, в отдельную node_modules
+node screenshot.js            # -> ../../../scratchpad/screens/*.png (путь в скрипте — поправить под себя)
+bash convert_shots.sh         # -> public/screens/*.jpg (масштаб 1920×1080, ужатые)
+
+# 3) шрифты (кириллица) как data: URI
 npm install
+python3 fetch_fonts.py        # -> public/fonts/*.woff2, src/fontManifest.json
+python3 embed_fonts.py        # -> src/embeddedFonts.ts
 
-# 1) скачать и встроить шрифты (кириллица) как data: URI
-python3 fetch_fonts.py     # -> public/fonts/*.woff2, src/fontManifest.json
-python3 embed_fonts.py     # -> src/embeddedFonts.ts
-
-# 2) озвучка (espeak-ng должен быть установлен: apt install espeak-ng)
-python3 gen_vo.py          # -> audio/vo/01..12.wav
-
-# 3) музыка (numpy)
-python3 gen_music.py       # -> audio/music_raw.wav
+# 4) музыка (numpy) — два трека, под каждый ролик своя длительность
+python3 gen_music.py
 ffmpeg -y -i audio/music_raw.wav -af "loudnorm=I=-20:TP=-2:LRA=9" audio/music.wav
-
-# 4) разложить аудио в public/ (Remotion берёт статику отсюда)
-mkdir -p public/audio && cp audio/vo/*.wav audio/music.wav public/audio/
+python3 gen_music_tour.py
+ffmpeg -y -i audio/tour_music_raw.wav -af "loudnorm=I=-20:TP=-2:LRA=9" audio/tour-music.wav
+mkdir -p public/audio && cp audio/music.wav audio/tour-music.wav public/audio/
 
 # 5) рендер (нужен headless Chromium + ffmpeg с libx264 — см. remotion.config.ts)
-npm run render              # -> out/stom-asia-ad.mp4
+npm run render         # -> out/stom-asia-ad.mp4
+npm run render:tour    # -> out/stom-asia-tour.mp4
 ```
 
-Тайминг каждой сцены в `Video.tsx` (`SCENES[]`) подобран под длительность
-реальных VO-файлов (espeak) + отступы — при замене озвучки на другую (другой
-темп речи) длительности сцен нужно пересчитать под новые файлы.
+`seed_demo.py`/`seed_demo2.py` создают клинику «Стоматология «Асия»»
+(логин `demo_director` / пароль `demo12345`) с пациентами, приёмами,
+оплатами, складом, заявками, задачами, планом лечения и историей правок
+карточки (для «Журнала аудита») — всё вымышленное, без реальных персональных
+данных.
+
+Тайминг сцен рекламного ролика (`SCENES[]` в `Video.tsx`) — под комфортное
+чтение подписи в кадре (без VO); тайминг карточек обзорного ролика (`PAGES[]`
+в `TourVideo.tsx`) — фиксированные 126 кадров (4.2 с) на страницу. Меняете
+список страниц/подписи — пересчитайте `gen_music_tour.py` (границы секций
+`INTRO_END`/`OUTRO_START`/`TOTAL`) под новую суммарную длительность.
