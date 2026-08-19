@@ -177,6 +177,8 @@ class Role(models.Model):
 # (ключ, подпись, URL-префикс). dashboard всегда доступен и не блокируется.
 SECTIONS = [
     ("dashboard",    "Дашборд",    "/"),
+    ("funnel",       "Заявки · CRM", "/new/funnel/"),
+    ("marketing",    "Маркетинг",  "/new/marketing/"),
     ("calendar",     "Расписание", "/calendar/"),
     ("appointments", "Записи",     "/appointments/"),
     ("patients",     "Пациенты",   "/patients/"),
