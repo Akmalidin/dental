@@ -254,7 +254,14 @@ tr.clickable:hover{background:var(--cloud);cursor:pointer;}
    88px+ на невысоком экране телефона легко превышают viewport, а в дне/неделе
    overflow-y:hidden специально не мешает sticky-шапке времени. */
 .sched-wrap.sched-wrap-month{overflow-y:auto;max-height:76vh;}
-.sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;}
+.sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;position:relative;}
+/* Красная линия «сейчас» (только дневной вид — у недели/месяца нет часовой
+   сетки, см. positionScheduleNowLine) — position:absolute внутри
+   .sched-grid (её нужный position:relative уже выше), а не grid-row/-column:
+   реальное время редко попадает точно на границу слота. Ставится и
+   пересчитывается в JS (positionScheduleNowLine), CSS только рисует. */
+.sched-now-line{position:absolute;height:0;border-top:2px solid var(--coral);z-index:6;pointer-events:none;}
+.sched-now-line::before{content:'';position:absolute;left:-5px;top:-5px;width:9px;height:9px;border-radius:50%;background:var(--coral);}
 .sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
 .sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
 /* Лента дней (дневной вид): подпись-дата над каждой группой врачей одного
@@ -6786,6 +6793,7 @@ function renderSchedule(){
     // иначе после каждой перерисовки (смена дня/фильтра врачей) лента на
     // мгновение оставалась без активной подсветки.
     updateVisibleDayLabelFromScroll();
+    positionScheduleNowLine();
   }
   else if(calView==='week'){
     updateWeekDateLabel();
@@ -7102,6 +7110,51 @@ function buildDayRibbonHTML(){
   html+='</div>';
   return html;
 }
+// Красная линия «сейчас» — только дневной вид (у недели/месяца нет часовой
+// сетки со слотами, см. buildWeekHTML/buildMonthHTML — там просто список
+// карточек на день, без вертикальной оси времени). Показывается, только
+// если сегодняшняя дата сейчас реально в ленте (могли пролистать на другой
+// день/неделю) и текущее время попадает в рабочие часы клиники (calSettings.
+// start/end) — иначе линия рисовалась бы за пределами сетки или вообще не
+// на своём месте. Позиция считается через getBoundingClientRect (не через
+// grid-row/-column — реальное время редко совпадает с границей слота), и
+// не зависит от горизонтальной прокрутки ленты: top/left выставляются
+// абсолютно внутри .sched-grid (её position:relative), а не относительно
+// вьюпорта — сама лента и линия скроллятся вместе.
+function positionScheduleNowLine(){
+  document.querySelectorAll('.sched-now-line').forEach(el=>el.remove());
+  if(calView!=='day') return;
+  const grid=document.getElementById('schedGrid');
+  if(!grid) return;
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const startMin=calSettings.start*60, endMin=calSettings.end*60, interval=calSettings.interval;
+  if(nowMin<startMin || nowMin>endMin) return; // сейчас вне рабочих часов клиники
+  const todayIso=isoDate(now);
+  const cells=[...grid.querySelectorAll(`[data-date="${todayIso}"]`)];
+  if(cells.length===0) return; // сегодня сейчас не в видимой части ленты
+  const firstSlotCell=grid.querySelector('.sched-time');
+  if(!firstSlotCell) return;
+  const gridRect=grid.getBoundingClientRect();
+  const slotTop=firstSlotCell.getBoundingClientRect().top - gridRect.top;
+  let minLeft=Infinity, maxRight=-Infinity;
+  cells.forEach(c=>{
+    const r=c.getBoundingClientRect();
+    minLeft=Math.min(minLeft, r.left - gridRect.left);
+    maxRight=Math.max(maxRight, r.right - gridRect.left);
+  });
+  const topPx=slotTop + (nowMin-startMin)/interval*SCHED_ROW_PX;
+  const line=document.createElement('div');
+  line.className='sched-now-line';
+  line.style.top=topPx+'px';
+  line.style.left=minLeft+'px';
+  line.style.width=(maxRight-minLeft)+'px';
+  grid.appendChild(line);
+}
+// Пересчитываем раз в минуту, чтобы линия ползла вниз, пока страница
+// расписания открыта, а не только при следующей ручной перерисовке —
+// no-op на любой другой странице/виде (см. ранние return выше).
+setInterval(positionScheduleNowLine, 60000);
 // Дозагрузка дней в ленту при приближении скролла к правому краю. Полная
 // пересборка innerHTML вместо точечной вставки колонок (CSS grid с одним
 // потоком ячеек не позволяет чисто «дописать» новые колонки в середину уже
@@ -7119,6 +7172,7 @@ function appendRibbonDays(count){
   const prevScrollLeft=el.scrollLeft;
   el.innerHTML=buildDayRibbonHTML();
   el.scrollLeft=prevScrollLeft;
+  positionScheduleNowLine();
 }
 
 /* ---- Запись: просмотр + действия (та же логика, что в старом интерфейсе:
