@@ -65,7 +65,7 @@
                 <div class="form-group"><label data-i18n="w_direction">Направление</label><select id="vw-direction"><option>—</option></select></div>
               </div>
               <div class="form-group"><label data-i18n="w_status">Статус</label><select id="vw-status-select" disabled></select></div>
-              <div class="form-group"><label data-i18n="w_visit_comment">Комментарий к визиту</label><textarea rows="2" id="vw-notes" onblur="vwAutosave()" placeholder="Комментарий к визиту"></textarea></div>
+              <div class="form-group"><label data-i18n="w_visit_comment">Комментарий к визиту</label><textarea autocomplete="off" rows="2" id="vw-notes" onblur="vwAutosave()" placeholder="Комментарий к визиту"></textarea></div>
               <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="vwFillFromPrevious()"><span data-i18n="w_fill_from_prev">Заполнить анамнез из предыдущих визитов</span></button>
             </div>
           </div>
@@ -154,7 +154,7 @@
                   <option value="" data-i18n="w_choose_template">— выбрать шаблон —</option>
                 </select>
               </div>
-              <div class="form-group"><label data-i18n="w_message_text">Текст сообщения</label><textarea rows="4" id="vcMsgText" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
+              <div class="form-group"><label data-i18n="w_message_text">Текст сообщения</label><textarea autocomplete="off" rows="4" id="vcMsgText" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
               <button class="btn btn-cobalt" onclick="vwSendVisitMessage()" data-i18n="w_send">Отправить</button>
               <span id="vcMsgSentNote" style="font-size:11.5px;color:var(--teal);margin-left:10px;display:none;"><span data-i18n="w_sent_ok">Отправлено ✓</span></span>
             </div>
@@ -271,10 +271,10 @@
   diagBlock.innerHTML = `<div class="card-head"><h3 data-i18n="w_diagnosis">Диагноз</h3></div>
     <div class="card-body">
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_diagnosis">Диагноз</label><textarea rows="2" id="vw-diagnosis" onblur="vwAutosave()" placeholder="${t('w_diagnosis')}…"></textarea></div>
+        <div class="form-group"><label data-i18n="w_diagnosis">Диагноз</label><textarea autocomplete="off" rows="2" id="vw-diagnosis" onblur="vwAutosave()" placeholder="${t('w_diagnosis')}…"></textarea></div>
         <div class="form-group"><label data-i18n="w_icd10">МКБ-10</label><select id="vw-icd" onchange="vwAutosave()"></select></div>
       </div>
-      <div class="form-group"><label data-i18n="w_recommendations">Рекомендации</label><textarea rows="2" id="vw-recommendations" onblur="vwAutosave()" placeholder="${t('w_recommendations_for_patient')}…"></textarea></div>
+      <div class="form-group"><label data-i18n="w_recommendations">Рекомендации</label><textarea autocomplete="off" rows="2" id="vw-recommendations" onblur="vwAutosave()" placeholder="${t('w_recommendations_for_patient')}…"></textarea></div>
     </div>`;
   document.getElementById('vwAccordion').before(diagBlock);
   document.getElementById('vw-diagnosis').value = vw.emr.diagnosis;
@@ -300,7 +300,7 @@
       <div class="accordion-item">
         <button class="accordion-head ${i===0?'open':''}" onclick="toggleAccordion(this)"><span data-i18n="${s.labelKey}">${t(s.labelKey)}</span><span class="chev">⌄</span></button>
         <div class="accordion-body ${i===0?'open':''}">
-          <textarea rows="2" placeholder="${t(s.labelKey)}" id="vw-field-${s.id}" onblur="vwAutosave()" ${readOnlyClosed?'disabled':''}>${s.get()||''}</textarea>
+          <textarea autocomplete="off" rows="2" placeholder="${t(s.labelKey)}" id="vw-field-${s.id}" onblur="vwAutosave()" ${readOnlyClosed?'disabled':''}>${s.get()||''}</textarea>
           <div style="display:flex;justify-content:flex-end;margin-top:8px;">
             <button class="btn btn-ghost btn-sm" ${readOnlyClosed?'disabled':''} onclick="vwOpenSaveAsTemplate()" data-i18n="w_save_as_template">${t('w_save_as_template')}</button>
           </div>
@@ -503,9 +503,9 @@
                    onblur="setTimeout(()=>{const b=document.getElementById('toothSvcSuggest-${num}'); if(b) b.classList.add('hidden');},200)">
             <div id="toothSvcSuggest-${num}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
           </div>
-          <div class="form-group"><label>${t('w_exam_plan')}</label><textarea rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>${t('w_recommendations')}</label><textarea rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_exam_plan')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+          <div class="form-group"><label>${t('w_recommendations')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
         </div>
       </div>`;
     }).join('');

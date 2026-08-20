@@ -24,7 +24,7 @@
           </div>
           <div class="toolbar-right-nav" style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-soft)">
             <button class="btn btn-ghost btn-sm" onclick="goToScheduleToday()" data-i18n="w_today_f">Сегодня</button>
-            <button class="icon-btn" onclick="changeDay(-1)">‹</button><span id="schedDateLabel" onclick="openSchedDatePicker()" title="Перейти к дате" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;">31.07.2026</span><input type="date" id="schedDatePickerInput" onchange="schedDatePickerChanged(this.value)" style="width:1px;height:1px;padding:0;border:none;opacity:0;pointer-events:none;"><button class="icon-btn" onclick="changeDay(1)">›</button>
+            <button class="icon-btn" onclick="changeDay(-1)">‹</button><span id="schedDateLabel" onclick="openSchedDatePicker()" title="Перейти к дате" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;">31.07.2026</span><input autocomplete="off" type="date" id="schedDatePickerInput" onchange="schedDatePickerChanged(this.value)" style="width:1px;height:1px;padding:0;border:none;opacity:0;pointer-events:none;"><button class="icon-btn" onclick="changeDay(1)">›</button>
           </div>
         </div>
         <!-- «Плавающая» копия шапки (подписи дат + врачи) — становится видна
