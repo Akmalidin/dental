@@ -754,7 +754,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
   <div id="vcpSettings" class="vcp-settings hidden">
     <label class="vcp-settings-label" data-i18n="w_assistant_name_label">Имя ассистента</label>
-    <input type="text" id="vcpAssistantNameInput" data-i18n-placeholder="w_assistant_name_placeholder" placeholder="ODONTIS">
+    <input type="text" id="vcpAssistantNameInput" data-i18n-placeholder="w_assistant_name_placeholder" placeholder="ODONTIS" autocomplete="off">
     <label class="vcp-settings-check">
       <input type="checkbox" id="vcpWakeWordCheck" onchange="vcpWakeWordToggled(this.checked)">
       <span data-i18n="w_wake_word_label">Слушать имя ассистента и включаться самому</span>
@@ -765,7 +765,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   <div id="voiceChatMessages" class="vcp-messages"></div>
   <div class="vcp-foot">
     <button type="button" id="voiceChatMicBtn" class="vcp-mic" onclick="voiceChatMicToggle(this)" title="Голосовое сообщение">🎤</button>
-    <input type="text" id="voiceChatTextInput" data-i18n-placeholder="w_voice_type_hint" placeholder="Сообщение…" onkeydown="if(event.key==='Enter'){event.preventDefault();sendVoiceChatText();}">
+    <input type="text" id="voiceChatTextInput" data-i18n-placeholder="w_voice_type_hint" placeholder="Сообщение…" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendVoiceChatText();}">
     <button type="button" class="vcp-send" onclick="sendVoiceChatText()" title="Отправить">➤</button>
   </div>
 </div>
@@ -994,7 +994,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
            карточке пациента (openNewApptForCurrentPatient) слот уже подобран
            автоматически — ближайший свободный от «сейчас», см. findNextFreeSlot(). -->
       <div id="apptAvailabilityHint" class="hidden" style="font-size:12px;border-radius:8px;padding:8px 12px;margin:-6px 0 14px;"></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="appt-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" id="appt-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-appt')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" id="apptModalSaveBtn" onclick="submitNewAppt()">Создать запись</button></div>
   </div>
@@ -1069,7 +1069,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_source">Источник</label><select id="np-source"></select></div>
         <div class="form-group"><label data-i18n="w_respdoctor">Ответственный врач</label><select id="np-doctor"></select></div>
       </div>
-      <div class="form-group"><label data-i18n="w_note">Примечание</label><textarea rows="2" id="np-notes" placeholder="Аллергии, особенности приёма…"></textarea></div>
+      <div class="form-group"><label data-i18n="w_note">Примечание</label><textarea autocomplete="off" rows="2" id="np-notes" placeholder="Аллергии, особенности приёма…"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-patient')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitNewPatient()">Создать пациента</button></div>
   </div>
@@ -1097,7 +1097,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_source">Источник</label><select id="pe-source"></select></div>
         <div class="form-group"><label data-i18n="w_respdoctor">Ответственный врач</label><select id="pe-doctor"></select></div>
       </div>
-      <div class="form-group"><label data-i18n="w_allergies">Аллергии / особенности</label><textarea rows="2" id="pe-notes" placeholder="Аллергии, особенности приёма…"></textarea></div>
+      <div class="form-group"><label data-i18n="w_allergies">Аллергии / особенности</label><textarea autocomplete="off" rows="2" id="pe-notes" placeholder="Аллергии, особенности приёма…"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-patient-edit')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="savePatientEdit()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1119,7 +1119,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <option>Отказ от оплаты после лечения</option>
         </select>
       </div>
-      <div class="form-group"><textarea rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…" data-i18n-placeholder="w_describe_reason_own_words"></textarea></div>
+      <div class="form-group"><textarea autocomplete="off" rows="2" id="bl-reason" placeholder="Или опишите причину своими словами…" data-i18n-placeholder="w_describe_reason_own_words"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-blacklist-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="addToBlacklist()"><span data-i18n="btn_add_to_list">Добавить в список</span></button></div>
   </div>
@@ -1131,7 +1131,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
     <div class="modal-head"><h3 id="taskModalTitle" data-i18n="title_m_task_new">Новая задача</h3><button class="modal-close" onclick="closeModal('m-task-edit')">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label data-i18n="w_task_title">Заголовок</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="task-title" placeholder="Например: Заказать материалы" data-i18n-placeholder="w_task_title_placeholder"></div>
-      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea rows="3" id="task-description" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea autocomplete="off" rows="3" id="task-description" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
       <div class="form-row2">
         <div class="form-group"><label data-i18n="w_task_due">Срок</label><input autocomplete="off" type="datetime-local" id="task-due"></div>
         <div class="form-group"><label data-i18n="w_priority">Приоритет</label>
@@ -1203,7 +1203,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_doctor">Врач</label><select id="rx-doctor"></select></div>
         <div class="form-group"><label data-i18n="w_med_date">Дата назначения</label><input autocomplete="off" type="date" id="rx-date"></div>
       </div>
-      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="rx-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="rx-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-prescription-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitPrescriptionForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1223,7 +1223,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-group"><label data-i18n="w_datetime">Дата и время</label><input autocomplete="off" type="datetime-local" id="vj-add-when"></div>
       <div class="form-group"><label data-i18n="w_services_optional">Услуги (необязательно)</label><select id="vj-add-services" multiple style="min-height:88px;"></select></div>
-      <div class="form-group"><label data-i18n="w_reason_optional">Причина (необязательно)</label><textarea rows="2" id="vj-add-reason" placeholder="например, консультация"></textarea></div>
+      <div class="form-group"><label data-i18n="w_reason_optional">Причина (необязательно)</label><textarea autocomplete="off" rows="2" id="vj-add-reason" placeholder="например, консультация"></textarea></div>
       <div id="vjAddError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;"></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-visit-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="vjSubmitAdd()"><span data-i18n="w_mark_visit">Отметить</span></button></div>
@@ -1368,7 +1368,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_funnel_stage">Этап воронки</label><select id="lead-stage"><option value="new">Новая</option><option value="notreached">Не дозвонились</option><option value="thinking">Думает</option><option value="booked">Записан</option><option value="noshow">Не пришёл</option><option value="came">Пришёл</option><option value="completed">Завершено</option><option value="rejected">Отказ</option></select></div>
       </div>
       <div class="form-group"><label data-i18n="w_responsible">Ответственный</label><select id="lead-admin"><option value="">Все администраторы</option></select></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" id="lead-comment" placeholder="Интересует цена на брекеты"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" id="lead-comment" placeholder="Интересует цена на брекеты"></textarea></div>
     </div>
     <div class="modal-foot" style="justify-content:space-between;">
       <button class="btn btn-danger hidden" id="leadDeleteBtn" onclick="deleteLeadCard()">Удалить заявку</button>
@@ -1391,7 +1391,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label><select><option>Наличные</option><option>Карта</option><option>Перевод на карту</option><option>Депозит</option><option>Страховка</option><option>Рассрочка</option></select></div>
       </div>
       <div class="form-group"><label data-i18n="w_purpose">Назначение</label><select><option>Оплата лечения</option><option>Пополнение депозита</option><option>Взнос рассрочки</option></select></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="closeModal('m-payment')">Провести оплату</button></div>
   </div>
@@ -1407,7 +1407,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
           <div class="row" style="padding:4px 0;"><div class="row-main"><b id="vr-patient">—</b><span id="vr-meta">—</span></div></div>
         </div>
       </div>
-      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…" data-i18n-placeholder="w_doctor_notes_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_doctor_notes">Заметки врача</label><textarea autocomplete="off" rows="2" id="vr-notes" placeholder="Что сделано, жалобы, рекомендации…" data-i18n-placeholder="w_doctor_notes_placeholder"></textarea></div>
       <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Итог визита</label>
       <label class="reason-opt"><input autocomplete="off" type="radio" name="vr" value="Начал лечение · НЛ|cobalt" checked><div><b style="font-size:13px;display:block">Начал лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">НЛ</span></div></label>
       <label class="reason-opt"><input autocomplete="off" type="radio" name="vr" value="Продолжает лечение · ПЛ|amber"><div><b style="font-size:13px;display:block">Продолжает лечение</b><span style="font-size:11.5px;color:var(--ink-soft)">ПЛ</span></div></label>
@@ -1451,7 +1451,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_tech_lab_contact">Контакт лаборатории</label><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tech-lab-contact"></div>
       </div>
       <div class="form-group"><label data-i18n="w_tech_lead_days">Срок изготовления по умолчанию, дней</label><input autocomplete="off" type="number" min="1" id="tech-lead-days" value="5"></div>
-      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="tech-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="tech-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-technician-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTechnicianForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1470,7 +1470,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
       <div id="entryRows"></div>
       <button type="button" class="btn btn-ghost btn-sm" onclick="whAddEntryRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="entry-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="entry-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-entry-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitEntryForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1534,7 +1534,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" step="0.01" min="0" id="exp-amount"></div>
         <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="exp-date"></div>
       </div>
-      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea rows="2" id="exp-description"></textarea></div>
+      <div class="form-group"><label data-i18n="w_description">Описание</label><textarea autocomplete="off" rows="2" id="exp-description"></textarea></div>
       <div class="form-group"><label data-i18n="w_branch">Филиал</label><select id="exp-branch"></select></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-expense-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitExpenseForm()"><span data-i18n="w_save">Сохранить</span></button></div>
@@ -1556,7 +1556,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <div class="form-group"><label data-i18n="w_wh_issued_to">Кому выдано</label><select id="dist-issued-to"><option value="">—</option></select></div>
         <div class="form-group"><label data-i18n="w_date">Дата</label><input autocomplete="off" type="date" id="dist-date"></div>
       </div>
-      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="dist-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="dist-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-distribution-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitDistributionForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1576,7 +1576,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
       <div id="transferRows"></div>
       <button type="button" class="btn btn-ghost btn-sm" onclick="whAddTransferRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="transfer-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="transfer-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-transfer-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitTransferForm()"><span data-i18n="w_save">Сохранить</span></button></div>
   </div>
@@ -1595,7 +1595,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--ink-soft);" data-i18n="w_wh_items">Позиции</label>
       <div id="inventoryRows"></div>
       <button type="button" class="btn btn-ghost btn-sm" onclick="whAddInventoryRow()">+ <span data-i18n="w_wh_add_row">Добавить строку</span></button>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea rows="2" id="inv-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_notes">Заметки</label><textarea autocomplete="off" rows="2" id="inv-notes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
       <div class="form-group toggle" style="margin-top:6px;"><input autocomplete="off" type="checkbox" id="inv-post-now"><span style="font-size:13px;margin-left:2px" data-i18n="w_wh_post_now">Провести сразу (скорректировать остатки)</span></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-inventory-add')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitInventoryForm()"><span data-i18n="w_save">Сохранить</span></button></div>
@@ -1611,7 +1611,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Не успевает</span></label>
       <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Не получается</span></label>
       <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Забыл</span></label>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-cancel')">Назад</button><button class="btn btn-danger" onclick="closeModal('m-cancel')">Отменить визит</button></div>
   </div>
@@ -1768,7 +1768,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <div style="border-top:1px solid var(--mist-line);padding-top:16px;">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:var(--ink-soft);">Новый шаблон</label>
         <div class="form-group"><input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="tpl-title" placeholder="Название шаблона"></div>
-        <div class="form-group"><textarea rows="3" id="tpl-text" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
+        <div class="form-group"><textarea autocomplete="off" rows="3" id="tpl-text" placeholder="Текст сообщения…" data-i18n-placeholder="w_message_text"></textarea></div>
         <button class="btn btn-cobalt btn-sm" onclick="addTemplate()">+ Добавить шаблон</button>
       </div>
     </div>
@@ -2280,9 +2280,9 @@ function renderSelectedTeethPanel(){
           <div class="form-group"><label data-i18n="w_services">Услуги</label><select><option>—</option><option>Пломбирование</option><option>Установка коронки</option></select></div>
           <div class="form-group"><label data-i18n="w_complex_services">Комплексные услуги</label><select><option>—</option><option>Эндодонтическое лечение</option></select></div>
         </div>
-        <div class="form-group"><label data-i18n="w_exam_plan">План обследования</label><textarea rows="1" placeholder="План обследования"></textarea></div>
-        <div class="form-group"><label data-i18n="w_treatment_consult">Лечение / Консультация</label><textarea rows="1" placeholder="Лечение / Консультация"></textarea></div>
-        <div class="form-group"><label data-i18n="w_recommendations">Рекомендации</label><textarea rows="1" placeholder="Рекомендации"></textarea></div>
+        <div class="form-group"><label data-i18n="w_exam_plan">План обследования</label><textarea autocomplete="off" rows="1" placeholder="План обследования"></textarea></div>
+        <div class="form-group"><label data-i18n="w_treatment_consult">Лечение / Консультация</label><textarea autocomplete="off" rows="1" placeholder="Лечение / Консультация"></textarea></div>
+        <div class="form-group"><label data-i18n="w_recommendations">Рекомендации</label><textarea autocomplete="off" rows="1" placeholder="Рекомендации"></textarea></div>
       </div>
     </div>`;
   }).join('');
@@ -3085,7 +3085,7 @@ function buildAccordion(){
     <div class="accordion-item">
       <button class="accordion-head ${i===0?'open':''}" onclick="toggleAccordion(this)">${s.label}<span class="chev">⌄</span></button>
       <div class="accordion-body ${i===0?'open':''}">
-        <textarea rows="2" placeholder="${s.label}" id="vc-field-${s.id}"></textarea>
+        <textarea autocomplete="off" rows="2" placeholder="${s.label}" id="vc-field-${s.id}"></textarea>
         <div style="display:flex;justify-content:flex-end;margin-top:8px;">
           <button class="btn btn-ghost btn-sm">Сохранить как шаблон</button>
         </div>
