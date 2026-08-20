@@ -3222,18 +3222,30 @@ function updateMsgNavBadge(){
 function renderClientList(){
   const wrap=document.getElementById('clientListWrap');
   if(!wrap) return;
-  const q=(document.getElementById('msgSearchInput')?.value||'').toLowerCase();
+  const q=(document.getElementById('msgSearchInput')?.value||'').toLowerCase().trim();
   const list=chatClients.filter(c=>{
     const matchesQ = c.name.toLowerCase().includes(q) || (c.phone||'').includes(q);
     const matchesCh = msgChannelFilter==='all' || c.channel===msgChannelFilter;
     return matchesQ && matchesCh;
   });
-  if(list.length===0){ wrap.innerHTML=`<div style="padding:20px;font-size:12.5px;color:var(--ink-soft);text-align:center;">${t('w_no_chats_yet')}</div>`; return; }
-  wrap.innerHTML=list.map(c=>{
-    const initials=c.name.split(' ').map(w=>w[0]).slice(0,2).join('');
+  // При непустом поиске — дополнительно ищем среди ВСЕХ пациентов (не
+  // только тех, у кого уже есть переписка в chatClients), чтобы можно было
+  // начать новую переписку прямо из поиска — по прямому запросу «в разделе
+  // мессенджеры при поиске сделай список пациентов, нажав на него могут
+  // отправлять сообщения». Раньше поиск был только по уже существующим
+  // беседам — пациент без единого сообщения никак не находился здесь.
+  let extra=[];
+  if(q){
+    const existingIds=new Set(chatClients.map(c=>c.id));
+    extra=patientsList.filter(p=>!existingIds.has(p.id) &&
+      (p.fullName.toLowerCase().includes(q) || (p.phone||'').includes(q))).slice(0,30);
+  }
+  if(list.length===0 && extra.length===0){ wrap.innerHTML=`<div style="padding:20px;font-size:12.5px;color:var(--ink-soft);text-align:center;">${t('w_no_chats_yet')}</div>`; return; }
+  const existingHtml=list.map(c=>{
+    const ini=c.name.split(' ').map(w=>w[0]).slice(0,2).join('');
     const chIcon = c.channel==='whatsapp' ? '🟢' : '🔵';
     return `<div class="client-row ${c.id===currentClientId?'active':''}" onclick="selectClient(${c.id})">
-      <div class="client-avatar-wrap"><div class="row-avatar">${initials}</div><span class="ch-icon">${chIcon}</span></div>
+      <div class="client-avatar-wrap"><div class="row-avatar">${ini}</div><span class="ch-icon">${chIcon}</span></div>
       <div class="client-row-main"><b>${c.name}</b><span>${c.lastBody||t('w_no_messages')}</span></div>
       <div class="client-row-meta">
         <span class="time">${c.lastTime||''}</span>
@@ -3241,6 +3253,15 @@ function renderClientList(){
       </div>
     </div>`;
   }).join('');
+  const extraHtml = extra.length ? `<div style="padding:10px 14px 4px;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">${t('w_start_new_chat')}</div>` +
+    extra.map(p=>{
+      const ini=p.fullName.split(' ').map(w=>w[0]).slice(0,2).join('');
+      return `<div class="client-row" onclick="startNewChatWithPatient(${p.id})">
+        <div class="client-avatar-wrap"><div class="row-avatar">${ini}</div></div>
+        <div class="client-row-main"><b>${p.fullName}</b><span>${p.phone||''}</span></div>
+      </div>`;
+    }).join('') : '';
+  wrap.innerHTML=existingHtml+extraHtml;
 }
 function msgSetChannelFilter(ch){
   msgChannelFilter=ch;
@@ -3317,6 +3338,38 @@ async function sendChatMessage(){
     showToast(t('w_send_message_failed'), 'error');
   }
 }
+// Заводит запись в chatClients для пациента, у которого ещё нет ни одного
+// сообщения (patient_notify/patient_wa_messages на бэкенде и так уже
+// прекрасно работают с любым pk, независимо от истории — не хватало только
+// точки входа в самом интерфейсе). name/phone можно передать явно (когда
+// известны заранее, напр. из карточки пациента через URL — она открывает
+// ЛЮБОГО пациента, не только из капнутого на 300 patientsList на этой
+// странице) — иначе ищем в patientsList.
+function ensureChatClient(id, name, phone){
+  if(chatClients.some(c=>c.id===id)) return;
+  let pName=name, pPhone=phone;
+  if(!pName){
+    const p=patientsList.find(x=>x.id===id);
+    if(p){ pName=p.fullName; pPhone=p.phone; }
+  }
+  if(!pName) return;
+  chatClients.unshift({id, name:pName, phone:pPhone||'', channel:'whatsapp', lastBody:'', lastTime:'', unread:0});
+}
+// Клик по пациенту из «доп. поиска» в списке бесед (см. renderClientList) —
+// начинает новую переписку без единого сообщения в истории.
+function startNewChatWithPatient(id){
+  ensureChatClient(id);
+  const search=document.getElementById('msgSearchInput');
+  if(search) search.value='';
+  selectClient(id);
+}
+// Точка входа из карточки пациента (?patient=<id>[&name=&phone=] в URL,
+// см. openChatWithPatient) — открывает раздел «Мессенджеры» сразу с
+// выбранным пациентом, даже если переписки с ним ещё не было.
+function openMessagesForPatient(id, name, phone){
+  ensureChatClient(id, name, phone);
+  selectClient(id);
+}
 
 /* ---- «Карточка приёма» (visitcard.html) — целиком демо-раздел без
    реального пациента (см. баннер в шаблоне), поэтому виджет быстрой
@@ -3357,10 +3410,20 @@ function renderVcMsgHistory(){
   if(vcDemoMessages.length===0){ el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);">Переписки пока нет</div>'; return; }
   el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;">'+vcDemoMessages.slice(-5).map(m=>`<div class="chat-bubble ${m.from}" style="max-width:100%;">${m.text}<span class="time">${m.time}</span></div>`).join('')+'</div>';
 }
-function openChatWithPatient(){
-  // Реальный переход к переписке пациента возможен только с реальным id
-  // (карточки пациента, не демо-визита) — открываем настоящий раздел «Мессенджеры».
-  location.href='/new/messages/';
+// Переход из карточки пациента (см. patientcard.html → «Написать
+// сообщение») в раздел «Мессенджеры» сразу с выбранным пациентом — раньше
+// такой кнопки вообще не было (жалоба: «в старой клинике сама могла писать
+// сообщения пациентам, а в новой нет такой возможности»). name/phone из
+// patientsList передаём в URL явно — на самой странице «Мессенджеры»
+// patientsList капнут на последние 300 пациентов и может не содержать
+// ЭТОГО конкретного (карточка пациента открывается для любого, не только
+// свежего), поэтому не полагаемся на повторный поиск там.
+function openChatWithPatient(patientId){
+  if(!patientId){ location.href='/new/messages/'; return; }
+  const p=patientsList.find(x=>x.id===patientId);
+  const params=new URLSearchParams({patient:patientId});
+  if(p){ params.set('name', p.fullName); params.set('phone', p.phone||''); }
+  location.href='/new/messages/?'+params.toString();
 }
 
 /* ================= REPORTS: tabs + charts + AI assistant ================= */
@@ -4256,6 +4319,8 @@ const translations={
   w_confirm_task_delete: {ru:'Удалить задачу?', ky:'Тапшырманы өчүрөсүзбү?', en:'Delete this task?', uz:'Vazifani o\'chirasizmi?'},
   w_confirm_delete_expense: {ru:'Удалить расход? Действие необратимо.', ky:'Чыгымды өчүрөсүзбү? Аракет кайтарылгыс.', en:'Delete this expense? This cannot be undone.', uz:"Xarajatni o'chirasizmi? Amalni bekor qilib bo'lmaydi."},
   w_expense_deleted: {ru:'Расход удалён', ky:'Чыгым өчүрүлдү', en:'Expense deleted', uz:"Xarajat o'chirildi"},
+  w_confirm_delete_patient: {ru:'Удалить пациента? Он переместится в корзину.', ky:'Пациентти өчүрөсүзбү? Ал себетке жылат.', en:'Delete this patient? They will be moved to the recycle bin.', uz:"Bemorni o'chirasizmi? U savatga ko'chiriladi."},
+  w_patient_deleted: {ru:'Пациент перемещён в корзину', ky:'Пациент себетке жылдырылды', en:'Patient moved to recycle bin', uz:"Bemor savatga ko'chirildi"},
   w_hover_fio: {ru:'ФИО', ky:'ФАА', en:'Full name', uz:'F.I.Sh.'},
   w_hover_appt_time: {ru:'Время записи', ky:'Жазуу убактысы', en:'Appointment time', uz:'Yozuv vaqti'},
   w_hover_phone: {ru:'Номер телефона', ky:'Телефон номери', en:'Phone number', uz:'Telefon raqami'},
@@ -4424,6 +4489,8 @@ const translations={
   w_no_transactions_yet: {ru:'Пока нет операций', ky:'Азырынча операциялар жок', en:'No transactions yet', uz:'Hozircha operatsiyalar yo‘q'},
   w_list_empty: {ru:'Список пуст', ky:'Тизме бош', en:'The list is empty', uz:'Ro‘yxat bo‘sh'},
   w_no_chats_yet: {ru:'Переписок пока нет', ky:'Азырынча жазышуулар жок', en:'No chats yet', uz:'Hozircha suhbatlar yo‘q'},
+  w_write_message: {ru:'Написать сообщение', ky:'Кат жазуу', en:'Write message', uz:'Xabar yozish'},
+  w_start_new_chat: {ru:'Начать новую переписку', ky:'Жаңы жазышуу баштоо', en:'Start a new chat', uz:'Yangi suhbat boshlash'},
   w_patient_card: {ru:'Карточка пациента', ky:'Бейтап картасы', en:'Patient card', uz:'Bemor kartasi'},
   w_loading: {ru:'Загрузка…', ky:'Жүктөлүүдө…', en:'Loading…', uz:'Yuklanmoqda…'},
   w_chat_load_failed: {ru:'Не удалось загрузить переписку', ky:'Жазышууну жүктөө мүмкүн болгон жок', en:'Failed to load the chat', uz:'Suhbatni yuklab bo‘lmadi'},
@@ -9064,7 +9131,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_PATIENT=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -9132,6 +9199,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, IS_SUPERADM
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
+    CAN_DELETE_PATIENT=!!data.canDeletePatient;
     IS_SUPERADMIN=!!data.isSuperadmin;
     IS_ADMIN=!!data.isAdmin;
     IS_ADMIN_MAIN=!!data.isAdminMain;
@@ -9296,9 +9364,20 @@ async function renderPatientsTable(){
     // «Отправить в кассу» прямо из списка — не только на вкладке
     // «Должники», но у любого пациента с долгом в общем списке тоже.
     const debtStyle = p.hasDebt ? ' style="background:var(--coral-tint);color:var(--coral);"' : '';
-    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}</td></tr>`;
+    const delBtn = CAN_DELETE_PATIENT ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral)" title="${t('w_delete')}" onclick="event.stopPropagation();deletePatientRow(${p.id},'${(p.fullName||'').replace(/'/g,"\\'")}')">🗑</button>` : '';
+    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}${delBtn}</td></tr>`;
   }).join('');
   renderPatientsPagination(data);
+}
+// Удалить пациента (в корзину, не безвозвратно) — та же вьюха, что и в
+// старом интерфейсе (apps.patients.views.patient_delete), уже мягко удаляет
+// и там же восстанавливается через /new/recycle/. Кнопка видна только при
+// праве patients.delete (CAN_DELETE_PATIENT, см. _shared_options).
+async function deletePatientRow(id, name){
+  if(!confirm(t('w_confirm_delete_patient')+(name?` «${name}»?`:'?'))) return;
+  const res=await postForm('/patients/'+id+'/delete/', new FormData());
+  if(res.redirected){ flashAndReload(t('w_patient_deleted')); }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 function renderPatientsPagination(data){
   const el=document.getElementById('patientsPagination');
@@ -9587,6 +9666,20 @@ function openPatientCard(id){
   renderPatientCardDocs(detail);
 
   pcTab('info');
+}
+// Карта пациента → «Удалить» — та же вьюха, что и в старом интерфейсе
+// (apps.patients.views.patient_delete): мягкое удаление, пациент попадает
+// в /new/recycle/, откуда его можно восстановить. Кнопка видна только при
+// праве patients.delete (CAN_DELETE_PATIENT) — гейт на уровне самого Django-
+// шаблона в patientcard.html (условный тег вокруг кнопки), она даже не
+// попадает в DOM у остальных, а не просто прячется в JS.
+async function deleteCurrentPatient(){
+  if(!currentPatientCardId) return;
+  const p=patientsList.find(x=>x.id===currentPatientCardId);
+  if(!confirm(t('w_confirm_delete_patient')+(p?` «${p.fullName}»?`:'?'))) return;
+  const res=await postForm('/patients/'+currentPatientCardId+'/delete/', new FormData());
+  if(res.redirected){ location.href='/new/patients/'; }
+  else { showToast(t('w_save_failed'), 'error'); }
 }
 
 function openNewPatient(fromApptModal){

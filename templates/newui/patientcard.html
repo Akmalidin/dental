@@ -16,7 +16,9 @@
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="pill teal" id="pc-status-pill" style="padding:6px 14px;font-size:12px;">—</span>
             <a href="tel:" id="pc-call-link" class="btn btn-ghost btn-sm" title="Позвонить пациенту">📞 <span data-i18n="w_call">Позвонить</span></a>
+            <button class="btn btn-ghost btn-sm" onclick="openChatWithPatient(currentPatientCardId)">✉ <span data-i18n="w_write_message">Написать сообщение</span></button>
             <button class="btn btn-ghost btn-sm" onclick="openEditPatient()">✎ <span data-i18n="w_edit_data">Изменить данные</span></button>
+            {% if real_data.canDeletePatient %}<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="deleteCurrentPatient()">🗑 <span data-i18n="w_delete">Удалить</span></button>{% endif %}
           </div>
         </div>
         <div class="hidden" id="pcBlacklistWarning" style="background:var(--coral-tint);border:1px solid var(--coral);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">

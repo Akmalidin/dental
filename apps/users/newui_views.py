@@ -107,6 +107,11 @@ def _shared_options(request, clinic):
         # у тех, у кого нет права (иначе клик просто упёрся бы в 403).
         "canDeleteHistory": bool(request.user.is_superadmin or
                                  (request.user.role_id and request.user.role.has_perm("patients.delete_history"))),
+        # Список/карта пациента → «Удалить» (в корзину, не безвозвратно — та
+        # же вьюха, что и в старом интерфейсе, apps.patients.views.
+        # patient_delete). Прячем у тех, у кого нет права patients.delete.
+        "canDeletePatient": bool(request.user.is_superadmin or
+                                 (request.user.role_id and request.user.role.has_perm("patients.delete"))),
         # Журнал аудита → кнопка «Откатить» — необратимо перезаписывает
         # текущее состояние объекта прошлым значением из истории, поэтому
         # только суперадминистратору (см. apps.users.newui_views.audit_revert).
@@ -539,7 +544,16 @@ def newui_accounting(request):
 def newui_messages(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
-    return _render(request, "messages", "messages.html", {"messagesData": _newui_messages_data(clinic)})
+    return _render(request, "messages", "messages.html", {
+        "messagesData": _newui_messages_data(clinic),
+        # Поиск в списке бесед должен находить ЛЮБОГО пациента, не только
+        # тех, у кого уже есть переписка (messagesData.clients) — иначе
+        # начать НОВЫЙ чат из поиска было невозможно (жалоба: «при поиске
+        # сделай список пациентов, нажав на него могут отправлять
+        # сообщения»). patientsList не был частью _shared_options — на этой
+        # странице до сих пор был пуст.
+        "patients": _newui_patients_data(),
+    })
 
 
 @login_required
