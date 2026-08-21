@@ -29,6 +29,18 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 
+def get_active_branch_id(request):
+    """ID филиала, выбранного в переключателе сайдбара (session["active_branch"],
+    см. apps.users.views.set_active_branch) — None, если выбрано «Все
+    филиалы». Используется для ФИЛЬТРАЦИИ отображаемых данных (расписание/
+    пациенты/склад/финансы/отчёты нового интерфейса) — в отличие от
+    apps.appointments.views._default_active_branch, который выбирает филиал
+    ПО УМОЛЧАНИЮ для новых записей (с fallback-цепочкой активный→основной→
+    свой→любой) и всегда возвращает что-то, а не None."""
+    bid = request.session.get("active_branch")
+    return bid if isinstance(bid, int) else None
+
+
 def set_current_clinic(clinic):
     _state.clinic = clinic
 

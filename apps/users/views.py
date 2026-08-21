@@ -404,11 +404,19 @@ def _newui_patients_page_data(request):
             )
         return qs
 
+    from apps.tenancy import get_active_branch_id
+    branch_id = get_active_branch_id(request)
+
     active_treatment_qs = Treatment.objects.filter(
         status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
     ).values_list("patient_id", flat=True)
 
-    base_qs = Patient.objects.all()
+    # Активный филиал переключателя сайдбара — фильтруем ВЕСЬ список (и
+    # KPI-блоки ниже, через all_patients_qs), а не только сам queryset
+    # результатов: выбор филиала — явное намерение «покажи мне этот
+    # филиал», а не второстепенный чип, поэтому в отличие от поиска/чипов
+    # затрагивает и сводку сверху.
+    base_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
     if q:
         base_qs = _search(base_qs)
     # Счётчики для чипов «Все/В лечении/Должники» — по queryset с учётом
@@ -427,7 +435,7 @@ def _newui_patients_page_data(request):
     today = timezone.localdate()
     week_ago = today - timedelta(days=7)
     week_ahead = today + timedelta(days=7)
-    all_patients_qs = Patient.objects.all()
+    all_patients_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
     new_count = all_patients_qs.filter(created_at__date__gte=week_ago).count()
     birthday_count = 0
     for bd in all_patients_qs.exclude(birth_date=None).values_list("birth_date", flat=True):
@@ -524,11 +532,15 @@ def _newui_services_data():
     }
 
 
-def _newui_finance_data(clinic):
+def _newui_finance_data(clinic, branch_id=None):
     """Финансы для нового интерфейса — реальные суммы. У макета «Касса» (смены,
     наличные/картой в текущей смене, Z-отчёт) опирается на кассовые смены,
     которых в реальной системе нет как модели — этот раздел размечен как
-    неподключённый (см. v-cashdesk), а не подделан."""
+    неподключённый (см. v-cashdesk), а не подделан.
+
+    branch_id — активный филиал переключателя сайдбара (None = «Все
+    филиалы»): Payment/Expense/Patient(долг) имеют собственное поле branch —
+    фильтруем ими напрямую."""
     from datetime import timedelta
     from django.db.models import Sum
     from django.utils import timezone
@@ -539,20 +551,27 @@ def _newui_finance_data(clinic):
     today = timezone.localdate()
     month_start = today.replace(day=1)
 
-    income = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
-    refund = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+    payments_qs = Payment.objects.filter(branch_id=branch_id) if branch_id else Payment.objects.all()
+    expenses_qs = Expense.objects.filter(branch_id=branch_id) if branch_id else Expense.objects.all()
+    patients_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
+
+    income = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+    refund = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
     revenue_month = float(income - refund)
-    expenses_month = float(Expense.objects.filter(created_at__date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
+    expenses_month = float(expenses_qs.filter(created_at__date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
     # PatientAdvance не clinic-scoped моделью (в отличие от Payment/Expense) —
     # фильтруем вручную через пациента, иначе утечка сумм других клиник.
+    # У самого депозита нет поля branch — фильтруем по филиалу ПАЦИЕНТА.
     advances_qs = PatientAdvance.objects.filter(patient__clinic=clinic) if clinic else PatientAdvance.objects.none()
+    if branch_id:
+        advances_qs = advances_qs.filter(patient__branch_id=branch_id)
     deposits_total = float(advances_qs.aggregate(s=Sum("amount"))["s"] or 0)
-    debtors = Patient.objects.filter(balance__lt=0)
+    debtors = patients_qs.filter(balance__lt=0)
     debt_total = float(-(debtors.aggregate(s=Sum("balance"))["s"] or 0))
     debt_count = debtors.count()
 
     txns = []
-    for p in Payment.objects.select_related("patient", "received_by").order_by("-created_at")[:10]:
+    for p in payments_qs.select_related("patient", "received_by").order_by("-created_at")[:10]:
         txns.append({
             "who": p.patient.full_name if p.patient else "—",
             "type": "Возврат" if p.type == Payment.TYPE_REFUND else "Оплата",
@@ -562,7 +581,7 @@ def _newui_finance_data(clinic):
             "paymentId": p.pk,
             "expenseId": None,
         })
-    for e in Expense.objects.select_related("category").order_by("-created_at")[:10]:
+    for e in expenses_qs.select_related("category").order_by("-created_at")[:10]:
         txns.append({
             "who": "Клиника", "type": f"Расход · {e.category.name if e.category else '—'}",
             "method": "—", "amount": -float(e.amount),
@@ -681,14 +700,21 @@ def _newui_warehouse_data():
     }
 
 
-def _newui_warehouse_ops_data():
+def _newui_warehouse_ops_data(branch_id=None):
     """Операции склада — поступления/списания/перемещения/инвентаризации
     (apps.warehouse), для отдельных вкладок страницы «Склад» в новом
     интерфейсе. Создание идёт через ТЕ ЖЕ вьюхи-формы старого интерфейса
     (apps.warehouse.views: entry_create/distribution_create/transfer_create/
     inventory_create — POST + res.redirected → flashAndReload), включая
     множественные позиции одним запросом (getlist по product/quantity/...),
-    как и в старом интерфейсе — бизнес-логика не дублируется."""
+    как и в старом интерфейсе — бизнес-логика не дублируется.
+
+    branch_id — активный филиал переключателя сайдбара (None = «Все
+    филиалы»): списания/инвентаризации у филиала СВОИ (branch), перемещения
+    показываем, если филиал участвует в них любой стороной (откуда ИЛИ
+    куда). Поступления (WarehouseEntry) — без поля branch, приходуются на
+    склад клиники в целом, поэтому филиалом не фильтруются."""
+    from django.db.models import Q
     from apps.warehouse.models import (
         Product, ProductCategory, Supplier, WarehouseEntry, WarehouseDistribution,
         WarehouseTransfer, InventoryDocument,
@@ -702,26 +728,35 @@ def _newui_warehouse_ops_data():
         "date": e.date.strftime("%d.%m.%Y"),
     } for e in WarehouseEntry.objects.select_related("product", "supplier").order_by("-date", "-id")[:100]]
 
+    distributions_qs = WarehouseDistribution.objects.select_related("product", "branch", "issued_to")
+    if branch_id:
+        distributions_qs = distributions_qs.filter(branch_id=branch_id)
     distributions = [{
         "id": d.pk, "product": d.product.name if d.product_id else "—",
         "quantity": float(d.quantity), "unit": d.product.unit if d.product_id else "",
         "branch": d.branch.name if d.branch_id else "—",
         "issuedTo": d.issued_to.name if d.issued_to_id else "—",
         "date": d.date.strftime("%d.%m.%Y"),
-    } for d in WarehouseDistribution.objects.select_related("product", "branch", "issued_to").order_by("-date", "-id")[:100]]
+    } for d in distributions_qs.order_by("-date", "-id")[:100]]
 
+    transfers_qs = WarehouseTransfer.objects.select_related("from_branch", "to_branch").prefetch_related("items__product")
+    if branch_id:
+        transfers_qs = transfers_qs.filter(Q(from_branch_id=branch_id) | Q(to_branch_id=branch_id))
     transfers = [{
         "id": tr.pk, "fromBranch": tr.from_branch.name if tr.from_branch_id else "—",
         "toBranch": tr.to_branch.name if tr.to_branch_id else "—",
         "date": tr.date.strftime("%d.%m.%Y"),
         "items": [{"product": it.product.name if it.product_id else "—", "quantity": float(it.quantity)} for it in tr.items.select_related("product").all()],
-    } for tr in WarehouseTransfer.objects.select_related("from_branch", "to_branch").prefetch_related("items__product").order_by("-date", "-id")[:100]]
+    } for tr in transfers_qs.order_by("-date", "-id")[:100]]
 
+    inventories_qs = InventoryDocument.objects.select_related("branch")
+    if branch_id:
+        inventories_qs = inventories_qs.filter(branch_id=branch_id)
     inventories = [{
         "id": inv.pk, "branch": inv.branch.name if inv.branch_id else "—",
         "date": inv.date.strftime("%d.%m.%Y"), "status": inv.status,
         "statusLabel": inv.get_status_display(),
-    } for inv in InventoryDocument.objects.select_related("branch").order_by("-date", "-id")[:100]]
+    } for inv in inventories_qs.order_by("-date", "-id")[:100]]
 
     return {
         "entries": entries,
@@ -740,7 +775,7 @@ def _newui_warehouse_ops_data():
     }
 
 
-def _newui_reports_data():
+def _newui_reports_data(branch_id=None):
     """Отчёты для нового интерфейса — верхние real-KPI «Общего отчёта», графики
     на нём же (выручка по неделям, загрузка врачей, источники заявок, причины
     отмены) и реальные вкладки Расходы/Должники/Отменённые визиты/Статистика по
@@ -758,7 +793,17 @@ def _newui_reports_data():
     модели, поэтому этого измерения в выборе больше нет вообще (не показываем
     вкладку с обещанием, которое нечем выполнить). ИИ-помощник НЕ подключен —
     см. баннер на странице; ИИ-рекомендаций как функции в системе не
-    существует."""
+    существует.
+
+    branch_id — активный филиал переключателя сайдбара (None = «Все
+    филиалы»). Фильтруются метрики, у которых есть прямая или однохоповая
+    связь с филиалом: выручка/расходы/должники (Payment/Expense/Patient.branch),
+    приёмы и всё, что от них считается (завершено/отменено/неявка,
+    отменённые визиты, статистика по врачам через Treatment.appointment,
+    повторные визиты, загрузка кабинетов, выручка по неделям). «Источники
+    заявок» (Lead) НЕ фильтруются — у модели нет поля branch и однозначной
+    связи с филиалом нет (как и «Материалы» выше — не показываем то, что
+    нечем честно посчитать)."""
     from datetime import timedelta
     from collections import defaultdict
     from django.db.models import Sum, Count, Max
@@ -770,9 +815,12 @@ def _newui_reports_data():
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
-    income = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
-    refund = Payment.objects.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+    payments_qs = Payment.objects.filter(branch_id=branch_id) if branch_id else Payment.objects.all()
+    income = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+    refund = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
     month_appts = Appointment.objects.filter(start_at__date__gte=month_start)
+    if branch_id:
+        month_appts = month_appts.filter(branch_id=branch_id)
     completed = month_appts.filter(status=Appointment.STATUS_COMPLETED).count()
     cancelled = month_appts.filter(status=Appointment.STATUS_CANCELLED).count()
     noshow = month_appts.filter(status=Appointment.STATUS_NO_SHOW).count()
@@ -780,6 +828,8 @@ def _newui_reports_data():
 
     # ── Расходы (Expense/ExpenseCategory) — за месяц ──
     expenses_qs = Expense.objects.filter(date__gte=month_start).select_related("category")
+    if branch_id:
+        expenses_qs = expenses_qs.filter(branch_id=branch_id)
     expenses_total = float(expenses_qs.aggregate(s=Sum("amount"))["s"] or 0)
     expenses_by_cat = list(
         expenses_qs.values("category__name").annotate(total=Sum("amount")).order_by("-total")
@@ -791,6 +841,8 @@ def _newui_reports_data():
 
     # ── Должники — тот же запрос, что и старый /finance/payments/debtors/ ──
     debtors_qs = Patient.objects.filter(balance__lt=0).order_by("balance")
+    if branch_id:
+        debtors_qs = debtors_qs.filter(branch_id=branch_id)
     debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
     debtors_total = float(sum(p["balance"] for p in debtors_list))
 
@@ -809,9 +861,16 @@ def _newui_reports_data():
     } for a in cancelled_qs[:200]]
 
     # ── Статистика по врачам — завершённые/оплаченные приёмы за месяц ──
-    doctor_treatments = (Treatment.objects.filter(
+    # У Treatment нет своего branch — фильтруем через связанный приём
+    # (Treatment.appointment.branch); лечения без привязки к приёму (напр.
+    # быстрая продажа) при выбранном филиале в статистику не попадают.
+    doctor_treatments_qs = Treatment.objects.filter(
         created_at__date__gte=month_start, status__in=[Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID],
-    ).values("doctor__name").annotate(cnt=Count("id"), revenue=Sum("total_amount")).order_by("-revenue"))
+    )
+    if branch_id:
+        doctor_treatments_qs = doctor_treatments_qs.filter(appointment__branch_id=branch_id)
+    doctor_treatments = (doctor_treatments_qs
+        .values("doctor__name").annotate(cnt=Count("id"), revenue=Sum("total_amount")).order_by("-revenue"))
     doctor_appt_totals = dict(month_appts.values_list("doctor__name").annotate(cnt=Count("id")))
     doctor_appt_completed = dict(month_appts.filter(status=Appointment.STATUS_COMPLETED).values_list("doctor__name").annotate(cnt=Count("id")))
     doctor_stats = []
@@ -862,6 +921,8 @@ def _newui_reports_data():
     service_agg = {}
     cures_qs = (TreatmentCure.objects.filter(treatment__created_at__date__gte=month_start)
                 .exclude(treatment__status="cancelled").select_related("service"))
+    if branch_id:
+        cures_qs = cures_qs.filter(treatment__appointment__branch_id=branch_id)
     for cure in cures_qs:
         key = cure.service.name if cure.service_id else "Без услуги"
         row = service_agg.setdefault(key, {"count": 0, "revenue": 0.0})
@@ -877,7 +938,7 @@ def _newui_reports_data():
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     week_count = (days_in_month - 1) // 7 + 1
     weekly_net = [0.0] * week_count
-    month_income_refund = Payment.objects.filter(
+    month_income_refund = payments_qs.filter(
         created_at__date__gte=month_start, created_at__date__lte=today,
         type__in=[Payment.TYPE_INCOME, Payment.TYPE_REFUND],
     ).only("amount", "type", "created_at")
@@ -897,8 +958,11 @@ def _newui_reports_data():
 
     # ── Повторные визиты — визитов на пациента (все завершённые приёмы, не
     # только этот месяц — иначе «повторность» не увидеть) + дата последнего. ──
+    patient_visits_qs = Appointment.objects.filter(status=Appointment.STATUS_COMPLETED, patient__isnull=False)
+    if branch_id:
+        patient_visits_qs = patient_visits_qs.filter(branch_id=branch_id)
     patient_visits = (
-        Appointment.objects.filter(status=Appointment.STATUS_COMPLETED, patient__isnull=False)
+        patient_visits_qs
         .values("patient_id", "patient__last_name", "patient__first_name", "patient__middle_name")
         .annotate(cnt=Count("id"), last_at=Max("start_at"))
         .order_by("-cnt")
@@ -920,6 +984,8 @@ def _newui_reports_data():
         start_at__date__gte=week_start, start_at__date__lt=week_start + timedelta(days=7),
         cabinet__isnull=False,
     ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).select_related("cabinet"))
+    if branch_id:
+        week_appts = week_appts.filter(branch_id=branch_id)
     cabinet_hours = defaultdict(float)
     for a in week_appts:
         cabinet_hours[a.cabinet.name] += (a.end_at - a.start_at).total_seconds() / 3600.0
@@ -982,19 +1048,29 @@ def _newui_reports_data():
     }
 
 
-def _newui_schedule_data(clinic):
+def _newui_schedule_data(clinic, branch_id=None):
     """Расписание врачей для нового интерфейса — реальные врачи и реальные
     приёмы в окне ±30 дней от сегодня (день/неделя/месяц листаются внутри
     этого окна). Создание записи кликом по пустой ячейке и перетаскивание
     записи между ячейками/врачами подключены к тем же view, что и старый
     интерфейс — appointment_create_quick / appointment_move (см. схему
-    day_grid.html), логика конфликтов/расписания не дублируется."""
+    day_grid.html), логика конфликтов/расписания не дублируется.
+
+    branch_id — активный филиал переключателя сайдбара (None = «Все
+    филиалы»): сужаем и список врачей (кто закреплён за этим филиалом,
+    User.branches), и сами приёмы (Appointment.branch — источник истины,
+    т.к. запись могла быть создана до смены филиала врача)."""
     from datetime import timedelta
     from django.utils import timezone
     from apps.users.models import clinic_doctors
     from apps.appointments.models import Appointment
 
-    doctors = list(clinic_doctors(clinic).order_by("name")) if clinic else []
+    doctors = []
+    if clinic:
+        doctors_qs = clinic_doctors(clinic)
+        if branch_id:
+            doctors_qs = doctors_qs.filter(branches__id=branch_id).distinct()
+        doctors = list(doctors_qs.order_by("name"))
     doctor_ids = [d.pk for d in doctors]
     doctors_data = [{
         "id": d.pk, "init": initials_of(d.name), "name": d.name,
@@ -1009,6 +1085,8 @@ def _newui_schedule_data(clinic):
                 .filter(doctor_id__in=doctor_ids, start_at__date__gte=window_start, start_at__date__lte=window_end)
                 .exclude(status=Appointment.STATUS_CANCELLED)
                 .select_related("patient", "service", "created_by").order_by("start_at"))
+    if branch_id:
+        appts_qs = appts_qs.filter(branch_id=branch_id)
 
     status_color = {
         Appointment.STATUS_SCHEDULED: "cobalt", Appointment.STATUS_CONFIRMED: "cobalt",
