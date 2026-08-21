@@ -2692,6 +2692,39 @@ class ClinicBlockReasonTestCase(TestCase):
         self.assertContains(resp, "Уже есть доступ? Войти")
 
 
+class StomAsiaRoutingMiddlewareTestCase(TestCase):
+    """Регрессия: <slug>.stom.asia для заблокированной/несуществующей клиники
+    редиректит на /access-request/ на ТОМ ЖЕ поддомене (в отличие от
+    PublicSiteMiddleware, который уводит на другой app-хост) — сама
+    /access-request/ и статика должны быть исключены из повторной проверки,
+    иначе middleware редиректит сам на себя (ERR_TOO_MANY_REDIRECTS)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Routing", slug="akm")
+        self.clinic.is_active = False
+        self.clinic.blocked_reason = "тест"
+        self.clinic.save(update_fields=["is_active", "blocked_reason"])
+
+    def test_access_request_on_blocked_subdomain_does_not_redirect_loop(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/access-request/?clinic=akm", HTTP_HOST="akm.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_unresolved_slug_still_redirects_to_access_request(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/", HTTP_HOST="unknown-slug.stom.asia")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/access-request/?clinic=unknown-slug")
+
+    def test_static_path_on_blocked_subdomain_not_redirected(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/static/css/app.css", HTTP_HOST="akm.stom.asia")
+        self.assertNotEqual(resp.status_code, 302)
+
+
 class StomAsiaLoginTemplateTestCase(TestCase):
     """На домене stom.asia (CRM_BASE_DOMAIN) страница входа рендерится
     отдельным, переоформленным шаблоном (login_stom.html) — на остальных
