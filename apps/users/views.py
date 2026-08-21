@@ -2047,6 +2047,8 @@ def _newui_superadmin_data():
                 "branchCount": Branch.objects.filter(clinic=c, is_active=True).count(),
                 "staffCount": User.objects.filter(clinic=c, is_active=True).count(),
                 "patientCount": Patient.all_objects.filter(clinic=c, is_deleted=False).count(),
+                "branches": [{"id": b.pk, "name": b.name, "isActive": b.is_active, "isMain": b.is_main}
+                             for b in Branch.objects.filter(clinic=c).order_by("-is_main", "name")],
                 "loginEvents": [{
                     "user": e.user.name if e.user else "—",
                     "ip": e.ip_address or "—",
@@ -2633,7 +2635,13 @@ def clinic_toggle_active(request, clinic_id):
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     clinic.is_active = not clinic.is_active
-    clinic.save(update_fields=["is_active"])
+    update_fields = ["is_active"]
+    if not clinic.is_active:
+        # Причину указывает супер-админ в момент блокировки — клиника увидит
+        # её на /access-request/ вместо простого «недоступна».
+        clinic.blocked_reason = request.POST.get("reason", "").strip()
+        update_fields.append("blocked_reason")
+    clinic.save(update_fields=update_fields)
     state = _("разблокирована") if clinic.is_active else _("заблокирована")
     messages.success(request, _("Клиника «%(n)s» %(s)s") % {"n": clinic.name, "s": state})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
@@ -2702,6 +2710,34 @@ def clinic_access_request_set_status(request, pk):
     if status in dict(ClinicAccessRequest.STATUS_CHOICES):
         req.status = status
         req.save(update_fields=["status"])
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@login_required
+@require_POST
+def branch_toggle_active(request, pk):
+    """Заблокировать/разблокировать филиал — только супер-админ (из
+    /new/superadmin/). Блокировка = «запретить запись/работу в филиале»:
+    новые записи на приём больше не создаются в этот филиал (см.
+    apps.appointments.views._default_active_branch, appointment_create_quick) —
+    существующие записи/история остаются как есть, филиал просто исчезает
+    из переключателей/выбора для НОВОЙ работы. Тот же Branch.is_active,
+    который уже редактируется в старом интерфейсе (BranchForm) — здесь
+    просто быстрый тумблер без открытия полной формы."""
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    from apps.tenancy import unscoped
+    with unscoped():
+        # Branch.objects — clinic-scoped (ClinicManager); супер-админ может
+        # переключать филиал ЛЮБОЙ клиники, не только «текущей» по сессии.
+        # Branch.all_clinics — немодифицированный менеджер ClinicScopedModel,
+        # видит записи всех клиник без фильтрации.
+        branch = get_object_or_404(Branch.all_clinics, pk=pk)
+        branch.is_active = not branch.is_active
+        branch.save(update_fields=["is_active"])
+    state = _("разблокирован") if branch.is_active else _("заблокирован")
+    messages.success(request, _("Филиал «%(n)s» %(s)s") % {"n": branch.name, "s": state})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
 
 
@@ -3062,10 +3098,21 @@ def login_view(request):
     if clinic is None and getattr(request, "host_clinic", None):
         clinic = request.host_clinic
         clinic_slug = clinic.slug
+    # На домене stom.asia (апекс/www/любой поддоменом клиники) — отдельный,
+    # переоформленный под фирменный стиль ODONTIS шаблон входа (тёмный фон,
+    # коралловый акцент, анимации), см. templates/auth/login_stom.html.
+    # На остальных доменах (sadaf.kg и др.) поведение не меняется.
+    from django.conf import settings as dj_settings
+    crm_base = (getattr(dj_settings, "CRM_BASE_DOMAIN", "") or "").lower()
+    host = request.get_host().split(":")[0].lower()
+    is_stom_asia = bool(crm_base) and (host == crm_base or host.endswith("." + crm_base))
+    template_name = "auth/login_stom.html" if is_stom_asia else "auth/login.html"
     try:
         if clinic:
             set_current_clinic(clinic)
-        return render(request, "auth/login.html", {"form": form, "clinic_slug": clinic_slug})
+        # clinic_settings в контекст добавляет apps.settings_clinic.context_processors
+        # (по текущей клинике, см. set_current_clinic выше) — здесь его задавать не нужно.
+        return render(request, template_name, {"form": form, "clinic_slug": clinic_slug})
     finally:
         clear_current_clinic()
 
@@ -3121,6 +3168,7 @@ def clinic_access_request(request):
     return render(request, "auth/access_request.html", {
         "clinic_slug": clinic_slug,
         "known_clinic": known_clinic,
+        "is_blocked": bool(known_clinic and not known_clinic.is_active),
         "submitted": submitted,
     })
 

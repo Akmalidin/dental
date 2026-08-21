@@ -2570,3 +2570,156 @@ class ClinicBlockedFeaturesTestCase(TestCase):
         data = _extract_newui_real_data(resp.content.decode())
         self.assertTrue(data["voiceEnabled"])
         self.assertTrue(data["aiEnabled"])
+
+
+class BranchBlockingTestCase(TestCase):
+    """«Запретить запись/работу в филиале» (Branch.is_active=False) — новая
+    запись не может достаться заблокированному филиалу врача, ни через
+    быстрое создание (appointment_create_quick), ни через супер-админскую
+    вьюху переключения (branch_toggle_active)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника BB", slug="clinic-bb")
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        self.branch = Branch.objects.create(
+            name="Филиал BB", address="-", phone="0", is_main=True, clinic=self.clinic,
+        )
+        self.doctor = User.objects.create(
+            login="bb_doctor", name="Врач BB", email="bbd@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor.branches.set([self.branch])
+        self.staff = User.objects.create(
+            login="bb_staff", name="Сотрудник BB", email="bbs@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="bb_super", name="Супер BB", email="bbsup@test.local",
+            role=self.superadmin_role,
+        )
+
+    def test_appointment_create_quick_rejected_when_branch_blocked(self):
+        self.branch.is_active = False
+        self.branch.save(update_fields=["is_active"])
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": "2026-09-01T10:00:00",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("заблокирован", resp.json()["error"])
+
+    def test_appointment_create_quick_works_when_branch_active(self):
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": "2026-09-01T10:00:00",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_branch_toggle_active_requires_superadmin(self):
+        self.client.force_login(self.staff)
+        resp = self.client.post(f"/users/branches/{self.branch.pk}/toggle-active/", follow=True)
+        self.branch.refresh_from_db()
+        self.assertTrue(self.branch.is_active)  # не изменилось
+
+    def test_branch_toggle_active_by_superadmin(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(f"/users/branches/{self.branch.pk}/toggle-active/")
+        self.assertEqual(resp.status_code, 302)
+        self.branch.refresh_from_db()
+        self.assertFalse(self.branch.is_active)
+
+
+class ClinicBlockReasonTestCase(TestCase):
+    """Причина блокировки клиники (Clinic.blocked_reason) — задаётся
+    супер-админом в момент блокировки, показывается на /access-request/
+    вместе со скрытой ссылкой «Войти» именно для заблокированной клиники."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Reason", slug="clinic-reason")
+        self.superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        self.superadmin = User.objects.create(
+            login="reason_super", name="Супер Reason", email="rsup@test.local",
+            role=self.superadmin_role,
+        )
+
+    def test_toggle_active_saves_reason_when_blocking(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(
+            f"/users/clinic/{self.clinic.pk}/toggle-active/",
+            {"reason": "Задолженность по оплате тарифа"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertFalse(self.clinic.is_active)
+        self.assertEqual(self.clinic.blocked_reason, "Задолженность по оплате тарифа")
+
+    def test_toggle_active_reason_ignored_when_unblocking(self):
+        self.clinic.is_active = False
+        self.clinic.blocked_reason = "Старая причина"
+        self.clinic.save(update_fields=["is_active", "blocked_reason"])
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(
+            f"/users/clinic/{self.clinic.pk}/toggle-active/",
+            {"reason": "должно быть проигнорировано"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertTrue(self.clinic.is_active)
+        self.assertEqual(self.clinic.blocked_reason, "Старая причина")  # не тронуто
+
+    def test_access_request_shows_reason_and_hides_login_link(self):
+        self.clinic.is_active = False
+        self.clinic.blocked_reason = "Нарушение условий использования"
+        self.clinic.save(update_fields=["is_active", "blocked_reason"])
+        resp = self.client.get(f"/access-request/?clinic={self.clinic.slug}")
+        self.assertContains(resp, "Нарушение условий использования")
+        self.assertNotContains(resp, "Уже есть доступ? Войти")
+
+    def test_access_request_shows_login_link_when_not_blocked(self):
+        resp = self.client.get("/access-request/?clinic=unknown-slug-xyz")
+        self.assertContains(resp, "Уже есть доступ? Войти")
+
+
+class StomAsiaLoginTemplateTestCase(TestCase):
+    """На домене stom.asia (CRM_BASE_DOMAIN) страница входа рендерится
+    отдельным, переоформленным шаблоном (login_stom.html) — на остальных
+    доменах поведение не меняется (login.html). Апекс/www.stom.asia — это
+    лендинг о продукте (config.urls_marketing, см. StomAsiaRoutingMiddleware),
+    поэтому CRM-логин на stom.asia открывается на "app.stom.asia" — служебный
+    хост, который middleware намеренно не трактует как слаг клиники."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Demo", slug="demo")
+
+    def test_stom_asia_app_host_renders_new_template(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="app.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "auth/login_stom.html")
+
+    def test_stom_asia_clinic_subdomain_renders_new_template(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="demo.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "auth/login_stom.html")
+
+    def test_other_domain_keeps_old_template(self):
+        from django.test import override_settings
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="app.sadaf.kg")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "auth/login.html")
