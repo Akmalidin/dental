@@ -245,6 +245,14 @@ class StomAsiaRoutingMiddleware:
       общий app-хост, в отличие от *.sadaf.kg) — только помечаем клинику по хосту
       для страницы входа (см. login_view), сам urlconf/маршруты не меняются.
     """
+    # Редирект на «запросить доступ» ниже остаётся НА ТОМ ЖЕ поддомене
+    # (в отличие от PublicSiteMiddleware, который уводит на другой app-хост) —
+    # поэтому сама страница /access-request/ и статика для неё должны быть
+    # исключены из повторной проверки, иначе ERR_TOO_MANY_REDIRECTS: запрос
+    # к /access-request/?clinic=<slug> для той же заблокированной клиники
+    # снова попадает в этот же middleware и снова редиректит сам на себя.
+    ALLOWED_PREFIXES = ("/access-request", "/static", "/i18n", "/sw.js", "/manifest.json")
+
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -257,7 +265,7 @@ class StomAsiaRoutingMiddleware:
         if host in (crm_base, "www." + crm_base):
             request.urlconf = "config.urls_marketing"
             return self.get_response(request)
-        if host.endswith("." + crm_base):
+        if host.endswith("." + crm_base) and not request.path.startswith(self.ALLOWED_PREFIXES):
             slug = host[: -(len(crm_base) + 1)]
             superadmin_host = (getattr(dj, "SUPERADMIN_HOST", "") or "").lower()
             if slug and slug not in ("www", "app") and host != superadmin_host:

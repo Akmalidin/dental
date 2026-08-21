@@ -132,11 +132,18 @@ input{font-family:inherit;}
 .foot{text-align:center;margin-top:22px;color:rgba(139,147,163,.7);font-size:11.5px;
   animation:riseIn .6s .16s cubic-bezier(.22,1,.36,1) both;}
 
-/* пульс-линия — фирменный элемент ODONTIS, рисуется один раз при загрузке */
+/* пульс-линия — фирменный элемент ODONTIS: бегущий отрезок непрерывно
+   «пробегает» по контуру (как луч кардиомонитора), а не рисуется один раз
+   и замирает. Сумма dasharray (46+220=266) равна одному циклу dashoffset —
+   поэтому виток закольцовывается без видимого скачка/паузы. */
 .pulse{width:100%;height:26px;margin-bottom:2px;opacity:.9;}
-.pulse path{fill:none;stroke:var(--coral);stroke-width:2;stroke-linecap:round;stroke-dasharray:220;stroke-dashoffset:220;
-  animation:draw 1.3s .3s ease-out forwards;}
-@keyframes draw{to{stroke-dashoffset:0;}}
+.pulse path{fill:none;stroke:var(--coral);stroke-width:2;stroke-linecap:round;
+  stroke-dasharray:46 220;
+  animation:pulse-flow 2.4s linear infinite;}
+@keyframes pulse-flow{
+  from{stroke-dashoffset:266;}
+  to{stroke-dashoffset:0;}
+}
 </style>
 </head>
 <body>
