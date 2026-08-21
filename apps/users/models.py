@@ -56,10 +56,29 @@ class Clinic(models.Model):
         ("branches", "Создание филиалов"),
     ]
     granted_access = models.JSONField(default=list, blank=True, verbose_name="Доступы (супер-админ)")
+    # В отличие от granted_access (выдать то, чего нет по умолчанию) — это
+    # ОБРАТНОЕ: список функций, которые обычно РАБОТАЮТ, но супер-админ может
+    # точечно запретить конкретной клинике. Пусто по умолчанию — ничего не
+    # блокируется, поведение всех существующих клиник не меняется. Ключи,
+    # кроме voice_bot, специально совпадают с SECTION_KEYS/
+    # SectionAccessMiddleware.PREFIXES (apps/tenancy.py) — там же и
+    # применяется блокировка, без отдельной таблицы соответствий.
+    BLOCKABLE_FEATURES = [
+        ("voice_bot", "Голосовой/ИИ-бот"),
+        ("warehouse", "Склад"),
+        ("finance", "Финансы/Касса"),
+        ("technicians", "Лаборатория"),
+        ("medicines", "Лекарства"),
+        ("reports", "Аналитика"),
+    ]
+    blocked_features = models.JSONField(default=list, blank=True, verbose_name="Заблокированные функции")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def has_access(self, key):
         return key in (self.granted_access or [])
+
+    def is_blocked(self, key):
+        return key in (self.blocked_features or [])
 
     @property
     def is_expired(self):
@@ -402,6 +421,71 @@ class UserActivity(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.action} — {self.created_at:%d.%m.%Y %H:%M}"
+
+
+class ClinicAccessRequest(models.Model):
+    """Заявка «дайте доступ» — публичная форма (apps.users.views.
+    clinic_access_request), показывается посетителю вместо тихого редиректа
+    на общий вход, когда поддомен не соответствует ни одной клинике или
+    клиника заблокирована (Clinic.is_active=False). Супер-админ видит список
+    новых заявок в /new/superadmin/."""
+    STATUS_NEW, STATUS_CONTACTED, STATUS_RESOLVED = "new", "contacted", "resolved"
+    STATUS_CHOICES = [(STATUS_NEW, "Новая"), (STATUS_CONTACTED, "Связались"), (STATUS_RESOLVED, "Решено")]
+    clinic_slug = models.CharField(max_length=120, blank=True, verbose_name="Поддомен (если вводили)")
+    clinic_name = models.CharField(max_length=200, verbose_name="Название клиники")
+    contact_name = models.CharField(max_length=200, verbose_name="Контактное лицо")
+    phone = models.CharField(max_length=30, verbose_name="Телефон")
+    email = models.EmailField(blank=True)
+    message = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Заявка на доступ"
+        verbose_name_plural = "Заявки на доступ"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.clinic_name} — {self.get_status_display()}"
+
+
+class ClinicLoginEvent(models.Model):
+    """Лог попыток входа (успешных и нет) — IP/устройство/клиника, для
+    супер-админ-панели («Последние входы» по клинике) и как основа для
+    блокировки по IP (см. BlockedIP, apps.users.forms.LoginForm.clean)."""
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    clinic = models.ForeignKey(Clinic, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+    success = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Вход в систему"
+        verbose_name_plural = "Входы в систему"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.ip_address} — {'ok' if self.success else 'fail'} — {self.created_at:%d.%m.%Y %H:%M}"
+
+
+class BlockedIP(models.Model):
+    """Глобальная блокировка входа по IP (не привязана к одной клинике —
+    заблокированный IP не сможет войти ни в одну клинику). Проверяется в
+    apps.users.forms.LoginForm.clean() при каждой попытке входа."""
+    ip_address = models.GenericIPAddressField(unique=True)
+    note = models.CharField(max_length=300, blank=True)
+    blocked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Заблокированный IP"
+        verbose_name_plural = "Заблокированные IP"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.ip_address
 
 
 class AuditRevert(models.Model):

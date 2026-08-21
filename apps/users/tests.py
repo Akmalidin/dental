@@ -2394,3 +2394,179 @@ class NewUISuperadminTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Clinic.objects.filter(name="Клиника из старого интерфейса").exists())
+
+
+class ClinicBlockingTestCase(TestCase):
+    """Реальная блокировка клиники (Clinic.is_active=False) — мгновенный
+    разлогин активных сессий + запрет нового входа, оба ведут на
+    /access-request/ (apps.tenancy.TariffGuardMiddleware, login_view)."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        self.clinic = Clinic.objects.create(name="Клиника Блок", slug="clinic-blocking")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="cb_director", name="Директор CB", email="cbd@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.director.set_password("pass1234")
+        self.director.save()
+
+    def test_active_session_logged_out_when_clinic_blocked(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/", follow=False)
+        self.assertEqual(resp.status_code, 200)  # ещё активна
+
+        self.clinic.is_active = False
+        self.clinic.save(update_fields=["is_active"])
+
+        resp2 = self.client.get("/new/", follow=True)
+        self.assertRedirects(resp2, f"/access-request/?clinic={self.clinic.slug}",
+                              fetch_redirect_response=False)
+        self.assertFalse(resp2.wsgi_request.user.is_authenticated)
+
+    def test_new_login_blocked_for_inactive_clinic(self):
+        self.clinic.is_active = False
+        self.clinic.save(update_fields=["is_active"])
+        resp = self.client.get(f"/login/?clinic={self.clinic.slug}")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, f"/access-request/?clinic={self.clinic.slug}")
+
+    def test_expired_tariff_still_works_as_before(self):
+        """Регрессия: истёкший тариф (не блокировка) по-прежнему рендерит
+        tariff_expired.html на месте, сессия не разлогинивается."""
+        from datetime import date, timedelta
+        self.clinic.tariff_until = date.today() - timedelta(days=1)
+        self.clinic.save(update_fields=["tariff_until"])
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/")
+        self.assertEqual(resp.status_code, 402)
+        self.assertTrue(resp.wsgi_request.user.is_authenticated)
+
+
+class ClinicAccessRequestTestCase(TestCase):
+    """Форма «запросить доступ» — публичная, создаёт заявку и уведомляет
+    супер-админов (apps.notifications.models.Notification)."""
+
+    def setUp(self):
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.superadmin = User.objects.create(
+            login="car_super", name="Супер CAR", email="cars@test.local",
+            role=self.superadmin_role,
+        )
+
+    def test_submit_creates_request_and_notifies_superadmin(self):
+        from apps.users.models import ClinicAccessRequest
+        from apps.notifications.models import Notification
+        resp = self.client.post("/access-request/", {
+            "clinic_name": "Новая клиника CAR", "contact_name": "Иван Иванов",
+            "phone": "+996700000001", "email": "ivan@test.local", "message": "Хочу подключиться",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(ClinicAccessRequest.objects.filter(clinic_name="Новая клиника CAR").exists())
+        self.assertTrue(Notification.objects.filter(user=self.superadmin, title__icontains="Новая клиника CAR").exists())
+
+    def test_submit_missing_required_fields_shows_error(self):
+        from apps.users.models import ClinicAccessRequest
+        resp = self.client.post("/access-request/", {"clinic_name": "", "contact_name": "", "phone": ""})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(ClinicAccessRequest.objects.exists())
+
+    def test_public_site_middleware_unresolved_slug_redirects_to_access_request(self):
+        """Регрессия для жалобы «редиректит на sadaf» — несуществующий
+        поддомен теперь ведёт на форму запроса доступа, а не на общий вход."""
+        from django.test import override_settings
+        with override_settings(PUBLIC_BASE_DOMAIN="example.test", APP_HOST="app.example.test"):
+            resp = self.client.get("/", HTTP_HOST="totally-unknown-slug.example.test")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("app.example.test/access-request/", resp.url)
+
+
+class BlockedIPTestCase(TestCase):
+    """Блокировка входа по IP (apps.users.forms.LoginForm.clean) — глобальная,
+    не привязана к одной клинике; логируется ClinicLoginEvent на каждую
+    попытку входа (успех/провал)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника IP", slug="clinic-ip")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="ip_director", name="Директор IP", email="ipd@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.director.set_password("pass1234")
+        self.director.save()
+
+    def test_blocked_ip_cannot_login(self):
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="203.0.113.5")
+        resp = self.client.post("/login/", {"login": "ip_director", "password": "pass1234"},
+                                 REMOTE_ADDR="203.0.113.5")
+        self.assertContains(resp, "заблокирован")
+        self.assertFalse(resp.wsgi_request.user.is_authenticated)
+
+    def test_login_events_logged_success_and_failure(self):
+        from apps.users.models import ClinicLoginEvent
+        self.client.post("/login/", {"login": "ip_director", "password": "wrong"}, REMOTE_ADDR="203.0.113.9")
+        self.client.post("/login/", {"login": "ip_director", "password": "pass1234"}, REMOTE_ADDR="203.0.113.9")
+        events = list(ClinicLoginEvent.objects.filter(ip_address="203.0.113.9").order_by("created_at"))
+        self.assertEqual(len(events), 2)
+        self.assertFalse(events[0].success)
+        self.assertTrue(events[1].success)
+        self.assertEqual(events[1].clinic_id, self.clinic.pk)
+
+
+class ClinicBlockedFeaturesTestCase(TestCase):
+    """Блокировка отдельных функций клиники (Clinic.blocked_features) —
+    apps.tenancy.SectionAccessMiddleware + голосовой/ИИ-бот в _shared_options."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника BF", slug="clinic-bf")
+        self.other_clinic = Clinic.objects.create(name="Клиника BF Other", slug="clinic-bf-other")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.staff = User.objects.create(
+            login="bf_staff", name="Сотрудник BF", email="bfs@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.other_staff = User.objects.create(
+            login="bf_other", name="Сотрудник Other", email="bfo@test.local",
+            role=self.admin_role, clinic=self.other_clinic,
+        )
+
+    def test_blocked_warehouse_redirects_both_interfaces(self):
+        self.clinic.blocked_features = ["warehouse"]
+        self.clinic.save(update_fields=["blocked_features"])
+        self.client.force_login(self.staff)
+        resp1 = self.client.get("/new/warehouse/", follow=True)
+        self.assertRedirects(resp1, "/new/", fetch_redirect_response=False)
+        resp2 = self.client.get("/warehouse/", follow=True)
+        self.assertRedirects(resp2, "/", fetch_redirect_response=False)
+
+    def test_unaffected_clinic_keeps_access(self):
+        self.clinic.blocked_features = ["warehouse"]
+        self.clinic.save(update_fields=["blocked_features"])
+        self.client.force_login(self.other_staff)
+        resp = self.client.get("/new/warehouse/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_voice_bot_hidden_when_blocked_even_if_globally_enabled(self):
+        from unittest.mock import patch
+        self.clinic.blocked_features = ["voice_bot"]
+        self.clinic.save(update_fields=["blocked_features"])
+        self.client.force_login(self.staff)
+        with patch("apps.notifications.voice.voice_enabled", return_value=True), \
+             patch("apps.notifications.voice.ai_enabled", return_value=True):
+            resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertFalse(data["voiceEnabled"])
+        self.assertFalse(data["aiEnabled"])
+
+    def test_voice_bot_visible_when_not_blocked(self):
+        from unittest.mock import patch
+        self.client.force_login(self.staff)
+        with patch("apps.notifications.voice.voice_enabled", return_value=True), \
+             patch("apps.notifications.voice.ai_enabled", return_value=True):
+            resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertTrue(data["voiceEnabled"])
+        self.assertTrue(data["aiEnabled"])

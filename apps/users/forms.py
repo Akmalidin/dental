@@ -23,7 +23,25 @@ class LoginForm(forms.Form):
         login = self.cleaned_data.get("login")
         password = self.cleaned_data.get("password")
         if login and password:
+            from apps.tenancy import get_client_ip
+            from .models import BlockedIP, ClinicLoginEvent
+            ip = get_client_ip(self.request) if self.request else None
+            if ip and BlockedIP.objects.filter(ip_address=ip).exists():
+                raise forms.ValidationError(_("Доступ с этого IP заблокирован"))
             self.user_cache = authenticate(self.request, username=login, password=password)
+            success = self.user_cache is not None and self.user_cache.is_active
+            # Пишем событие входа в любом случае (успех/провал) — супер-админ
+            # должен видеть и подозрительные неудачные попытки, не только
+            # успешные входы (см. /new/superadmin/ — «Последние входы»).
+            try:
+                ClinicLoginEvent.objects.create(
+                    user=self.user_cache, clinic=getattr(self.user_cache, "clinic", None),
+                    ip_address=ip,
+                    user_agent=(self.request.META.get("HTTP_USER_AGENT", "") if self.request else "")[:300],
+                    success=success,
+                )
+            except Exception:
+                pass
             if self.user_cache is None:
                 raise forms.ValidationError(_("Неверный логин или пароль"))
             if not self.user_cache.is_active:

@@ -17,6 +17,18 @@ from django.utils import timezone
 _state = threading.local()
 
 
+def get_client_ip(request):
+    """Реальный IP посетителя за nginx-прокси. nginx уже прокидывает
+    X-Forwarded-For (см. deploy/nginx-sadaf.conf: proxy_set_header
+    X-Forwarded-For $proxy_add_x_forwarded_for;) — берём первый адрес в
+    цепочке (ближайший к клиенту), иначе REMOTE_ADDR (прямое подключение,
+    напр. локальная разработка)."""
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
 def set_current_clinic(clinic):
     _state.clinic = clinic
 
@@ -132,8 +144,17 @@ class CurrentClinicMiddleware:
 
 
 class TariffGuardMiddleware:
-    """Блокирует доступ, если тариф клиники истёк (кроме суперадмина)."""
-    ALLOWED_PREFIXES = ("/login", "/logout", "/static", "/i18n", "/sw.js", "/manifest.json")
+    """Блокирует доступ, если тариф клиники истёк, или клиника заблокирована
+    супер-админом (Clinic.is_active=False) — кроме суперадмина.
+
+    Два разных случая, разное поведение (сознательно):
+    - Истёк тариф — рендерим страницу-заглушку НА МЕСТЕ (tariff_expired.html,
+      402) — сессия жива, просто нельзя работать, пока не продлят.
+    - Клиника заблокирована — РАЗЛОГИНИВАЕМ немедленно и уводим на форму
+      «запросить доступ» (см. apps.users.views.clinic_access_request) — по
+      явному решению: блокировка клиники должна мгновенно выкидывать все
+      активные сессии, а не просто показывать сообщение внутри них."""
+    ALLOWED_PREFIXES = ("/login", "/logout", "/static", "/i18n", "/sw.js", "/manifest.json", "/access-request")
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -142,9 +163,15 @@ class TariffGuardMiddleware:
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated and not getattr(user, "is_superadmin", False):
             clinic = getattr(user, "clinic", None)
-            if clinic is not None and clinic.is_expired:
-                path = request.path
-                if not any(path.startswith(p) for p in self.ALLOWED_PREFIXES):
+            path = request.path
+            if clinic is not None and not any(path.startswith(p) for p in self.ALLOWED_PREFIXES):
+                if not clinic.is_active:
+                    from django.contrib.auth import logout
+                    from django.shortcuts import redirect
+                    slug = clinic.slug
+                    logout(request)
+                    return redirect(f"/access-request/?clinic={slug}")
+                if clinic.is_expired:
                     from django.shortcuts import render
                     return render(request, "tariff_expired.html", {"clinic": clinic}, status=402)
         return self.get_response(request)
@@ -165,20 +192,26 @@ class PublicSiteMiddleware:
         from django.conf import settings as dj
         clinic = Clinic.objects.filter(slug=slug).first()
         site = ClinicSite.objects.filter(clinic=clinic).first() if clinic else None
-        if clinic and site and site.enabled and site.published:
+        if clinic and clinic.is_active and site and site.enabled and site.published:
             request.public_clinic = clinic
             request.public_site = site
             request.urlconf = "config.urls_site"
             set_current_clinic(clinic)
             return None  # continue
-        # Публичного сайта нет (клинике он не нужен) или клиника не найдена —
-        # ведём на CRM, а не показываем «Сайт недоступен» посетителю. Передаём
-        # ?clinic=<slug>, чтобы страница входа показала лого/название именно
-        # этой клиники (см. login_view), а не общий дефолт.
         app_host = getattr(dj, "APP_HOST", "") or "app.sadaf.kg"
         scheme = "https" if request.is_secure() else "http"
-        login_qs = f"?clinic={clinic.slug}" if clinic else ""
-        return HttpResponseRedirect(f"{scheme}://{app_host}/login/{login_qs}")
+        if clinic is None or not clinic.is_active:
+            # Клиника не найдена вообще, ИЛИ найдена, но заблокирована — это и
+            # есть «недоступна» (раньше здесь тихо уводило на общий вход без
+            # темы клиники — выглядело как «редирект на sadaf», см. план).
+            # Теперь — форма «запросить доступ», супер-админу приходит
+            # уведомление (apps.users.views.clinic_access_request).
+            qs = f"?clinic={slug}" if slug else ""
+            return HttpResponseRedirect(f"{scheme}://{app_host}/access-request/{qs}")
+        # Клиника есть и активна, просто без публичного сайта (не нужен) или
+        # он выключен — штатный сценарий, как и раньше: обычный вход, но с
+        # темой этой клиники (лого/название на странице входа).
+        return HttpResponseRedirect(f"{scheme}://{app_host}/login/?clinic={clinic.slug}")
 
     def __call__(self, request):
         from django.conf import settings as dj
@@ -226,9 +259,18 @@ class StomAsiaRoutingMiddleware:
             return self.get_response(request)
         if host.endswith("." + crm_base):
             slug = host[: -(len(crm_base) + 1)]
-            if slug and slug not in ("www", "app"):
+            superadmin_host = (getattr(dj, "SUPERADMIN_HOST", "") or "").lower()
+            if slug and slug not in ("www", "app") and host != superadmin_host:
                 from apps.users.models import Clinic
-                request.host_clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
+                clinic = Clinic.objects.filter(slug=slug).first()
+                if clinic and clinic.is_active:
+                    request.host_clinic = clinic
+                else:
+                    # Слаг не резолвится ни в одну клинику, ИЛИ клиника
+                    # заблокирована — та же форма «запросить доступ», что и
+                    # на *.sadaf.kg (PublicSiteMiddleware), для единообразия.
+                    from django.http import HttpResponseRedirect
+                    return HttpResponseRedirect(f"/access-request/?clinic={slug}")
         return self.get_response(request)
 
 
@@ -323,21 +365,29 @@ class SectionAccessMiddleware:
         user = getattr(request, "user", None)
         if (user is not None and user.is_authenticated
                 and not getattr(user, "is_superadmin", False)):
-            allowed = getattr(user, "allowed_sections", None)
-            if allowed is not None:  # None = персональных ограничений нет
-                path = request.path
-                for prefix, key in self.PREFIXES:
-                    if path.startswith(prefix):
-                        if key is not None and key not in allowed:
-                            from django.shortcuts import redirect
-                            from django.contrib import messages
-                            messages.error(request, "У вас нет доступа к этому разделу")
-                            # Заблокированный /new/* уводил на дашборд СТАРОГО
-                            # интерфейса — для пользователя нового интерфейса
-                            # это выглядело как случайный обрыв в другое
-                            # приложение. Остаёмся в том интерфейсе, где были.
-                            return redirect("/new/" if path.startswith("/new/") else "/")
-                        break
+            allowed = getattr(user, "allowed_sections", None)  # None = персональных ограничений нет
+            clinic = getattr(user, "clinic", None)
+            blocked = (clinic.blocked_features or []) if clinic is not None else []
+            path = request.path
+            for prefix, key in self.PREFIXES:
+                if path.startswith(prefix):
+                    # Блокировка клиники (супер-админ) сильнее личного доступа —
+                    # проверяем её первой, сообщение поэтому отдельное.
+                    if key is not None and key in blocked:
+                        from django.shortcuts import redirect
+                        from django.contrib import messages
+                        messages.error(request, "Эта функция отключена для вашей клиники")
+                        return redirect("/new/" if path.startswith("/new/") else "/")
+                    if allowed is not None and key is not None and key not in allowed:
+                        from django.shortcuts import redirect
+                        from django.contrib import messages
+                        messages.error(request, "У вас нет доступа к этому разделу")
+                        # Заблокированный /new/* уводил на дашборд СТАРОГО
+                        # интерфейса — для пользователя нового интерфейса
+                        # это выглядело как случайный обрыв в другое
+                        # приложение. Остаёмся в том интерфейсе, где были.
+                        return redirect("/new/" if path.startswith("/new/") else "/")
+                    break
         return self.get_response(request)
 
 

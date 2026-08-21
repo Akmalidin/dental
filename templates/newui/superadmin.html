@@ -17,10 +17,26 @@
               <th data-i18n="w_sa_staff">Сотрудники</th>
               <th data-i18n="w_sa_patients">Пациенты</th>
               <th data-i18n="w_sa_access">Доступы</th>
+              <th data-i18n="w_sa_status">Статус</th>
               <th></th>
             </tr></thead>
             <tbody id="saTableBody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="page" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card" style="padding:16px;">
+          <h3 style="margin-bottom:10px;" data-i18n="w_sa_access_requests">📬 Заявки на доступ</h3>
+          <div id="saRequestsList"></div>
+        </div>
+        <div class="card" style="padding:16px;">
+          <h3 style="margin-bottom:10px;" data-i18n="w_sa_blocked_ips">🚫 Заблокированные IP</h3>
+          <form onsubmit="event.preventDefault();saBlockIp();" style="display:flex;gap:8px;margin-bottom:12px;">
+            <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="saNewIp" placeholder="192.0.2.1" style="flex:1;">
+            <button type="submit" class="btn btn-soft btn-sm" data-i18n="w_sa_block">Заблокировать</button>
+          </form>
+          <div id="saBlockedIpsList"></div>
         </div>
       </div>
 
@@ -89,10 +105,19 @@
               <label data-i18n="w_sa_channels">Каналы связи (по тарифу):</label>
               <div style="display:flex;gap:14px;" id="saeChannels"></div>
             </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_blocked_features">🔓 Заблокированные функции:</label>
+              <div id="saeBlocked" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_login_events">Последние входы:</label>
+              <div id="saeLoginEvents" style="font-size:12px;color:var(--ink-soft);"></div>
+            </div>
           </div>
           <div class="modal-foot" style="justify-content:space-between;">
             <button class="btn btn-ghost" onclick="saEnterClinic()">→ <span data-i18n="w_sa_enter">Войти в клинику</span></button>
             <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" id="saeToggleActiveBtn" onclick="saToggleActive()"></button>
               <button class="btn btn-ghost" onclick="closeModal('m-sa-edit')" data-i18n="w_cancel">Отмена</button>
               <button class="btn btn-cobalt" onclick="saSaveEdit()" data-i18n="w_save">Сохранить</button>
             </div>
@@ -104,7 +129,7 @@
 <script>
 (function(){
   const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
-  const SA = REAL.superadminData || {clinics:[], tariffChoices:[], allModules:[], grantableAccess:[], timezoneChoices:[]};
+  const SA = REAL.superadminData || {clinics:[], tariffChoices:[], allModules:[], grantableAccess:[], blockableFeatures:[], timezoneChoices:[], accessRequests:[], blockedIPs:[]};
   let saCurrentId = null;
 
   function saFmtDate(iso){
@@ -123,6 +148,7 @@
       const accessBadges = SA.grantableAccess.map(([key,label])=>
         c.grantedAccess.includes(key) ? `<span class="pill cobalt">${label}</span>` : `<span class="pill grey">${label}</span>`
       ).join(' ');
+      const statusBadge = c.isActive ? `<span class="pill teal">${t('w_sa_active')}</span>` : `<span class="pill coral">${t('w_sa_blocked')}</span>`;
       return `<tr class="clickable" onclick="openSaEdit(${c.id})">
         <td><b>${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.slug}</div></td>
         <td>${tariffPill}${c.tariffUntil?`<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">до ${saFmtDate(c.tariffUntil)}</div>`:''}</td>
@@ -130,9 +156,58 @@
         <td>${c.staffCount}</td>
         <td>${c.patientCount}</td>
         <td>${accessBadges}</td>
+        <td>${statusBadge}</td>
         <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saEnterClinicById(${c.id})">→ ${t('w_sa_enter')}</button></td>
       </tr>`;
     }).join('');
+  };
+
+  window.renderSaRequests = function(){
+    const el = document.getElementById('saRequestsList');
+    if(!el) return;
+    if(SA.accessRequests.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">${t('w_sa_no_requests')}</p>`; return; }
+    el.innerHTML = SA.accessRequests.map(r=>`
+      <div style="border:1px solid var(--mist-line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;">
+        <div style="display:flex;justify-content:space-between;"><b>${r.clinicName}</b><span style="color:var(--ink-soft);">${r.at}</span></div>
+        <div style="color:var(--ink-soft);margin-top:2px;">${r.contactName} · ${r.phone}${r.email?' · '+r.email:''} · IP ${r.ip}</div>
+        ${r.message ? `<div style="margin-top:4px;">${r.message}</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'contacted')">${t('w_sa_contacted')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'resolved')">${t('w_sa_resolved')}</button>
+        </div>
+      </div>`).join('');
+  };
+
+  window.saSetRequestStatus = async function(id, status){
+    const fd = new FormData();
+    fd.append('status', status);
+    const res = await postForm(`/users/access-requests/${id}/status/`, fd);
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  window.renderSaBlockedIps = function(){
+    const el = document.getElementById('saBlockedIpsList');
+    if(!el) return;
+    if(SA.blockedIPs.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">${t('w_sa_no_blocked_ips')}</p>`; return; }
+    el.innerHTML = SA.blockedIPs.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--mist-line);border-radius:10px;padding:8px 12px;margin-bottom:6px;font-size:12.5px;">
+        <div><b style="font-family:monospace;">${b.ip}</b>${b.note?' · '+b.note:''}<div style="color:var(--ink-soft);font-size:11px;">${b.at}</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="saUnblockIp(${b.id})">${t('w_sa_unblock')}</button>
+      </div>`).join('');
+  };
+
+  window.saBlockIp = async function(){
+    const ip = document.getElementById('saNewIp').value.trim();
+    if(!ip) return;
+    const fd = new FormData();
+    fd.append('ip_address', ip);
+    const res = await postForm('/users/block-ip/', fd);
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  window.saUnblockIp = async function(id){
+    const res = await postForm(`/users/block-ip/${id}/unblock/`, new FormData());
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   window.openNewClinicModal = function(){
@@ -211,7 +286,33 @@
         <input type="checkbox" id="sae-wa" ${c.waMasterEnabled?'checked':''} onchange="saToggleChannel(${c.id},'wa')"> WhatsApp</label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
         <input type="checkbox" id="sae-tg" ${c.telegramMasterEnabled?'checked':''} onchange="saToggleChannel(${c.id},'tg')"> Telegram</label>`;
+    document.getElementById('saeBlocked').innerHTML = SA.blockableFeatures.map(([k,l])=>
+      `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;cursor:pointer;">
+        <input type="checkbox" name="sae-blocked" value="${k}" ${c.blockedFeatures.includes(k)?'checked':''}>${l}</label>`).join('');
+    document.getElementById('saeLoginEvents').innerHTML = c.loginEvents.length ? c.loginEvents.map(e=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--mist-line);">
+        <span>${e.at} · ${e.user} · <span style="font-family:monospace;">${e.ip}</span> ${e.success?'✅':'❌'}</span>
+        ${e.ip!=='—' ? `<button class="btn btn-ghost btn-sm" onclick="saBlockIpQuick('${e.ip}')">${t('w_sa_block')}</button>` : ''}
+      </div>`).join('') : `<span>${t('w_sa_no_login_events')}</span>`;
+    const activeBtn = document.getElementById('saeToggleActiveBtn');
+    activeBtn.textContent = c.isActive ? t('w_sa_block_clinic') : t('w_sa_unblock_clinic');
+    activeBtn.style.color = c.isActive ? 'var(--coral)' : 'var(--teal)';
     openModal('m-sa-edit');
+  };
+
+  window.saBlockIpQuick = async function(ip){
+    const fd = new FormData();
+    fd.append('ip_address', ip);
+    const res = await postForm('/users/block-ip/', fd);
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  window.saToggleActive = async function(){
+    if(!saCurrentId) return;
+    const c = SA.clinics.find(x=>x.id===saCurrentId);
+    if(c && c.isActive && !confirm(t('w_sa_confirm_block'))) return;
+    const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, new FormData());
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   window.saToggleChannel = async function(id, channel){
@@ -234,7 +335,11 @@
     document.querySelectorAll('input[name="sae-access"]:checked').forEach(cb=>fdAccess.append('access', cb.value));
     const resAccess = await postForm(`/users/clinic/${saCurrentId}/access/`, fdAccess);
 
-    if(resUpdate.redirected && resAccess.redirected){ flashAndReload(t('w_saved')); }
+    const fdBlocked = new FormData();
+    document.querySelectorAll('input[name="sae-blocked"]:checked').forEach(cb=>fdBlocked.append('blocked', cb.value));
+    const resBlocked = await postForm(`/users/clinic/${saCurrentId}/blocked-features/`, fdBlocked);
+
+    if(resUpdate.redirected && resAccess.redirected && resBlocked.redirected){ flashAndReload(t('w_saved')); }
     else { showToast(t('w_save_failed'), 'error'); }
   };
 
@@ -249,6 +354,8 @@
   };
 
   renderSaTable();
+  renderSaRequests();
+  renderSaBlockedIps();
 })();
 </script>
 {% endblock %}

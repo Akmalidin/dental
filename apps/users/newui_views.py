@@ -139,12 +139,13 @@ def _shared_options(request, clinic):
         # Голосовой ввод (диктовка в карту + голосовые команды по расписанию) —
         # плавающий виджет на всех страницах, скрыт целиком, если ключ OpenAI
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
-        # и у GreenAPI).
-        "voiceEnabled": voice_enabled(),
+        # и у GreenAPI), И если супер-админ явно заблокировал его этой
+        # клинике (Clinic.blocked_features, "voice_bot" — см. /new/superadmin/).
+        "voiceEnabled": voice_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # Свободный вопрос-ответ (YandexGPT) — включает и голосовой fallback
         # («спроси что угодно» в плавающем виджете), и реальный ответ в
         # текстовом чате «ИИ-помощник» на странице Отчётов.
-        "aiEnabled": ai_enabled(),
+        "aiEnabled": ai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
         # тот же персональный механизм allowed_sections, что и в старом интерфейсе
         # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.
