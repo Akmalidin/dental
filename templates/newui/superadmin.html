@@ -1,0 +1,254 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Супер-админ{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 data-i18n="nav_superadmin">Супер-админ</h1>
+        <div class="topbar-right">
+          <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ <span data-i18n="w_sa_new_clinic">Новая клиника</span></button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="card">
+          <table>
+            <thead><tr>
+              <th data-i18n="w_sa_clinic">Клиника</th>
+              <th data-i18n="w_sa_tariff">Тариф</th>
+              <th data-i18n="w_sa_branches">Филиалы</th>
+              <th data-i18n="w_sa_staff">Сотрудники</th>
+              <th data-i18n="w_sa_patients">Пациенты</th>
+              <th data-i18n="w_sa_access">Доступы</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="saTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Модалка: новая клиника -->
+      <div class="modal-backdrop" id="m-sa-create">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_sa_new_clinic">Новая клиника</h3><button class="modal-close" onclick="closeModal('m-sa-create')">✕</button></div>
+          <div class="modal-body">
+            <div id="saCreateError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+            <div id="saCreateForm">
+              <div class="form-group"><label data-i18n="w_sa_clinic_name">Название клиники</label>
+                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-cname"></div>
+              <div class="form-group"><label data-i18n="w_sa_admin_name">Имя администратора</label>
+                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-name"></div>
+              <div class="form-row2">
+                <div class="form-group"><label data-i18n="w_sa_admin_login">Логин администратора</label>
+                  <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-login"></div>
+                <div class="form-group"><label data-i18n="w_sa_admin_password">Пароль</label>
+                  <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-pass"></div>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                <input type="checkbox" id="sa-seed" checked>
+                <span data-i18n="w_sa_seed_demo">Заполнить демо-данными (услуги, материалы, шаблоны ЭМК)</span>
+              </label>
+            </div>
+            <div id="saCreateResult" class="hidden">
+              <div style="background:var(--teal-tint);color:var(--teal);border-radius:10px;padding:14px;font-size:13px;line-height:1.7;">
+                <div data-i18n="w_sa_clinic_created">Клиника создана. Данные для входа (сохраните — пароль больше нигде не показывается):</div>
+                <div style="margin-top:8px;font-family:monospace;" id="saResultBox"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot" id="saCreateFoot">
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-create')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" onclick="submitNewClinic()" data-i18n="w_sa_create">Создать</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: редактирование клиники + доступы -->
+      <div class="modal-backdrop" id="m-sa-edit">
+        <div class="modal wide">
+          <div class="modal-head"><h3 id="saEditTitle">Клиника</h3><button class="modal-close" onclick="closeModal('m-sa-edit')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-row2">
+              <div class="form-group"><label data-i18n="w_sa_clinic_name">Название клиники</label>
+                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sae-name"></div>
+              <div class="form-group"><label data-i18n="w_sa_slug">Поддомен</label>
+                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sae-slug"></div>
+              <div class="form-group"><label data-i18n="w_sa_timezone">Часовой пояс</label>
+                <select id="sae-timezone"></select></div>
+              <div class="form-group"><label data-i18n="w_sa_tariff">Тариф</label>
+                <select id="sae-tariff"></select></div>
+              <div class="form-group"><label data-i18n="w_sa_tariff_until">Оплачен до</label>
+                <input type="date" id="sae-until"></div>
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_modules">Модули (навигация клиники по тарифу):</label>
+              <div id="saeModules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_access">Доступы (жёсткое разрешение, выдаёт только супер-админ):</label>
+              <div id="saeAccess" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_channels">Каналы связи (по тарифу):</label>
+              <div style="display:flex;gap:14px;" id="saeChannels"></div>
+            </div>
+          </div>
+          <div class="modal-foot" style="justify-content:space-between;">
+            <button class="btn btn-ghost" onclick="saEnterClinic()">→ <span data-i18n="w_sa_enter">Войти в клинику</span></button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" onclick="closeModal('m-sa-edit')" data-i18n="w_cancel">Отмена</button>
+              <button class="btn btn-cobalt" onclick="saSaveEdit()" data-i18n="w_save">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  const SA = REAL.superadminData || {clinics:[], tariffChoices:[], allModules:[], grantableAccess:[], timezoneChoices:[]};
+  let saCurrentId = null;
+
+  function saFmtDate(iso){
+    if(!iso) return '—';
+    const [y,m,d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+  }
+
+  window.renderSaTable = function(){
+    const body = document.getElementById('saTableBody');
+    if(!body) return;
+    if(SA.clinics.length===0){ body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">—</td></tr>`; return; }
+    body.innerHTML = SA.clinics.map(c=>{
+      const tariffLabel = (SA.tariffChoices.find(t=>t[0]===c.tariffPlan)||[c.tariffPlan,c.tariffPlan])[1];
+      const tariffPill = c.isExpired ? `<span class="pill coral">${tariffLabel} · истёк</span>` : `<span class="pill teal">${tariffLabel}</span>`;
+      const accessBadges = SA.grantableAccess.map(([key,label])=>
+        c.grantedAccess.includes(key) ? `<span class="pill cobalt">${label}</span>` : `<span class="pill grey">${label}</span>`
+      ).join(' ');
+      return `<tr class="clickable" onclick="openSaEdit(${c.id})">
+        <td><b>${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.slug}</div></td>
+        <td>${tariffPill}${c.tariffUntil?`<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">до ${saFmtDate(c.tariffUntil)}</div>`:''}</td>
+        <td>${c.branchCount}</td>
+        <td>${c.staffCount}</td>
+        <td>${c.patientCount}</td>
+        <td>${accessBadges}</td>
+        <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saEnterClinicById(${c.id})">→ ${t('w_sa_enter')}</button></td>
+      </tr>`;
+    }).join('');
+  };
+
+  window.openNewClinicModal = function(){
+    ['sa-cname','sa-admin-name','sa-admin-login','sa-admin-pass'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('sa-seed').checked = true;
+    document.getElementById('saCreateError').classList.add('hidden');
+    document.getElementById('saCreateForm').classList.remove('hidden');
+    document.getElementById('saCreateFoot').innerHTML =
+      `<button class="btn btn-ghost" onclick="closeModal('m-sa-create')">${t('w_cancel')}</button>
+       <button class="btn btn-cobalt" onclick="submitNewClinic()">${t('w_sa_create')}</button>`;
+    document.getElementById('saCreateResult').classList.add('hidden');
+    openModal('m-sa-create');
+  };
+
+  window.submitNewClinic = async function(){
+    const cname = document.getElementById('sa-cname').value.trim();
+    const alogin = document.getElementById('sa-admin-login').value.trim();
+    const apass = document.getElementById('sa-admin-pass').value.trim();
+    if(!cname || !alogin || !apass){
+      const box = document.getElementById('saCreateError');
+      box.textContent = t('w_sa_fill_required');
+      box.classList.remove('hidden');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('clinic_name', cname);
+    fd.append('clinic_admin_name', document.getElementById('sa-admin-name').value.trim());
+    fd.append('clinic_admin_login', alogin);
+    fd.append('clinic_admin_password', apass);
+    fd.append('clinic_seed', document.getElementById('sa-seed').checked ? '1' : '0');
+    const res = await postForm('/new/superadmin/clinic/create/', fd);
+    let payload = null;
+    try{ payload = await res.json(); }catch(e){}
+    if(res.ok && payload && payload.ok){
+      document.getElementById('saCreateForm').classList.add('hidden');
+      document.getElementById('saCreateError').classList.add('hidden');
+      document.getElementById('saResultBox').innerHTML =
+        `${t('w_sa_admin_login')}: <b>${payload.adminLogin}</b><br>${t('w_sa_admin_password')}: <b>${apass}</b><br>URL: <b>${payload.loginUrl}</b>`;
+      document.getElementById('saCreateResult').classList.remove('hidden');
+      document.getElementById('saCreateFoot').innerHTML =
+        `<button class="btn btn-cobalt" onclick="flashAndReload('${t('w_sa_clinic_created')}')">${t('w_ok_understood')}</button>`;
+    } else {
+      const box = document.getElementById('saCreateError');
+      box.textContent = (payload && payload.error) || t('w_save_failed');
+      box.classList.remove('hidden');
+    }
+  };
+
+  window.openSaEdit = function(id){
+    const c = SA.clinics.find(x=>x.id===id);
+    if(!c) return;
+    saCurrentId = id;
+    document.getElementById('saEditTitle').textContent = c.name;
+    document.getElementById('sae-name').value = c.name;
+    document.getElementById('sae-slug').value = c.slug;
+    document.getElementById('sae-until').value = c.tariffUntil || '';
+    document.getElementById('sae-timezone').innerHTML = SA.timezoneChoices.map(([k,l])=>
+      `<option value="${k}" ${k===c.timezone?'selected':''}>${l}</option>`).join('');
+    document.getElementById('sae-tariff').innerHTML = SA.tariffChoices.map(([k,l])=>
+      `<option value="${k}" ${k===c.tariffPlan?'selected':''}>${l}</option>`).join('');
+    // Пусто в enabledModules = «все модули включены» (та же семантика, что и
+    // в старом интерфейсе — apps/settings_clinic/context_processors.py,
+    // ClinicSettings.module_enabled): показываем ВСЕ галочки отмеченными,
+    // а не пустыми — иначе супер-админ увидит «ничего не включено» вместо
+    // реального «ограничений нет», и случайно урежет клинику, сняв всего
+    // одну лишнюю галочку.
+    const allChecked = c.enabledModules.length === 0;
+    document.getElementById('saeModules').innerHTML = SA.allModules.map(([k,l])=>
+      `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;cursor:pointer;">
+        <input type="checkbox" name="sae-module" value="${k}" ${(allChecked || c.enabledModules.includes(k))?'checked':''}>${l}</label>`).join('');
+    document.getElementById('saeAccess').innerHTML = SA.grantableAccess.map(([k,l])=>
+      `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;cursor:pointer;">
+        <input type="checkbox" name="sae-access" value="${k}" ${c.grantedAccess.includes(k)?'checked':''}>${l}</label>`).join('');
+    document.getElementById('saeChannels').innerHTML = `
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
+        <input type="checkbox" id="sae-wa" ${c.waMasterEnabled?'checked':''} onchange="saToggleChannel(${c.id},'wa')"> WhatsApp</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
+        <input type="checkbox" id="sae-tg" ${c.telegramMasterEnabled?'checked':''} onchange="saToggleChannel(${c.id},'tg')"> Telegram</label>`;
+    openModal('m-sa-edit');
+  };
+
+  window.saToggleChannel = async function(id, channel){
+    await postForm(`/users/clinic/${id}/channel-toggle/${channel}/`, new FormData());
+    showToast(t('w_saved'));
+  };
+
+  window.saSaveEdit = async function(){
+    if(!saCurrentId) return;
+    const fd = new FormData();
+    fd.append('name', document.getElementById('sae-name').value.trim());
+    fd.append('slug', document.getElementById('sae-slug').value.trim());
+    fd.append('timezone', document.getElementById('sae-timezone').value);
+    fd.append('tariff_plan', document.getElementById('sae-tariff').value);
+    fd.append('tariff_until', document.getElementById('sae-until').value);
+    document.querySelectorAll('input[name="sae-module"]:checked').forEach(cb=>fd.append('modules', cb.value));
+    const resUpdate = await postForm(`/users/clinic/${saCurrentId}/update/`, fd);
+
+    const fdAccess = new FormData();
+    document.querySelectorAll('input[name="sae-access"]:checked').forEach(cb=>fdAccess.append('access', cb.value));
+    const resAccess = await postForm(`/users/clinic/${saCurrentId}/access/`, fdAccess);
+
+    if(resUpdate.redirected && resAccess.redirected){ flashAndReload(t('w_saved')); }
+    else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  window.saEnterClinic = function(){ if(saCurrentId) saEnterClinicById(saCurrentId); };
+
+  window.saEnterClinicById = async function(id){
+    const fd = new FormData();
+    fd.append('clinic', id);
+    fd.append('next', '/new/');
+    await postForm('/users/set-clinic/', fd);
+    location.href = '/new/';
+  };
+
+  renderSaTable();
+})();
+</script>
+{% endblock %}

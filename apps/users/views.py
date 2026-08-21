@@ -2014,6 +2014,81 @@ def initials_of(name):
     return "".join(p[0] for p in parts[:2]).upper()
 
 
+def _newui_superadmin_data():
+    """Список клиник + статистика для супер-админ-панели нового интерфейса
+    (templates/newui/superadmin.html). Мутации (создание клиники/филиала,
+    редактирование, доступы, переключение «Войти →») идут через уже
+    существующие вьюхи старого интерфейса (superadmin_panel, clinic_update,
+    clinic_set_access, set_active_clinic, toggle_clinic_site/channel) — POST +
+    res.redirected → flashAndReload, тот же паттерн, что и везде в новом
+    интерфейсе; бизнес-логика супер-админ-действий не дублируется здесь."""
+    from apps.tenancy import unscoped
+    from apps.users.models import Clinic, TIMEZONE_CHOICES
+    from apps.settings_clinic.models import ClinicSettings
+    clinics = []
+    with unscoped():
+        from apps.patients.models import Patient
+        for c in Clinic.objects.all().order_by("name"):
+            clinics.append({
+                "id": c.pk, "name": c.name, "slug": c.slug,
+                "isActive": c.is_active,
+                "tariffPlan": c.tariff_plan,
+                "tariffUntil": c.tariff_until.isoformat() if c.tariff_until else "",
+                "isExpired": c.is_expired,
+                "timezone": c.timezone,
+                "enabledModules": c.enabled_modules or [],
+                "grantedAccess": c.granted_access or [],
+                "waMasterEnabled": c.wa_master_enabled,
+                "telegramMasterEnabled": c.telegram_master_enabled,
+                "branchCount": Branch.objects.filter(clinic=c, is_active=True).count(),
+                "staffCount": User.objects.filter(clinic=c, is_active=True).count(),
+                "patientCount": Patient.all_objects.filter(clinic=c, is_deleted=False).count(),
+            })
+    return {
+        "clinics": clinics,
+        "tariffChoices": ClinicSettings.TARIFF_CHOICES,
+        "allModules": ClinicSettings.ALL_MODULES,
+        "grantableAccess": Clinic.GRANTABLE_ACCESS,
+        "timezoneChoices": TIMEZONE_CHOICES,
+    }
+
+
+def _create_clinic(cname, alogin, apass, admin_name, do_seed):
+    """Создать клинику + первого администратора (admin_main) + главный филиал
+    + (опционально) демо-данные. Общая логика для superadmin_panel (форма
+    старого интерфейса) и newui_clinic_create (JSON, новый интерфейс) — не
+    дублируем её в двух местах. Поднимает ValueError с текстом для
+    пользователя при невалидном вводе (пустые поля/занятый логин)."""
+    from apps.tenancy import set_current_clinic, clear_current_clinic
+    from apps.services.seed_data import seed_dental
+    from django.utils.text import slugify
+    from apps.users.models import Clinic
+    cname, alogin, apass = cname.strip(), alogin.strip(), apass.strip()
+    if not (cname and alogin and apass):
+        raise ValueError(_("Заполните название клиники, логин и пароль администратора"))
+    if User.objects.filter(login=alogin).exists():
+        raise ValueError(_("Логин администратора уже занят"))
+    base = slugify(cname) or "clinic"
+    slug, i = base, 2
+    while Clinic.objects.filter(slug=slug).exists():
+        slug, i = f"{base}-{i}", i + 1
+    new_clinic = Clinic.objects.create(name=cname, slug=slug)
+    amrole, _r = Role.objects.get_or_create(name=Role.ADMIN_MAIN)
+    au = User.objects.create(
+        login=alogin, name=admin_name or f"Админ {cname}",
+        role=amrole, clinic=new_clinic, is_staff=False,
+    )
+    au.set_password(apass)
+    au.save()
+    set_current_clinic(new_clinic)
+    try:
+        Branch.objects.create(name=cname, address="—", phone="—", is_main=True)
+        seed_result = seed_dental() if do_seed else None
+    finally:
+        clear_current_clinic()
+    return new_clinic, au, seed_result
+
+
 @login_required
 def superadmin_panel(request):
     if not request.user.is_superadmin:
@@ -2029,54 +2104,32 @@ def superadmin_panel(request):
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "create_clinic":
-            from apps.tenancy import set_current_clinic, clear_current_clinic
-            from apps.services.seed_data import seed_dental
-            from django.utils.text import slugify
-            cname = request.POST.get("clinic_name", "").strip()
-            alogin = request.POST.get("clinic_admin_login", "").strip()
-            apass = request.POST.get("clinic_admin_password", "").strip()
-            if not (cname and alogin and apass):
-                messages.error(request, _("Заполните название клиники, логин и пароль администратора"))
-                return redirect("superadmin_panel")
-            if User.objects.filter(login=alogin).exists():
-                messages.error(request, _("Логин администратора уже занят"))
-                return redirect("superadmin_panel")
-            base = slugify(cname) or "clinic"
-            slug, i = base, 2
-            while Clinic.objects.filter(slug=slug).exists():
-                slug, i = f"{base}-{i}", i + 1
-            new_clinic = Clinic.objects.create(name=cname, slug=slug)
-            amrole, _r = Role.objects.get_or_create(name=Role.ADMIN_MAIN)
-            au = User.objects.create(
-                login=alogin, name=request.POST.get("clinic_admin_name") or f"Админ {cname}",
-                role=amrole, clinic=new_clinic, is_staff=False,
-            )
-            au.set_password(apass)
-            au.save()
-            # филиал + (опционально) автозаполнение услуг/материалов/ЭМК/документов в новой клинике
+            cname = request.POST.get("clinic_name", "")
+            alogin = request.POST.get("clinic_admin_login", "")
+            apass = request.POST.get("clinic_admin_password", "")
+            admin_name = request.POST.get("clinic_admin_name") or ""
             do_seed = request.POST.get("clinic_seed", "1") != "0"
-            set_current_clinic(new_clinic)
             try:
-                Branch.objects.create(name=cname, address="—", phone="—", is_main=True)
-                res = seed_dental() if do_seed else None
-            finally:
-                clear_current_clinic()
+                new_clinic, au, res = _create_clinic(cname, alogin, apass, admin_name, do_seed)
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect("superadmin_panel")
             if res:
                 messages.success(request, _(
                     "Клиника «%(n)s» создана. Админ: %(l)s. Заполнено: услуг %(s)s, материалов %(m)s, ЭМК %(e)s, документов %(d)s"
-                ) % {"n": cname, "l": alogin, "s": res["services"], "m": res["materials"],
+                ) % {"n": new_clinic.name, "l": au.login, "s": res["services"], "m": res["materials"],
                      "e": res.get("emr", 0), "d": res.get("docs", 0)})
             else:
                 messages.success(request, _(
                     "Клиника «%(n)s» создана пустой (без демо-данных). Админ: %(l)s"
-                ) % {"n": cname, "l": alogin})
+                ) % {"n": new_clinic.name, "l": au.login})
             # Данные доступа для передачи новой клинике — одноразовый показ через сессию
             # (пароль в открытом виде доступен только сейчас, до хеширования уже не достать).
             from django.conf import settings as dj_settings
             app_host = getattr(dj_settings, "APP_HOST", "app.sadaf.kg")
             request.session["new_clinic_ready"] = {
-                "name": cname, "login": alogin, "password": apass, "slug": slug,
-                "login_url": f"https://{app_host}/login/?clinic={slug}",
+                "name": new_clinic.name, "login": au.login, "password": apass.strip(), "slug": new_clinic.slug,
+                "login_url": f"https://{app_host}/login/?clinic={new_clinic.slug}",
             }
             return redirect("superadmin_panel")
         if action == "save_modules":

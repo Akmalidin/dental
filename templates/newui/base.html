@@ -885,6 +885,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>
       <span data-i18n="nav_корзина">Корзина</span>
     </a>
+    <!-- Супер-админ-панель — видна только суперадмину (IS_SUPERADMIN,
+         loadRealStaffData), скрыта по умолчанию в разметке. -->
+    <a class="nav-item hidden{% if active == 'superadmin' %} active{% endif %}" id="navSuperadmin" data-view="superadmin" href="{% url 'newui_superadmin' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span data-i18n="nav_superadmin">Супер-админ</span>
+    </a>
 
     <a class="nav-item" href="#" onclick="event.preventDefault();openMenuSettings();" style="margin-top:2px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
@@ -4057,6 +4063,7 @@ const translations={
   nav_задачи:         {ru:'Задачи',             ky:'Тапшырмалар',      en:'Tasks',             uz:'Vazifalar'},
   nav_лекарства:      {ru:'Лекарства',          ky:'Дарылар',          en:'Medicines',         uz:'Dorilar'},
   nav_корзина:        {ru:'Корзина',            ky:'Себет',            en:'Recycle bin',       uz:'Savat'},
+  nav_superadmin:     {ru:'Супер-админ',        ky:'Супер-админ',      en:'Super admin',       uz:'Super admin'},
   nav_склад:          {ru:'Склад',              ky:'Кампа',            en:'Warehouse',         uz:'Ombor'},
   nav_лаборатория:    {ru:'Лаборатория',        ky:'Лаборатория',      en:'Lab',               uz:'Laboratoriya'},
   nav_касса:          {ru:'Касса',              ky:'Касса',            en:'Cash desk',         uz:'Kassa'},
@@ -4272,6 +4279,29 @@ const translations={
   w_no_chat_yet: {ru:'Переписки пока нет', ky:'Азырынча кат алышуу жок', en:'No conversation yet', uz:'Hozircha yozishma yo\'q'},
   w_visit_closed_no_edit: {ru:'Приём завершён — редактирование недоступно', ky:'Кабыл алуу аяктады — түзөтүү мүмкүн эмес', en:'Visit is closed — editing unavailable', uz:'Qabul yakunlandi — tahrirlash mumkin emas'},
   w_save_failed: {ru:'Не удалось сохранить', ky:'Сактоо мүмкүн болгон жок', en:'Failed to save', uz:'Saqlab bo\'lmadi'},
+  w_saved: {ru:'Сохранено', ky:'Сакталды', en:'Saved', uz:'Saqlandi'},
+  w_ok_understood: {ru:'Понятно', ky:'Түшүнүктүү', en:'Got it', uz:'Tushunarli'},
+  w_sa_new_clinic: {ru:'Новая клиника', ky:'Жаңы клиника', en:'New clinic', uz:'Yangi klinika'},
+  w_sa_clinic: {ru:'Клиника', ky:'Клиника', en:'Clinic', uz:'Klinika'},
+  w_sa_tariff: {ru:'Тариф', ky:'Тариф', en:'Plan', uz:'Tarif'},
+  w_sa_branches: {ru:'Филиалы', ky:'Филиалдар', en:'Branches', uz:'Filiallar'},
+  w_sa_staff: {ru:'Сотрудники', ky:'Кызматкерлер', en:'Staff', uz:'Xodimlar'},
+  w_sa_patients: {ru:'Пациенты', ky:'Пациенттер', en:'Patients', uz:'Bemorlar'},
+  w_sa_access: {ru:'Доступы', ky:'Уруксаттар', en:'Access', uz:'Ruxsatlar'},
+  w_sa_clinic_name: {ru:'Название клиники', ky:'Клиниканын аты', en:'Clinic name', uz:'Klinika nomi'},
+  w_sa_admin_name: {ru:'Имя администратора', ky:'Администратордун аты', en:'Admin name', uz:'Administrator ismi'},
+  w_sa_admin_login: {ru:'Логин администратора', ky:'Администратордун логини', en:'Admin login', uz:'Administrator login'},
+  w_sa_admin_password: {ru:'Пароль', ky:'Сыр сөз', en:'Password', uz:'Parol'},
+  w_sa_seed_demo: {ru:'Заполнить демо-данными (услуги, материалы, шаблоны ЭМК)', ky:'Демо-маалыматтар менен толтуруу (кызматтар, материалдар, ЭМК үлгүлөрү)', en:'Fill with demo data (services, materials, EMR templates)', uz:'Demo ma\'lumotlar bilan to\'ldirish (xizmatlar, materiallar, EMR shablonlari)'},
+  w_sa_clinic_created: {ru:'Клиника создана. Данные для входа (сохраните — пароль больше нигде не показывается):', ky:'Клиника түзүлдү. Кирүү маалыматтары (сактап коюңуз — сыр сөз башка эч жерде көрсөтүлбөйт):', en:'Clinic created. Login details (save them — the password will not be shown again):', uz:'Klinika yaratildi. Kirish ma\'lumotlari (saqlab qo\'ying — parol boshqa hech qayerda ko\'rsatilmaydi):'},
+  w_sa_slug: {ru:'Поддомен', ky:'Субдомен', en:'Subdomain', uz:'Subdomen'},
+  w_sa_timezone: {ru:'Часовой пояс', ky:'Убакыт алкагы', en:'Timezone', uz:'Vaqt zonasi'},
+  w_sa_tariff_until: {ru:'Оплачен до', ky:'Төлөнгөн мөөнөтү', en:'Paid until', uz:'To\'langan muddati'},
+  w_sa_modules: {ru:'Модули (навигация клиники по тарифу):', ky:'Модулдар (тарифке жараша клиниканын навигациясы):', en:'Modules (clinic navigation by plan):', uz:'Modullar (tarifga ko\'ra klinika navigatsiyasi):'},
+  w_sa_channels: {ru:'Каналы связи (по тарифу):', ky:'Байланыш каналдары (тарифке жараша):', en:'Communication channels (by plan):', uz:'Aloqa kanallari (tarifga ko\'ra):'},
+  w_sa_enter: {ru:'Войти в клинику', ky:'Клиникага кирүү', en:'Enter clinic', uz:'Klinikaga kirish'},
+  w_sa_create: {ru:'Создать', ky:'Түзүү', en:'Create', uz:'Yaratish'},
+  w_sa_fill_required: {ru:'Заполните название клиники, логин и пароль администратора', ky:'Клиниканын атын, администратордун логинин жана сыр сөзүн толтуруңуз', en:'Fill in the clinic name, admin login and password', uz:'Klinika nomi, administrator login va parolini kiriting'},
   w_save_failed_connection: {ru:'Не удалось сохранить — проверьте соединение', ky:'Сактоо мүмкүн болгон жок — байланышты текшериңиз', en:'Failed to save — check your connection', uz:'Saqlab bo\'lmadi — aloqani tekshiring'},
   w_confirm_finish_visit: {ru:'Завершить приём? После этого редактирование будет недоступно.', ky:'Кабыл алууну аяктайсызбы? Андан кийин түзөтүү мүмкүн болбойт.', en:'Finish the visit? Editing will be unavailable after this.', uz:'Qabulni yakunlaysizmi? Shundan keyin tahrirlash mumkin bo\'lmaydi.'},
   w_finish_visit_failed: {ru:'Не удалось завершить приём', ky:'Кабыл алууну аяктоо мүмкүн болгон жок', en:'Failed to finish the visit', uz:'Qabulni yakunlab bo\'lmadi'},
@@ -9217,6 +9247,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_
     // _recycle_bin_allowed).
     document.getElementById('navRecycle').classList.toggle('hidden',
       !(IS_SUPERADMIN || IS_ADMIN_MAIN || data.recycleBinStaff) || !(IS_SUPERADMIN || IS_ADMIN) || !(data.navSections||[]).includes('recycle'));
+    document.getElementById('navSuperadmin').classList.toggle('hidden', !IS_SUPERADMIN);
     // Журнал посещений — виден суперадмину/директору (admin_main) всегда,
     // остальному персоналу (включая роль «Админ» — ресепшен/администратор
     // клиники) — только если включено в настройках клиники (visitsJournalStaff,

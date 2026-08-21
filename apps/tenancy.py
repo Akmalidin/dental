@@ -259,7 +259,7 @@ class SuperadminHostMiddleware:
             logout(request)
         if request.path == "/":
             from django.shortcuts import redirect
-            return redirect("superadmin_panel")
+            return redirect("newui_superadmin")
         return self.get_response(request)
 
 
