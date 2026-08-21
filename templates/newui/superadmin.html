@@ -106,6 +106,10 @@
               <div style="display:flex;gap:14px;" id="saeChannels"></div>
             </div>
             <div class="form-group">
+              <label data-i18n="w_sa_branches_list">Филиалы:</label>
+              <div id="saeBranches" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+            <div class="form-group">
               <label data-i18n="w_sa_blocked_features">🔓 Заблокированные функции:</label>
               <div id="saeBlocked" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
             </div>
@@ -289,6 +293,11 @@
     document.getElementById('saeBlocked').innerHTML = SA.blockableFeatures.map(([k,l])=>
       `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;cursor:pointer;">
         <input type="checkbox" name="sae-blocked" value="${k}" ${c.blockedFeatures.includes(k)?'checked':''}>${l}</label>`).join('');
+    document.getElementById('saeBranches').innerHTML = c.branches.length ? c.branches.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;font-size:12.5px;">
+        <span>${b.name}${b.isMain?` <span class="pill grey">${t('w_sa_main_branch')}</span>`:''} ${b.isActive?`<span class="pill teal">${t('w_sa_active')}</span>`:`<span class="pill coral">${t('w_sa_blocked')}</span>`}</span>
+        <button class="btn btn-ghost btn-sm" onclick="saToggleBranch(${b.id})">${b.isActive?t('w_sa_block'):t('w_sa_unblock')}</button>
+      </div>`).join('') : `<span style="font-size:12.5px;color:var(--ink-soft);">${t('w_sa_no_branches')}</span>`;
     document.getElementById('saeLoginEvents').innerHTML = c.loginEvents.length ? c.loginEvents.map(e=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--mist-line);">
         <span>${e.at} · ${e.user} · <span style="font-family:monospace;">${e.ip}</span> ${e.success?'✅':'❌'}</span>
@@ -310,8 +319,20 @@
   window.saToggleActive = async function(){
     if(!saCurrentId) return;
     const c = SA.clinics.find(x=>x.id===saCurrentId);
-    if(c && c.isActive && !confirm(t('w_sa_confirm_block'))) return;
-    const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, new FormData());
+    const fd = new FormData();
+    if(c && c.isActive){
+      // Блокируем — причина обязательна, клиника увидит её на странице
+      // «Запросить доступ» вместо простого «недоступна».
+      const reason = prompt(t('w_sa_block_reason_prompt'));
+      if(reason===null) return;  // отмена
+      fd.append('reason', reason.trim());
+    }
+    const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, fd);
+    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  window.saToggleBranch = async function(id){
+    const res = await postForm(`/users/branches/${id}/toggle-active/`, new FormData());
     if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 

@@ -72,6 +72,10 @@ class Clinic(models.Model):
         ("reports", "Аналитика"),
     ]
     blocked_features = models.JSONField(default=list, blank=True, verbose_name="Заблокированные функции")
+    # Причина блокировки клиники целиком (is_active=False) — задаётся
+    # супер-админом в момент блокировки, показывается клинике на странице
+    # «Запросить доступ» вместо простого «недоступна».
+    blocked_reason = models.TextField(blank=True, verbose_name="Причина блокировки")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def has_access(self, key):

@@ -426,7 +426,12 @@ def appointment_create_quick(request):
         if sched_err:
             return JsonResponse({"error": sched_err}, status=400)
 
-        branch = doctor.branches.first() or Branch.objects.first()
+        # Заблокированный супер-админом филиал (Clinic.blocked... нет, тут
+        # Branch.is_active — «запретить запись/работу в филиале») не должен
+        # получать новые записи — берём только среди активных филиалов врача.
+        branch = doctor.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
+        if branch is None:
+            return JsonResponse({"error": "Филиал этого врача заблокирован — запись невозможна"}, status=400)
         appt = Appointment.objects.create(
             patient=Patient.objects.filter(pk=data.get("patient_id")).first(),
             doctor=doctor,
@@ -499,8 +504,11 @@ def appointment_update_quick(request, pk):
 
         appt.patient = Patient.objects.filter(pk=data.get("patient_id")).first()
         if doctor.pk != appt.doctor_id:
+            new_branch = doctor.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
+            if new_branch is None:
+                return JsonResponse({"error": "Филиал этого врача заблокирован — запись невозможна"}, status=400)
             appt.doctor = doctor
-            appt.branch = doctor.branches.first() or Branch.objects.first()
+            appt.branch = new_branch
         appt.service = service
         appt.start_at = start
         appt.end_at = end
@@ -598,9 +606,20 @@ def appointment_list(request):
     })
 
 
+def _default_active_branch(request):
+    """Филиал по умолчанию для новой записи — активная сессия → основной →
+    филиал сотрудника → любой. Всегда только СРЕДИ АКТИВНЫХ (заблокированный
+    супер-админом филиал, Branch.is_active=False, не должен получать новые
+    записи — см. запрос «запретить запись/работу в филиале»)."""
+    from apps.users.models import Branch
+    active = Branch.objects.filter(pk=request.session.get("active_branch"), is_active=True).first()
+    return (active or Branch.objects.filter(is_main=True, is_active=True).first()
+            or request.user.branches.filter(is_active=True).first()
+            or Branch.objects.filter(is_active=True).first())
+
+
 @login_required
 def appointment_create(request):
-    from apps.users.models import Branch
     # предзаполнение из посуточной сетки: ?date=&time=&doctor=
     initial = {
         "doctor": request.user if request.user.is_doctor else None,
@@ -608,9 +627,7 @@ def appointment_create(request):
         # филиал по умолчанию — активный/основной (та же логика, что и при
         # сохранении ниже, но применена сразу при открытии формы, а не только
         # если поле оставили пустым при сабмите — иначе на экране пусто).
-        "branch": (Branch.objects.filter(pk=request.session.get("active_branch")).first()
-                   or Branch.objects.filter(is_main=True).first()
-                   or request.user.branches.first() or Branch.objects.first()),
+        "branch": _default_active_branch(request),
     }
     gd, gt, gdoc = request.GET.get("date"), request.GET.get("time"), request.GET.get("doctor")
     if gd and gt:
@@ -630,10 +647,7 @@ def appointment_create(request):
         if not appt.status:
             appt.status = Appointment.STATUS_SCHEDULED
         if not appt.branch_id:   # по умолчанию активный/основной филиал
-            from apps.users.models import Branch
-            appt.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
-                           or Branch.objects.filter(is_main=True).first()
-                           or request.user.branches.first() or Branch.objects.first())
+            appt.branch = _default_active_branch(request)
         if not appt.service_id:
             from apps.services.models import Service
             appt.service, _created = Service.objects.get_or_create(
