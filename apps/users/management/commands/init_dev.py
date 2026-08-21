@@ -11,7 +11,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self._create_superadmin()
-        self._create_demo_clinic()
 
     def _create_superadmin(self):
         from apps.users.models import User, Role
@@ -34,21 +33,3 @@ class Command(BaseCommand):
         user.role = role
         user.save()
         self.stdout.write(self.style.SUCCESS("  [ok] Superadmin created: admin / 7313"))
-
-    def _create_demo_clinic(self):
-        from apps.tenants.models import Tenant, Domain, Subscription
-        from datetime import date
-
-        if Tenant.objects.filter(slug="demo").exists():
-            self.stdout.write("  [skip] Demo clinic already exists")
-            return
-
-        tenant = Tenant.objects.create(
-            schema_name="demo",
-            name="Demo Clinic",
-            slug="demo",
-            owner_email="demo@akmsoft.kg",
-        )
-        Domain.objects.create(domain="localhost", tenant=tenant, is_primary=True)
-        Subscription.objects.create(tenant=tenant, plan="trial", started_at=date.today())
-        self.stdout.write(self.style.SUCCESS("  [ok] Demo clinic created"))

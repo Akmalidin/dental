@@ -52,9 +52,6 @@ INSTALLED_APPS = [
     "apps.settings_clinic",
     "apps.sync",
     "apps.marketing",
-
-    # Tenants app — только модели центральной БД (Tenant, Subscription)
-    "apps.tenants",
 ]
 
 # ─── Middleware (без TenantMainMiddleware) ────────────────────────────────────
@@ -69,6 +66,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.tenancy.ImpersonationMiddleware",
     "apps.tenancy.StomAsiaRoutingMiddleware",
+    "apps.tenancy.SuperadminHostMiddleware",
     "apps.tenancy.CurrentClinicMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
     "apps.tenancy.PublicSiteMiddleware",

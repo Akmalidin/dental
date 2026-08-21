@@ -53,6 +53,18 @@ class BranchListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = BranchSerializer
     queryset = Branch.objects.all()
 
+    def perform_create(self, serializer):
+        # Список (GET) уже безопасно авто-фильтруется по текущей клинике
+        # (Branch.objects — ClinicManager, apps/tenancy.py), но создание (POST)
+        # раньше не проверяло роль вообще — та же проверка, что и в
+        # web-вьюхе branch_create (apps/users/views.py), не дублируем текст,
+        # переиспользуем Clinic.has_access.
+        from rest_framework.exceptions import PermissionDenied
+        user = self.request.user
+        if not user.is_superadmin and not (user.clinic and user.clinic.has_access("branches")):
+            raise PermissionDenied("Создание филиалов недоступно вашей клинике. Обратитесь к супер-админу.")
+        serializer.save()
+
 
 class BranchDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = BranchSerializer

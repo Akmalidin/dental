@@ -75,6 +75,68 @@
   </div>
   {% endif %}
 
+  <!-- Редактирование клиники + доступы супер-админа -->
+  {% if editable_by_superadmin %}
+  <div class="card card-pad">
+    <h3 class="font-bold" style="color:var(--text)">✏️ Редактировать клинику</h3>
+    <form method="post" action="/users/clinic/{{ clinic.pk }}/update/" class="mt-3 grid grid-cols-2 gap-3">
+      {% csrf_token %}
+      <label class="text-sm">Название
+        <input type="text" name="name" value="{{ clinic.name }}" class="w-full mt-1" required>
+      </label>
+      <label class="text-sm">Поддомен (slug)
+        <input type="text" name="slug" value="{{ clinic.slug }}" class="w-full mt-1">
+      </label>
+      <label class="text-sm">Часовой пояс
+        <select name="timezone" class="w-full mt-1">
+          {% for key, label in timezone_choices %}
+          <option value="{{ key }}" {% if key == clinic.timezone %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-sm">Тариф
+        <select name="tariff_plan" class="w-full mt-1">
+          {% for key, label in tariff_choices %}
+          <option value="{{ key }}" {% if key == clinic.tariff_plan %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="text-sm">Тариф оплачен до
+        <input type="date" name="tariff_until" value="{{ clinic.tariff_until|date:'Y-m-d' }}" class="w-full mt-1">
+      </label>
+      <div class="col-span-2">
+        <p class="fld mb-2">Модули (доступны в навигации клиники по тарифу):</p>
+        <div class="grid grid-cols-3 gap-2">
+          {% for key, label in all_modules %}
+          <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
+            <input type="checkbox" name="modules" value="{{ key }}" {% if key in clinic.enabled_modules %}checked{% endif %}>
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-span-2">
+        <button type="submit" class="btn btn-primary btn-sm">Сохранить клинику</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card card-pad">
+    <h3 class="font-bold" style="color:var(--text)">🔑 Доступы</h3>
+    <p class="muted text-sm mt-0.5 mb-3">Жёсткие разрешения на конкретные действия — выдаёт только супер-админ, сама клиника изменить их не может.</p>
+    <form method="post" action="/users/clinic/{{ clinic.pk }}/access/" class="flex flex-wrap items-center gap-3">
+      {% csrf_token %}
+      {% for key, label in grantable_access %}
+      <label class="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm" style="border:1px solid var(--border)">
+        <input type="checkbox" name="access" value="{{ key }}" {% if key in clinic_access_set %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+      <button type="submit" class="btn btn-soft btn-sm">Сохранить доступы</button>
+    </form>
+  </div>
+  {% endif %}
+
   <!-- Персонал -->
   <div class="card overflow-hidden">
     <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">

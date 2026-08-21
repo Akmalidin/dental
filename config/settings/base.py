@@ -11,7 +11,6 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv(
 # ─── Multitenancy ───────────────────────────────────────────────────────────
 SHARED_APPS = [
     "django_tenants",
-    "apps.tenants",
 
     # Django built-ins (shared)
     "django.contrib.contenttypes",

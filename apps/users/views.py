@@ -2428,7 +2428,8 @@ def clinic_overview(request, clinic_id):
         })
     stats["staff"] = len(staff)
 
-    from apps.users.models import ClinicSite
+    from apps.users.models import ClinicSite, TIMEZONE_CHOICES
+    from apps.settings_clinic.models import ClinicSettings
     from django.conf import settings as dj_settings
     site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
     public_url = "https://{}.{}".format(clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
@@ -2441,6 +2442,12 @@ def clinic_overview(request, clinic_id):
         "sections": SECTIONS,
         "site": site,
         "public_url": public_url,
+        "timezone_choices": TIMEZONE_CHOICES,
+        "tariff_choices": ClinicSettings.TARIFF_CHOICES,
+        "all_modules": ClinicSettings.ALL_MODULES,
+        "grantable_access": Clinic.GRANTABLE_ACCESS,
+        "clinic_access_set": set(clinic.granted_access or []),
+        "editable_by_superadmin": user.is_superadmin,
     })
 
 
@@ -2480,6 +2487,60 @@ def toggle_clinic_channel(request, clinic_id, channel):
     label = "WhatsApp" if channel == "wa" else "Telegram"
     state = "включён" if getattr(clinic, field) else "выключен"
     messages.success(request, _("%(label)s для клиники %(state)s") % {"label": label, "state": state})
+    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+
+
+@login_required
+@require_POST
+def clinic_update(request, clinic_id):
+    """Редактировать ключевые поля клиники напрямую по её id — только
+    суперадмин. Раньше тариф/модули можно было менять только для «текущей»
+    (выбранной через «Войти →») клиники в сессии — неудобно; здесь то же
+    самое, но по конкретному clinic_id, без обязательного «входа»."""
+    from apps.users.models import Clinic
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    name = request.POST.get("name", "").strip()
+    if name:
+        clinic.name = name
+    slug = request.POST.get("slug", "").strip()
+    if slug:
+        clinic.slug = slug
+    if request.POST.get("timezone"):
+        clinic.timezone = request.POST["timezone"]
+    clinic.tariff_plan = request.POST.get("tariff_plan", clinic.tariff_plan)
+    until = request.POST.get("tariff_until", "").strip()
+    if until:
+        from datetime import datetime
+        try:
+            clinic.tariff_until = datetime.strptime(until, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    else:
+        clinic.tariff_until = None
+    clinic.enabled_modules = request.POST.getlist("modules")
+    clinic.save(update_fields=["name", "slug", "timezone", "tariff_plan", "tariff_until", "enabled_modules"])
+    messages.success(request, _("Клиника «%(n)s» обновлена") % {"n": clinic.name})
+    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+
+
+@login_required
+@require_POST
+def clinic_set_access(request, clinic_id):
+    """Выдать/забрать клинике доступы, которые может менять только
+    супер-админ (Clinic.granted_access, см. GRANTABLE_ACCESS)."""
+    from apps.users.models import Clinic
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    valid_keys = {key for key, _label in Clinic.GRANTABLE_ACCESS}
+    selected = set(request.POST.getlist("access")) & valid_keys
+    clinic.granted_access = sorted(selected)
+    clinic.save(update_fields=["granted_access"])
+    messages.success(request, _("Доступы клиники «%(n)s» обновлены") % {"n": clinic.name})
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
 
@@ -3284,6 +3345,9 @@ def branch_list(request):
 @login_required
 @role_required("superadmin", "admin_main")
 def branch_create(request):
+    if not request.user.is_superadmin and not (request.user.clinic and request.user.clinic.has_access("branches")):
+        messages.error(request, _("Создание филиалов недоступно вашей клинике. Обратитесь к супер-админу."))
+        return redirect("branch_list")
     form = BranchForm(request.POST or None)
     if form.is_valid():
         form.save()

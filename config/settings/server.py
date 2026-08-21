@@ -57,6 +57,13 @@ PUBLIC_HOST_CLINIC_SLUG = config("PUBLIC_HOST_CLINIC_SLUG", default="sadaf")
 PUBLIC_BASE_DOMAIN = config("PUBLIC_BASE_DOMAIN", default=PUBLIC_BASE_DOMAIN)
 # stom.asia — новый бренд, поддомены клиник открывают CRM напрямую (см. StomAsiaRoutingMiddleware).
 CRM_BASE_DOMAIN = config("CRM_BASE_DOMAIN", default="")
+# Отдельный фиксированный хост только для супер-админ панели (см.
+# SuperadminHostMiddleware в apps/tenancy.py) — например "soft.stom.asia".
+# Пусто по умолчанию = фича выключена, как и CRM_BASE_DOMAIN. Чтобы реально
+# заработало, помимо этой переменной нужны также: (1) сам хост в ALLOWED_HOSTS
+# и CSRF_TRUSTED_ORIGINS (env), (2) DNS A-запись на сервер, (3) nginx-блок —
+# всё это настраивается отдельно, вне репозитория.
+SUPERADMIN_HOST = config("SUPERADMIN_HOST", default="")
 
 # ─── Logging (в консоль → journald через systemd) ────────────────────────────
 LOGGING = {

@@ -2154,3 +2154,164 @@ class StaffFormTabsTestCase(TestCase):
         resp = self.client.get("/users/create/")
         superadmin_label = dict(Role.ROLE_CHOICES)[Role.SUPERADMIN]
         self.assertNotContains(resp, superadmin_label)
+
+
+class ClinicGrantedAccessTestCase(TestCase):
+    """Клиники по умолчанию не могут создавать филиалы, пока супер-админ
+    явно не выдал доступ (Clinic.granted_access) — проверяем оба места
+    создания филиала (web-форма + REST API), и что супер-админ сам не
+    ограничен доступами."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника GA", slug="clinic-granted-access")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="ga_director", name="Директор GA", email="gad@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="ga_super", name="Супер GA", email="gas@test.local",
+            role=self.superadmin_role,
+        )
+        self.client = Client()
+
+    def test_branch_create_blocked_without_access(self):
+        self.client.force_login(self.director)
+        resp = self.client.post("/users/branches/create/", {
+            "name": "Второй филиал", "address": "ул. Тестовая", "phone": "0",
+        }, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Branch.objects.filter(clinic=self.clinic, name="Второй филиал").exists())
+
+    def test_branch_create_allowed_with_access(self):
+        self.clinic.granted_access = ["branches"]
+        self.clinic.save(update_fields=["granted_access"])
+        self.client.force_login(self.director)
+        resp = self.client.post("/users/branches/create/", {
+            "name": "Второй филиал", "address": "ул. Тестовая", "phone": "0",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Branch.objects.filter(clinic=self.clinic, name="Второй филиал").exists())
+
+    def test_superadmin_not_limited_by_clinic_access(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/users/branches/create/", {
+            "name": "Филиал супера", "address": "ул. Тестовая", "phone": "0",
+        })
+        self.assertEqual(resp.status_code, 302)
+
+    def test_branch_api_create_blocked_without_access(self):
+        self.client.force_login(self.director)
+        resp = self.client.post("/api/v1/auth/branches/", {
+            "name": "API филиал", "address": "ул. Тестовая", "phone": "0",
+        })
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(Branch.objects.filter(clinic=self.clinic, name="API филиал").exists())
+
+    def test_branch_api_create_allowed_with_access(self):
+        self.clinic.granted_access = ["branches"]
+        self.clinic.save(update_fields=["granted_access"])
+        self.client.force_login(self.director)
+        resp = self.client.post("/api/v1/auth/branches/", {
+            "name": "API филиал", "address": "ул. Тестовая", "phone": "0",
+        })
+        self.assertEqual(resp.status_code, 201)
+
+    def test_clinic_set_access_only_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/access/", {"access": ["branches"]})
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.granted_access, [])
+
+    def test_clinic_set_access_by_superadmin_ignores_invalid_keys(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/access/", {
+            "access": ["branches", "not-a-real-key"],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.granted_access, ["branches"])
+
+    def test_clinic_update_by_superadmin(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/update/", {
+            "name": "Клиника GA (переименована)", "slug": self.clinic.slug,
+            "timezone": "Asia/Bishkek", "tariff_plan": "premium",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.name, "Клиника GA (переименована)")
+        self.assertEqual(self.clinic.tariff_plan, "premium")
+
+    def test_clinic_update_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/update/", {"name": "Хакнутое имя"})
+        self.clinic.refresh_from_db()
+        self.assertNotEqual(self.clinic.name, "Хакнутое имя")
+
+
+class ClinicGrantedAccessMigrationTestCase(TestCase):
+    """Data-миграция 0028: клиники, у которых уже было больше одного
+    активного филиала на момент миграции, грандфазерятся (не отбираем
+    задним числом), однофилиальные/новые — остаются без доступа."""
+
+    def test_grandfathers_multi_branch_clinics(self):
+        import importlib
+        mod = importlib.import_module("apps.users.migrations.0028_clinic_granted_access")
+
+        multi = Clinic.objects.create(name="Много филиалов", slug="clinic-multi")
+        Branch.objects.create(name="Ф1", address="-", phone="0", clinic=multi, is_active=True)
+        Branch.objects.create(name="Ф2", address="-", phone="0", clinic=multi, is_active=True)
+
+        single = Clinic.objects.create(name="Один филиал", slug="clinic-single")
+        Branch.objects.create(name="Ф1", address="-", phone="0", clinic=single, is_active=True)
+
+        from django.apps import apps as django_apps
+        mod.grandfather_multi_branch_clinics(django_apps, None)
+
+        multi.refresh_from_db()
+        single.refresh_from_db()
+        self.assertEqual(multi.granted_access, ["branches"])
+        self.assertEqual(single.granted_access, [])
+
+
+class SuperadminHostMiddlewareTestCase(TestCase):
+    """SUPERADMIN_HOST (soft.stom.asia в проде) — если не задан, middleware
+    no-op; если задан и хост совпадает, посторонняя сессия разлогинивается,
+    а супер-админ на "/" уводится сразу в панель."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника SH", slug="clinic-superadmin-host")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="sh_director", name="Директор SH", email="shd@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="sh_super", name="Супер SH", email="shs@test.local",
+            role=self.superadmin_role,
+        )
+        self.client = Client()
+
+    def test_noop_when_unset(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/", HTTP_HOST="soft.stom.asia")
+        # SUPERADMIN_HOST не задан в дев-настройках — обычный хостинг, сессия жива
+        self.assertNotEqual(resp.status_code, 302)
+
+    def test_logs_out_non_superadmin_on_superadmin_host(self):
+        from django.test import override_settings
+        self.client.force_login(self.director)
+        with override_settings(SUPERADMIN_HOST="soft.stom.asia"):
+            resp = self.client.get("/users/", HTTP_HOST="soft.stom.asia", follow=True)
+        self.assertFalse(resp.wsgi_request.user.is_authenticated)
+
+    def test_superadmin_root_redirects_to_panel(self):
+        from django.test import override_settings
+        self.client.force_login(self.superadmin)
+        with override_settings(SUPERADMIN_HOST="soft.stom.asia"):
+            resp = self.client.get("/", HTTP_HOST="soft.stom.asia")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/users/superadmin/")

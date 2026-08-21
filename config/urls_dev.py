@@ -49,9 +49,6 @@ urlpatterns = [
     path("manifest.json", web_manifest, name="web_manifest"),
     path("sync/", include("apps.sync.urls")),
 
-    # Центральная панель (работает локально без схем)
-    path("central/", include("central.urls")),
-
     # REST API v1
     path("api/v1/auth/", include("apps.users.api_urls")),
     path("api/v1/patients/", include("apps.patients.api_urls")),
