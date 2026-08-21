@@ -45,7 +45,21 @@ class Clinic(models.Model):
     # чтобы реально отправлять сообщения, нужно, чтобы ОБА переключателя были включены.
     wa_master_enabled = models.BooleanField(default=True, verbose_name="WhatsApp разрешён клинике")
     telegram_master_enabled = models.BooleanField(default=True, verbose_name="Telegram разрешён клинике")
+    # Реестр фич, которые выдаёт ТОЛЬКО супер-админ (central-панель) — жёсткое
+    # серверное разрешение на конкретные действия, сама клиника изменить его
+    # не может (в отличие от enabled_modules — это косметика навигации по
+    # тарифу, которую отчасти настраивает сама клиника). По умолчанию пусто:
+    # ни одна клиника не может делать это действие, пока супер-админ явно не
+    # выдал доступ. Добавлять новые ключи сюда по мере надобности — остальной
+    # код (has_access) их не знает заранее.
+    GRANTABLE_ACCESS = [
+        ("branches", "Создание филиалов"),
+    ]
+    granted_access = models.JSONField(default=list, blank=True, verbose_name="Доступы (супер-админ)")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def has_access(self, key):
+        return key in (self.granted_access or [])
 
     @property
     def is_expired(self):

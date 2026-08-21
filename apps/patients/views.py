@@ -368,11 +368,14 @@ def patient_create(request):
 def patient_create_quick(request):
     """AJAX: компактное создание пациента прямо из модалки «Новая запись»
     (только ФИО/телефон/дата рождения/пол) — без ухода со страницы. Переиспользует
-    PatientForm (та же валидация/дедуп-поля, что и на полной форме), а не
-    дублирует её; филиал подставляется по умолчанию, как и в остальных
-    «быстрых» флоу (см. активный/основной филиал вызывающего)."""
+    PatientForm (ту же валидацию полей, что и на полной форме) и ту же проверку
+    на дубли по ФИО+телефону, что и patient_create — не дублируем её, а
+    повторяем здесь тем же способом (patient ещё не сохранён на момент проверки,
+    объекта form.instance.pk нет). Филиал подставляется по умолчанию, как и в
+    остальных «быстрых» флоу (см. активный/основной филиал вызывающего)."""
     from django.http import JsonResponse
     from apps.users.models import Branch
+    from .models import normalize_phone
     branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
               or Branch.objects.filter(is_main=True).first()
               or request.user.branches.first() or Branch.objects.first())
@@ -383,6 +386,22 @@ def patient_create_quick(request):
         first_field, first_errors = next(iter(form.errors.items()))
         return JsonResponse({"error": first_errors[0]}, status=400)
     patient = form.save(commit=False)
+    # Дубликат: совпадают ФИО И телефон → не создаём, отдаём уже существующего
+    # (тот же принцип, что и в patient_create — полная форма старого интерфейса).
+    pnorm = normalize_phone(patient.phone)
+    if pnorm:
+        dup = (Patient.objects.filter(
+            last_name__iexact=patient.last_name.strip(),
+            first_name__iexact=patient.first_name.strip())
+            .filter(Q(phone__contains=pnorm) | Q(phone2__contains=pnorm)))
+        dup = [p for p in dup if normalize_phone(p.phone) == pnorm or normalize_phone(p.phone2) == pnorm]
+        if dup:
+            existing = dup[0]
+            return JsonResponse({
+                "error": "duplicate", "duplicate": True,
+                "id": existing.pk, "name": existing.full_name,
+                "phone": existing.phone, "number": existing.display_number,
+            }, status=409)
     patient.created_by = request.user
     patient.save()
     form.save_m2m()

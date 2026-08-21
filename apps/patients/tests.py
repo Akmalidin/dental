@@ -230,6 +230,30 @@ class PatientCreateQuickTestCase(TestCase):
         resp = self.client.get("/patients/quick-create/")
         self.assertEqual(resp.status_code, 405)
 
+    def test_duplicate_name_and_phone_is_rejected(self):
+        existing = Patient.objects.create(
+            first_name="Азиз", last_name="Каримов", phone="+996700123456", branch=self.branch,
+        )
+        resp = self.client.post("/patients/quick-create/", {
+            "first_name": "Азиз", "last_name": "Каримов", "phone": "0700123456",
+        })
+        self.assertEqual(resp.status_code, 409)
+        data = resp.json()
+        self.assertTrue(data["duplicate"])
+        self.assertEqual(data["id"], existing.pk)
+        self.assertEqual(Patient.objects.count(), 1)
+
+    def test_same_name_different_phone_is_allowed(self):
+        Patient.objects.create(
+            first_name="Азиз", last_name="Каримов", phone="+996700123456", branch=self.branch,
+        )
+        resp = self.client.post("/patients/quick-create/", {
+            "first_name": "Азиз", "last_name": "Каримов", "phone": "0555999888",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        self.assertEqual(Patient.objects.count(), 2)
+
 
 class PatientDeletePermissionTestCase(TestCase):
     def setUp(self):

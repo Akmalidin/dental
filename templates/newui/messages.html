@@ -41,3 +41,17 @@
         </div>
       </div>
 {% endblock %}
+{% block extra_js %}
+<script>
+// Переход из карточки пациента («Написать сообщение», см. base.html
+// openChatWithPatient) — сразу открывает переписку с этим пациентом, даже
+// если сообщений с ним ещё не было (openMessagesForPatient сам заводит
+// запись в chatClients при необходимости). name/phone — из URL (могут не
+// быть в патниках capнутом на 300 patientsList на этой странице).
+(function(){
+  const params=new URLSearchParams(location.search);
+  const pid=params.get('patient');
+  if(pid) openMessagesForPatient(parseInt(pid, 10), params.get('name')||null, params.get('phone')||null);
+})();
+</script>
+{% endblock %}

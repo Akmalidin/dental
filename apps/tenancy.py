@@ -232,6 +232,37 @@ class StomAsiaRoutingMiddleware:
         return self.get_response(request)
 
 
+class SuperadminHostMiddleware:
+    """Отдельный фиксированный хост только для супер-админ панели (например
+    soft.stom.asia) — в отличие от StomAsiaRoutingMiddleware (там поддомен по
+    slug клиники), здесь ОДИН конкретный хост из settings.SUPERADMIN_HOST.
+    Если SUPERADMIN_HOST не задан — no-op (фича выключена, как и
+    CRM_BASE_DOMAIN). Обычные сотрудники клиник на этом хосте не должны
+    работать вовсе — если чужая (не супер-админская) сессия каким-то образом
+    используется на этом хосте, она разлогинивается."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings as dj
+        superadmin_host = (getattr(dj, "SUPERADMIN_HOST", "") or "").lower()
+        if not superadmin_host:
+            return self.get_response(request)
+        host = request.get_host().split(":")[0].lower()
+        if host != superadmin_host:
+            return self.get_response(request)
+        request.is_superadmin_host = True
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and not getattr(user, "is_superadmin", False):
+            from django.contrib.auth import logout
+            logout(request)
+        if request.path == "/":
+            from django.shortcuts import redirect
+            return redirect("superadmin_panel")
+        return self.get_response(request)
+
+
 class SectionAccessMiddleware:
     """Персональные доступы: блокирует заход в раздел, если он не разрешён пользователю.
 
