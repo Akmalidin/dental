@@ -4321,6 +4321,8 @@ const translations={
   w_expense_deleted: {ru:'Расход удалён', ky:'Чыгым өчүрүлдү', en:'Expense deleted', uz:"Xarajat o'chirildi"},
   w_confirm_delete_patient: {ru:'Удалить пациента? Он переместится в корзину.', ky:'Пациентти өчүрөсүзбү? Ал себетке жылат.', en:'Delete this patient? They will be moved to the recycle bin.', uz:"Bemorni o'chirasizmi? U savatga ko'chiriladi."},
   w_patient_deleted: {ru:'Пациент перемещён в корзину', ky:'Пациент себетке жылдырылды', en:'Patient moved to recycle bin', uz:"Bemor savatga ko'chirildi"},
+  w_duplicate_patient_found: {ru:'Пациент с таким ФИО и телефоном уже есть в базе:', ky:'Мындай аты-жөнү жана телефону бар пациент базада бар:', en:'A patient with this name and phone already exists:', uz:"Bunday F.I.Sh. va telefonli bemor bazada allaqachon bor:"},
+  w_open_existing_card: {ru:'Открыть карточку', ky:'Картаны ачуу', en:'Open card', uz:'Kartani ochish'},
   w_hover_fio: {ru:'ФИО', ky:'ФАА', en:'Full name', uz:'F.I.Sh.'},
   w_hover_appt_time: {ru:'Время записи', ky:'Жазуу убактысы', en:'Appointment time', uz:'Yozuv vaqti'},
   w_hover_phone: {ru:'Номер телефона', ky:'Телефон номери', en:'Phone number', uz:'Telefon raqami'},
@@ -9721,6 +9723,24 @@ async function submitNewPatient(){
       showToast('Пациент добавлен');
     } else {
       flashAndReload('Пациент добавлен');
+    }
+  } else if(res.status===409 && payload && payload.duplicate){
+    // Найден дубль по ФИО+телефону (см. patient_create_quick) — не создаём
+    // молча новую карточку.
+    if(apptModalPendingPatientContext){
+      // Изнутри «Новая запись» — не бросаем начатую запись переходом на
+      // другую страницу, а просто подставляем уже существующего пациента и
+      // продолжаем (m-appt под низом всё ещё открыта, дата/время/врач целы).
+      closeModal('m-patient');
+      apptModalPendingPatientContext=false;
+      if(!patientsList.some(p=>p.id===payload.id)) patientsList.push({id: payload.id, fullName: payload.name, phone: payload.phone});
+      selectApptPatient(payload.id);
+      showToast(t('w_duplicate_patient_found')+' '+payload.name);
+    } else {
+      const box=document.getElementById('patientModalError');
+      box.innerHTML = `${t('w_duplicate_patient_found')} <b>${payload.name}</b> (№${payload.number}, ${payload.phone}). `
+        + `<a href="#" onclick="closeModal('m-patient');location.href='/new/patients/${payload.id}/';return false;" style="color:inherit;text-decoration:underline;">${t('w_open_existing_card')}</a>`;
+      box.classList.remove('hidden');
     }
   } else {
     showModalError('patientModalError', (payload && payload.error) || 'Не удалось создать пациента');
