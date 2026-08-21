@@ -2756,3 +2756,160 @@ class StomAsiaLoginTemplateTestCase(TestCase):
             resp = self.client.get("/login/", HTTP_HOST="app.sadaf.kg")
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "auth/login.html")
+
+
+class BranchFilterTestCase(TestCase):
+    """Переключатель филиала (session["active_branch"], /users/set-branch/)
+    теперь реально ФИЛЬТРУЕТ отображаемые данные нового интерфейса —
+    расписание/пациенты/склад(операции)/финансы/отчёты — а не только
+    подставляет филиал по умолчанию для новых записей, см.
+    apps.tenancy.get_active_branch_id и _newui_schedule_data/
+    _newui_patients_page_data/_newui_finance_data/_newui_warehouse_ops_data/
+    _newui_reports_data (apps/users/views.py)."""
+
+    def setUp(self):
+        import datetime as dt
+        from django.utils import timezone
+        from apps.patients.models import Patient
+        from apps.appointments.models import Appointment
+        from apps.finance.models import Payment, Expense, ExpenseCategory
+        from apps.warehouse.models import Product, WarehouseDistribution
+
+        self.clinic = Clinic.objects.create(name="Клиника BF2", slug="clinic-bf2")
+        self.branch1 = Branch.objects.create(name="Филиал 1", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.branch2 = Branch.objects.create(name="Филиал 2", address="-", phone="0", clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="bf2_director", name="Директор BF2", email="bf2d@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.doctor1 = User.objects.create(
+            login="bf2_doc1", name="Врач Филиал1", email="bf2doc1@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor1.branches.set([self.branch1])
+        self.doctor2 = User.objects.create(
+            login="bf2_doc2", name="Врач Филиал2", email="bf2doc2@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor2.branches.set([self.branch2])
+
+        self.patient1 = Patient.objects.create(
+            first_name="Один", last_name="Пациентов1", phone="+996700000001",
+            branch=self.branch1, clinic=self.clinic,
+        )
+        self.patient2 = Patient.objects.create(
+            first_name="Два", last_name="Пациентов2", phone="+996700000002",
+            branch=self.branch2, clinic=self.clinic,
+        )
+
+        today = timezone.localdate()
+        start1 = timezone.make_aware(dt.datetime.combine(today, dt.time(10, 0)))
+        end1 = timezone.make_aware(dt.datetime.combine(today, dt.time(11, 0)))
+        Appointment.objects.create(
+            patient=self.patient1, doctor=self.doctor1, branch=self.branch1,
+            start_at=start1, end_at=end1, status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+        start2 = timezone.make_aware(dt.datetime.combine(today, dt.time(14, 0)))
+        end2 = timezone.make_aware(dt.datetime.combine(today, dt.time(15, 0)))
+        Appointment.objects.create(
+            patient=self.patient2, doctor=self.doctor2, branch=self.branch2,
+            start_at=start2, end_at=end2, status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+
+        Payment.objects.create(
+            patient=self.patient1, amount=1000, branch=self.branch1, received_by=self.director,
+            type=Payment.TYPE_INCOME, clinic=self.clinic,
+        )
+        Payment.objects.create(
+            patient=self.patient2, amount=2000, branch=self.branch2, received_by=self.director,
+            type=Payment.TYPE_INCOME, clinic=self.clinic,
+        )
+        cat = ExpenseCategory.objects.create(name="Прочее", clinic=self.clinic)
+        Expense.objects.create(
+            branch=self.branch1, amount=100, category=cat, description="", created_by=self.director,
+            date=today, clinic=self.clinic,
+        )
+        Expense.objects.create(
+            branch=self.branch2, amount=200, category=cat, description="", created_by=self.director,
+            date=today, clinic=self.clinic,
+        )
+
+        product = Product.objects.create(name="Перчатки", unit="уп", quantity=50, clinic=self.clinic)
+        WarehouseDistribution.objects.create(product=product, quantity=5, branch=self.branch1, date=today)
+        WarehouseDistribution.objects.create(product=product, quantity=7, branch=self.branch2, date=today)
+
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def _set_branch(self, branch):
+        session = self.client.session
+        session["active_branch"] = branch.pk
+        session.save()
+
+    def test_schedule_filtered_by_active_branch(self):
+        self._set_branch(self.branch1)
+        resp = self.client.get("/new/schedule/data/")
+        data = resp.json()
+        doctor_names = [d["name"] for d in data["doctors"]]
+        self.assertIn("Врач Филиал1", doctor_names)
+        self.assertNotIn("Врач Филиал2", doctor_names)
+        patient_names = [a["patient"] for a in data["appointments"]]
+        self.assertIn(self.patient1.full_name, patient_names)
+        self.assertNotIn(self.patient2.full_name, patient_names)
+
+    def test_schedule_shows_all_when_no_branch_selected(self):
+        resp = self.client.get("/new/schedule/data/")
+        data = resp.json()
+        doctor_names = [d["name"] for d in data["doctors"]]
+        self.assertIn("Врач Филиал1", doctor_names)
+        self.assertIn("Врач Филиал2", doctor_names)
+
+    def test_patients_list_filtered_by_active_branch(self):
+        self._set_branch(self.branch2)
+        resp = self.client.get("/new/patients/data/")
+        data = resp.json()
+        names = [r["fullName"] for r in data["results"]]
+        self.assertIn(self.patient2.full_name, names)
+        self.assertNotIn(self.patient1.full_name, names)
+        self.assertEqual(data["stats"]["allCount"], 1)
+
+    def test_finance_filtered_by_active_branch(self):
+        self._set_branch(self.branch1)
+        resp = self.client.get("/new/finance/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["financeData"]["revenueMonth"], 1000.0)
+
+    def test_finance_shows_all_when_no_branch_selected(self):
+        resp = self.client.get("/new/finance/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["financeData"]["revenueMonth"], 3000.0)
+
+    def test_warehouse_ops_filtered_by_active_branch(self):
+        self._set_branch(self.branch1)
+        resp = self.client.get("/new/warehouse/")
+        data = _extract_newui_real_data(resp.content.decode())
+        dist_branches = [d["branch"] for d in data["warehouseOpsData"]["distributions"]]
+        self.assertIn("Филиал 1", dist_branches)
+        self.assertNotIn("Филиал 2", dist_branches)
+
+    def test_warehouse_stock_not_filtered_by_branch(self):
+        """Остатки клиники в целом не разбиты по филиалам (Product без поля
+        branch) — сознательно НЕ фильтруются переключателем, см. docstring
+        _newui_warehouse_ops_data/newui_warehouse."""
+        self._set_branch(self.branch1)
+        resp = self.client.get("/new/warehouse/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(len(data["warehouseData"]["items"]), 1)
+
+    def test_reports_filtered_by_active_branch(self):
+        self._set_branch(self.branch1)
+        resp = self.client.get("/new/reports/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["reportsData"]["revenueMonth"], 1000.0)
+
+    def test_reports_shows_all_when_no_branch_selected(self):
+        resp = self.client.get("/new/reports/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["reportsData"]["revenueMonth"], 3000.0)

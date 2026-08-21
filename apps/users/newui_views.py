@@ -219,7 +219,9 @@ def newui_patients_data_json(request):
     поиском/фильтром (в клинике может быть тысячи пациентов — компактный
     встроенный patientsList (см. _newui_patients_data, лимит 300) годится
     только для быстрого поиска в модалках на других страницах, не для самого
-    списка). Дергается из renderPatientsTable() в base.html."""
+    списка). Дергается из renderPatientsTable() в base.html. Учитывает
+    активный филиал переключателя сайдбара (request.session["active_branch"])
+    — см. _newui_patients_page_data."""
     from django.http import JsonResponse
     return JsonResponse(_newui_patients_page_data(request))
 
@@ -244,10 +246,10 @@ def newui_patientcard(request, pk):
 
 @login_required
 def newui_schedule(request):
-    from apps.tenancy import get_current_clinic
+    from apps.tenancy import get_current_clinic, get_active_branch_id
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     return _render(request, "schedule", "schedule.html", {
-        "schedule": _newui_schedule_data(clinic),
+        "schedule": _newui_schedule_data(clinic, get_active_branch_id(request)),
         # Модалка "Новая запись" на этой странице ищет пациента и услугу так
         # же, как на /new/patients/ и /new/services/ — переиспользуем те же
         # хелперы, без дублирования бизнес-логики.
@@ -266,9 +268,9 @@ def newui_schedule_data_json(request):
     пациента открывают на порядок чаще календаря) было бы расточительно —
     подгружаем по требованию и кэшируем на клиенте на время сессии страницы."""
     from django.http import JsonResponse
-    from apps.tenancy import get_current_clinic
+    from apps.tenancy import get_current_clinic, get_active_branch_id
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
-    return JsonResponse(_newui_schedule_data(clinic))
+    return JsonResponse(_newui_schedule_data(clinic, get_active_branch_id(request)))
 
 
 @login_required
@@ -288,9 +290,11 @@ def newui_services(request):
 
 @login_required
 def newui_finance(request):
-    from apps.tenancy import get_current_clinic
+    from apps.tenancy import get_current_clinic, get_active_branch_id
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
-    return _render(request, "finance", "finance.html", {"financeData": _newui_finance_data(clinic)})
+    return _render(request, "finance", "finance.html", {
+        "financeData": _newui_finance_data(clinic, get_active_branch_id(request)),
+    })
 
 
 @login_required
@@ -303,15 +307,23 @@ def newui_lab(request):
 
 @login_required
 def newui_warehouse(request):
+    from apps.tenancy import get_active_branch_id
     return _render(request, "warehouse", "warehouse.html", {
+        # Остатки (_newui_warehouse_data) НЕ фильтруются по филиалу — учёт
+        # материалов в системе ведётся клиникой в целом (Product.quantity —
+        # один общий остаток, без разбивки по филиалам), фильтруется по
+        # филиалу только сама история операций.
         "warehouseData": _newui_warehouse_data(),
-        "warehouseOpsData": _newui_warehouse_ops_data(),
+        "warehouseOpsData": _newui_warehouse_ops_data(get_active_branch_id(request)),
     })
 
 
 @login_required
 def newui_reports(request):
-    return _render(request, "reports", "reports.html", {"reportsData": _newui_reports_data()})
+    from apps.tenancy import get_active_branch_id
+    return _render(request, "reports", "reports.html", {
+        "reportsData": _newui_reports_data(get_active_branch_id(request)),
+    })
 
 
 @login_required
