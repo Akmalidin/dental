@@ -69,6 +69,9 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
 .sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
 .sidebar-clinic{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:12px;color:#B7BECB;display:flex;justify-content:space-between;align-items:center;}
+.sidebar-branch-switcher{margin:-12px 0 18px;}
+.sidebar-branch-switcher select{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px;font-size:12px;color:#B7BECB;cursor:pointer;}
+.sidebar-branch-switcher select:focus{outline:none;border-color:var(--coral);}
 .nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6E7686;padding:14px 10px 6px;font-weight:600;}
 .nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;border-radius:8px;font-size:13.5px;color:#C4CAD6;margin-bottom:2px;width:100%;text-align:left;transition:.12s;}
 .nav-item svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
@@ -779,6 +782,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       ODONTIS
     </div>
     <div class="sidebar-clinic"><span>{% if active_clinic %}{{ active_clinic.name }}{% else %}Все клиники{% endif %}</span></div>
+    {% if nav_branches|length > 1 %}
+    <form method="post" action="/users/set-branch/" class="sidebar-branch-switcher">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <select name="branch" onchange="this.form.submit()">
+        <option value="all" {% if not active_branch %}selected{% endif %}>Все филиалы</option>
+        {% for b in nav_branches %}
+        <option value="{{ b.pk }}" {% if active_branch and active_branch.pk == b.pk %}selected{% endif %}>{{ b.name }}{% if b.is_main %} (осн.){% endif %}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
 
     <div class="nav-label">Продажи</div>
     <a class="nav-item{% if active == 'dashboard' %} active{% endif %}" data-view="dashboard" href="{% url 'newui_dashboard' %}">
@@ -4302,6 +4317,23 @@ const translations={
   w_sa_enter: {ru:'Войти в клинику', ky:'Клиникага кирүү', en:'Enter clinic', uz:'Klinikaga kirish'},
   w_sa_create: {ru:'Создать', ky:'Түзүү', en:'Create', uz:'Yaratish'},
   w_sa_fill_required: {ru:'Заполните название клиники, логин и пароль администратора', ky:'Клиниканын атын, администратордун логинин жана сыр сөзүн толтуруңуз', en:'Fill in the clinic name, admin login and password', uz:'Klinika nomi, administrator login va parolini kiriting'},
+  w_sa_status: {ru:'Статус', ky:'Статус', en:'Status', uz:'Holat'},
+  w_sa_active: {ru:'Активна', ky:'Активдүү', en:'Active', uz:'Faol'},
+  w_sa_blocked: {ru:'Заблокирована', ky:'Бөгөттөлгөн', en:'Blocked', uz:'Bloklangan'},
+  w_sa_access_requests: {ru:'📬 Заявки на доступ', ky:'📬 Кирүү өтүнүчтөрү', en:'📬 Access requests', uz:'📬 Kirish so\'rovlari'},
+  w_sa_no_requests: {ru:'Новых заявок нет', ky:'Жаңы өтүнүч жок', en:'No new requests', uz:'Yangi so\'rovlar yo\'q'},
+  w_sa_contacted: {ru:'Связались', ky:'Байланыштык', en:'Contacted', uz:'Bog\'lanildi'},
+  w_sa_resolved: {ru:'Решено', ky:'Чечилди', en:'Resolved', uz:'Hal qilindi'},
+  w_sa_blocked_ips: {ru:'🚫 Заблокированные IP', ky:'🚫 Бөгөттөлгөн IP', en:'🚫 Blocked IPs', uz:'🚫 Bloklangan IP'},
+  w_sa_no_blocked_ips: {ru:'Заблокированных IP нет', ky:'Бөгөттөлгөн IP жок', en:'No blocked IPs', uz:'Bloklangan IP yo\'q'},
+  w_sa_block: {ru:'Заблокировать', ky:'Бөгөттөө', en:'Block', uz:'Bloklash'},
+  w_sa_unblock: {ru:'Разблокировать', ky:'Бөгөттөн чыгаруу', en:'Unblock', uz:'Blokdan chiqarish'},
+  w_sa_blocked_features: {ru:'🔓 Заблокированные функции', ky:'🔓 Бөгөттөлгөн функциялар', en:'🔓 Blocked features', uz:'🔓 Bloklangan funksiyalar'},
+  w_sa_login_events: {ru:'Последние входы', ky:'Акыркы кирүүлөр', en:'Recent logins', uz:'Oxirgi kirishlar'},
+  w_sa_no_login_events: {ru:'Входов ещё не было', ky:'Кирүү болгон эмес', en:'No logins yet', uz:'Hali kirishlar bo\'lmagan'},
+  w_sa_block_clinic: {ru:'Заблокировать клинику', ky:'Клиниканы бөгөттөө', en:'Block clinic', uz:'Klinikani bloklash'},
+  w_sa_unblock_clinic: {ru:'Разблокировать клинику', ky:'Клиниканы бөгөттөн чыгаруу', en:'Unblock clinic', uz:'Klinikani blokdan chiqarish'},
+  w_sa_confirm_block: {ru:'Заблокировать клинику? Все сотрудники будут немедленно выведены из системы.', ky:'Клиниканы бөгөттөйсүзбү? Бардык кызматкерлер дароо чыгарылат.', en:'Block this clinic? All staff will be logged out immediately.', uz:'Klinikani bloklaysizmi? Barcha xodimlar darhol tizimdan chiqariladi.'},
   w_save_failed_connection: {ru:'Не удалось сохранить — проверьте соединение', ky:'Сактоо мүмкүн болгон жок — байланышты текшериңиз', en:'Failed to save — check your connection', uz:'Saqlab bo\'lmadi — aloqani tekshiring'},
   w_confirm_finish_visit: {ru:'Завершить приём? После этого редактирование будет недоступно.', ky:'Кабыл алууну аяктайсызбы? Андан кийин түзөтүү мүмкүн болбойт.', en:'Finish the visit? Editing will be unavailable after this.', uz:'Qabulni yakunlaysizmi? Shundan keyin tahrirlash mumkin bo\'lmaydi.'},
   w_finish_visit_failed: {ru:'Не удалось завершить приём', ky:'Кабыл алууну аяктоо мүмкүн болгон жок', en:'Failed to finish the visit', uz:'Qabulni yakunlab bo\'lmadi'},

@@ -2023,12 +2023,15 @@ def _newui_superadmin_data():
     res.redirected → flashAndReload, тот же паттерн, что и везде в новом
     интерфейсе; бизнес-логика супер-админ-действий не дублируется здесь."""
     from apps.tenancy import unscoped
-    from apps.users.models import Clinic, TIMEZONE_CHOICES
+    from apps.users.models import Clinic, ClinicLoginEvent, ClinicAccessRequest, BlockedIP, TIMEZONE_CHOICES
     from apps.settings_clinic.models import ClinicSettings
     clinics = []
     with unscoped():
         from apps.patients.models import Patient
         for c in Clinic.objects.all().order_by("name"):
+            events = list(
+                ClinicLoginEvent.objects.filter(clinic=c).select_related("user").order_by("-created_at")[:10]
+            )
             clinics.append({
                 "id": c.pk, "name": c.name, "slug": c.slug,
                 "isActive": c.is_active,
@@ -2038,18 +2041,38 @@ def _newui_superadmin_data():
                 "timezone": c.timezone,
                 "enabledModules": c.enabled_modules or [],
                 "grantedAccess": c.granted_access or [],
+                "blockedFeatures": c.blocked_features or [],
                 "waMasterEnabled": c.wa_master_enabled,
                 "telegramMasterEnabled": c.telegram_master_enabled,
                 "branchCount": Branch.objects.filter(clinic=c, is_active=True).count(),
                 "staffCount": User.objects.filter(clinic=c, is_active=True).count(),
                 "patientCount": Patient.all_objects.filter(clinic=c, is_deleted=False).count(),
+                "loginEvents": [{
+                    "user": e.user.name if e.user else "—",
+                    "ip": e.ip_address or "—",
+                    "success": e.success,
+                    "at": e.created_at.strftime("%d.%m.%Y %H:%M"),
+                } for e in events],
             })
+        access_requests = [{
+            "id": r.pk, "clinicName": r.clinic_name, "clinicSlug": r.clinic_slug,
+            "contactName": r.contact_name, "phone": r.phone, "email": r.email,
+            "message": r.message, "ip": r.ip_address or "—", "status": r.status,
+            "at": r.created_at.strftime("%d.%m.%Y %H:%M"),
+        } for r in ClinicAccessRequest.objects.exclude(status=ClinicAccessRequest.STATUS_RESOLVED).order_by("-created_at")[:50]]
+        blocked_ips = [{
+            "id": b.pk, "ip": b.ip_address, "note": b.note,
+            "at": b.created_at.strftime("%d.%m.%Y %H:%M"),
+        } for b in BlockedIP.objects.all().order_by("-created_at")]
     return {
         "clinics": clinics,
         "tariffChoices": ClinicSettings.TARIFF_CHOICES,
         "allModules": ClinicSettings.ALL_MODULES,
         "grantableAccess": Clinic.GRANTABLE_ACCESS,
+        "blockableFeatures": Clinic.BLOCKABLE_FEATURES,
         "timezoneChoices": TIMEZONE_CHOICES,
+        "accessRequests": access_requests,
+        "blockedIPs": blocked_ips,
     }
 
 
@@ -2597,6 +2620,91 @@ def clinic_set_access(request, clinic_id):
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
 
+@login_required
+@require_POST
+def clinic_toggle_active(request, clinic_id):
+    """Заблокировать/разблокировать клинику — только супер-админ. Реальную
+    блокировку (мгновенный разлогин + запрет входа) делает
+    apps.tenancy.TariffGuardMiddleware/login_view, читая Clinic.is_active —
+    здесь только переключаем сам флаг."""
+    from apps.users.models import Clinic
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    clinic.is_active = not clinic.is_active
+    clinic.save(update_fields=["is_active"])
+    state = _("разблокирована") if clinic.is_active else _("заблокирована")
+    messages.success(request, _("Клиника «%(n)s» %(s)s") % {"n": clinic.name, "s": state})
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@login_required
+@require_POST
+def clinic_set_blocked_features(request, clinic_id):
+    """Запретить/разрешить клинике отдельные функции (Clinic.blocked_features,
+    см. BLOCKABLE_FEATURES) — только супер-админ."""
+    from apps.users.models import Clinic
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    valid_keys = {key for key, _label in Clinic.BLOCKABLE_FEATURES}
+    selected = set(request.POST.getlist("blocked")) & valid_keys
+    clinic.blocked_features = sorted(selected)
+    clinic.save(update_fields=["blocked_features"])
+    messages.success(request, _("Заблокированные функции клиники «%(n)s» обновлены") % {"n": clinic.name})
+    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+
+
+@login_required
+@require_POST
+def block_ip(request):
+    """Заблокировать IP от входа в систему (глобально, не привязано к одной
+    клинике) — только супер-админ. См. apps.users.forms.LoginForm.clean()."""
+    from apps.users.models import BlockedIP
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    ip = request.POST.get("ip_address", "").strip()
+    if ip:
+        BlockedIP.objects.get_or_create(
+            ip_address=ip,
+            defaults={"note": request.POST.get("note", "").strip(), "blocked_by": request.user},
+        )
+        messages.success(request, _("IP %(ip)s заблокирован") % {"ip": ip})
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@login_required
+@require_POST
+def unblock_ip(request, pk):
+    """Снять блокировку IP — только супер-админ."""
+    from apps.users.models import BlockedIP
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    BlockedIP.objects.filter(pk=pk).delete()
+    messages.success(request, _("IP разблокирован"))
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@login_required
+@require_POST
+def clinic_access_request_set_status(request, pk):
+    """Пометить заявку на доступ «Связались»/«Решено» — только супер-админ."""
+    from apps.users.models import ClinicAccessRequest
+    if not request.user.is_superadmin:
+        messages.error(request, _("Доступно только суперадмину"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")
+    req = get_object_or_404(ClinicAccessRequest, pk=pk)
+    status = request.POST.get("status", "")
+    if status in dict(ClinicAccessRequest.STATUS_CHOICES):
+        req.status = status
+        req.save(update_fields=["status"])
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
 def _can_edit_site(user, clinic):
     """Редактировать сайт: суперадмин (любую) или Директор своей клиники."""
     return user.is_superadmin or (user.is_admin_main and user.clinic_id == clinic.pk)
@@ -2943,6 +3051,13 @@ def login_view(request):
     from apps.tenancy import set_current_clinic, clear_current_clinic
     from apps.users.models import Clinic
     clinic_slug = (request.POST.get("clinic") or request.GET.get("clinic") or "").strip()
+    if clinic_slug:
+        found = Clinic.objects.filter(slug=clinic_slug).first()
+        if found is not None and not found.is_active:
+            # Раньше здесь молча падало в общий вход без темы клиники —
+            # теперь явно ведём на форму «запросить доступ» (та же логика,
+            # что в PublicSiteMiddleware/StomAsiaRoutingMiddleware).
+            return redirect(f"/access-request/?clinic={clinic_slug}")
     clinic = Clinic.objects.filter(slug=clinic_slug, is_active=True).first() if clinic_slug else None
     if clinic is None and getattr(request, "host_clinic", None):
         clinic = request.host_clinic
@@ -2960,6 +3075,54 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("/login/")
+
+
+def clinic_access_request(request):
+    """Публичная форма «запросить доступ» — показывается вместо тихого
+    редиректа на общий вход, когда поддомен не соответствует ни одной
+    клинике или клиника заблокирована (Clinic.is_active=False). См.
+    apps.tenancy.PublicSiteMiddleware/StomAsiaRoutingMiddleware/
+    TariffGuardMiddleware и login_view — все ведут сюда. Уведомляет
+    супер-админа через уже существующий Notification.send() (создаёт
+    запись + шлёт web push, ничего изобретать не нужно)."""
+    from apps.tenancy import get_client_ip
+    from apps.users.models import Clinic, ClinicAccessRequest, Role
+    from apps.notifications.models import Notification
+
+    clinic_slug = (request.GET.get("clinic") or request.POST.get("clinic_slug") or "").strip()
+    known_clinic = Clinic.objects.filter(slug=clinic_slug).first() if clinic_slug else None
+    submitted = False
+
+    if request.method == "POST":
+        clinic_name = request.POST.get("clinic_name", "").strip()
+        contact_name = request.POST.get("contact_name", "").strip()
+        phone = request.POST.get("phone", "").strip()
+        error = None
+        if not (clinic_name and contact_name and phone):
+            error = _("Заполните название клиники, контактное лицо и телефон")
+        if error:
+            messages.error(request, error)
+        else:
+            req = ClinicAccessRequest.objects.create(
+                clinic_slug=clinic_slug, clinic_name=clinic_name,
+                contact_name=contact_name, phone=phone,
+                email=request.POST.get("email", "").strip(),
+                message=request.POST.get("message", "").strip(),
+                ip_address=get_client_ip(request),
+            )
+            for su in User.objects.filter(role__name=Role.SUPERADMIN, is_active=True):
+                Notification.send(
+                    su, _("Запрос доступа: %(n)s") % {"n": clinic_name},
+                    body=f"{contact_name}, {phone}" + (f" — {req.message}" if req.message else ""),
+                    type="system", link="/new/superadmin/",
+                )
+            submitted = True
+
+    return render(request, "auth/access_request.html", {
+        "clinic_slug": clinic_slug,
+        "known_clinic": known_clinic,
+        "submitted": submitted,
+    })
 
 
 @login_required

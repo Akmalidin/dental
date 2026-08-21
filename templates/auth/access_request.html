@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Запрос доступа — AKM SOFT CLINIC</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="h-full flex items-center justify-center" style="background:linear-gradient(135deg,#1E1B4B 0%,#312E81 40%,#4C1D95 100%)">
+
+<div class="w-full max-w-sm px-4">
+
+  <div class="text-center mb-8">
+    <div class="inline-flex w-16 h-16 rounded-2xl items-center justify-center mb-4 shadow-xl overflow-hidden"
+         style="background:linear-gradient(135deg,#6366F1,#A855F7)">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2C8 2 6 5 6 9c0 5 2 13 4 13 1.5 0 1.5-3 2-3s.5 3 2 3c2 0 4-8 4-13 0-4-2-7-6-7z" fill="#fff" fill-opacity=".25"/></svg>
+    </div>
+    <h1 class="text-2xl font-black text-white">
+      {% if known_clinic %}{{ known_clinic.name }}{% else %}Клиника недоступна{% endif %}
+    </h1>
+    <p class="text-indigo-300 text-sm mt-1">
+      {% if known_clinic %}Доступ к этой клинике сейчас закрыт{% else %}Такой клиники не найдено{% endif %}
+    </p>
+  </div>
+
+  <div class="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-7 shadow-2xl">
+    {% if submitted %}
+      <div class="text-center">
+        <div class="text-5xl mb-3">✅</div>
+        <h2 class="text-white font-bold text-lg mb-2">Заявка отправлена</h2>
+        <p class="text-indigo-200 text-sm">Мы получили заявку и свяжемся с вами в ближайшее время.</p>
+      </div>
+    {% else %}
+      <h2 class="text-white font-bold text-lg mb-2">Запросить доступ</h2>
+      <p class="text-indigo-200 text-sm mb-5">Оставьте данные — мы свяжемся с вами и дадим доступ к системе.</p>
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="clinic_slug" value="{{ clinic_slug }}">
+
+        {% if messages %}
+        <div class="bg-red-500/20 border border-red-400/40 text-red-200 text-sm px-4 py-3 rounded-xl">
+          {% for m in messages %}{{ m }}{% endfor %}
+        </div>
+        {% endif %}
+
+        <div>
+          <label class="block text-indigo-200 text-sm font-medium mb-1.5">Название клиники</label>
+          <input type="text" name="clinic_name" required
+                 value="{% if known_clinic %}{{ known_clinic.name }}{% endif %}"
+                 class="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                 placeholder="Моя клиника">
+        </div>
+        <div>
+          <label class="block text-indigo-200 text-sm font-medium mb-1.5">Контактное лицо</label>
+          <input type="text" name="contact_name" required
+                 class="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                 placeholder="Ваше имя">
+        </div>
+        <div>
+          <label class="block text-indigo-200 text-sm font-medium mb-1.5">Телефон</label>
+          <input type="tel" name="phone" required
+                 class="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                 placeholder="+996 ___ __ __ __">
+        </div>
+        <div>
+          <label class="block text-indigo-200 text-sm font-medium mb-1.5">Email (необязательно)</label>
+          <input type="email" name="email"
+                 class="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                 placeholder="mail@example.com">
+        </div>
+        <div>
+          <label class="block text-indigo-200 text-sm font-medium mb-1.5">Сообщение (необязательно)</label>
+          <textarea name="message" rows="2"
+                    class="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    placeholder="Коротко о вашей клинике"></textarea>
+        </div>
+
+        <button type="submit"
+                class="w-full py-2.5 rounded-xl text-sm font-bold text-white shadow-lg mt-2"
+                style="background:linear-gradient(135deg,#6366F1,#A855F7)">
+          Отправить заявку
+        </button>
+      </form>
+    {% endif %}
+
+    <div class="text-center mt-5">
+      <a href="/login/" class="text-indigo-300 text-xs hover:text-white">← Уже есть доступ? Войти</a>
+    </div>
+  </div>
+
+  <p class="text-center text-indigo-400 text-xs mt-6">© 2025 AKM SOFT. Все права защищены.</p>
+</div>
+
+</body>
+</html>
