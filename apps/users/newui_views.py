@@ -23,7 +23,7 @@ from .views import (
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
     _newui_tasks_data, _newui_medicines_data, _newui_recycle_data,
     _newui_technicians_data, _newui_warehouse_ops_data,
-    _newui_visits_journal_data,
+    _newui_visits_journal_data, _newui_superadmin_data,
 )
 
 
@@ -399,6 +399,57 @@ def newui_recycle(request):
         messages.error(request, "Корзина скрыта администратором")
         return redirect("/new/")
     return _render(request, "recycle", "recycle.html", {"recycleData": _newui_recycle_data(request)})
+
+
+@login_required
+def newui_superadmin(request):
+    """Супер-админ-панель в новом интерфейсе: список клиник, статистика,
+    переключение/редактирование/доступы — тот же функционал, что и у старого
+    /users/superadmin/ + /users/clinic/<id>/overview/, просто в едином стиле
+    нового интерфейса. Мутации идут через существующие вьюхи старого
+    интерфейса (см. _newui_superadmin_data)."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    if not request.user.is_superadmin:
+        messages.error(request, "Доступ только для суперадмина")
+        return redirect("/new/")
+    return _render(request, "superadmin", "superadmin.html", {"superadminData": _newui_superadmin_data()})
+
+
+@login_required
+def newui_clinic_create(request):
+    """AJAX: создание клиники из новой супер-админ-панели. В отличие от
+    остальных мутаций этой страницы (которые идут через старые POST-вьюхи
+    старого интерфейса, res.redirected → flashAndReload — там редирект всегда
+    означает успех), у создания клиники есть реальные ошибки валидации
+    (пустые поля, занятый логин), которые старая вьюха (superadmin_panel)
+    показывает через messages И ВСЁ РАВНО редиректит — так что «редирект =
+    успех» здесь не работает. Поэтому — отдельный JSON-эндпоинт, переиспользующий
+    ту же _create_clinic(), а не дублирующий её."""
+    from django.http import JsonResponse
+    from apps.users.views import _create_clinic
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    do_seed = request.POST.get("clinic_seed", "1") != "0"
+    try:
+        clinic, admin_user, seed_result = _create_clinic(
+            request.POST.get("clinic_name", ""),
+            request.POST.get("clinic_admin_login", ""),
+            request.POST.get("clinic_admin_password", ""),
+            request.POST.get("clinic_admin_name", ""),
+            do_seed,
+        )
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    from django.conf import settings as dj_settings
+    app_host = getattr(dj_settings, "APP_HOST", "app.sadaf.kg")
+    return JsonResponse({
+        "ok": True, "id": clinic.pk, "name": clinic.name, "slug": clinic.slug,
+        "adminLogin": admin_user.login,
+        "loginUrl": f"https://{app_host}/login/?clinic={clinic.slug}",
+    })
 
 
 @login_required

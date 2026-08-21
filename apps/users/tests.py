@@ -2314,4 +2314,83 @@ class SuperadminHostMiddlewareTestCase(TestCase):
         with override_settings(SUPERADMIN_HOST="soft.stom.asia"):
             resp = self.client.get("/", HTTP_HOST="soft.stom.asia")
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, "/users/superadmin/")
+        self.assertEqual(resp.url, "/new/superadmin/")
+
+
+class NewUISuperadminTestCase(TestCase):
+    """Супер-админ-панель в новом интерфейсе (/new/superadmin/) — список
+    клиник со статистикой, создание клиники через отдельный JSON-эндпоинт
+    (в отличие от остальных мутаций страницы, у создания клиники есть
+    реальные ошибки валидации, поэтому не «редирект = успех», см.
+    apps.users.newui_views.newui_clinic_create)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника SA", slug="clinic-sa-newui")
+        self.branch = Branch.objects.create(name="Филиал SA", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="sa_director", name="Директор SA", email="sad@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="sa_super", name="Супер SA", email="sas@test.local",
+            role=self.superadmin_role,
+        )
+        self.client = Client()
+
+    def test_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/superadmin/", follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "saTableBody")
+
+    def test_lists_clinics_with_stats(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/")
+        self.assertEqual(resp.status_code, 200)
+        data = _extract_newui_real_data(resp.content.decode())
+        names = [c["name"] for c in data["superadminData"]["clinics"]]
+        self.assertIn("Клиника SA", names)
+        entry = next(c for c in data["superadminData"]["clinics"] if c["id"] == self.clinic.pk)
+        self.assertEqual(entry["branchCount"], 1)
+        self.assertEqual(entry["staffCount"], 1)
+
+    def test_create_clinic_requires_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.post("/new/superadmin/clinic/create/", {
+            "clinic_name": "Новая", "clinic_admin_login": "newlogin", "clinic_admin_password": "pass1234",
+        })
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_clinic_success(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/clinic/create/", {
+            "clinic_name": "Новая клиника", "clinic_admin_login": "newlogin2", "clinic_admin_password": "pass1234",
+            "clinic_seed": "0",
+        })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(Clinic.objects.filter(pk=payload["id"], name="Новая клиника").exists())
+        self.assertTrue(User.objects.filter(login="newlogin2", clinic_id=payload["id"]).exists())
+
+    def test_create_clinic_duplicate_login_returns_error_not_redirect(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/clinic/create/", {
+            "clinic_name": "Ещё клиника", "clinic_admin_login": "sa_director", "clinic_admin_password": "pass1234",
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+        self.assertFalse(Clinic.objects.filter(name="Ещё клиника").exists())
+
+    def test_superadmin_panel_still_creates_clinic_via_shared_helper(self):
+        """Регрессия: рефакторинг create_clinic в общий _create_clinic() не
+        должен сломать старую форму (templates/users/superadmin.html)."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/users/superadmin/", {
+            "action": "create_clinic", "clinic_name": "Клиника из старого интерфейса",
+            "clinic_admin_login": "oldui_admin", "clinic_admin_password": "pass1234", "clinic_seed": "0",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Clinic.objects.filter(name="Клиника из старого интерфейса").exists())
