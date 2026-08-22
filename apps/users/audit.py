@@ -27,7 +27,7 @@ set_active_clinic → action="clinic_enter"), открытие сводки кл
 is_superadmin — просмотр admin_main своей же клиники не логируется, это
 рутина) и «Войти как сотрудник» (staff_login_as → action="impersonate_start").
 """
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.db.models import Q
 from django.utils import timezone
@@ -42,6 +42,13 @@ CATEGORY_DENY = "deny"
 CATEGORY_CHANGE = "change"
 CATEGORY_DELETE = "delete"
 CATEGORY_VIEW = "view"
+
+# Дата включения захвата IP в историю правок (Patient/Treatment) — PR #76,
+# задеплоен 2026-08-22 15:14 UTC. Записи истории ДО этого момента не могут
+# получить IP задним числом (миграция добавляет только поле, не данные) —
+# используем эту дату, чтобы отличить в UI «IP не отслеживался тогда» от
+# «IP не определился технически».
+IP_TRACKING_SINCE = datetime(2026, 8, 22, 15, 14, tzinfo=dt_timezone.utc)
 
 ACTION_LABELS = {
     "ip_block": "Блокировка IP",
@@ -140,7 +147,7 @@ def _event_row(e):
         "action_label": ACTION_LABELS.get(e.action, e.action),
         "actor_label": actor_label,
         "object_repr": e.object_repr or "—",
-        "ip": e.ip_address or "—",
+        "ip": e.ip_address or "—", "ip_hint": None,
         "result": e.result,
     }
 
@@ -157,20 +164,27 @@ def _login_row(ev):
         "action_label": "Вход в систему" if ev.success else "Отказ во входе",
         "actor_label": actor_label,
         "object_repr": f"user/{ev.user_id}" if ev.user_id else "—",
-        "ip": ev.ip_address or "—",
+        "ip": ev.ip_address or "—", "ip_hint": None,
         "result": "success" if ev.success else "fail",
     }
 
 
 def _history_row(r):
     category = CATEGORY_DELETE if r["raw_type"] == "-" else CATEGORY_CHANGE
+    ip = r.get("ip")
+    if ip:
+        ip_display, ip_hint = ip, None
+    elif r["date"] < IP_TRACKING_SINCE:
+        ip_display, ip_hint = "—", "IP не отслеживался до 22.08.2026"
+    else:
+        ip_display, ip_hint = "—", None
     return {
         "id": f"hist:{r['model']}:{r['hid']}", "source": "history", "created_at": r["date"],
         "category": category,
         "action_label": f"{r['type']}: {r['model_label']}",
         "actor_label": r["user"],
         "object_repr": r["title"],
-        "ip": r.get("ip") or "—",
+        "ip": ip_display, "ip_hint": ip_hint,
         "result": "success",
     }
 
