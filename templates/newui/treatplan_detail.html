@@ -1,0 +1,313 @@
+{% extends "newui/base.html" %}
+{% block page_title %}План лечения{% endblock %}
+{% block content %}
+      <div class="topbar">
+        <h1 id="tpTitle">План лечения</h1>
+        <div class="topbar-right" style="gap:8px;">
+          <a class="btn btn-ghost btn-sm" href="{% url 'newui_treatplans' %}">← Назад</a>
+          <a class="btn btn-ghost btn-sm" id="tpPrintLink" href="#" target="_blank">🖨 Печать</a>
+          <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ Добавить этап</button>
+        </div>
+      </div>
+
+      <div class="page">
+        <div class="card" style="padding:16px 18px;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <h2 id="tpHeadTitle" style="font-size:17px;"></h2>
+                <span class="pill" id="tpStatusPill"></span>
+              </div>
+              <div style="font-size:12.5px;color:var(--ink-soft);">
+                Пациент: <a id="tpPatientLink" href="#" style="color:var(--cobalt);font-weight:600;"></a>
+                · Врач: <b id="tpDoctorName"></b>
+                · <span id="tpCreatedAt"></span>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:var(--ink-soft);">Итого по плану</div>
+              <div class="mono" style="font-size:20px;font-weight:700;" id="tpTotalPrice">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tpStages"></div>
+        <div id="tpEmptyState" class="card hidden" style="padding:32px;text-align:center;color:var(--ink-soft);">
+          Этапов пока нет. <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ Добавить первый этап</button>
+        </div>
+      </div>
+
+      <!-- Модалка: добавить услугу в этап -->
+      <div class="modal-backdrop" id="m-tp-item">
+        <div class="modal">
+          <div class="modal-head"><h3>Добавить услугу</h3><button class="modal-close" onclick="closeModal('m-tp-item')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Услуга</label>
+              <select id="tpItemService" style="width:100%;" onchange="tpItemRecalc()"></select></div>
+            <div class="form-row2">
+              <div class="form-group"><label>№ зуба</label>
+                <input type="text" id="tpItemTooth" autocomplete="off" placeholder="напр. 26"></div>
+              <div class="form-group"><label>Количество</label>
+                <input type="number" id="tpItemQty" value="1" min="1" oninput="tpItemRecalc()"></div>
+              <div class="form-group"><label>Цена</label>
+                <input type="number" id="tpItemPrice" step="0.01" oninput="tpItemRecalc()"></div>
+              <div class="form-group"><label>Скидка %</label>
+                <input type="number" id="tpItemDiscount" value="0" min="0" max="100" oninput="tpItemRecalc()"></div>
+            </div>
+            <div style="text-align:right;font-size:13px;color:var(--ink-soft);">Итого: <b class="mono" id="tpItemTotal">0</b></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-item')">Отмена</button>
+            <button class="btn btn-cobalt" onclick="tpSaveItem()">Добавить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: изменить этап -->
+      <div class="modal-backdrop" id="m-tp-stage">
+        <div class="modal">
+          <div class="modal-head"><h3>Изменить этап</h3><button class="modal-close" onclick="closeModal('m-tp-stage')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Название этапа</label>
+              <input type="text" id="tpStageTitle" autocomplete="off"></div>
+            <div class="form-group"><label>Продолжительность (мин)</label>
+              <input type="number" id="tpStageDuration" min="0"></div>
+            <div class="form-group"><label>Привязанный визит</label>
+              <select id="tpStageVisit" style="width:100%;"></select></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-stage')">Отмена</button>
+            <button class="btn btn-cobalt" onclick="tpSaveStage()">Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: переместить/дублировать услугу -->
+      <div class="modal-backdrop" id="m-tp-move">
+        <div class="modal">
+          <div class="modal-head"><h3>Переместить/дублировать услугу</h3><button class="modal-close" onclick="closeModal('m-tp-move')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Целевой этап</label>
+              <select id="tpMoveStage" style="width:100%;"></select></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-move')">Отмена</button>
+            <button class="btn btn-ghost" onclick="tpSaveMove('copy')">Дублировать</button>
+            <button class="btn btn-cobalt" onclick="tpSaveMove('move')">Переместить</button>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  const PLAN = REAL.planDetail;
+  if(!PLAN){ return; }
+
+  const STATUS_PILL = {draft:'grey', approved:'cobalt', in_progress:'amber', completed:'teal', cancelled:'coral'};
+  const ITEM_STATUS_PILL = {pending:'grey', scheduled:'cobalt', done:'teal', cancelled:'coral'};
+  let tpCurrentStageId = null;   // для модалки «добавить услугу»
+  let tpCurrentItemId = null;    // для модалки «переместить/дублировать»
+
+  function fmt(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + (window.CUR_SYM || 'сом'); }
+
+  function renderHeader(){
+    document.title = PLAN.title;
+    document.getElementById('tpTitle').textContent = PLAN.title;
+    document.getElementById('tpHeadTitle').textContent = PLAN.title;
+    const pill = document.getElementById('tpStatusPill');
+    pill.textContent = PLAN.status;
+    pill.className = 'pill ' + (STATUS_PILL[PLAN.statusCode] || 'grey');
+    const patientLink = document.getElementById('tpPatientLink');
+    patientLink.textContent = PLAN.patientName;
+    patientLink.href = `/new/patients/${PLAN.patientId}/`;
+    document.getElementById('tpDoctorName').textContent = PLAN.doctorName;
+    document.getElementById('tpCreatedAt').textContent = PLAN.createdAt;
+    document.getElementById('tpTotalPrice').textContent = fmt(PLAN.totalPrice);
+    document.getElementById('tpPrintLink').href = `/treatments/plans/${PLAN.id}/print/`;
+  }
+
+  function renderStages(){
+    const wrap = document.getElementById('tpStages');
+    const empty = document.getElementById('tpEmptyState');
+    if(!PLAN.stages.length){
+      wrap.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    wrap.innerHTML = PLAN.stages.map(stage => `
+      <div class="card" style="margin-bottom:14px;overflow:hidden;">
+        <div class="card-head" style="flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;">
+            <b>${stage.title || ('Этап #' + stage.id)}</b>
+            <span style="color:var(--ink-soft);margin-left:10px;">${stage.durationMin ? stage.durationMin + ' мин' : 'без длительности'}</span>
+            <span style="color:var(--ink-soft);margin-left:10px;">${stage.visitLabel || 'визит не назначен'}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <b class="mono">${fmt(stage.total)}</b>
+            <button class="btn btn-ghost btn-sm" onclick="tpOpenAddItem(${stage.id})">+ Услуга</button>
+            <button class="btn btn-ghost btn-sm" onclick="tpOpenEditStage(${stage.id})">✎ Этап</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="tpDeleteStage(${stage.id})">✕</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Услуга</th><th>№ зуба</th><th>Кол-во</th><th>Цена</th><th>Скидка</th><th>Итого</th><th>Статус</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${stage.items.length ? stage.items.map(it => `
+              <tr>
+                <td>${it.serviceName}</td>
+                <td>${it.toothNumber || '—'}</td>
+                <td>${it.quantity}</td>
+                <td class="mono">${fmt(it.price)}</td>
+                <td>${it.discount ? it.discount + '%' : '—'}</td>
+                <td class="mono">${fmt(it.subtotal)}</td>
+                <td><span class="pill ${ITEM_STATUS_PILL[it.status]||'grey'}" style="cursor:pointer;" onclick="tpToggleItem(${it.id})">${it.statusLabel}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-ghost btn-sm" onclick="tpOpenMove(${it.id})">⇄</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="tpDeleteItem(${it.id})">✕</button>
+                </td>
+              </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:16px;">Услуг в этапе нет</td></tr>`}
+          </tbody>
+        </table>
+      </div>`).join('');
+  }
+
+  function populateServiceSelect(){
+    document.getElementById('tpItemService').innerHTML = PLAN.services.map(s =>
+      `<option value="${s.id}" data-price="${s.price}">${s.name}${s.cat ? ' · ' + s.cat : ''} — ${Math.round(s.price)} ${window.CUR_SYM || 'сом'}</option>`
+    ).join('');
+  }
+
+  function populateVisitSelects(){
+    const opts = '<option value="">— не назначен —</option>' +
+      PLAN.patientTreatments.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+    document.getElementById('tpStageVisit').innerHTML = opts;
+  }
+
+  function populateStageSelects(excludeId){
+    const opts = PLAN.stages.filter(s => s.id !== excludeId)
+      .map(s => `<option value="${s.id}">${s.title || ('Этап #' + s.id)}</option>`).join('');
+    document.getElementById('tpMoveStage').innerHTML = opts || '<option value="">— нет других этапов —</option>';
+  }
+
+  window.tpItemRecalc = function(){
+    const price = parseFloat(document.getElementById('tpItemPrice').value) || 0;
+    const qty = parseInt(document.getElementById('tpItemQty').value) || 1;
+    const disc = parseFloat(document.getElementById('tpItemDiscount').value) || 0;
+    const gross = price * qty;
+    const total = gross - (gross * disc / 100);
+    document.getElementById('tpItemTotal').textContent = fmt(total);
+  };
+
+  window.tpOpenAddItem = function(stageId){
+    tpCurrentStageId = stageId;
+    populateServiceSelect();
+    document.getElementById('tpItemTooth').value = '';
+    document.getElementById('tpItemQty').value = 1;
+    document.getElementById('tpItemDiscount').value = 0;
+    const sel = document.getElementById('tpItemService');
+    const applyPrice = () => {
+      const opt = sel.options[sel.selectedIndex];
+      document.getElementById('tpItemPrice').value = opt ? opt.dataset.price : 0;
+      tpItemRecalc();
+    };
+    sel.onchange = applyPrice;
+    applyPrice();
+    openModal('m-tp-item');
+  };
+
+  window.tpSaveItem = async function(){
+    if(!tpCurrentStageId) return;
+    const sel = document.getElementById('tpItemService');
+    const serviceId = sel.value;
+    if(!serviceId) return;
+    const body = {
+      stage_id: tpCurrentStageId, service_id: parseInt(serviceId),
+      tooth: document.getElementById('tpItemTooth').value.trim(),
+      qty: parseInt(document.getElementById('tpItemQty').value) || 1,
+      price: parseFloat(document.getElementById('tpItemPrice').value) || 0,
+      discount: parseFloat(document.getElementById('tpItemDiscount').value) || 0,
+    };
+    const res = await fetch('/treatments/plans/items/add/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify(body),
+    });
+    let payload = null;
+    try{ payload = await res.json(); }catch(e){}
+    if(res.ok && payload && payload.ok){ flashAndReload('Услуга добавлена'); }
+    else{ showToast((payload && payload.error) || 'Не удалось сохранить', 'error'); }
+  };
+
+  window.tpAddStage = async function(){
+    const res = await postForm(`/treatments/plans/${PLAN.id}/stage/add/`, new FormData());
+    if(res.redirected){ flashAndReload('Этап добавлен'); } else { showToast('Не удалось сохранить', 'error'); }
+  };
+
+  window.tpOpenEditStage = function(stageId){
+    const stage = PLAN.stages.find(s => s.id === stageId);
+    if(!stage) return;
+    tpCurrentStageId = stageId;
+    document.getElementById('tpStageTitle').value = stage.title || '';
+    document.getElementById('tpStageDuration').value = stage.durationMin || '';
+    populateVisitSelects();
+    document.getElementById('tpStageVisit').value = stage.visitId || '';
+    openModal('m-tp-stage');
+  };
+
+  window.tpSaveStage = async function(){
+    if(!tpCurrentStageId) return;
+    const fd = new FormData();
+    fd.append('title', document.getElementById('tpStageTitle').value.trim());
+    fd.append('duration_min', document.getElementById('tpStageDuration').value);
+    fd.append('visit', document.getElementById('tpStageVisit').value);
+    const res = await postForm(`/treatments/plans/stages/${tpCurrentStageId}/edit/`, fd);
+    if(res.redirected){ flashAndReload('Этап сохранён'); } else { showToast('Не удалось сохранить', 'error'); }
+  };
+
+  window.tpDeleteStage = async function(stageId){
+    if(!confirm('Удалить этап со всеми услугами?')) return;
+    const res = await postForm(`/treatments/plans/stages/${stageId}/delete/`, new FormData());
+    if(res.redirected){ flashAndReload('Этап удалён'); } else { showToast('Не удалось удалить', 'error'); }
+  };
+
+  window.tpDeleteItem = async function(itemId){
+    if(!confirm('Удалить услугу из плана?')) return;
+    const res = await postForm(`/treatments/plans/items/${itemId}/delete/`, new FormData());
+    if(res.redirected){ flashAndReload('Услуга удалена'); } else { showToast('Не удалось удалить', 'error'); }
+  };
+
+  window.tpOpenMove = function(itemId){
+    tpCurrentItemId = itemId;
+    let curStageId = null;
+    for(const s of PLAN.stages){ if(s.items.some(it => it.id === itemId)){ curStageId = s.id; break; } }
+    populateStageSelects(curStageId);
+    openModal('m-tp-move');
+  };
+
+  window.tpSaveMove = async function(mode){
+    if(!tpCurrentItemId) return;
+    const targetStage = document.getElementById('tpMoveStage').value;
+    if(!targetStage) return;
+    const fd = new FormData();
+    fd.append('stage_id', targetStage);
+    fd.append('mode', mode);
+    const res = await postForm(`/treatments/plans/items/${tpCurrentItemId}/move/`, fd);
+    if(res.redirected){ flashAndReload(mode === 'copy' ? 'Услуга продублирована' : 'Услуга перемещена'); }
+    else{ showToast('Не удалось сохранить', 'error'); }
+  };
+
+  window.tpToggleItem = async function(itemId){
+    const res = await postForm(`/treatments/plans/items/${itemId}/toggle/`, new FormData());
+    if(res.ok){ flashAndReload('Статус обновлён'); } else { showToast('Не удалось сохранить', 'error'); }
+  };
+
+  renderHeader();
+  renderStages();
+})();
+</script>
+{% endblock %}

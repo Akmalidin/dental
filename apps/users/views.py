@@ -1370,6 +1370,84 @@ def _newui_treatplans_data(clinic):
     }
 
 
+def _newui_treatplan_detail_data(plan):
+    """Полное дерево ОДНОГО плана лечения (этапы → услуги) — для
+    /new/treatplans/<pk>/ (newui_treatplan_detail). В отличие от
+    _newui_treatplans_data (список планов, только первый этап для
+    превью) — здесь нужны ВСЕ этапы со всеми услугами, чтобы новая
+    страница полностью заменяла собой старый /treatments/plans/<pk>/
+    (apps.treatments.views.plan_detail), с которого скопирован тот же
+    приём самоисцеления «услуг без этапа» и тот же набор вспомогательных
+    данных (services_json/patient_treatments) для форм добавления."""
+    from apps.treatments.models import Treatment
+    from apps.treatments.models_plan import TreatmentPlanStage
+    from apps.services.models import Service
+    from apps.users.models import clinic_doctors
+    from apps.tenancy import get_current_clinic
+
+    # Самоисцеление — как в apps.treatments.views.plan_detail: старые планы
+    # могли получить услуги без этапа (до того, как этапы вообще появились).
+    orphans = plan.items.filter(stage__isnull=True)
+    if orphans.exists():
+        n = plan.stages.count()
+        stage = TreatmentPlanStage.objects.create(plan=plan, title=f"Этап {n + 1}", sort_order=n)
+        orphans.update(stage=stage)
+
+    stages = []
+    for s in (plan.stages
+              .select_related("visit")
+              .prefetch_related("items__service", "items__doctor")
+              .order_by("sort_order", "id")):
+        items = []
+        for it in s.items.order_by("sort_order", "id"):
+            items.append({
+                "id": it.pk,
+                "serviceId": it.service_id,
+                "serviceName": it.service.name,
+                "toothNumber": it.tooth_number,
+                "quantity": it.quantity,
+                "price": float(it.price),
+                "discount": float(it.discount),
+                "subtotal": float(it.subtotal),
+                "status": it.status,
+                "statusLabel": it.get_status_display(),
+                "treatmentId": it.treatment_id,
+            })
+        stages.append({
+            "id": s.pk,
+            "title": s.title,
+            "durationMin": s.duration_min,
+            "visitId": s.visit_id,
+            "visitLabel": (f"Приём #{s.visit.display_number}" if s.visit_id else ""),
+            "total": float(s.total),
+            "items": items,
+        })
+
+    services = list(Service.objects.filter(is_active=True).select_related("category")
+                    .order_by("category__sort_order", "name")
+                    .values("id", "name", "price", "category__name"))
+    patient_treatments = (Treatment.all_objects.filter(patient=plan.patient, is_deleted=False)
+                          .exclude(status="cancelled").order_by("-created_at")[:50])
+
+    return {
+        "id": plan.pk,
+        "title": plan.title,
+        "status": plan.get_status_display(),
+        "statusCode": plan.status,
+        "patientId": plan.patient_id,
+        "patientName": plan.patient.full_name,
+        "doctorName": plan.doctor.name if plan.doctor else "—",
+        "createdAt": plan.created_at.strftime("%d.%m.%Y"),
+        "totalPrice": float(plan.total_price),
+        "stages": stages,
+        "services": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),
+                     "cat": s["category__name"] or ""} for s in services],
+        "patientTreatments": [{"id": t.pk, "label": f"Приём #{t.display_number} · {t.created_at:%d.%m.%Y}"}
+                              for t in patient_treatments],
+        "doctors": [{"id": d.pk, "name": d.name} for d in clinic_doctors(get_current_clinic())],
+    }
+
+
 def _newui_visits_data(clinic):
     """«Визиты» — реальные записи (Appointment), та же модель, что и
     /new/schedule/ и старый интерфейс. Смена статуса идёт через тот же

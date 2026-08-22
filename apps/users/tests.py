@@ -2881,6 +2881,133 @@ class AuditTimezoneTestCase(TestCase):
         self.assertIn("ip_rule/tz-test", reprs)
 
 
+class NewUITreatplanDetailTestCase(TestCase):
+    """/new/treatplans/<pk>/ — план лечения в новом интерфейсе, заменяет
+    переход на старый /treatments/plans/<pk>/ (см. план «План лечения в
+    новом интерфейсе»). Мутации идут на существующие POST-эндпоинты
+    apps.treatments.views (не дублируются) — здесь проверяем именно
+    сборку данных и права доступа новой read-only страницы."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        from apps.services.models import Service
+        from apps.treatments.models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
+
+        self.clinic = Clinic.objects.create(name="Клиника TP", slug="clinic-tp")
+        self.other_clinic = Clinic.objects.create(name="Клиника TP2", slug="clinic-tp2")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="tp_director", name="Директор TP",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.other_director = User.objects.create(login="tp_other_director", name="Чужой Директор",
+                                                    role=self.admin_role, clinic=self.other_clinic)
+        self.client = Client()
+
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        set_current_clinic(self.clinic)
+        try:
+            self.patient = Patient.objects.create(first_name="Азиз", last_name="Тестов",
+                                                   phone="+996700000123", branch=self.branch)
+            self.service = Service.objects.create(name="Пломба", price=3200, clinic=self.clinic)
+        finally:
+            clear_current_clinic()
+
+        self.plan = TreatmentPlan.objects.create(
+            patient=self.patient, doctor=self.director, title="Пломбирование, зуб 26",
+            status=TreatmentPlan.STATUS_APPROVED,
+        )
+        self.stage = TreatmentPlanStage.objects.create(plan=self.plan, title="Этап 1")
+        self.item = TreatmentPlanItem.objects.create(
+            plan=self.plan, service=self.service, stage=self.stage,
+            price=3200, discount=10, quantity=1, status=TreatmentPlanItem.STATUS_PENDING,
+        )
+
+    def test_requires_login(self):
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_returns_full_stage_item_tree(self):
+        self.client.force_login(self.director)
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        self.assertEqual(resp.status_code, 200)
+        data = _extract_newui_real_data(resp.content.decode())["planDetail"]
+        self.assertEqual(data["id"], self.plan.pk)
+        self.assertEqual(data["patientName"], "Тестов Азиз")
+        self.assertEqual(len(data["stages"]), 1)
+        stage = data["stages"][0]
+        self.assertEqual(len(stage["items"]), 1)
+        item = stage["items"][0]
+        self.assertEqual(item["serviceName"], "Пломба")
+        self.assertEqual(item["subtotal"], 2880.0)  # 3200 - 10%
+        self.assertEqual(data["totalPrice"], 2880.0)
+
+    def test_other_clinic_plan_is_404(self):
+        self.client.force_login(self.other_director)
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_orphan_items_self_heal_into_a_stage(self):
+        """Услуга без этапа (старые планы до появления этапов) — как и
+        старая /treatments/plans/<pk>/, новая страница сама создаёт этап
+        и переносит туда «осиротевшие» услуги."""
+        from apps.treatments.models_plan import TreatmentPlanItem
+        TreatmentPlanItem.objects.create(plan=self.plan, service=self.service, stage=None, price=1000)
+        self.client.force_login(self.director)
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        data = _extract_newui_real_data(resp.content.decode())["planDetail"]
+        self.assertEqual(len(data["stages"]), 2)
+        all_items = [it for s in data["stages"] for it in s["items"]]
+        self.assertEqual(len(all_items), 2)
+
+    def test_full_mutation_flow_through_existing_endpoints(self):
+        """Регрессия сквозного сценария (эндпоинты не менялись, но новая
+        страница на них полагается): добавить этап -> добавить услугу ->
+        переместить -> переключить статус -> удалить услугу -> удалить этап."""
+        from apps.treatments.models_plan import TreatmentPlanStage, TreatmentPlanItem
+        self.client.force_login(self.director)
+
+        r = self.client.post(f"/treatments/plans/{self.plan.pk}/stage/add/")
+        self.assertEqual(r.status_code, 302)
+        stage2 = TreatmentPlanStage.objects.filter(plan=self.plan).exclude(pk=self.stage.pk).first()
+        self.assertIsNotNone(stage2)
+
+        import json as _json
+        r = self.client.post("/treatments/plans/items/add/",
+                              data=_json.dumps({"stage_id": stage2.pk, "service_id": self.service.pk,
+                                                "tooth": "26", "price": 3200, "discount": 0, "qty": 1}),
+                              content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        new_item = TreatmentPlanItem.objects.filter(stage=stage2).first()
+        self.assertIsNotNone(new_item)
+
+        r = self.client.post(f"/treatments/plans/items/{new_item.pk}/move/",
+                              {"stage_id": self.stage.pk, "mode": "move"})
+        self.assertEqual(r.status_code, 302)
+        new_item.refresh_from_db()
+        self.assertEqual(new_item.stage_id, self.stage.pk)
+
+        r = self.client.post(f"/treatments/plans/items/{new_item.pk}/toggle/")
+        self.assertEqual(r.status_code, 200)
+        new_item.refresh_from_db()
+        self.assertEqual(new_item.status, "done")
+
+        r = self.client.post(f"/treatments/plans/items/{new_item.pk}/delete/")
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(TreatmentPlanItem.objects.filter(pk=new_item.pk).exists())
+
+        r = self.client.post(f"/treatments/plans/stages/{stage2.pk}/delete/")
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(TreatmentPlanStage.objects.filter(pk=stage2.pk).exists())
+
+    def test_treatplans_list_and_patientcard_link_to_new_page(self):
+        """Оставшиеся ссылки на план лечения ведут в новый интерфейс, не
+        на /treatments/plans/... (templates/newui/base.html)."""
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/treatplans/")
+        self.assertContains(resp, "/new/treatplans/${p.id}/")
+        self.assertNotContains(resp, "/treatments/plans/${p.id}/")
+
+
 class ClinicBlockingTestCase(TestCase):
     """Реальная блокировка клиники (Clinic.is_active=False) — мгновенный
     разлогин активных сессий + запрет нового входа, оба ведут на

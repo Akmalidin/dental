@@ -5955,7 +5955,7 @@ function renderTreatplans(){
     return;
   }
   body.innerHTML=treatplansData.plans.map(p=>`
-    <tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'">
+    <tr class="clickable" onclick="location.href='/new/treatplans/${p.id}/'">
       <td><b>${p.patient}</b></td><td>${p.stage}</td><td>${p.doctor}</td>
       <td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td>
       <td><span class="pill ${statusPill[p.statusCode]||'cobalt'}">${p.status}</span></td>
@@ -9526,7 +9526,7 @@ function renderPatientCardPlan(d){
   }
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_treatment_plan_one">План лечения</h3>${createBtn}</div>
     <table><thead><tr><th data-i18n="w_stage">Этап</th><th data-i18n="w_doctor">Врач</th><th data-i18n="w_progress">Прогресс</th><th data-i18n="w_cost">Стоимость</th><th data-i18n="w_status">Статус</th></tr></thead>
-    <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/treatments/plans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
+    <tbody>${d.plans.map(p=>`<tr class="clickable" onclick="location.href='/new/treatplans/${p.id}/'"><td>${p.stage}</td><td>${p.doctor}</td><td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${planStatusPillCard[p.statusCode]||'cobalt'}">${p.status}</span></td></tr>`).join('')}</tbody></table>`;
 }
 // Создать новый план лечения для текущего пациента — пустой (без этапов/
 // услуг), сразу открываем его в полноценном редакторе (тот же
@@ -9569,7 +9569,7 @@ async function newPlanCreateForPatient(patientId){
   const data=await res.json().catch(()=>({}));
   if(res.ok && data.ok && data.plan_id){
     closeModal('m-newplan-patient');
-    location.href='/treatments/plans/'+data.plan_id+'/';
+    location.href='/new/treatplans/'+data.plan_id+'/';
   } else {
     showToast(data.error || t('w_save_failed'), 'error');
   }
