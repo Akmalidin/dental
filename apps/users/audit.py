@@ -29,7 +29,7 @@ is_superadmin — просмотр admin_main своей же клиники н�
 """
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from django.db.models import Q
+from django.db.models import Count as _Count, Q
 from django.utils import timezone
 
 
@@ -69,7 +69,19 @@ ACTION_LABELS = {
     "clinic_view": "Просмотр клиники",
     "clinic_enter": "Вход в клинику (супер-админ)",
     "impersonate_start": "Вход как сотрудник",
+    "bulk_purge": "Массовая очистка (авто, >30 дней)",
+    "backup_create": "Создание резервной копии БД",
+    "backup_download": "Скачивание резервной копии БД",
 }
+
+# Возрастной порог массовой очистки «Удалений в очереди» — записи свежее
+# этого возраста НЕ трогаем (ещё могут быть случайно восстановлены через
+# обычную «Корзину»), см. bulk_purge_eligible_summary()/bulk_purge_old_deletions().
+BULK_PURGE_DEFAULT_DAYS = 30
+# Максимум объектов, реально удаляемых за один вызов bulk_purge_old_deletions()
+# — синхронный запрос, без очереди задач (Celery) в проде, у gunicorn таймаут
+# 120с (deploy/sadaf.service) — большая очередь чистится за несколько кликов.
+BULK_PURGE_DEFAULT_LIMIT = 1000
 
 
 def log_audit_event(*, action, category, object_repr="", actor=None, request=None,
@@ -302,3 +314,90 @@ def superadmin_audit_metrics():
         "pending_deletions": pending_deletions,
         "blocked_ips": blocked_ips,
     }
+
+
+def bulk_purge_eligible_summary(days=BULK_PURGE_DEFAULT_DAYS):
+    """Сводка «сколько можно безвозвратно удалить» — по модели и по клинике,
+    только записи, чей deleted_at старше `days` дней (свежие удаления ещё
+    можно случайно восстановить через обычную «Корзину» — не трогаем).
+    Читается вкладкой «Удаления» перед запуском bulk_purge_old_deletions(),
+    та же форма кросс-клиникового запроса, что и pending_deletions в
+    superadmin_audit_metrics(), плюс возрастной фильтр."""
+    from apps.users.views import _recycle_models
+    from apps.users.models import Clinic
+
+    threshold = timezone.now() - timedelta(days=days)
+    by_model = []
+    breakdown = []
+    total = 0
+    for kind, (Model, label) in _recycle_models().items():
+        qs = Model.all_objects.filter(is_deleted=True, deleted_at__lt=threshold)
+        model_total = 0
+        per_clinic = qs.values("clinic_id").annotate(n=_Count("id"))
+        clinic_ids = [row["clinic_id"] for row in per_clinic if row["clinic_id"]]
+        clinic_names = dict(Clinic.objects.filter(pk__in=clinic_ids).values_list("pk", "name"))
+        for row in per_clinic:
+            n = row["n"]
+            model_total += n
+            breakdown.append({
+                "kind": kind, "label": label,
+                "clinic_id": row["clinic_id"],
+                "clinic_name": clinic_names.get(row["clinic_id"], "—"),
+                "count": n,
+            })
+        by_model.append({"kind": kind, "label": label, "count": model_total})
+        total += model_total
+    breakdown.sort(key=lambda r: r["count"], reverse=True)
+    return {"threshold_days": days, "total": total, "by_model": by_model, "rows": breakdown}
+
+
+def bulk_purge_old_deletions(actor=None, request=None, days=BULK_PURGE_DEFAULT_DAYS,
+                              limit=BULK_PURGE_DEFAULT_LIMIT):
+    """Безвозвратно удаляет мягко-удалённые записи (ВСЕ клиники), у которых
+    deleted_at старше `days` дней — не больше `limit` объектов за вызов (см.
+    BULK_PURGE_DEFAULT_LIMIT). Тот же приём удаления/обработки ProtectedError,
+    что и в apps.users.views.recycle_purge, но по всей платформе и пакетно."""
+    from django.db.models import ProtectedError
+    from apps.users.views import _recycle_models
+
+    threshold = timezone.now() - timedelta(days=days)
+    purged, skipped_protected = 0, 0
+    by_model = {}
+    for kind, (Model, label) in _recycle_models().items():
+        if purged >= limit:
+            break
+        # Материализуем в список ДО удаления (не .iterator() — на Postgres
+        # он открывает серверный курсор, а мы прямо во время обхода удаляем
+        # строки из той же таблицы, что курсор читает: неопределённое
+        # поведение). Срез по остатку бюджета — тот же лимит, но одним
+        # запросом, а не «прочитать всё и потом резать в Python».
+        qs = (Model.all_objects.filter(is_deleted=True, deleted_at__lt=threshold)
+              .order_by("deleted_at"))[:limit - purged]
+        for obj in list(qs):
+            if purged >= limit:
+                break
+            title = str(obj)
+            obj_pk, obj_clinic = obj.pk, getattr(obj, "clinic", None)
+            try:
+                if kind == "patient" and hasattr(obj, "purge_with_related"):
+                    obj.purge_with_related()
+                else:
+                    obj.delete()
+                log_audit_event(
+                    action="purge", category=CATEGORY_DELETE, actor=actor, request=request,
+                    clinic=obj_clinic, object_model=kind, object_id=obj_pk,
+                    object_repr=f"{kind}/{obj_pk} — {title}",
+                )
+                purged += 1
+                by_model[kind] = by_model.get(kind, 0) + 1
+            except ProtectedError:
+                skipped_protected += 1
+
+    log_audit_event(
+        action="bulk_purge", category=CATEGORY_DELETE, actor=actor, request=request,
+        object_repr=f"Массовая очистка: {purged} объектов (>{days} дн.)",
+        diff=[{"field": "purged_count", "old": "0", "new": str(purged)}],
+    )
+    remaining = bulk_purge_eligible_summary(days)["total"]
+    return {"purged": purged, "skipped_protected": skipped_protected,
+            "remaining": remaining, "by_model": by_model}

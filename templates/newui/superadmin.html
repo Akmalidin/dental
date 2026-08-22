@@ -9,6 +9,8 @@
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-clinics" onclick="saShowTab('clinics')">Клиники</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-users" onclick="saShowTab('users')">Пользователи</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-ipblocks" onclick="saShowTab('ipblocks')">Блокировки IP</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-deletions" onclick="saShowTab('deletions')">Удаления (&gt;30д)</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-backups" onclick="saShowTab('backups')">Резервные копии</button>
           </div>
           <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ Новая клиника</button>
         </div>
@@ -29,7 +31,7 @@
         <div class="kpi-grid" style="margin-bottom:14px;">
           <div class="card kpi b-cobalt"><div class="kpi-top"><span>Событий за сутки</span><span class="kpi-delta" id="kpiEventsDelta"></span></div><b id="kpiEventsToday">—</b></div>
           <div class="card kpi b-coral"><div class="kpi-top"><span>Отказов входа</span><span class="kpi-delta" id="kpiDenialsDelta"></span></div><b id="kpiDenialsToday">—</b></div>
-          <div class="card kpi b-amber"><div class="kpi-top"><span>Удалений в очереди</span></div><b id="kpiPendingDeletions">—</b><span class="lbl">Корзина, все клиники</span></div>
+          <div class="card kpi b-amber" style="cursor:pointer;" onclick="saShowTab('deletions')" title="Открыть вкладку «Удаления»"><div class="kpi-top"><span>Удалений в очереди</span></div><b id="kpiPendingDeletions">—</b><span class="lbl">Корзина, все клиники</span></div>
           <div class="card kpi b-teal"><div class="kpi-top"><span>Заблокированных IP</span></div><b id="kpiBlockedIps">—</b></div>
         </div>
 
@@ -119,6 +121,44 @@
             <button class="btn btn-cobalt btn-sm" onclick="saOpenBlockReason('ip',{})">+ Заблокировать IP</button>
           </div>
           <div id="saBlockedIpsList"></div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Удаления (массовая очистка >30 дней) ═══════════════ -->
+      <div class="page hidden" id="saPanel-deletions">
+        <div class="card" style="padding:16px;margin-bottom:12px;">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:0;">
+            Записи, помеченные удалёнными более 30 дней назад (по всем клиникам) —
+            их ещё можно восстановить через обычную «Корзину», пока они не очищены
+            здесь безвозвратно. Свежие удаления (младше 30 дней) в этот список не
+            попадают — они остаются в «Корзине» как обычно.
+          </p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table>
+            <thead><tr><th>Модель</th><th>Клиника</th><th>Кол-во (&gt;30 дней)</th></tr></thead>
+            <tbody id="saDeletionsTableBody"></tbody>
+          </table>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--mist-line);">
+            <span id="saDeletionsTotalLabel" style="font-size:13px;font-weight:600;"></span>
+            <button class="btn btn-danger" id="saBulkPurgeBtn" onclick="saOpenBulkPurgeConfirm()" disabled>🗑 Запустить безвозвратную очистку</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Резервные копии ═════════════════════════════════════ -->
+      <div class="page hidden" id="saPanel-backups">
+        <div class="card" style="padding:16px;margin-bottom:12px;">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:0;">
+            Копии создаются автоматически каждую ночь в 00:00 (Бишкек), хранятся
+            последние 14 дней. Скачивание доступно только супер-админу.
+          </p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table>
+            <thead><tr><th>Файл</th><th>Дата</th><th>Размер</th><th></th></tr></thead>
+            <tbody id="saBackupsTableBody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -246,6 +286,30 @@
           </div>
         </div>
       </div>
+
+      <!-- Модалка: подтверждение массовой очистки — необратимо, поэтому
+           требует ввода фразы, а не просто клика (единственное место в
+           проекте с таким уровнем защиты — блок-радиус тут кросс-клиниковый
+           и безвозвратный). -->
+      <div class="modal-backdrop" id="m-sa-bulk-purge">
+        <div class="modal">
+          <div class="modal-head"><h3>Безвозвратная очистка</h3><button class="modal-close" onclick="closeModal('m-sa-bulk-purge')">✕</button></div>
+          <div class="modal-body">
+            <div style="background:var(--coral-tint);color:var(--coral);border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px;">
+              Будет безвозвратно удалено <b id="saBulkPurgeCount">0</b> записей
+              (по всем клиникам, старше 30 дней). Действие нельзя отменить.
+            </div>
+            <div class="form-group">
+              <label>Чтобы подтвердить, введите <b>УДАЛИТЬ</b>:</label>
+              <input type="text" id="saBulkPurgeConfirmInput" autocomplete="off" oninput="saCheckPurgeConfirmText()">
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-bulk-purge')">Отмена</button>
+            <button class="btn btn-danger" id="saBulkPurgeSubmitBtn" onclick="saSubmitBulkPurge()" disabled>Удалить безвозвратно</button>
+          </div>
+        </div>
+      </div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -261,8 +325,8 @@
   }
 
   // ── Вкладки ──────────────────────────────────────────────────────────
-  const SA_TABS = ['feed','clinics','users','ipblocks'];
-  let saUsersLoaded = false, saFeedLoaded = false;
+  const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups'];
+  let saUsersLoaded = false, saFeedLoaded = false, saDeletionsLoaded = false, saBackupsLoaded = false;
   window.saShowTab = function(tab){
     SA_TABS.forEach(t=>{
       const panel = document.getElementById('saPanel-'+t);
@@ -274,6 +338,8 @@
     if(extra) extra.classList.toggle('hidden', tab!=='clinics');
     if(tab==='users' && !saUsersLoaded){ saUsersLoaded = true; saLoadUsers(); }
     if(tab==='feed' && !saFeedLoaded){ saFeedLoaded = true; saLoadFeed(); }
+    if(tab==='deletions' && !saDeletionsLoaded){ saDeletionsLoaded = true; saLoadDeletions(); }
+    if(tab==='backups' && !saBackupsLoaded){ saBackupsLoaded = true; saLoadBackups(); }
   };
 
   // ── Клиники (без изменений от прежней единственной страницы) ────────
@@ -702,6 +768,95 @@
       await postForm('/users/set-clinic/', fd);
     }
     location.href = '/new/staff/';
+  };
+
+  // ── Удаления (массовая очистка >30 дней, кросс-клиниково) ──────────────
+  let saDeletionsTotal = 0;
+
+  window.saLoadDeletions = async function(){
+    let data;
+    try{
+      const res = await fetch('/new/superadmin/deletions/');
+      data = await res.json();
+    }catch(e){
+      showToast('Не удалось загрузить сводку удалений', 'error');
+      return;
+    }
+    saDeletionsTotal = data.total || 0;
+    const body = document.getElementById('saDeletionsTableBody');
+    const rows = data.rows || [];
+    body.innerHTML = rows.length ? rows.map(r=>`
+      <tr><td>${r.label}</td><td>${r.clinic_name}</td><td>${r.count}</td></tr>`).join('')
+      : `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);padding:24px;">Нечего очищать — старше 30 дней записей нет</td></tr>`;
+    document.getElementById('saDeletionsTotalLabel').textContent = `Всего: ${saDeletionsTotal}`;
+    document.getElementById('saBulkPurgeBtn').disabled = saDeletionsTotal === 0;
+  };
+
+  window.saOpenBulkPurgeConfirm = function(){
+    if(saDeletionsTotal === 0) return;
+    document.getElementById('saBulkPurgeCount').textContent = saDeletionsTotal;
+    document.getElementById('saBulkPurgeConfirmInput').value = '';
+    document.getElementById('saBulkPurgeSubmitBtn').disabled = true;
+    openModal('m-sa-bulk-purge');
+  };
+
+  window.saCheckPurgeConfirmText = function(){
+    const ok = document.getElementById('saBulkPurgeConfirmInput').value.trim() === 'УДАЛИТЬ';
+    document.getElementById('saBulkPurgeSubmitBtn').disabled = !ok;
+  };
+
+  window.saSubmitBulkPurge = async function(){
+    const fd = new FormData();
+    fd.append('confirm', document.getElementById('saBulkPurgeConfirmInput').value.trim());
+    let data;
+    try{
+      const res = await postForm('/new/superadmin/deletions/purge/', fd);
+      data = await res.json();
+    }catch(e){
+      showToast('Не удалось выполнить очистку', 'error');
+      return;
+    }
+    if(data && data.error){ showToast(data.error, 'error'); return; }
+    closeModal('m-sa-bulk-purge');
+    showToast(`Удалено: ${data.purged}${data.skipped_protected ? `, пропущено (связаны с другими записями): ${data.skipped_protected}` : ''}${data.remaining ? `. Осталось ещё ${data.remaining} — нажмите ещё раз` : ''}`);
+    saLoadDeletions();
+    // kpiPendingDeletions считает ВСЕ is_deleted (без возрастного фильтра, в
+    // отличие от data.remaining) — обновляем той же метрикой, что и лента.
+    try{
+      const metricsRes = await fetch('/new/superadmin/feed/?category=all&page=1');
+      const metricsData = await metricsRes.json();
+      saRenderFeedMetrics(metricsData.metrics || {});
+    }catch(e){ /* плитки просто не обновятся — не критично */ }
+  };
+
+  // ── Резервные копии ──────────────────────────────────────────────────
+  function saFmtBytes(n){
+    if(!n) return '0 Б';
+    const units = ['Б','КБ','МБ','ГБ'];
+    let i = 0;
+    while(n >= 1024 && i < units.length - 1){ n /= 1024; i++; }
+    return `${n.toFixed(i===0?0:1)} ${units[i]}`;
+  }
+
+  window.saLoadBackups = async function(){
+    let data;
+    try{
+      const res = await fetch('/new/superadmin/backups/');
+      data = await res.json();
+    }catch(e){
+      showToast('Не удалось загрузить список резервных копий', 'error');
+      return;
+    }
+    const body = document.getElementById('saBackupsTableBody');
+    const rows = data.rows || [];
+    body.innerHTML = rows.length ? rows.map(b=>`
+      <tr>
+        <td class="mono" style="font-size:11.5px;">${b.name}</td>
+        <td style="white-space:nowrap;">${b.mtime}</td>
+        <td>${saFmtBytes(b.size)}</td>
+        <td><a class="btn btn-ghost btn-sm" href="/new/superadmin/backups/download/${encodeURIComponent(b.name)}/">⬇ Скачать</a></td>
+      </tr>`).join('')
+      : `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:24px;">Резервных копий пока нет — первая появится после ближайшего ночного запуска</td></tr>`;
   };
 
   document.getElementById('saFeedDateFrom').addEventListener('change', e=>{ saFeedState.dateFrom=e.target.value; saFeedState.page=1; saLoadFeed(); });

@@ -30,6 +30,7 @@ lib64/
 # Django
 media/
 staticfiles/
+backups/
 *.log
 local_settings.py
 

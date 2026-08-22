@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import timedelta
 
 from django.test import TestCase, Client, override_settings
 from apps.users.models import User, Permission, PermissionCategory, Role, Clinic, Branch
@@ -12,6 +13,26 @@ def _extract_newui_real_data(html):
         html, re.DOTALL,
     )
     return json.loads(m.group(1))
+
+
+def _isolated_sqlite_db_path():
+    """Отдельный, реальный файл SQLite (НЕ тот, что использует Django для
+    самих тестов) — apps.users.management.commands.backup_database читает
+    settings.DATABASES["default"]["NAME"] напрямую через stdlib sqlite3,
+    в обход Django ORM. Если направить его на ЖИВОЕ тестовое соединение
+    (обычно расшаренный in-memory URI + открытая TestCase-транзакция),
+    sqlite3.Connection.backup() виснет в ожидании блокировки — поэтому для
+    тестов команды бэкапа нужен отдельный, ничем не занятый файл."""
+    import sqlite3
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".sqlite3")
+    import os
+    os.close(fd)
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE t (id INTEGER)")
+    conn.commit()
+    conn.close()
+    return path
 
 
 class NewUIPreviewTestCase(TestCase):
@@ -2713,6 +2734,194 @@ class RecyclePendingCountTestCase(TestCase):
         self.assertGreaterEqual(metrics["pending_deletions"], 2)
 
 
+class BulkPurgeEligibilityTestCase(TestCase):
+    """apps.users.audit.bulk_purge_eligible_summary — сводка «Удаления»:
+    только записи старше порога (по умолчанию 30 дней), кросс-клиниково."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        from apps.tasks.models import Task
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        from django.utils import timezone
+
+        self.clinic = Clinic.objects.create(name="Клиника BP", slug="clinic-bulk-purge")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="bp_director", name="Директор BP",
+                                             role=self.admin_role, clinic=self.clinic)
+        set_current_clinic(self.clinic)
+        try:
+            self.fresh_patient = Patient.objects.create(first_name="Свежий", last_name="Удалён",
+                                                          phone="+996700000010", branch=self.branch)
+            self.old_patient = Patient.objects.create(first_name="Старый", last_name="Удалён",
+                                                        phone="+996700000011", branch=self.branch)
+            self.old_task = Task.objects.create(title="Старая задача", created_by=self.director)
+        finally:
+            clear_current_clinic()
+
+        now = timezone.now()
+        self.fresh_patient.soft_delete(user=self.director)
+        Patient.all_objects.filter(pk=self.fresh_patient.pk).update(deleted_at=now - timedelta(days=10))
+        self.old_patient.soft_delete(user=self.director)
+        Patient.all_objects.filter(pk=self.old_patient.pk).update(deleted_at=now - timedelta(days=40))
+        self.old_task.soft_delete(user=self.director)
+        Task.all_objects.filter(pk=self.old_task.pk).update(deleted_at=now - timedelta(days=40))
+
+    def test_summary_counts_only_records_older_than_threshold(self):
+        from apps.users.audit import bulk_purge_eligible_summary
+        summary = bulk_purge_eligible_summary(days=30)
+        self.assertEqual(summary["total"], 2)  # old_patient + old_task, НЕ fresh_patient
+        by_kind = {r["kind"]: r["count"] for r in summary["by_model"]}
+        self.assertEqual(by_kind.get("patient"), 1)
+        self.assertEqual(by_kind.get("task"), 1)
+        clinic_rows = [r for r in summary["rows"] if r["clinic_id"] == self.clinic.pk]
+        self.assertEqual(sum(r["count"] for r in clinic_rows), 2)
+
+
+class BulkPurgeExecutionTestCase(TestCase):
+    """apps.users.audit.bulk_purge_old_deletions — сам прогон массовой
+    очистки: реально удаляет старое, не трогает свежее, пишет аудит."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        from django.utils import timezone
+
+        self.clinic = Clinic.objects.create(name="Клиника BPX", slug="clinic-bulk-purge-x")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(login="bpx_director", name="Директор BPX",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.superadmin = User.objects.create(login="bpx_super", name="Супер BPX", role=self.superadmin_role)
+
+        set_current_clinic(self.clinic)
+        try:
+            self.old_patient = Patient.objects.create(first_name="Совсем", last_name="Старый",
+                                                        phone="+996700000012", branch=self.branch)
+            self.fresh_patient = Patient.objects.create(first_name="Совсем", last_name="Свежий",
+                                                          phone="+996700000013", branch=self.branch)
+        finally:
+            clear_current_clinic()
+
+        now = timezone.now()
+        self.old_patient.soft_delete(user=self.director)
+        Patient.all_objects.filter(pk=self.old_patient.pk).update(deleted_at=now - timedelta(days=40))
+        self.fresh_patient.soft_delete(user=self.director)
+        Patient.all_objects.filter(pk=self.fresh_patient.pk).update(deleted_at=now - timedelta(days=5))
+
+    def test_purge_deletes_old_keeps_fresh_and_logs_audit(self):
+        from apps.users.audit import bulk_purge_old_deletions
+        from apps.patients.models import Patient
+        from apps.users.models import AuditEvent
+
+        result = bulk_purge_old_deletions(actor=self.superadmin, days=30)
+        self.assertEqual(result["purged"], 1)
+        self.assertEqual(result["skipped_protected"], 0)
+        self.assertFalse(Patient.all_objects.filter(pk=self.old_patient.pk).exists())
+        self.assertTrue(Patient.all_objects.filter(pk=self.fresh_patient.pk).exists())
+
+        self.assertTrue(AuditEvent.objects.filter(
+            action="purge", object_model="patient", object_id=str(self.old_patient.pk)).exists())
+        summary_evt = AuditEvent.objects.filter(action="bulk_purge").first()
+        self.assertIsNotNone(summary_evt)
+        self.assertEqual(summary_evt.actor_id, self.superadmin.pk)
+
+    def test_protected_error_is_skipped_not_raised(self):
+        from apps.users.audit import bulk_purge_old_deletions
+        from apps.services.models import Service
+        from apps.treatments.models import Treatment, TreatmentCure
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        from django.utils import timezone
+
+        from apps.patients.models import Patient
+        set_current_clinic(self.clinic)
+        try:
+            # НЕ self.old_patient — его самого заодно удалит purge_with_related()
+            # в этом же прогоне (он тоже старше порога), и вместе с ним каскадом
+            # уйдёт Treatment/TreatmentCure, снимая защиту с Service раньше, чем
+            # до него дойдёт очередь. Отдельный, НЕ мягко-удалённый пациент —
+            # чтобы Treatment точно пережил прогон и Service остался защищён.
+            protector_patient = Patient.objects.create(first_name="Не", last_name="Удалён",
+                                                         phone="+996700000015", branch=self.branch)
+            service = Service.objects.create(name="Услуга под защитой", price=100)
+            treatment = Treatment.objects.create(patient=protector_patient, branch=self.branch,
+                                                  doctor=self.director)
+            TreatmentCure.objects.create(treatment=treatment, service=service, price=100,
+                                          doctor=self.director)
+        finally:
+            clear_current_clinic()
+        service.soft_delete(user=self.director)
+        Service.all_objects.filter(pk=service.pk).update(deleted_at=timezone.now() - timedelta(days=40))
+
+        result = bulk_purge_old_deletions(actor=self.superadmin, days=30)
+        self.assertGreaterEqual(result["skipped_protected"], 1)
+        self.assertTrue(Service.all_objects.filter(pk=service.pk).exists())
+
+
+class NewUISuperadminBulkPurgeViewTestCase(TestCase):
+    """AJAX-вьюхи вкладки «Удаления» — is_superadmin-гейт + фраза
+    подтверждения на POST."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        from django.utils import timezone
+
+        self.clinic = Clinic.objects.create(name="Клиника BPV", slug="clinic-bulk-purge-v")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(login="bpv_director", name="Директор BPV",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.superadmin = User.objects.create(login="bpv_super", name="Супер BPV", role=self.superadmin_role)
+
+        set_current_clinic(self.clinic)
+        try:
+            self.old_patient = Patient.objects.create(first_name="Вью", last_name="Тест",
+                                                        phone="+996700000014", branch=self.branch)
+        finally:
+            clear_current_clinic()
+        self.old_patient.soft_delete(user=self.director)
+        Patient.all_objects.filter(pk=self.old_patient.pk).update(
+            deleted_at=timezone.now() - timedelta(days=40))
+
+        self.client = Client()
+
+    def test_breakdown_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/superadmin/deletions/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_breakdown_returns_rows_for_superadmin(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/deletions/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertGreaterEqual(data["total"], 1)
+
+    def test_purge_requires_confirm_phrase(self):
+        from apps.patients.models import Patient
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/deletions/purge/", {"confirm": "неверно"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(Patient.all_objects.filter(pk=self.old_patient.pk).exists())
+
+    def test_purge_with_confirm_phrase_deletes_and_logs(self):
+        from apps.patients.models import Patient
+        from apps.users.models import AuditEvent
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/deletions/purge/", {"confirm": "УДАЛИТЬ"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Patient.all_objects.filter(pk=self.old_patient.pk).exists())
+        self.assertTrue(AuditEvent.objects.filter(action="bulk_purge").exists())
+
+    def test_purge_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.post("/new/superadmin/deletions/purge/", {"confirm": "УДАЛИТЬ"})
+        self.assertEqual(resp.status_code, 403)
+
+
 class HistoryIPTestCase(TestCase):
     """IP автора правки в истории Пациент/Приём — apps.tenancy.
     HistoricalIPAddressModel/_add_history_ip (сигнал pre_create_historical_record)."""
@@ -3029,6 +3238,199 @@ class NewUITreatplanDetailTestCase(TestCase):
         resp = self.client.get("/new/treatplans/")
         self.assertContains(resp, "/new/treatplans/${p.id}/")
         self.assertNotContains(resp, "/treatments/plans/${p.id}/")
+
+
+class BackupDatabaseCommandTestCase(TestCase):
+    """apps.users.management.commands.backup_database — тесты идут на
+    SQLite (config/settings/development.py), поэтому здесь проверяется
+    именно ветка _dump_sqlite; ветка _dump_postgres — отдельным юнит-тестом
+    с замоканным subprocess.Popen (см. BackupPostgresBranchTestCase)."""
+
+    def test_creates_valid_gzip_sqlite_backup_with_expected_filename(self):
+        import gzip
+        import os
+        import tempfile
+        from pathlib import Path
+        from django.conf import settings
+        from django.core.management import call_command
+        from django.test import override_settings
+
+        db_path = _isolated_sqlite_db_path()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                databases = {**settings.DATABASES, "default": {**settings.DATABASES["default"], "NAME": db_path}}
+                with override_settings(BACKUPS_DIR=Path(tmp), DATABASES=databases):
+                    call_command("backup_database")
+                files = list(Path(tmp).glob("sadaf_backup_*"))
+                self.assertEqual(len(files), 1)
+                self.assertRegex(files[0].name, r"^sadaf_backup_\d{4}-\d{2}-\d{2}_\d{4}\.sqlite3\.gz$")
+                with gzip.open(files[0], "rb") as gz:
+                    content = gz.read()
+                self.assertGreater(len(content), 0)
+        finally:
+            os.unlink(db_path)
+
+    def test_dry_run_creates_no_files(self):
+        import tempfile
+        from pathlib import Path
+        from django.core.management import call_command
+        from django.test import override_settings
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(BACKUPS_DIR=Path(tmp)):
+                call_command("backup_database", dry=True)
+            self.assertEqual(list(Path(tmp).glob("sadaf_backup_*")), [])
+
+    def test_writes_backup_create_audit_event(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from django.conf import settings
+        from django.core.management import call_command
+        from django.test import override_settings
+        from apps.users.models import AuditEvent
+
+        db_path = _isolated_sqlite_db_path()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                databases = {**settings.DATABASES, "default": {**settings.DATABASES["default"], "NAME": db_path}}
+                with override_settings(BACKUPS_DIR=Path(tmp), DATABASES=databases):
+                    call_command("backup_database")
+            self.assertTrue(AuditEvent.objects.filter(action="backup_create").exists())
+        finally:
+            os.unlink(db_path)
+
+
+class BackupRetentionTestCase(TestCase):
+    """Ротация: хранится только последние --keep копий, старые удаляются."""
+
+    def test_keeps_only_last_n_backups(self):
+        import os
+        import tempfile
+        import time
+        from pathlib import Path
+        from django.conf import settings
+        from django.core.management import call_command
+        from django.test import override_settings
+
+        db_path = _isolated_sqlite_db_path()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                now = time.time()
+                for i in range(16):
+                    f = tmp_path / f"sadaf_backup_2026-01-{i+1:02d}_0000.sqlite3.gz"
+                    f.write_bytes(b"x")
+                    os.utime(f, (now - (20 - i) * 3600, now - (20 - i) * 3600))  # старые → новые
+                databases = {**settings.DATABASES, "default": {**settings.DATABASES["default"], "NAME": db_path}}
+                with override_settings(BACKUPS_DIR=tmp_path, DATABASES=databases):
+                    call_command("backup_database", keep=14)
+                remaining = list(tmp_path.glob("sadaf_backup_*"))
+                self.assertEqual(len(remaining), 14)
+                # Только что созданный файл — среди выживших (самый новый по mtime).
+                newest_by_mtime = max(remaining, key=lambda p: p.stat().st_mtime)
+                self.assertIn("sqlite3.gz", newest_by_mtime.name)
+        finally:
+            os.unlink(db_path)
+
+
+class BackupPostgresBranchTestCase(TestCase):
+    """Юнит-тест _dump_postgres в изоляции (без реального pg_dump/Postgres —
+    песочница тестов всегда на SQLite) — проверяем только состав argv/env."""
+
+    def test_pg_dump_argv_and_password_env(self):
+        from unittest.mock import patch, MagicMock
+        from pathlib import Path
+        from apps.users.management.commands.backup_database import Command
+
+        fake_db = {"HOST": "dbhost", "PORT": "5433", "USER": "sadaf", "PASSWORD": "s3cr3t", "NAME": "sadaf_clinic"}
+        cmd = Command()
+        with patch("apps.users.management.commands.backup_database.subprocess.Popen") as mock_popen, \
+             patch("gzip.open"):
+            mock_proc = MagicMock()
+            mock_proc.stdout.read.side_effect = [b"", b""]
+            mock_proc.wait.return_value = 0
+            mock_popen.return_value = mock_proc
+            cmd._dump_postgres(fake_db, Path("/tmp/does-not-matter.sql.gz"))
+            argv = mock_popen.call_args.args[0]
+            env = mock_popen.call_args.kwargs["env"]
+        self.assertIn("pg_dump", argv)
+        self.assertIn("dbhost", argv)
+        self.assertIn("5433", argv)
+        self.assertIn("sadaf", argv)
+        self.assertIn("sadaf_clinic", argv)
+        self.assertEqual(env["PGPASSWORD"], "s3cr3t")
+
+
+class NewUISuperadminBackupsViewTestCase(TestCase):
+    """AJAX-список + скачивание бэкапов — is_superadmin-гейт, защита от
+    path traversal, аудит-лог скачивания."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Backup View", slug="clinic-backup-view")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(login="bv_director", name="Директор BV",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.superadmin = User.objects.create(login="bv_super", name="Супер BV", role=self.superadmin_role)
+        self.client = Client()
+
+        import tempfile
+        from pathlib import Path
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.backups_dir = Path(self._tmpdir.name)
+        self.backup_file = self.backups_dir / "sadaf_backup_2026-01-01_0000.sqlite3.gz"
+        self.backup_file.write_bytes(b"fake-gzip-content")
+        self.other_file = self.backups_dir / "not_a_backup.txt"
+        self.other_file.write_bytes(b"should not be downloadable")
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_list_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get("/new/superadmin/backups/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_list_returns_backup_file_with_size_and_date(self):
+        self.client.force_login(self.superadmin)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get("/new/superadmin/backups/")
+        self.assertEqual(resp.status_code, 200)
+        rows = resp.json()["rows"]
+        names = [r["name"] for r in rows]
+        self.assertIn("sadaf_backup_2026-01-01_0000.sqlite3.gz", names)
+        self.assertNotIn("not_a_backup.txt", names)  # не матчит glob("sadaf_backup_*")
+
+    def test_download_streams_file_and_logs_audit_event(self):
+        from apps.users.models import AuditEvent
+        self.client.force_login(self.superadmin)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get(f"/new/superadmin/backups/download/{self.backup_file.name}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("attachment", resp["Content-Disposition"])
+        self.assertEqual(b"".join(resp.streaming_content), b"fake-gzip-content")
+        self.assertTrue(AuditEvent.objects.filter(
+            action="backup_download", object_repr=self.backup_file.name).exists())
+
+    def test_download_rejects_path_traversal(self):
+        self.client.force_login(self.superadmin)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get("/new/superadmin/backups/download/..%2F..%2Fsettings.py/")
+        self.assertIn(resp.status_code, (403, 404))
+
+    def test_download_rejects_unknown_filename_prefix(self):
+        self.client.force_login(self.superadmin)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get(f"/new/superadmin/backups/download/{self.other_file.name}/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_download_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director)
+        with override_settings(BACKUPS_DIR=self.backups_dir):
+            resp = self.client.get(f"/new/superadmin/backups/download/{self.backup_file.name}/")
+        self.assertEqual(resp.status_code, 403)
 
 
 class ClinicBlockingTestCase(TestCase):
