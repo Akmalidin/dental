@@ -23,10 +23,18 @@ class LoginForm(forms.Form):
         login = self.cleaned_data.get("login")
         password = self.cleaned_data.get("password")
         if login and password:
+            from django.db.models import Q
+            from django.utils import timezone
             from apps.tenancy import get_client_ip
             from .models import BlockedIP, ClinicLoginEvent
             ip = get_client_ip(self.request) if self.request else None
-            if ip and BlockedIP.objects.filter(ip_address=ip).exists():
+            # Блокировка со сроком (BlockedIP.expires_at) больше не действует
+            # после истечения — но запись не удаляется (история блокировок
+            # остаётся видна в Аудит-центре), поэтому не просто .exists() по
+            # ip_address, а с учётом срока.
+            if ip and BlockedIP.objects.filter(ip_address=ip).filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+            ).exists():
                 raise forms.ValidationError(_("Доступ с этого IP заблокирован"))
             self.user_cache = authenticate(self.request, username=login, password=password)
             success = self.user_cache is not None and self.user_cache.is_active

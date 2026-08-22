@@ -92,9 +92,19 @@ class BlockedIPMiddleware:
 
     def __call__(self, request):
         if not request.path.startswith(self.ALLOWED_PREFIXES):
+            from django.db.models import Q
+            from django.utils import timezone as dj_timezone
             from apps.users.models import BlockedIP
             ip = get_client_ip(request)
-            blocked = BlockedIP.objects.filter(ip_address=ip).first() if ip else None
+            # Учитываем expires_at — истёкшая блокировка не должна больше
+            # разлогинивать (см. также apps.users.forms.LoginForm.clean(),
+            # там та же проверка на вход).
+            blocked = (
+                BlockedIP.objects.filter(ip_address=ip)
+                .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=dj_timezone.now()))
+                .first()
+                if ip else None
+            )
             if blocked is not None:
                 user = getattr(request, "user", None)
                 if user is not None and user.is_authenticated:
@@ -559,8 +569,25 @@ class ClinicSoftDeleteModel(_ClinicSaveMixin, models.Model):
             self.updated_at = timezone.now()   # важно для синхронизации (кто новее)
             fields.append("updated_at")
         self.save(update_fields=fields)
+        # Единая точка логирования удаления для Аудит-центра — покрывает
+        # ВСЕ модели, унаследованные от ClinicSoftDeleteModel (Patient,
+        # Treatment, Appointment, Service, Task, ...), без правки каждого
+        # места вызова. request здесь не передаётся (сигнатура — только
+        # user), поэтому IP/user-agent у события удаления не будет — только
+        # актор и diff (осознанный компромисс, см. план).
+        try:
+            from apps.users.audit import log_audit_event
+            log_audit_event(
+                action="soft_delete", category="delete", actor=user,
+                clinic=getattr(self, "clinic", None),
+                object_model=self._meta.model_name, object_id=str(self.pk),
+                object_repr=f"{self._meta.model_name}/{self.pk} — {self}",
+                diff=[{"field": "is_deleted", "old": "Нет", "new": "Да"}],
+            )
+        except Exception:
+            pass
 
-    def restore(self):
+    def restore(self, user=None):
         self.is_deleted = False
         self.deleted_at = None
         self.deleted_by = None
@@ -569,3 +596,14 @@ class ClinicSoftDeleteModel(_ClinicSaveMixin, models.Model):
             self.updated_at = timezone.now()   # важно для синхронизации (кто новее)
             fields.append("updated_at")
         self.save(update_fields=fields)
+        try:
+            from apps.users.audit import log_audit_event
+            log_audit_event(
+                action="restore", category="change", actor=user,
+                clinic=getattr(self, "clinic", None),
+                object_model=self._meta.model_name, object_id=str(self.pk),
+                object_repr=f"{self._meta.model_name}/{self.pk} — {self}",
+                diff=[{"field": "is_deleted", "old": "Да", "new": "Нет"}],
+            )
+        except Exception:
+            pass

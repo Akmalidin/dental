@@ -1,38 +1,123 @@
 {% extends "newui/base.html" %}
-{% block page_title %}Супер-админ{% endblock %}
+{% block page_title %}Аудит-центр{% endblock %}
 {% block content %}
       <div class="topbar">
-        <h1 data-i18n="nav_superadmin">Супер-админ</h1>
-        <div class="topbar-right">
-          <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ <span data-i18n="w_sa_new_clinic">Новая клиника</span></button>
+        <h1>🛡 Аудит-центр</h1>
+        <div class="topbar-right" style="gap:10px;">
+          <div class="sa-tabs" style="display:flex;gap:4px;background:var(--mist);border-radius:10px;padding:3px;">
+            <button type="button" class="btn btn-sm sa-tabbtn active" id="saTabBtn-feed" onclick="saShowTab('feed')">Лента событий</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-clinics" onclick="saShowTab('clinics')">Клиники</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-users" onclick="saShowTab('users')">Пользователи</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-ipblocks" onclick="saShowTab('ipblocks')">Блокировки IP</button>
+          </div>
+          <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ Новая клиника</button>
         </div>
       </div>
-      <div class="page">
+
+      <style>
+        .sa-tabbtn{background:transparent;color:var(--ink-soft);border-radius:8px;padding:7px 12px;}
+        .sa-tabbtn.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);}
+        .sa-diff-old{background:var(--coral-tint);color:var(--coral);border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:'JetBrains Mono',monospace;margin-bottom:3px;word-break:break-all;}
+        .sa-diff-new{background:var(--teal-tint);color:var(--teal);border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:'JetBrains Mono',monospace;word-break:break-all;}
+        .sa-detail-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--mist-line);font-size:12.5px;}
+        .sa-detail-row span:first-child{color:var(--ink-soft);flex-shrink:0;}
+        .sa-detail-row span:last-child{text-align:right;font-weight:500;word-break:break-all;}
+      </style>
+
+      <!-- ═══ Вкладка: Лента событий (Аудит-центр) ═══════════════════════ -->
+      <div class="page" id="saPanel-feed">
+        <div class="kpi-grid" style="margin-bottom:14px;">
+          <div class="card kpi b-cobalt"><div class="kpi-top"><span>Событий за сутки</span><span class="kpi-delta" id="kpiEventsDelta"></span></div><b id="kpiEventsToday">—</b></div>
+          <div class="card kpi b-coral"><div class="kpi-top"><span>Отказов входа</span><span class="kpi-delta" id="kpiDenialsDelta"></span></div><b id="kpiDenialsToday">—</b></div>
+          <div class="card kpi b-amber"><div class="kpi-top"><span>Удалений в очереди</span></div><b id="kpiPendingDeletions">—</b><span class="lbl">Корзина, все клиники</span></div>
+          <div class="card kpi b-teal"><div class="kpi-top"><span>Заблокированных IP</span></div><b id="kpiBlockedIps">—</b></div>
+        </div>
+
+        <div class="card" style="padding:14px 16px;margin-bottom:12px;">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+            <div id="saCatTabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="date" id="saFeedDateFrom" style="border:1px solid var(--mist-line);border-radius:8px;padding:6px 8px;">
+              <span style="color:var(--ink-soft);">—</span>
+              <input type="date" id="saFeedDateTo" style="border:1px solid var(--mist-line);border-radius:8px;padding:6px 8px;">
+              <input type="text" id="saFeedSearch" placeholder="Поиск: email, IP, ID объекта" style="min-width:220px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;">
+              <button class="btn btn-ghost btn-sm" onclick="saOpenBlockReason('ip',{})">🚫 Заблокировать IP</button>
+              <a class="btn btn-ghost btn-sm" id="saExportLink" href="/new/superadmin/export/" target="_blank">⬇ Экспорт CSV</a>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;">
+          <div class="card" style="padding:0;overflow:hidden;">
+            <table>
+              <thead><tr>
+                <th>Время</th><th>Актор</th><th>Действие</th><th>Объект</th><th>IP</th><th>Результат</th>
+              </tr></thead>
+              <tbody id="saFeedTableBody"></tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--mist-line);">
+              <span id="saFeedTotalLabel" style="font-size:12px;color:var(--ink-soft);"></span>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="btn btn-ghost btn-sm" onclick="saFeedPage(-1)">← Назад</button>
+                <span id="saFeedPageLabel" style="font-size:12px;color:var(--ink-soft);"></span>
+                <button class="btn btn-ghost btn-sm" onclick="saFeedPage(1)">Вперёд →</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" id="saDetailCard" style="padding:16px;min-height:200px;">
+            <div style="color:var(--ink-soft);font-size:12.5px;text-align:center;padding:24px 0;">Выберите событие в списке слева</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Клиники (прежняя единственная страница /new/superadmin/) ═══ -->
+      <div class="page hidden" id="saPanel-clinics">
         <div class="card">
           <table>
             <thead><tr>
-              <th data-i18n="w_sa_clinic">Клиника</th>
-              <th data-i18n="w_sa_tariff">Тариф</th>
-              <th data-i18n="w_sa_branches">Филиалы</th>
-              <th data-i18n="w_sa_staff">Сотрудники</th>
-              <th data-i18n="w_sa_patients">Пациенты</th>
-              <th data-i18n="w_sa_access">Доступы</th>
-              <th data-i18n="w_sa_status">Статус</th>
-              <th></th>
+              <th>Клиника</th><th>Тариф</th><th>Филиалы</th><th>Сотрудники</th><th>Пациенты</th><th>Доступы</th><th>Статус</th><th></th>
             </tr></thead>
             <tbody id="saTableBody"></tbody>
           </table>
         </div>
       </div>
-
-      <div class="page" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="page hidden" id="saPanel-clinics-extra" style="display:grid;grid-template-columns:1fr;gap:16px;">
         <div class="card" style="padding:16px;">
-          <h3 style="margin-bottom:10px;" data-i18n="w_sa_access_requests">📬 Заявки на доступ</h3>
+          <h3 style="margin-bottom:10px;">📬 Заявки на доступ</h3>
           <div id="saRequestsList"></div>
         </div>
+      </div>
+
+      <!-- ═══ Вкладка: Пользователи ═══════════════════════════════════════ -->
+      <div class="page hidden" id="saPanel-users">
+        <div class="card" style="padding:14px 16px;margin-bottom:12px;">
+          <input type="text" id="saUsersSearch" placeholder="Поиск: имя, логин, телефон" style="min-width:260px;border:1px solid var(--mist-line);border-radius:8px;padding:7px 10px;">
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table>
+            <thead><tr>
+              <th>Сотрудник</th><th>Роль</th><th>Клиника</th><th>Телефон</th><th>Статус</th><th></th>
+            </tr></thead>
+            <tbody id="saUsersTableBody"></tbody>
+          </table>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid var(--mist-line);">
+            <span id="saUsersTotalLabel" style="font-size:12px;color:var(--ink-soft);"></span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <button class="btn btn-ghost btn-sm" onclick="saUsersPage(-1)">← Назад</button>
+              <span id="saUsersPageLabel" style="font-size:12px;color:var(--ink-soft);"></span>
+              <button class="btn btn-ghost btn-sm" onclick="saUsersPage(1)">Вперёд →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Блокировки IP ══════════════════════════════════════ -->
+      <div class="page hidden" id="saPanel-ipblocks">
         <div class="card" style="padding:16px;">
-          <h3 style="margin-bottom:10px;" data-i18n="w_sa_blocked_ips">🚫 Заблокированные IP</h3>
-          <button class="btn btn-ghost btn-sm" style="margin-bottom:12px;" onclick="saOpenBlockReason('ip',{})" data-i18n="w_sa_add_blocked_ip">+ Заблокировать IP</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3>🚫 Заблокированные IP</h3>
+            <button class="btn btn-cobalt btn-sm" onclick="saOpenBlockReason('ip',{})">+ Заблокировать IP</button>
+          </div>
           <div id="saBlockedIpsList"></div>
         </div>
       </div>
@@ -40,35 +125,35 @@
       <!-- Модалка: новая клиника -->
       <div class="modal-backdrop" id="m-sa-create">
         <div class="modal">
-          <div class="modal-head"><h3 data-i18n="w_sa_new_clinic">Новая клиника</h3><button class="modal-close" onclick="closeModal('m-sa-create')">✕</button></div>
+          <div class="modal-head"><h3>Новая клиника</h3><button class="modal-close" onclick="closeModal('m-sa-create')">✕</button></div>
           <div class="modal-body">
             <div id="saCreateError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
             <div id="saCreateForm">
-              <div class="form-group"><label data-i18n="w_sa_clinic_name">Название клиники</label>
+              <div class="form-group"><label>Название клиники</label>
                 <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-cname"></div>
-              <div class="form-group"><label data-i18n="w_sa_admin_name">Имя администратора</label>
+              <div class="form-group"><label>Имя администратора</label>
                 <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-name"></div>
               <div class="form-row2">
-                <div class="form-group"><label data-i18n="w_sa_admin_login">Логин администратора</label>
+                <div class="form-group"><label>Логин администратора</label>
                   <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-login"></div>
-                <div class="form-group"><label data-i18n="w_sa_admin_password">Пароль</label>
+                <div class="form-group"><label>Пароль</label>
                   <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sa-admin-pass"></div>
               </div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
                 <input type="checkbox" id="sa-seed" checked>
-                <span data-i18n="w_sa_seed_demo">Заполнить демо-данными (услуги, материалы, шаблоны ЭМК)</span>
+                <span>Заполнить демо-данными (услуги, материалы, шаблоны ЭМК)</span>
               </label>
             </div>
             <div id="saCreateResult" class="hidden">
               <div style="background:var(--teal-tint);color:var(--teal);border-radius:10px;padding:14px;font-size:13px;line-height:1.7;">
-                <div data-i18n="w_sa_clinic_created">Клиника создана. Данные для входа (сохраните — пароль больше нигде не показывается):</div>
+                <div>Клиника создана. Данные для входа (сохраните — пароль больше нигде не показывается):</div>
                 <div style="margin-top:8px;font-family:monospace;" id="saResultBox"></div>
               </div>
             </div>
           </div>
           <div class="modal-foot" id="saCreateFoot">
-            <button class="btn btn-ghost" onclick="closeModal('m-sa-create')" data-i18n="w_cancel">Отмена</button>
-            <button class="btn btn-cobalt" onclick="submitNewClinic()" data-i18n="w_sa_create">Создать</button>
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-create')">Отмена</button>
+            <button class="btn btn-cobalt" onclick="submitNewClinic()">Создать</button>
           </div>
         </div>
       </div>
@@ -79,78 +164,85 @@
           <div class="modal-head"><h3 id="saEditTitle">Клиника</h3><button class="modal-close" onclick="closeModal('m-sa-edit')">✕</button></div>
           <div class="modal-body">
             <div class="form-row2">
-              <div class="form-group"><label data-i18n="w_sa_clinic_name">Название клиники</label>
+              <div class="form-group"><label>Название клиники</label>
                 <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sae-name"></div>
-              <div class="form-group"><label data-i18n="w_sa_slug">Поддомен</label>
+              <div class="form-group"><label>Поддомен</label>
                 <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="sae-slug"></div>
-              <div class="form-group"><label data-i18n="w_sa_timezone">Часовой пояс</label>
+              <div class="form-group"><label>Часовой пояс</label>
                 <select id="sae-timezone"></select></div>
-              <div class="form-group"><label data-i18n="w_sa_tariff">Тариф</label>
+              <div class="form-group"><label>Тариф</label>
                 <select id="sae-tariff"></select></div>
-              <div class="form-group"><label data-i18n="w_sa_tariff_until">Оплачен до</label>
+              <div class="form-group"><label>Оплачен до</label>
                 <input type="date" id="sae-until"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_modules">Модули (навигация клиники по тарифу):</label>
+              <label>Модули (навигация клиники по тарифу):</label>
               <div id="saeModules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_access">Доступы (жёсткое разрешение, выдаёт только супер-админ):</label>
+              <label>Доступы (жёсткое разрешение, выдаёт только супер-админ):</label>
               <div id="saeAccess" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_channels">Каналы связи (по тарифу):</label>
+              <label>Каналы связи (по тарифу):</label>
               <div style="display:flex;gap:14px;" id="saeChannels"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_branches_list">Филиалы:</label>
+              <label>Филиалы:</label>
               <div id="saeBranches" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_blocked_features">🔓 Заблокированные функции:</label>
+              <label>🔓 Заблокированные функции:</label>
               <div id="saeBlocked" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_login_events">Последние входы:</label>
+              <label>Последние входы:</label>
               <div id="saeLoginEvents" style="font-size:12px;color:var(--ink-soft);"></div>
             </div>
           </div>
           <div class="modal-foot" style="justify-content:space-between;">
-            <button class="btn btn-ghost" onclick="saEnterClinic()">→ <span data-i18n="w_sa_enter">Войти в клинику</span></button>
+            <button class="btn btn-ghost" onclick="saEnterClinic()">→ Войти в клинику</button>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-ghost" id="saeToggleActiveBtn" onclick="saToggleActive()"></button>
-              <button class="btn btn-ghost" onclick="closeModal('m-sa-edit')" data-i18n="w_cancel">Отмена</button>
-              <button class="btn btn-cobalt" onclick="saSaveEdit()" data-i18n="w_save">Сохранить</button>
+              <button class="btn btn-ghost" onclick="closeModal('m-sa-edit')">Отмена</button>
+              <button class="btn btn-cobalt" onclick="saSaveEdit()">Сохранить</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Модалка: причина блокировки (клиника ИЛИ IP — общая, см. saOpenBlockReason) —
-           готовые шаблоны причин (клик заполняет текст) + отдельное поле для
-           своего текста. Причина сохраняется и показывается тому, кого
-           заблокировали (клиника — на /access-request/, IP — на экране
-           блокировки), см. Clinic.blocked_reason / BlockedIP.note. -->
+      <!-- Модалка: причина блокировки (клиника ИЛИ IP — общая) — готовые
+           шаблоны причин (клик заполняет текст) + своё поле; для IP ещё
+           срок действия блокировки. -->
       <div class="modal-backdrop" id="m-sa-block-reason">
         <div class="modal">
-          <div class="modal-head"><h3 id="saBlockReasonTitle" data-i18n="w_sa_block_reason_title">Причина блокировки</h3><button class="modal-close" onclick="closeModal('m-sa-block-reason')">✕</button></div>
+          <div class="modal-head"><h3 id="saBlockReasonTitle">Причина блокировки</h3><button class="modal-close" onclick="closeModal('m-sa-block-reason')">✕</button></div>
           <div class="modal-body">
             <div class="form-group" id="saBlockReasonIpWrap" style="display:none;">
-              <label data-i18n="w_sa_ip_address">IP-адрес</label>
+              <label>IP-адрес</label>
               <input type="text" id="saBlockReasonIp" placeholder="192.0.2.1" autocomplete="off">
             </div>
+            <div class="form-group" id="saBlockReasonDurationWrap" style="display:none;">
+              <label>Срок блокировки:</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-ghost btn-sm sa-dur" data-days="1" onclick="saSetDuration(1)">1 день</button>
+                <button type="button" class="btn btn-ghost btn-sm sa-dur" data-days="7" onclick="saSetDuration(7)">7 дней</button>
+                <button type="button" class="btn btn-ghost btn-sm sa-dur" data-days="30" onclick="saSetDuration(30)">30 дней</button>
+                <button type="button" class="btn btn-cobalt btn-sm sa-dur" data-days="" onclick="saSetDuration('')">Бессрочно</button>
+              </div>
+            </div>
             <div class="form-group">
-              <label data-i18n="w_sa_reason_templates">Готовые причины (клик — подставить):</label>
+              <label>Готовые причины (клик — подставить):</label>
               <div id="saReasonTemplates" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
             </div>
             <div class="form-group">
-              <label data-i18n="w_sa_reason_custom">Причина (покажется тому, кого блокируете):</label>
+              <label>Причина (покажется тому, кого блокируете):</label>
               <textarea id="saBlockReasonText" rows="3" style="width:100%;resize:vertical;"></textarea>
             </div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" onclick="closeModal('m-sa-block-reason')" data-i18n="w_cancel">Отмена</button>
-            <button class="btn btn-danger" onclick="saSubmitBlockReason()" data-i18n="w_sa_block">Заблокировать</button>
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-block-reason')">Отмена</button>
+            <button class="btn btn-danger" onclick="saSubmitBlockReason()">Заблокировать</button>
           </div>
         </div>
       </div>
@@ -168,17 +260,34 @@
     return `${d}.${m}.${y}`;
   }
 
+  // ── Вкладки ──────────────────────────────────────────────────────────
+  const SA_TABS = ['feed','clinics','users','ipblocks'];
+  let saUsersLoaded = false, saFeedLoaded = false;
+  window.saShowTab = function(tab){
+    SA_TABS.forEach(t=>{
+      const panel = document.getElementById('saPanel-'+t);
+      if(panel) panel.classList.toggle('hidden', t!==tab);
+      const btn = document.getElementById('saTabBtn-'+t);
+      if(btn) btn.classList.toggle('active', t===tab);
+    });
+    const extra = document.getElementById('saPanel-clinics-extra');
+    if(extra) extra.classList.toggle('hidden', tab!=='clinics');
+    if(tab==='users' && !saUsersLoaded){ saUsersLoaded = true; saLoadUsers(); }
+    if(tab==='feed' && !saFeedLoaded){ saFeedLoaded = true; saLoadFeed(); }
+  };
+
+  // ── Клиники (без изменений от прежней единственной страницы) ────────
   window.renderSaTable = function(){
     const body = document.getElementById('saTableBody');
     if(!body) return;
-    if(SA.clinics.length===0){ body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">—</td></tr>`; return; }
+    if(SA.clinics.length===0){ body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:24px;">—</td></tr>`; return; }
     body.innerHTML = SA.clinics.map(c=>{
       const tariffLabel = (SA.tariffChoices.find(t=>t[0]===c.tariffPlan)||[c.tariffPlan,c.tariffPlan])[1];
       const tariffPill = c.isExpired ? `<span class="pill coral">${tariffLabel} · истёк</span>` : `<span class="pill teal">${tariffLabel}</span>`;
       const accessBadges = SA.grantableAccess.map(([key,label])=>
         c.grantedAccess.includes(key) ? `<span class="pill cobalt">${label}</span>` : `<span class="pill grey">${label}</span>`
       ).join(' ');
-      const statusBadge = c.isActive ? `<span class="pill teal">${t('w_sa_active')}</span>` : `<span class="pill coral">${t('w_sa_blocked')}</span>`;
+      const statusBadge = c.isActive ? `<span class="pill teal">Активна</span>` : `<span class="pill coral">Заблокирована</span>`;
       return `<tr class="clickable" onclick="openSaEdit(${c.id})">
         <td><b>${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.slug}</div></td>
         <td>${tariffPill}${c.tariffUntil?`<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">до ${saFmtDate(c.tariffUntil)}</div>`:''}</td>
@@ -187,7 +296,7 @@
         <td>${c.patientCount}</td>
         <td>${accessBadges}</td>
         <td>${statusBadge}</td>
-        <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saEnterClinicById(${c.id})">→ ${t('w_sa_enter')}</button></td>
+        <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();saEnterClinicById(${c.id})">→ Войти</button></td>
       </tr>`;
     }).join('');
   };
@@ -195,15 +304,15 @@
   window.renderSaRequests = function(){
     const el = document.getElementById('saRequestsList');
     if(!el) return;
-    if(SA.accessRequests.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">${t('w_sa_no_requests')}</p>`; return; }
+    if(SA.accessRequests.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">Заявок нет</p>`; return; }
     el.innerHTML = SA.accessRequests.map(r=>`
       <div style="border:1px solid var(--mist-line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;">
         <div style="display:flex;justify-content:space-between;"><b>${r.clinicName}</b><span style="color:var(--ink-soft);">${r.at}</span></div>
         <div style="color:var(--ink-soft);margin-top:2px;">${r.contactName} · ${r.phone}${r.email?' · '+r.email:''} · IP ${r.ip}</div>
         ${r.message ? `<div style="margin-top:4px;">${r.message}</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'contacted')">${t('w_sa_contacted')}</button>
-          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'resolved')">${t('w_sa_resolved')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'contacted')">Связались</button>
+          <button class="btn btn-ghost btn-sm" onclick="saSetRequestStatus(${r.id},'resolved')">Решено</button>
         </div>
       </div>`).join('');
   };
@@ -212,29 +321,31 @@
     const fd = new FormData();
     fd.append('status', status);
     const res = await postForm(`/users/access-requests/${id}/status/`, fd);
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+    if(res.redirected){ flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
   };
 
   window.renderSaBlockedIps = function(){
     const el = document.getElementById('saBlockedIpsList');
     if(!el) return;
-    if(SA.blockedIPs.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">${t('w_sa_no_blocked_ips')}</p>`; return; }
+    if(SA.blockedIPs.length===0){ el.innerHTML = `<p style="color:var(--ink-soft);font-size:12.5px;">Заблокированных IP нет</p>`; return; }
     el.innerHTML = SA.blockedIPs.map(b=>`
       <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--mist-line);border-radius:10px;padding:8px 12px;margin-bottom:6px;font-size:12.5px;">
-        <div><b style="font-family:monospace;">${b.ip}</b>${b.note?' · '+b.note:''}<div style="color:var(--ink-soft);font-size:11px;">${b.at}</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="saUnblockIp(${b.id})">${t('w_sa_unblock')}</button>
+        <div>
+          <b style="font-family:monospace;">${b.ip}</b>
+          ${b.isActive ? `<span class="pill coral" style="margin-left:6px;">заблокирован</span>` : `<span class="pill grey" style="margin-left:6px;">истёк</span>`}
+          ${b.note?' · '+b.note:''}
+          <div style="color:var(--ink-soft);font-size:11px;">с ${b.at}${b.expiresAt ? ' · до '+b.expiresAt : ' · бессрочно'}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="saUnblockIp(${b.id})">Разблокировать</button>
       </div>`).join('');
   };
 
   window.saUnblockIp = async function(id){
     const res = await postForm(`/users/block-ip/${id}/unblock/`, new FormData());
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+    if(res.redirected){ flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
   };
 
   // ── Модалка «Причина блокировки» — общая для клиники и IP ──────────────
-  // Готовые шаблоны причин: клик по чипу подставляет текст в textarea, но
-  // сам текст остаётся редактируемым — это не жёсткий выбор из списка, а
-  // быстрый старт + возможность дописать/заменить своими словами.
   const SA_REASON_TEMPLATES = {
     clinic: [
       'Просрочена оплата тарифа',
@@ -249,21 +360,35 @@
       'Попытка несанкционированного доступа',
     ],
   };
-  let saBlockReasonCtx = null;  // {type:'clinic', id} | {type:'ip', ip}
+  let saBlockReasonCtx = null;
+  let saBlockDuration = '';
+
+  window.saSetDuration = function(days){
+    saBlockDuration = days;
+    document.querySelectorAll('.sa-dur').forEach(btn=>{
+      const isSel = String(btn.dataset.days) === String(days);
+      btn.classList.toggle('btn-cobalt', isSel);
+      btn.classList.toggle('btn-ghost', !isSel);
+    });
+  };
 
   window.saOpenBlockReason = function(type, payload){
     saBlockReasonCtx = {type, ...payload};
     document.getElementById('saBlockReasonText').value = '';
     document.getElementById('saBlockReasonTitle').textContent =
-      type === 'clinic' ? t('w_sa_block_clinic_reason_title') : t('w_sa_block_ip_reason_title');
+      type === 'clinic' ? 'Причина блокировки клиники' : 'Причина блокировки IP';
     const ipWrap = document.getElementById('saBlockReasonIpWrap');
     const ipInput = document.getElementById('saBlockReasonIp');
+    const durWrap = document.getElementById('saBlockReasonDurationWrap');
     if(type === 'ip'){
       ipWrap.style.display = '';
+      durWrap.style.display = '';
       ipInput.value = payload.ip || '';
-      ipInput.readOnly = !!payload.ip;  // из «Последних входов» — IP уже известен, редактировать нечего
+      ipInput.readOnly = !!payload.ip;
+      saSetDuration('');
     } else {
       ipWrap.style.display = 'none';
+      durWrap.style.display = 'none';
     }
     document.getElementById('saReasonTemplates').innerHTML = SA_REASON_TEMPLATES[type].map(tpl => `
       <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('saBlockReasonText').value=this.textContent">${tpl}</button>
@@ -284,10 +409,11 @@
       if(!ip) return;
       fd.append('ip_address', ip);
       fd.append('note', reason);
+      if(saBlockDuration) fd.append('duration_days', saBlockDuration);
       url = '/users/block-ip/';
     }
     const res = await postForm(url, fd);
-    if(res.redirected){ closeModal('m-sa-block-reason'); flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+    if(res.redirected){ closeModal('m-sa-block-reason'); flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
   };
 
   window.openNewClinicModal = function(){
@@ -296,8 +422,8 @@
     document.getElementById('saCreateError').classList.add('hidden');
     document.getElementById('saCreateForm').classList.remove('hidden');
     document.getElementById('saCreateFoot').innerHTML =
-      `<button class="btn btn-ghost" onclick="closeModal('m-sa-create')">${t('w_cancel')}</button>
-       <button class="btn btn-cobalt" onclick="submitNewClinic()">${t('w_sa_create')}</button>`;
+      `<button class="btn btn-ghost" onclick="closeModal('m-sa-create')">Отмена</button>
+       <button class="btn btn-cobalt" onclick="submitNewClinic()">Создать</button>`;
     document.getElementById('saCreateResult').classList.add('hidden');
     openModal('m-sa-create');
   };
@@ -308,7 +434,7 @@
     const apass = document.getElementById('sa-admin-pass').value.trim();
     if(!cname || !alogin || !apass){
       const box = document.getElementById('saCreateError');
-      box.textContent = t('w_sa_fill_required');
+      box.textContent = 'Заполните обязательные поля';
       box.classList.remove('hidden');
       return;
     }
@@ -325,13 +451,13 @@
       document.getElementById('saCreateForm').classList.add('hidden');
       document.getElementById('saCreateError').classList.add('hidden');
       document.getElementById('saResultBox').innerHTML =
-        `${t('w_sa_admin_login')}: <b>${payload.adminLogin}</b><br>${t('w_sa_admin_password')}: <b>${apass}</b><br>URL: <b>${payload.loginUrl}</b>`;
+        `Логин: <b>${payload.adminLogin}</b><br>Пароль: <b>${apass}</b><br>URL: <b>${payload.loginUrl}</b>`;
       document.getElementById('saCreateResult').classList.remove('hidden');
       document.getElementById('saCreateFoot').innerHTML =
-        `<button class="btn btn-cobalt" onclick="flashAndReload('${t('w_sa_clinic_created')}')">${t('w_ok_understood')}</button>`;
+        `<button class="btn btn-cobalt" onclick="flashAndReload('Клиника создана')">Понятно</button>`;
     } else {
       const box = document.getElementById('saCreateError');
-      box.textContent = (payload && payload.error) || t('w_save_failed');
+      box.textContent = (payload && payload.error) || 'Не удалось сохранить';
       box.classList.remove('hidden');
     }
   };
@@ -348,12 +474,6 @@
       `<option value="${k}" ${k===c.timezone?'selected':''}>${l}</option>`).join('');
     document.getElementById('sae-tariff').innerHTML = SA.tariffChoices.map(([k,l])=>
       `<option value="${k}" ${k===c.tariffPlan?'selected':''}>${l}</option>`).join('');
-    // Пусто в enabledModules = «все модули включены» (та же семантика, что и
-    // в старом интерфейсе — apps/settings_clinic/context_processors.py,
-    // ClinicSettings.module_enabled): показываем ВСЕ галочки отмеченными,
-    // а не пустыми — иначе супер-админ увидит «ничего не включено» вместо
-    // реального «ограничений нет», и случайно урежет клинику, сняв всего
-    // одну лишнюю галочку.
     const allChecked = c.enabledModules.length === 0;
     document.getElementById('saeModules').innerHTML = SA.allModules.map(([k,l])=>
       `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;cursor:pointer;">
@@ -371,16 +491,16 @@
         <input type="checkbox" name="sae-blocked" value="${k}" ${c.blockedFeatures.includes(k)?'checked':''}>${l}</label>`).join('');
     document.getElementById('saeBranches').innerHTML = c.branches.length ? c.branches.map(b=>`
       <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--mist-line);border-radius:8px;padding:6px 10px;font-size:12.5px;">
-        <span>${b.name}${b.isMain?` <span class="pill grey">${t('w_sa_main_branch')}</span>`:''} ${b.isActive?`<span class="pill teal">${t('w_sa_active')}</span>`:`<span class="pill coral">${t('w_sa_blocked')}</span>`}</span>
-        <button class="btn btn-ghost btn-sm" onclick="saToggleBranch(${b.id})">${b.isActive?t('w_sa_block'):t('w_sa_unblock')}</button>
-      </div>`).join('') : `<span style="font-size:12.5px;color:var(--ink-soft);">${t('w_sa_no_branches')}</span>`;
+        <span>${b.name}${b.isMain?` <span class="pill grey">главный</span>`:''} ${b.isActive?`<span class="pill teal">активен</span>`:`<span class="pill coral">заблокирован</span>`}</span>
+        <button class="btn btn-ghost btn-sm" onclick="saToggleBranch(${b.id})">${b.isActive?'Заблокировать':'Разблокировать'}</button>
+      </div>`).join('') : `<span style="font-size:12.5px;color:var(--ink-soft);">Филиалов нет</span>`;
     document.getElementById('saeLoginEvents').innerHTML = c.loginEvents.length ? c.loginEvents.map(e=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--mist-line);">
         <span>${e.at} · ${e.user} · <span style="font-family:monospace;">${e.ip}</span> ${e.success?'✅':'❌'}</span>
-        ${e.ip!=='—' ? `<button class="btn btn-ghost btn-sm" onclick="saBlockIpQuick('${e.ip}')">${t('w_sa_block')}</button>` : ''}
-      </div>`).join('') : `<span>${t('w_sa_no_login_events')}</span>`;
+        ${e.ip!=='—' ? `<button class="btn btn-ghost btn-sm" onclick="saBlockIpQuick('${e.ip}')">Заблокировать</button>` : ''}
+      </div>`).join('') : `<span>Входов ещё не было</span>`;
     const activeBtn = document.getElementById('saeToggleActiveBtn');
-    activeBtn.textContent = c.isActive ? t('w_sa_block_clinic') : t('w_sa_unblock_clinic');
+    activeBtn.textContent = c.isActive ? 'Заблокировать клинику' : 'Разблокировать клинику';
     activeBtn.style.color = c.isActive ? 'var(--coral)' : 'var(--teal)';
     openModal('m-sa-edit');
   };
@@ -393,25 +513,21 @@
     if(!saCurrentId) return;
     const c = SA.clinics.find(x=>x.id===saCurrentId);
     if(c && c.isActive){
-      // Блокируем — причина указывается в отдельной модалке (шаблоны +
-      // свой текст), клиника увидит её на странице «Запросить доступ»
-      // вместо простого «недоступна».
       saOpenBlockReason('clinic', {id: saCurrentId});
       return;
     }
-    // Разблокируем — причина не нужна, действие мгновенное.
     const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, new FormData());
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+    if(res.redirected){ flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
   };
 
   window.saToggleBranch = async function(id){
     const res = await postForm(`/users/branches/${id}/toggle-active/`, new FormData());
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+    if(res.redirected){ flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
   };
 
   window.saToggleChannel = async function(id, channel){
     await postForm(`/users/clinic/${id}/channel-toggle/${channel}/`, new FormData());
-    showToast(t('w_saved'));
+    showToast('Сохранено');
   };
 
   window.saSaveEdit = async function(){
@@ -433,8 +549,8 @@
     document.querySelectorAll('input[name="sae-blocked"]:checked').forEach(cb=>fdBlocked.append('blocked', cb.value));
     const resBlocked = await postForm(`/users/clinic/${saCurrentId}/blocked-features/`, fdBlocked);
 
-    if(resUpdate.redirected && resAccess.redirected && resBlocked.redirected){ flashAndReload(t('w_saved')); }
-    else { showToast(t('w_save_failed'), 'error'); }
+    if(resUpdate.redirected && resAccess.redirected && resBlocked.redirected){ flashAndReload('Сохранено'); }
+    else { showToast('Не удалось сохранить', 'error'); }
   };
 
   window.saEnterClinic = function(){ if(saCurrentId) saEnterClinicById(saCurrentId); };
@@ -447,9 +563,188 @@
     location.href = '/new/';
   };
 
+  // ── Лента событий (Аудит-центр) ─────────────────────────────────────
+  const SA_CATS = [
+    {key:'all', label:'Все'},
+    {key:'login', label:'Входы'},
+    {key:'change', label:'Изменения'},
+    {key:'delete', label:'Удаления'},
+    {key:'deny', label:'Отказы'},
+    {key:'view', label:'Просмотры'},
+  ];
+  const CAT_LABELS = {login:'Вход', change:'Изменение', delete:'Удаление', deny:'Отказ', view:'Просмотр'};
+  const CAT_PILL = {login:'teal', change:'cobalt', delete:'coral', deny:'coral', view:'grey'};
+  let saFeedState = {category:'all', dateFrom:'', dateTo:'', search:'', page:1};
+
+  function saRenderCatTabs(){
+    document.getElementById('saCatTabs').innerHTML = SA_CATS.map(c=>
+      `<button type="button" class="btn btn-sm ${c.key===saFeedState.category?'btn-cobalt':'btn-ghost'}" onclick="saFeedSetCategory('${c.key}')">${c.label}</button>`
+    ).join('');
+  }
+  window.saFeedSetCategory = function(key){
+    saFeedState.category = key; saFeedState.page = 1; saRenderCatTabs(); saLoadFeed();
+  };
+
+  function saFeedParams(){
+    const p = new URLSearchParams();
+    p.set('category', saFeedState.category);
+    if(saFeedState.dateFrom) p.set('date_from', saFeedState.dateFrom);
+    if(saFeedState.dateTo) p.set('date_to', saFeedState.dateTo);
+    if(saFeedState.search) p.set('search', saFeedState.search);
+    p.set('page', saFeedState.page);
+    return p;
+  }
+
+  window.saLoadFeed = async function(){
+    const p = saFeedParams();
+    document.getElementById('saExportLink').href = '/new/superadmin/export/?' + p.toString();
+    let data;
+    try{
+      const res = await fetch('/new/superadmin/feed/?' + p.toString());
+      data = await res.json();
+    }catch(e){
+      showToast('Не удалось загрузить ленту событий', 'error');
+      return;
+    }
+    saRenderFeedRows(data.rows || []);
+    saRenderFeedMetrics(data.metrics || {});
+    document.getElementById('saFeedTotalLabel').textContent = `Всего: ${data.total ?? 0}`;
+    document.getElementById('saFeedPageLabel').textContent = `${data.page ?? 1} из ${data.num_pages ?? 1}`;
+  };
+
+  window.saFeedPage = function(delta){
+    const next = saFeedState.page + delta;
+    if(next < 1) return;
+    saFeedState.page = next;
+    saLoadFeed();
+  };
+
+  function saRenderFeedRows(rows){
+    const body = document.getElementById('saFeedTableBody');
+    if(!rows.length){ body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Событий нет</td></tr>`; return; }
+    body.innerHTML = rows.map(r=>`
+      <tr class="clickable" onclick="saOpenEventDetail('${r.id}')">
+        <td style="white-space:nowrap;font-size:12px;color:var(--ink-soft);">${r.created_at}</td>
+        <td>${r.actor_label}</td>
+        <td><span class="pill ${CAT_PILL[r.category]||'grey'}">${CAT_LABELS[r.category]||r.category}</span> ${r.action_label}</td>
+        <td class="mono" style="font-size:11.5px;">${r.object_repr}</td>
+        <td class="mono" style="font-size:11.5px;">${r.ip}</td>
+        <td>${r.result==='success'?'✅':'❌'}</td>
+      </tr>`).join('');
+  }
+
+  function saRenderFeedMetrics(m){
+    const setKpi = (id, val, deltaId, pct) => {
+      const b = document.getElementById(id);
+      if(b) b.textContent = (val ?? '—');
+      if(deltaId){
+        const d = document.getElementById(deltaId);
+        if(d){
+          d.textContent = (pct===null || pct===undefined) ? '' : `${pct>=0?'+':''}${pct}%`;
+          d.className = 'kpi-delta ' + (pct>0?'up':(pct<0?'down':''));
+        }
+      }
+    };
+    setKpi('kpiEventsToday', m.events_today, 'kpiEventsDelta', m.events_pct);
+    setKpi('kpiDenialsToday', m.denials_today, 'kpiDenialsDelta', m.denials_pct);
+    setKpi('kpiPendingDeletions', m.pending_deletions);
+    setKpi('kpiBlockedIps', m.blocked_ips);
+  }
+
+  window.saOpenEventDetail = async function(id){
+    const card = document.getElementById('saDetailCard');
+    card.innerHTML = `<div style="text-align:center;color:var(--ink-soft);padding:24px 0;">Загрузка…</div>`;
+    let d;
+    try{
+      const res = await fetch(`/new/superadmin/event/${encodeURIComponent(id)}/`);
+      if(!res.ok){ card.innerHTML = `<div style="color:var(--coral);font-size:12.5px;">Событие не найдено</div>`; return; }
+      d = await res.json();
+    }catch(e){
+      card.innerHTML = `<div style="color:var(--coral);font-size:12.5px;">Не удалось загрузить</div>`;
+      return;
+    }
+    const diffHtml = (d.diff||[]).map(c=>`
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;margin-bottom:4px;">${c.field}</div>
+        <div class="sa-diff-old">− ${c.old ?? '—'}</div>
+        <div class="sa-diff-new">+ ${c.new ?? '—'}</div>
+      </div>`).join('') || `<p style="color:var(--ink-soft);font-size:12.5px;">Изменений нет</p>`;
+    const row = (label, value) => `<div class="sa-detail-row"><span>${label}</span><span>${value}</span></div>`;
+    card.innerHTML = `
+      <h3 style="margin-bottom:2px;font-size:15px;">${d.action_label}</h3>
+      <div class="mono" style="font-size:11px;color:var(--ink-soft);margin-bottom:12px;">${id}</div>
+      ${row('Время', d.created_at)}
+      ${row('Актор', d.actor_label + (d.actor_role ? ' · ' + d.actor_role : ''))}
+      ${row('Объект', `<span class="mono">${d.object_repr}</span>`)}
+      ${row('IP', `<span class="mono">${d.ip}</span>`)}
+      ${row('Геолокация', d.geo || '—')}
+      ${row('Устройство', d.device || '—')}
+      ${row('Результат', d.result)}
+      <h4 style="margin:14px 0 8px;font-size:11.5px;color:var(--ink-soft);letter-spacing:.03em;">ИЗМЕНЕНИЯ</h4>
+      ${diffHtml}
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px;">
+        ${d.open_user_url ? `<a class="btn btn-ghost btn-sm" href="${d.open_user_url}">Открыть карточку пользователя</a>` : ''}
+        ${d.ip && d.ip !== '—' ? `<button class="btn btn-danger btn-sm" onclick="saOpenBlockReason('ip',{ip:'${d.ip}'})">Заблокировать этот IP</button>` : ''}
+      </div>`;
+  };
+
+  document.getElementById('saFeedDateFrom').addEventListener('change', e=>{ saFeedState.dateFrom=e.target.value; saFeedState.page=1; saLoadFeed(); });
+  document.getElementById('saFeedDateTo').addEventListener('change', e=>{ saFeedState.dateTo=e.target.value; saFeedState.page=1; saLoadFeed(); });
+  let saSearchTimer=null;
+  document.getElementById('saFeedSearch').addEventListener('input', e=>{
+    clearTimeout(saSearchTimer);
+    saSearchTimer = setTimeout(()=>{ saFeedState.search=e.target.value; saFeedState.page=1; saLoadFeed(); }, 350);
+  });
+  saRenderCatTabs();
+
+  // ── Пользователи (кросс-клиниково) ──────────────────────────────────
+  let saUsersState = {search:'', page:1};
+
+  window.saLoadUsers = async function(){
+    const p = new URLSearchParams();
+    if(saUsersState.search) p.set('search', saUsersState.search);
+    p.set('page', saUsersState.page);
+    let data;
+    try{
+      const res = await fetch('/new/superadmin/users/?'+p.toString());
+      data = await res.json();
+    }catch(e){
+      showToast('Не удалось загрузить список пользователей', 'error');
+      return;
+    }
+    const body = document.getElementById('saUsersTableBody');
+    const rows = data.rows || [];
+    body.innerHTML = rows.length ? rows.map(u=>`
+      <tr>
+        <td><b>${u.name}</b><div style="font-size:11px;color:var(--ink-soft);">${u.login}</div></td>
+        <td>${u.role}</td>
+        <td>${u.clinicName}</td>
+        <td>${u.phone||'—'}</td>
+        <td>${u.isActive?'<span class="pill teal">Активен</span>':'<span class="pill coral">Отключён</span>'}</td>
+        <td>${u.clinicId ? `<a class="btn btn-ghost btn-sm" href="/users/clinic/${u.clinicId}/overview/">Обзор клиники</a>` : ''}</td>
+      </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Никого не найдено</td></tr>`;
+    document.getElementById('saUsersTotalLabel').textContent = `Всего: ${data.total ?? 0}`;
+    document.getElementById('saUsersPageLabel').textContent = `${data.page ?? 1} из ${data.num_pages ?? 1}`;
+  };
+
+  window.saUsersPage = function(delta){
+    const next = saUsersState.page + delta;
+    if(next < 1) return;
+    saUsersState.page = next;
+    saLoadUsers();
+  };
+
+  let saUsersSearchTimer=null;
+  document.getElementById('saUsersSearch').addEventListener('input', e=>{
+    clearTimeout(saUsersSearchTimer);
+    saUsersSearchTimer = setTimeout(()=>{ saUsersState.search=e.target.value; saUsersState.page=1; saLoadUsers(); }, 350);
+  });
+
   renderSaTable();
   renderSaRequests();
   renderSaBlockedIps();
+  saLoadFeed();
+  saFeedLoaded = true;
 })();
 </script>
 {% endblock %}
