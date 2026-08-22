@@ -2143,6 +2143,8 @@ def _newui_superadmin_data():
         blocked_ips = [{
             "id": b.pk, "ip": b.ip_address, "note": b.note,
             "at": b.created_at.strftime("%d.%m.%Y %H:%M"),
+            "expiresAt": b.expires_at.strftime("%d.%m.%Y %H:%M") if b.expires_at else "",
+            "isActive": b.is_active_block,
         } for b in BlockedIP.objects.all().order_by("-created_at")]
     return {
         "clinics": clinics,
@@ -2156,12 +2158,14 @@ def _newui_superadmin_data():
     }
 
 
-def _create_clinic(cname, alogin, apass, admin_name, do_seed):
+def _create_clinic(cname, alogin, apass, admin_name, do_seed, request=None):
     """Создать клинику + первого администратора (admin_main) + главный филиал
     + (опционально) демо-данные. Общая логика для superadmin_panel (форма
     старого интерфейса) и newui_clinic_create (JSON, новый интерфейс) — не
     дублируем её в двух местах. Поднимает ValueError с текстом для
-    пользователя при невалидном вводе (пустые поля/занятый логин)."""
+    пользователя при невалидном вводе (пустые поля/занятый логин).
+    `request` — необязателен, нужен только для события в Аудит-центре
+    (актор/IP), не влияет на саму логику создания."""
     from apps.tenancy import set_current_clinic, clear_current_clinic
     from apps.services.seed_data import seed_dental
     from django.utils.text import slugify
@@ -2189,6 +2193,13 @@ def _create_clinic(cname, alogin, apass, admin_name, do_seed):
         seed_result = seed_dental() if do_seed else None
     finally:
         clear_current_clinic()
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_create", category="change",
+        actor=getattr(request, "user", None), request=request,
+        clinic=new_clinic, object_model="clinic", object_id=new_clinic.pk,
+        object_repr=f"clinic/{new_clinic.slug}",
+    )
     return new_clinic, au, seed_result
 
 
@@ -2213,7 +2224,7 @@ def superadmin_panel(request):
             admin_name = request.POST.get("clinic_admin_name") or ""
             do_seed = request.POST.get("clinic_seed", "1") != "0"
             try:
-                new_clinic, au, res = _create_clinic(cname, alogin, apass, admin_name, do_seed)
+                new_clinic, au, res = _create_clinic(cname, alogin, apass, admin_name, do_seed, request=request)
             except ValueError as e:
                 messages.error(request, str(e))
                 return redirect("superadmin_panel")
@@ -2447,7 +2458,7 @@ def recycle_restore(request, kind, pk):
     if kind in models:
         Model = models[kind][0]
         obj = get_object_or_404(_recycle_qs(Model), pk=pk)
-        obj.restore()
+        obj.restore(user=request.user)
         messages.success(request, _("Восстановлено: %(t)s") % {"t": str(obj)})
     return redirect("recycle_bin")
 
@@ -2494,11 +2505,18 @@ def recycle_purge(request, kind, pk):
         Model = models[kind][0]
         obj = get_object_or_404(_recycle_qs(Model), pk=pk)
         title = str(obj)
+        obj_pk, obj_clinic = obj.pk, getattr(obj, "clinic", None)
         try:
             if kind == "patient" and hasattr(obj, "purge_with_related"):
                 obj.purge_with_related()   # каскадно: приёмы, платежи, планы и т.д.
             else:
                 obj.delete()   # безвозвратно
+            from .audit import log_audit_event
+            log_audit_event(
+                action="purge", category="delete", actor=request.user, request=request,
+                clinic=obj_clinic, object_model=kind, object_id=obj_pk,
+                object_repr=f"{kind}/{obj_pk} — {title}",
+            )
             messages.success(request, _("Удалено безвозвратно: %(t)s") % {"t": title})
         except ProtectedError:
             messages.error(request, _("Нельзя удалить «%(t)s»: есть связанные записи.") % {"t": title})
@@ -2627,8 +2645,16 @@ def toggle_clinic_site(request, clinic_id):
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
+    was_enabled = site.enabled
     site.enabled = not site.enabled
     site.save(update_fields=["enabled"])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="site_toggle", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinicsite", object_id=site.pk,
+        object_repr=f"clinic/{clinic.slug} — публичный сайт",
+        diff=[{"field": "enabled", "old": str(was_enabled), "new": str(site.enabled)}],
+    )
     messages.success(request, _("Публичный сайт %(s)s") % {
         "s": "включён" if site.enabled else "выключен"})
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
@@ -2648,8 +2674,16 @@ def toggle_clinic_channel(request, clinic_id, channel):
     field = {"wa": "wa_master_enabled", "tg": "telegram_master_enabled"}.get(channel)
     if not field:
         return redirect(request.META.get("HTTP_REFERER") or "/")
-    setattr(clinic, field, not getattr(clinic, field))
+    was = getattr(clinic, field)
+    setattr(clinic, field, not was)
     clinic.save(update_fields=[field])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="channel_toggle", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug} — {field}",
+        diff=[{"field": field, "old": str(was), "new": str(getattr(clinic, field))}],
+    )
     label = "WhatsApp" if channel == "wa" else "Telegram"
     state = "включён" if getattr(clinic, field) else "выключен"
     messages.success(request, _("%(label)s для клиники %(state)s") % {"label": label, "state": state})
@@ -2668,6 +2702,8 @@ def clinic_update(request, clinic_id):
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
+    tracked_fields = ["name", "slug", "timezone", "tariff_plan", "tariff_until", "enabled_modules"]
+    before = {f: getattr(clinic, f) for f in tracked_fields}
     name = request.POST.get("name", "").strip()
     if name:
         clinic.name = name
@@ -2688,6 +2724,16 @@ def clinic_update(request, clinic_id):
         clinic.tariff_until = None
     clinic.enabled_modules = request.POST.getlist("modules")
     clinic.save(update_fields=["name", "slug", "timezone", "tariff_plan", "tariff_until", "enabled_modules"])
+    from .audit import log_audit_event
+    diff = [
+        {"field": f, "old": str(before[f]), "new": str(getattr(clinic, f))}
+        for f in tracked_fields if before[f] != getattr(clinic, f)
+    ]
+    log_audit_event(
+        action="clinic_update", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug}", diff=diff,
+    )
     messages.success(request, _("Клиника «%(n)s» обновлена") % {"n": clinic.name})
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
@@ -2702,10 +2748,19 @@ def clinic_set_access(request, clinic_id):
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
+    before = clinic.granted_access or []
     valid_keys = {key for key, _label in Clinic.GRANTABLE_ACCESS}
     selected = set(request.POST.getlist("access")) & valid_keys
     clinic.granted_access = sorted(selected)
     clinic.save(update_fields=["granted_access"])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_access_grant", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug}",
+        diff=[{"field": "granted_access", "old": ", ".join(before) or "—",
+               "new": ", ".join(clinic.granted_access) or "—"}],
+    )
     messages.success(request, _("Доступы клиники «%(n)s» обновлены") % {"n": clinic.name})
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
@@ -2722,14 +2777,24 @@ def clinic_toggle_active(request, clinic_id):
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
+    was_active = clinic.is_active
     clinic.is_active = not clinic.is_active
     update_fields = ["is_active"]
+    diff = [{"field": "is_active", "old": str(was_active), "new": str(clinic.is_active)}]
     if not clinic.is_active:
         # Причину указывает супер-админ в момент блокировки — клиника увидит
         # её на /access-request/ вместо простого «недоступна».
         clinic.blocked_reason = request.POST.get("reason", "").strip()
         update_fields.append("blocked_reason")
+        diff.append({"field": "blocked_reason", "old": "—", "new": clinic.blocked_reason or "—"})
     clinic.save(update_fields=update_fields)
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_block" if not clinic.is_active else "clinic_unblock",
+        category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug}", diff=diff,
+    )
     state = _("разблокирована") if clinic.is_active else _("заблокирована")
     messages.success(request, _("Клиника «%(n)s» %(s)s") % {"n": clinic.name, "s": state})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
@@ -2745,10 +2810,19 @@ def clinic_set_blocked_features(request, clinic_id):
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
     clinic = get_object_or_404(Clinic, pk=clinic_id)
+    before = clinic.blocked_features or []
     valid_keys = {key for key, _label in Clinic.BLOCKABLE_FEATURES}
     selected = set(request.POST.getlist("blocked")) & valid_keys
     clinic.blocked_features = sorted(selected)
     clinic.save(update_fields=["blocked_features"])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_feature_block", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug}",
+        diff=[{"field": "blocked_features", "old": ", ".join(before) or "—",
+               "new": ", ".join(clinic.blocked_features) or "—"}],
+    )
     messages.success(request, _("Заблокированные функции клиники «%(n)s» обновлены") % {"n": clinic.name})
     return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
 
@@ -2757,16 +2831,44 @@ def clinic_set_blocked_features(request, clinic_id):
 @require_POST
 def block_ip(request):
     """Заблокировать IP от входа в систему (глобально, не привязано к одной
-    клинике) — только супер-админ. См. apps.users.forms.LoginForm.clean()."""
+    клинике) — только супер-админ. См. apps.users.forms.LoginForm.clean()
+    и apps.tenancy.BlockedIPMiddleware.
+
+    duration_days — необязательное число дней действия блокировки (1/7/30
+    и т.п.), пусто/отсутствует = бессрочно (BlockedIP.expires_at=None).
+    update_or_create (не get_or_create, как было раньше) — повторная
+    блокировка уже заблокированного IP реально применяет новые срок/причину,
+    а не тихо игнорируется."""
     from apps.users.models import BlockedIP
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
     ip = request.POST.get("ip_address", "").strip()
     if ip:
-        BlockedIP.objects.get_or_create(
+        from django.utils import timezone
+        expires_at = None
+        duration_raw = request.POST.get("duration_days", "").strip()
+        if duration_raw:
+            try:
+                days = int(duration_raw)
+                if days > 0:
+                    expires_at = timezone.now() + timezone.timedelta(days=days)
+            except ValueError:
+                pass
+        note = request.POST.get("note", "").strip()
+        BlockedIP.objects.update_or_create(
             ip_address=ip,
-            defaults={"note": request.POST.get("note", "").strip(), "blocked_by": request.user},
+            defaults={"note": note, "blocked_by": request.user, "expires_at": expires_at},
+        )
+        from .audit import log_audit_event
+        log_audit_event(
+            action="ip_block", category="change", actor=request.user, request=request,
+            object_model="blockedip", object_id=ip, object_repr=f"ip_rule/{ip}",
+            diff=[
+                {"field": "status", "old": "allowed", "new": "blocked"},
+                {"field": "expires_at", "old": "—",
+                 "new": expires_at.strftime("%d.%m.%Y %H:%M") if expires_at else "бессрочно"},
+            ],
         )
         messages.success(request, _("IP %(ip)s заблокирован") % {"ip": ip})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
@@ -2780,7 +2882,16 @@ def unblock_ip(request, pk):
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
         return redirect(request.META.get("HTTP_REFERER") or "/")
-    BlockedIP.objects.filter(pk=pk).delete()
+    blocked = BlockedIP.objects.filter(pk=pk).first()
+    if blocked is not None:
+        ip = blocked.ip_address
+        blocked.delete()
+        from .audit import log_audit_event
+        log_audit_event(
+            action="ip_unblock", category="change", actor=request.user, request=request,
+            object_model="blockedip", object_id=ip, object_repr=f"ip_rule/{ip}",
+            diff=[{"field": "status", "old": "blocked", "new": "allowed"}],
+        )
     messages.success(request, _("IP разблокирован"))
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
 
@@ -2822,8 +2933,16 @@ def branch_toggle_active(request, pk):
         # Branch.all_clinics — немодифицированный менеджер ClinicScopedModel,
         # видит записи всех клиник без фильтрации.
         branch = get_object_or_404(Branch.all_clinics, pk=pk)
+        was_active = branch.is_active
         branch.is_active = not branch.is_active
         branch.save(update_fields=["is_active"])
+        from .audit import log_audit_event
+        log_audit_event(
+            action="branch_toggle", category="change", actor=request.user, request=request,
+            clinic=branch.clinic, object_model="branch", object_id=branch.pk,
+            object_repr=f"branch/{branch.pk} — {branch.name}",
+            diff=[{"field": "is_active", "old": str(was_active), "new": str(branch.is_active)}],
+        )
     state = _("разблокирован") if branch.is_active else _("заблокирован")
     messages.success(request, _("Филиал «%(n)s» %(s)s") % {"n": branch.name, "s": state})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
@@ -3543,9 +3662,15 @@ def staff_purge(request, pk):
     if not _can_manage_access(request.user, user):
         messages.error(request, _("Нет прав удалять этого сотрудника"))
         return redirect(request.META.get("HTTP_REFERER") or "staff_list")
-    name = user.name
+    name, user_pk, user_clinic = user.name, user.pk, user.clinic
     try:
         user.delete()
+        from .audit import log_audit_event
+        log_audit_event(
+            action="purge", category="delete", actor=request.user, request=request,
+            clinic=user_clinic, object_model="user", object_id=user_pk,
+            object_repr=f"user/{user_pk} — {name}",
+        )
         messages.success(request, _("Сотрудник «%(n)s» удалён") % {"n": name})
     except ProtectedError:
         if user.is_active:
@@ -4014,9 +4139,9 @@ def schedule_edit(request, pk):
 
 
 # ─── АУДИТ-ЦЕНТР (только для владельца/суперадмина) ─────────────────────────
-
-# Поля, которые не несут смысла в диффе (служебные/технические) — не показываем.
-_AUDIT_DIFF_SKIP_FIELDS = {"updated_at", "id"}
+# Diff-логика (build_rows) вынесена в apps.users.audit.build_history_rows —
+# ей же пользуется новая платформенная лента /new/superadmin/ (см. план
+# «Аудит-центр»), чтобы не дублировать код между двумя страницами.
 
 
 def _ru_plural(n, one, few, many):
@@ -4040,35 +4165,14 @@ def audit_center(request):
     from apps.treatments.models import Treatment
     from .models import AuditRevert
 
+    from .audit import build_history_rows
+
     HP = Patient.history.model
     HT = Treatment.history.model
-    type_label = {"+": "Создание", "~": "Изменение", "-": "Удаление"}
 
-    def build_rows(qs, model_key, model_label, title_fn):
-        out = []
-        for h in qs.select_related("history_user").order_by("-history_date")[:150]:
-            prev = h.prev_record
-            diff = []
-            if prev:
-                delta = h.diff_against(prev)
-                diff = [
-                    {"field": c.field, "old": c.old, "new": c.new}
-                    for c in delta.changes if c.field not in _AUDIT_DIFF_SKIP_FIELDS
-                ]
-            out.append({
-                "model": model_key, "model_label": model_label, "obj_id": h.id,
-                "title": title_fn(h),
-                "type": type_label.get(h.history_type, h.history_type),
-                "raw_type": h.history_type,
-                "user": h.history_user.name if h.history_user else "—",
-                "date": h.history_date, "hid": h.history_id,
-                "diff": diff,
-            })
-        return out
-
-    rows = build_rows(HP.objects.all(), "patient", "Пациент",
-                       lambda h: f"{h.last_name} {h.first_name}".strip() or f"#{h.id}")
-    rows += build_rows(HT.objects.all(), "treatment", "Приём", lambda h: f"Приём #{h.id}")
+    rows = build_history_rows(HP.objects.all(), "patient", "Пациент",
+                               lambda h: f"{h.last_name} {h.first_name}".strip() or f"#{h.id}")
+    rows += build_history_rows(HT.objects.all(), "treatment", "Приём", lambda h: f"Приём #{h.id}")
     rows.sort(key=lambda r: r["date"], reverse=True)
     recent_rows = rows[:5]
 

@@ -2396,6 +2396,267 @@ class NewUISuperadminTestCase(TestCase):
         self.assertTrue(Clinic.objects.filter(name="Клиника из старого интерфейса").exists())
 
 
+class AuditEventLoggingTestCase(TestCase):
+    """Мутации супер-админа и мягкое удаление (apps.tenancy.
+    ClinicSoftDeleteModel.soft_delete) пишут AuditEvent — единый источник
+    «Ленты событий» /new/superadmin/ (см. apps.users.audit.log_audit_event)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Аудит", slug="clinic-audit-evt")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.superadmin = User.objects.create(login="ae_super", name="Супер AE", role=self.superadmin_role)
+        self.client = Client()
+        self.client.force_login(self.superadmin)
+
+    def test_block_ip_writes_event_with_diff(self):
+        from apps.users.models import AuditEvent
+        self.client.post("/users/block-ip/", {"ip_address": "1.2.3.4", "note": "тест", "duration_days": "7"})
+        evt = AuditEvent.objects.filter(action="ip_block").first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.object_repr, "ip_rule/1.2.3.4")
+        self.assertEqual(evt.actor_id, self.superadmin.pk)
+        fields = {c["field"] for c in evt.diff}
+        self.assertIn("status", fields)
+        self.assertIn("expires_at", fields)
+
+    def test_unblock_ip_writes_event(self):
+        from apps.users.models import AuditEvent, BlockedIP
+        b = BlockedIP.objects.create(ip_address="8.8.4.4", blocked_by=self.superadmin)
+        self.client.post(f"/users/block-ip/{b.pk}/unblock/")
+        evt = AuditEvent.objects.filter(action="ip_unblock").first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.object_repr, "ip_rule/8.8.4.4")
+
+    def test_clinic_toggle_active_writes_event(self):
+        from apps.users.models import AuditEvent
+        self.client.post(f"/users/clinic/{self.clinic.pk}/toggle-active/", {"reason": "тест блок"})
+        evt = AuditEvent.objects.filter(action="clinic_block", clinic=self.clinic).first()
+        self.assertIsNotNone(evt)
+        self.assertTrue(any(c["field"] == "is_active" for c in evt.diff))
+
+    def test_soft_delete_writes_event(self):
+        from apps.users.models import AuditEvent
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        set_current_clinic(self.clinic)
+        try:
+            p = Patient.objects.create(first_name="Тест", last_name="Пациентов", phone="+996700000001",
+                                        branch=self.branch)
+        finally:
+            clear_current_clinic()
+        p.soft_delete(user=self.superadmin)
+        evt = AuditEvent.objects.filter(action="soft_delete", object_model="patient", object_id=str(p.pk)).first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.actor_id, self.superadmin.pk)
+        self.assertEqual(evt.diff, [{"field": "is_deleted", "old": "Нет", "new": "Да"}])
+
+
+class BlockedIPExpiryTestCase(TestCase):
+    """BlockedIP.expires_at — блокировка со сроком перестаёт действовать
+    после истечения, проверяется в ДВУХ местах: apps.users.forms.
+    LoginForm.clean() (новый вход) и apps.tenancy.BlockedIPMiddleware
+    (каждый запрос уже вошедшего)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Экспайр", slug="clinic-ip-expiry")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.user = User.objects.create(
+            login="ipexp_user", name="Юзер Экспайр", role=self.admin_role, clinic=self.clinic,
+        )
+        self.user.set_password("pass1234")
+        self.user.save()
+
+    def test_expired_block_does_not_block_login(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="1.1.1.1", expires_at=timezone.now() - timedelta(hours=1))
+        resp = self.client.post("/login/", {"login": "ipexp_user", "password": "pass1234"},
+                                 REMOTE_ADDR="1.1.1.1")
+        self.assertEqual(resp.status_code, 302)  # успешный вход — редирект, не форма с ошибкой
+
+    def test_active_block_still_blocks_login(self):
+        """apps.tenancy.BlockedIPMiddleware проверяет КАЖДЫЙ запрос (включая
+        сам POST /login/) раньше, чем запрос доходит до LoginForm.clean() —
+        поэтому реальный ответ здесь 403 от миддлвари, не форма с ошибкой
+        (LoginForm.clean() — эта же проверка, но как защита на случай, если
+        когда-нибудь появится путь к authenticate() в обход миддлвари)."""
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="2.2.2.2", expires_at=timezone.now() + timedelta(hours=1))
+        resp = self.client.post("/login/", {"login": "ipexp_user", "password": "pass1234"},
+                                 REMOTE_ADDR="2.2.2.2")
+        self.assertEqual(resp.status_code, 403)
+        self.assertContains(resp, "заблокирован", status_code=403)
+
+    def test_login_form_itself_respects_expiry(self):
+        """Проверка LoginForm.clean() напрямую (в обход BlockedIPMiddleware,
+        который в реальном запросе перехватывает раньше) — обе точки
+        проверки expires_at должны быть исправлены независимо, см.
+        apps.users.forms.LoginForm.clean()."""
+        from datetime import timedelta
+        from django.test import RequestFactory
+        from django.utils import timezone
+        from apps.users.forms import LoginForm
+        from apps.users.models import BlockedIP
+
+        BlockedIP.objects.create(ip_address="9.1.1.1", expires_at=timezone.now() - timedelta(hours=1))
+        req = RequestFactory().post("/login/", REMOTE_ADDR="9.1.1.1")
+        form = LoginForm(request=req, data={"login": "ipexp_user", "password": "pass1234"})
+        self.assertTrue(form.is_valid(), form.errors)
+
+        BlockedIP.objects.create(ip_address="9.2.2.2", expires_at=timezone.now() + timedelta(hours=1))
+        req2 = RequestFactory().post("/login/", REMOTE_ADDR="9.2.2.2")
+        form2 = LoginForm(request=req2, data={"login": "ipexp_user", "password": "pass1234"})
+        self.assertFalse(form2.is_valid())
+
+    def test_expired_block_does_not_log_out_active_session(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="3.3.3.3", expires_at=timezone.now() - timedelta(hours=1))
+        self.client.force_login(self.user)
+        resp = self.client.get("/new/", REMOTE_ADDR="3.3.3.3")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.wsgi_request.user.is_authenticated)
+
+    def test_active_block_logs_out_active_session(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="4.4.4.4", expires_at=timezone.now() + timedelta(hours=1))
+        self.client.force_login(self.user)
+        resp = self.client.get("/new/", REMOTE_ADDR="4.4.4.4")
+        self.assertEqual(resp.status_code, 403)
+
+
+class SuperadminAuditFeedTestCase(TestCase):
+    """/new/superadmin/feed/, /event/<id>/, /export/, /users/ — новые
+    AJAX-эндпоинты «Аудит-центра» (см. apps.users.audit.superadmin_audit_feed)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Лента", slug="clinic-feed")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="feed_director", name="Директор Лента", role=self.admin_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="feed_super", name="Супер Лента", role=self.superadmin_role,
+        )
+        self.client = Client()
+
+    def test_feed_requires_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/superadmin/feed/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_users_requires_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/superadmin/users/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_export_requires_superadmin(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/superadmin/export/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_feed_merges_ip_block_and_login_denial(self):
+        from apps.users.audit import log_audit_event
+        from apps.users.models import ClinicLoginEvent
+        self.client.force_login(self.superadmin)
+        log_audit_event(action="ip_block", category="change", actor=self.superadmin,
+                         object_model="blockedip", object_id="9.9.9.9", object_repr="ip_rule/9.9.9.9",
+                         diff=[{"field": "status", "old": "allowed", "new": "blocked"}])
+        ClinicLoginEvent.objects.create(user=self.director, clinic=self.clinic, ip_address="5.5.5.5", success=False)
+
+        resp_all = self.client.get("/new/superadmin/feed/?category=all")
+        self.assertEqual(resp_all.status_code, 200)
+        reprs = [r["object_repr"] for r in resp_all.json()["rows"]]
+        self.assertIn("ip_rule/9.9.9.9", reprs)
+
+        resp_change = self.client.get("/new/superadmin/feed/?category=change")
+        self.assertTrue(all(r["category"] == "change" for r in resp_change.json()["rows"]))
+        self.assertIn("ip_rule/9.9.9.9", [r["object_repr"] for r in resp_change.json()["rows"]])
+
+        resp_deny = self.client.get("/new/superadmin/feed/?category=deny")
+        self.assertTrue(all(r["category"] == "deny" for r in resp_deny.json()["rows"]))
+        self.assertIn("5.5.5.5", [r["ip"] for r in resp_deny.json()["rows"]])
+
+    def test_feed_view_category_is_empty_not_fabricated(self):
+        """«Просмотры» — вкладка есть, событий туда нигде не пишем (см.
+        apps.users.audit докстринг) — пустой список, не выдуманные данные."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/feed/?category=view")
+        self.assertEqual(resp.json()["rows"], [])
+
+    def test_feed_search_filters_by_ip(self):
+        from apps.users.audit import log_audit_event
+        self.client.force_login(self.superadmin)
+        log_audit_event(action="ip_block", category="change", actor=self.superadmin,
+                         object_model="blockedip", object_id="7.7.7.7", object_repr="ip_rule/7.7.7.7")
+        log_audit_event(action="ip_block", category="change", actor=self.superadmin,
+                         object_model="blockedip", object_id="6.6.6.6", object_repr="ip_rule/6.6.6.6")
+        resp = self.client.get("/new/superadmin/feed/?search=7.7.7.7")
+        reprs = [r["object_repr"] for r in resp.json()["rows"]]
+        self.assertIn("ip_rule/7.7.7.7", reprs)
+        self.assertNotIn("ip_rule/6.6.6.6", reprs)
+
+    def test_event_detail_returns_diff_and_geo_field(self):
+        from apps.users.audit import log_audit_event
+        from apps.users.models import AuditEvent
+        self.client.force_login(self.superadmin)
+        log_audit_event(action="ip_block", category="change", actor=self.superadmin,
+                         object_model="blockedip", object_id="1.2.3.4", object_repr="ip_rule/1.2.3.4",
+                         diff=[{"field": "status", "old": "allowed", "new": "blocked"}])
+        evt = AuditEvent.objects.get(action="ip_block")
+        resp = self.client.get(f"/new/superadmin/event/evt:{evt.pk}/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["diff"], [{"field": "status", "old": "allowed", "new": "blocked"}])
+        self.assertIn("geo", data)
+
+    def test_event_detail_unknown_id_404(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/event/evt:999999/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_users_lists_staff_across_clinics(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/users/")
+        self.assertEqual(resp.status_code, 200)
+        logins = [u["login"] for u in resp.json()["rows"]]
+        self.assertIn("feed_director", logins)
+
+
+class RecyclePendingCountTestCase(TestCase):
+    """«Удалений в очереди» на плашке ленты — счётчик по ВСЕЙ платформе
+    (все клиники), не только по текущей (в отличие от самой Корзины,
+    apps.users.views._recycle_qs, которая клиника-скоуп)."""
+
+    def test_pending_deletions_counts_across_clinics(self):
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        from apps.users.audit import superadmin_audit_metrics
+
+        c1 = Clinic.objects.create(name="Клиника Корзина 1", slug="clinic-recycle-1")
+        c2 = Clinic.objects.create(name="Клиника Корзина 2", slug="clinic-recycle-2")
+        for c in (c1, c2):
+            b = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=c)
+            set_current_clinic(c)
+            try:
+                p = Patient.objects.create(first_name="Удал", last_name="Пациентов", phone="+996700000002",
+                                            branch=b)
+            finally:
+                clear_current_clinic()
+            p.soft_delete()
+
+        metrics = superadmin_audit_metrics()
+        self.assertGreaterEqual(metrics["pending_deletions"], 2)
+
+
 class ClinicBlockingTestCase(TestCase):
     """Реальная блокировка клиники (Clinic.is_active=False) — мгновенный
     разлогин активных сессий + запрет нового входа, оба ведут на

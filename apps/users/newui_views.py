@@ -416,17 +416,230 @@ def newui_recycle(request):
 
 @login_required
 def newui_superadmin(request):
-    """Супер-админ-панель в новом интерфейсе: список клиник, статистика,
-    переключение/редактирование/доступы — тот же функционал, что и у старого
-    /users/superadmin/ + /users/clinic/<id>/overview/, просто в едином стиле
-    нового интерфейса. Мутации идут через существующие вьюхи старого
-    интерфейса (см. _newui_superadmin_data)."""
+    """Супер-админ-панель нового интерфейса — «2 в 1» (Аудит-центр):
+    вкладка «Лента событий» (платформенный журнал безопасности) + вкладки
+    «Клиники»/«Пользователи»/«Блокировки IP» на одной странице. Раньше это
+    был только список клиник — тот функционал никуда не делся (вкладка
+    «Клиники», тот же _newui_superadmin_data, те же вьюхи-мутации старого
+    интерфейса), просто больше не единственный экран страницы.
+
+    Сама лента/метрики/список пользователей — не встроены в начальный
+    payload (могут быть большими и требуют фильтрации/пагинации), а
+    грузятся по AJAX при открытии вкладки — см. newui_superadmin_feed/
+    newui_superadmin_users, тот же приём, что и у newui_patients_data_json/
+    newui_schedule_data_json для «тяжёлых» списков."""
     from django.contrib import messages
     from django.shortcuts import redirect
     if not request.user.is_superadmin:
         messages.error(request, "Доступ только для суперадмина")
         return redirect("/new/")
-    return _render(request, "superadmin", "superadmin.html", {"superadminData": _newui_superadmin_data()})
+    from .audit import superadmin_audit_metrics
+    return _render(request, "superadmin", "superadmin.html", {
+        "superadminData": _newui_superadmin_data(),
+        "auditMetrics": superadmin_audit_metrics(),
+    })
+
+
+@login_required
+def newui_superadmin_feed(request):
+    """AJAX: страница «Ленты событий» (фильтр по категории/датам/поиску,
+    пагинация) — см. apps.users.audit.superadmin_audit_feed. Дёргается при
+    открытии вкладки и при смене фильтров/странице списка."""
+    from django.http import JsonResponse
+    from datetime import datetime
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from .audit import superadmin_audit_feed, superadmin_audit_metrics
+
+    def _parse_date(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    category = request.GET.get("category", "all")
+    date_from = _parse_date(request.GET.get("date_from", ""))
+    date_to = _parse_date(request.GET.get("date_to", ""))
+    search = request.GET.get("search", "")
+    try:
+        page = int(request.GET.get("page", "1"))
+    except ValueError:
+        page = 1
+    feed = superadmin_audit_feed(category=category, date_from=date_from, date_to=date_to,
+                                  search=search, page=page)
+    for r in feed["rows"]:
+        r["created_at"] = r["created_at"].strftime("%d.%m.%Y %H:%M:%S")
+    return JsonResponse({**feed, "metrics": superadmin_audit_metrics()})
+
+
+@login_required
+def newui_superadmin_event_detail(request, event_id):
+    """AJAX: «Запись аудита» — детальная карточка одного события. IP →
+    геолокация и User-Agent → устройство считаются ТОЛЬКО здесь, по
+    открытию карточки (см. apps.users.geoip/ua_parse), не на каждой строке
+    ленты — сетевой вызов к ip-api.com не должен тормозить список.
+
+    event_id — составной: "evt:<pk>" (AuditEvent), "login:<pk>"
+    (ClinicLoginEvent) или "hist:<model>:<hid>" (simple_history Patient/
+    Treatment) — см. apps.users.audit._event_row/_login_row/_history_row,
+    строящие те же id для строк ленты."""
+    from django.http import JsonResponse
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from .models import AuditEvent, ClinicLoginEvent
+    from .geoip import get_ip_geolocation
+    from .ua_parse import parse_user_agent
+    from .audit import ACTION_LABELS, _AUDIT_DIFF_SKIP_FIELDS
+
+    parts = event_id.split(":")
+    kind = parts[0] if parts else ""
+    data = None
+
+    if kind == "evt" and len(parts) == 2:
+        e = AuditEvent.objects.filter(pk=parts[1]).select_related("actor", "clinic").first()
+        if e:
+            data = {
+                "action_label": ACTION_LABELS.get(e.action, e.action),
+                "created_at": e.created_at.strftime("%d.%m.%Y %H:%M:%S"),
+                "actor_label": e.actor_name or "—",
+                "actor_role": e.actor_role or "",
+                "object_repr": e.object_repr or "—",
+                "ip": e.ip_address or "—",
+                "geo": get_ip_geolocation(e.ip_address) if e.ip_address else None,
+                "device": parse_user_agent(e.user_agent) if e.user_agent else "—",
+                "result": "Успех" if e.result == "success" else "Отказ",
+                "diff": e.diff or [],
+                "open_user_url": (f"/users/{e.object_id}/edit/"
+                                  if e.object_model == "user" and e.object_id else None),
+            }
+    elif kind == "login" and len(parts) == 2:
+        ev = ClinicLoginEvent.objects.filter(pk=parts[1]).select_related("user", "clinic").first()
+        if ev:
+            data = {
+                "action_label": "Вход в систему" if ev.success else "Отказ во входе",
+                "created_at": ev.created_at.strftime("%d.%m.%Y %H:%M:%S"),
+                "actor_label": ev.user.name if ev.user else "—",
+                "actor_role": (ev.user.role_name or "") if ev.user else "",
+                "object_repr": f"user/{ev.user_id}" if ev.user_id else "—",
+                "ip": ev.ip_address or "—",
+                "geo": get_ip_geolocation(ev.ip_address) if ev.ip_address else None,
+                "device": parse_user_agent(ev.user_agent) if ev.user_agent else "—",
+                "result": "Успех" if ev.success else "Отказ",
+                "diff": [],
+                "open_user_url": f"/users/{ev.user_id}/edit/" if ev.user_id else None,
+            }
+    elif kind == "hist" and len(parts) == 3:
+        from apps.patients.models import Patient
+        from apps.treatments.models import Treatment
+        model_key, hid = parts[1], parts[2]
+        Model = {"patient": Patient, "treatment": Treatment}.get(model_key)
+        h = Model.history.filter(history_id=hid).select_related("history_user").first() if Model else None
+        if h:
+            type_label = {"+": "Создание", "~": "Изменение", "-": "Удаление"}
+            prev = h.prev_record
+            diff = []
+            if prev:
+                delta = h.diff_against(prev)
+                diff = [{"field": c.field, "old": str(c.old), "new": str(c.new)}
+                        for c in delta.changes if c.field not in _AUDIT_DIFF_SKIP_FIELDS]
+            model_label = "Пациент" if model_key == "patient" else "Приём"
+            data = {
+                "action_label": f"{type_label.get(h.history_type, h.history_type)}: {model_label}",
+                "created_at": h.history_date.strftime("%d.%m.%Y %H:%M:%S"),
+                "actor_label": h.history_user.name if h.history_user else "—",
+                "actor_role": (h.history_user.role_name or "") if h.history_user else "",
+                "object_repr": f"{model_key}/{h.id}",
+                "ip": "—", "geo": None, "device": "—",
+                "result": "Успех",
+                "diff": diff,
+                "open_user_url": None,
+            }
+
+    if data is None:
+        return JsonResponse({"error": "Событие не найдено"}, status=404)
+    return JsonResponse(data)
+
+
+@login_required
+def newui_superadmin_audit_export(request):
+    """CSV-экспорт отфильтрованной ленты (те же параметры фильтра, что и у
+    AJAX-страницы) — без пагинации, стандартный csv.writer + StreamingHttpResponse
+    (без новых зависимостей)."""
+    import csv
+    from datetime import datetime
+    from django.http import HttpResponseForbidden, StreamingHttpResponse
+    if not request.user.is_superadmin:
+        return HttpResponseForbidden("Доступно только суперадмину")
+    from .audit import superadmin_audit_feed
+
+    def _parse_date(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    category = request.GET.get("category", "all")
+    date_from = _parse_date(request.GET.get("date_from", ""))
+    date_to = _parse_date(request.GET.get("date_to", ""))
+    search = request.GET.get("search", "")
+    feed = superadmin_audit_feed(category=category, date_from=date_from, date_to=date_to,
+                                  search=search, page=1, page_size=100000)
+
+    class _Echo:
+        def write(self, value):
+            return value
+
+    def rows_gen():
+        writer = csv.writer(_Echo())
+        yield writer.writerow(["Время", "Актор", "Действие", "Объект", "IP", "Результат"])
+        for r in feed["rows"]:
+            yield writer.writerow([
+                r["created_at"].strftime("%d.%m.%Y %H:%M:%S"), r["actor_label"] or "—",
+                r["action_label"], r["object_repr"] or "—", r["ip"] or "—",
+                "Успех" if r["result"] == "success" else "Отказ",
+            ])
+
+    resp = StreamingHttpResponse(rows_gen(), content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="audit_events.csv"'
+    return resp
+
+
+@login_required
+def newui_superadmin_users(request):
+    """AJAX: сотрудники по ВСЕЙ платформе (кросс-клиниково) — вкладка
+    «Пользователи». Поиск по имени/логину/телефону, серверная пагинация
+    (apps.tenancy.unscoped() — тот же приём, что и в _newui_superadmin_data,
+    без него User.objects виден только по текущей клинике)."""
+    from django.http import JsonResponse
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from apps.tenancy import unscoped
+    from .models import User
+    search = request.GET.get("search", "").strip()
+    try:
+        page = int(request.GET.get("page", "1"))
+    except ValueError:
+        page = 1
+    with unscoped():
+        qs = User.objects.select_related("role", "clinic").order_by("name")
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(login__icontains=search) | Q(phone__icontains=search))
+        paginator = Paginator(qs, 50)
+        page_obj = paginator.get_page(page)
+        rows = [{
+            "id": u.pk, "name": u.name, "login": u.login,
+            "role": u.role.display_name if u.role else "—",
+            "clinicName": u.clinic.name if u.clinic else "—",
+            "clinicId": u.clinic_id,
+            "isActive": u.is_active,
+            "phone": u.phone,
+        } for u in page_obj]
+    return JsonResponse({
+        "rows": rows, "total": paginator.count,
+        "page": page_obj.number, "num_pages": paginator.num_pages,
+    })
 
 
 @login_required
@@ -453,6 +666,7 @@ def newui_clinic_create(request):
             request.POST.get("clinic_admin_password", ""),
             request.POST.get("clinic_admin_name", ""),
             do_seed,
+            request=request,
         )
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=400)

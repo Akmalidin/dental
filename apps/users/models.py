@@ -477,11 +477,19 @@ class ClinicLoginEvent(models.Model):
 class BlockedIP(models.Model):
     """Глобальная блокировка входа по IP (не привязана к одной клинике —
     заблокированный IP не сможет войти ни в одну клинику). Проверяется в
-    apps.users.forms.LoginForm.clean() при каждой попытке входа."""
+    apps.users.forms.LoginForm.clean() при каждой попытке входа И в
+    apps.tenancy.BlockedIPMiddleware на каждом запросе уже вошедших."""
     ip_address = models.GenericIPAddressField(unique=True)
     note = models.CharField(max_length=300, blank=True)
     blocked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
+    # Пусто = блокировка бессрочная (как у всех записей до этого поля).
+    # Иначе — блок автоматически перестаёт действовать после этой даты, но
+    # запись из таблицы не удаляется (история блокировок сохраняется для
+    # Аудит-центра) — проверка "активна ли блокировка сейчас" — в двух
+    # местах: LoginForm.clean() и BlockedIPMiddleware (оба фильтруют по
+    # expires_at__isnull=True или expires_at__gt=now).
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Блокировка до")
 
     class Meta:
         verbose_name = "Заблокированный IP"
@@ -490,6 +498,60 @@ class BlockedIP(models.Model):
 
     def __str__(self):
         return self.ip_address
+
+    @property
+    def is_active_block(self):
+        from django.utils import timezone
+        return self.expires_at is None or self.expires_at > timezone.now()
+
+
+class AuditEvent(models.Model):
+    """Платформенное событие для Аудит-центра (/new/superadmin/) — единая
+    лента изменений/удалений через всю систему, независимо от клиники.
+
+    Не дублирует то, что уже есть: логины/отказы входа берутся напрямую из
+    ClinicLoginEvent, правки карточек Пациент/Приём — из их же
+    simple_history (см. apps.users.audit.build_history_rows, тот же приём,
+    что уже используется в audit_center) — эта модель нужна только для
+    действий, которые больше нигде не логируются: блокировки клиник/IP,
+    выдача/запрет доступов, удаления объектов (через
+    ClinicSoftDeleteModel.soft_delete/restore, см. apps.tenancy) и т.п.
+    Пишется через apps.users.audit.log_audit_event() — никогда не должна
+    ронять вызывающую вьюху при ошибке записи."""
+    CATEGORY_CHOICES = [
+        ("change", "Изменение"),
+        ("delete", "Удаление"),
+    ]
+    RESULT_CHOICES = [
+        ("success", "Успех"),
+        ("fail", "Отказ"),
+    ]
+    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES)
+    action = models.CharField(max_length=40, verbose_name="Действие")  # "ip_block", "clinic_block", "soft_delete", ...
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Снимок имени/роли актёра НА МОМЕНТ действия — роль пользователя может
+    # измениться позже, а запись аудита должна показывать, кем он был тогда.
+    actor_name = models.CharField(max_length=200, blank=True)
+    actor_role = models.CharField(max_length=100, blank=True)
+    clinic = models.ForeignKey(Clinic, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    object_model = models.CharField(max_length=60, blank=True)
+    object_id = models.CharField(max_length=60, blank=True)
+    object_repr = models.CharField(max_length=300, blank=True, verbose_name="Объект")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+    result = models.CharField(max_length=10, choices=RESULT_CHOICES, default="success")
+    # [{"field": "...", "old": "...", "new": "..."}, ...] — тот же вид diff'а,
+    # что уже строит audit_center (apps.users.views._AUDIT_DIFF_SKIP_FIELDS).
+    diff = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Событие аудита"
+        verbose_name_plural = "События аудита"
+
+    def __str__(self):
+        return f"{self.action} — {self.object_repr} — {self.created_at:%d.%m.%Y %H:%M}"
 
 
 class AuditRevert(models.Model):
