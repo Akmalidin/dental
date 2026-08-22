@@ -446,10 +446,12 @@ def newui_superadmin_feed(request):
     пагинация) — см. apps.users.audit.superadmin_audit_feed. Дёргается при
     открытии вкладки и при смене фильтров/странице списка."""
     from django.http import JsonResponse
+    from django.utils import timezone
     from datetime import datetime
     if not request.user.is_superadmin:
         return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
     from .audit import superadmin_audit_feed, superadmin_audit_metrics
+    from .geoip import get_ip_geolocations_batch
 
     def _parse_date(s):
         try:
@@ -467,8 +469,14 @@ def newui_superadmin_feed(request):
         page = 1
     feed = superadmin_audit_feed(category=category, date_from=date_from, date_to=date_to,
                                   search=search, page=page)
+    # Колонка «Локация» — гео для IP ТОЛЬКО текущей страницы (≤50 строк),
+    # одним батч-запросом на все уникальные IP разом, не по одному на
+    # строку (см. apps.users.geoip.get_ip_geolocations_batch).
+    ips = {r["ip"] for r in feed["rows"] if r["ip"] and r["ip"] != "—"}
+    geo_map = get_ip_geolocations_batch(ips) if ips else {}
     for r in feed["rows"]:
-        r["created_at"] = r["created_at"].strftime("%d.%m.%Y %H:%M:%S")
+        r["created_at"] = timezone.localtime(r["created_at"]).strftime("%d.%m.%Y %H:%M:%S")
+        r["geo"] = geo_map.get(r["ip"])
     return JsonResponse({**feed, "metrics": superadmin_audit_metrics()})
 
 
@@ -484,6 +492,7 @@ def newui_superadmin_event_detail(request, event_id):
     Treatment) — см. apps.users.audit._event_row/_login_row/_history_row,
     строящие те же id для строк ленты."""
     from django.http import JsonResponse
+    from django.utils import timezone
     if not request.user.is_superadmin:
         return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
     from .models import AuditEvent, ClinicLoginEvent
@@ -500,7 +509,7 @@ def newui_superadmin_event_detail(request, event_id):
         if e:
             data = {
                 "action_label": ACTION_LABELS.get(e.action, e.action),
-                "created_at": e.created_at.strftime("%d.%m.%Y %H:%M:%S"),
+                "created_at": timezone.localtime(e.created_at).strftime("%d.%m.%Y %H:%M:%S"),
                 "actor_label": e.actor_name or "—",
                 "actor_role": e.actor_role or "",
                 "object_repr": e.object_repr or "—",
@@ -509,16 +518,22 @@ def newui_superadmin_event_detail(request, event_id):
                 "device": parse_user_agent(e.user_agent) if e.user_agent else "—",
                 "result": "Успех" if e.result == "success" else "Отказ",
                 "diff": e.diff or [],
-                "open_user_url": (f"/users/{e.object_id}/edit/"
-                                  if e.object_model == "user" and e.object_id else None),
+                # «Открыть карточку пользователя» ведёт в новый интерфейс
+                # (/new/staff/), не на старую /users/<pk>/edit/ — см.
+                # saOpenUserInNewUI в templates/newui/superadmin.html,
+                # ему нужна клиника цели, чтобы сначала переключиться.
+                "open_user_id": e.object_id if e.object_model == "user" and e.object_id else None,
+                "open_user_clinic_id": e.clinic_id if e.object_model == "user" and e.object_id else None,
             }
     elif kind == "login" and len(parts) == 2:
         ev = ClinicLoginEvent.objects.filter(pk=parts[1]).select_related("user", "clinic").first()
         if ev:
+            actor_label = ev.user.name if ev.user else (
+                f"Логин: {ev.attempted_login}" if ev.attempted_login else "—")
             data = {
                 "action_label": "Вход в систему" if ev.success else "Отказ во входе",
-                "created_at": ev.created_at.strftime("%d.%m.%Y %H:%M:%S"),
-                "actor_label": ev.user.name if ev.user else "—",
+                "created_at": timezone.localtime(ev.created_at).strftime("%d.%m.%Y %H:%M:%S"),
+                "actor_label": actor_label,
                 "actor_role": (ev.user.role_name or "") if ev.user else "",
                 "object_repr": f"user/{ev.user_id}" if ev.user_id else "—",
                 "ip": ev.ip_address or "—",
@@ -526,7 +541,8 @@ def newui_superadmin_event_detail(request, event_id):
                 "device": parse_user_agent(ev.user_agent) if ev.user_agent else "—",
                 "result": "Успех" if ev.success else "Отказ",
                 "diff": [],
-                "open_user_url": f"/users/{ev.user_id}/edit/" if ev.user_id else None,
+                "open_user_id": ev.user_id or None,
+                "open_user_clinic_id": ev.clinic_id if ev.user_id else None,
             }
     elif kind == "hist" and len(parts) == 3:
         from apps.patients.models import Patient
@@ -543,16 +559,20 @@ def newui_superadmin_event_detail(request, event_id):
                 diff = [{"field": c.field, "old": str(c.old), "new": str(c.new)}
                         for c in delta.changes if c.field not in _AUDIT_DIFF_SKIP_FIELDS]
             model_label = "Пациент" if model_key == "patient" else "Приём"
+            hist_ip = getattr(h, "history_ip", None)
             data = {
                 "action_label": f"{type_label.get(h.history_type, h.history_type)}: {model_label}",
-                "created_at": h.history_date.strftime("%d.%m.%Y %H:%M:%S"),
+                "created_at": timezone.localtime(h.history_date).strftime("%d.%m.%Y %H:%M:%S"),
                 "actor_label": h.history_user.name if h.history_user else "—",
                 "actor_role": (h.history_user.role_name or "") if h.history_user else "",
                 "object_repr": f"{model_key}/{h.id}",
-                "ip": "—", "geo": None, "device": "—",
+                "ip": hist_ip or "—",
+                "geo": get_ip_geolocation(hist_ip) if hist_ip else None,
+                "device": "—",
                 "result": "Успех",
                 "diff": diff,
-                "open_user_url": None,
+                "open_user_id": None,
+                "open_user_clinic_id": None,
             }
 
     if data is None:
@@ -568,6 +588,7 @@ def newui_superadmin_audit_export(request):
     import csv
     from datetime import datetime
     from django.http import HttpResponseForbidden, StreamingHttpResponse
+    from django.utils import timezone
     if not request.user.is_superadmin:
         return HttpResponseForbidden("Доступно только суперадмину")
     from .audit import superadmin_audit_feed
@@ -594,7 +615,7 @@ def newui_superadmin_audit_export(request):
         yield writer.writerow(["Время", "Актор", "Действие", "Объект", "IP", "Результат"])
         for r in feed["rows"]:
             yield writer.writerow([
-                r["created_at"].strftime("%d.%m.%Y %H:%M:%S"), r["actor_label"] or "—",
+                timezone.localtime(r["created_at"]).strftime("%d.%m.%Y %H:%M:%S"), r["actor_label"] or "—",
                 r["action_label"], r["object_repr"] or "—", r["ip"] or "—",
                 "Успех" if r["result"] == "success" else "Отказ",
             ])

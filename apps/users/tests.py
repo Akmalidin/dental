@@ -2713,6 +2713,174 @@ class RecyclePendingCountTestCase(TestCase):
         self.assertGreaterEqual(metrics["pending_deletions"], 2)
 
 
+class HistoryIPTestCase(TestCase):
+    """IP автора правки в истории Пациент/Приём — apps.tenancy.
+    HistoricalIPAddressModel/_add_history_ip (сигнал pre_create_historical_record)."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        self.clinic = Clinic.objects.create(name="Клиника History IP", slug="clinic-hist-ip")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="hip_director", name="Директор HIP",
+                                             role=self.admin_role, clinic=self.clinic)
+        set_current_clinic(self.clinic)
+        try:
+            self.patient = Patient.objects.create(first_name="Иван", last_name="Тестов",
+                                                   phone="+996700000003", branch=self.branch)
+        finally:
+            clear_current_clinic()
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_patient_edit_writes_history_ip(self):
+        resp = self.client.post(f"/patients/{self.patient.pk}/edit/", {
+            "first_name": "Иван", "last_name": "Тестов", "phone": "+996700000099",
+            "branch": self.branch.pk,
+        }, REMOTE_ADDR="203.0.113.7")
+        self.assertEqual(resp.status_code, 302)
+        latest = self.patient.history.first()
+        self.assertEqual(latest.history_ip, "203.0.113.7")
+
+    def test_old_history_rows_without_ip_degrade_gracefully(self):
+        """Запись создания (до появления history_ip у существующих клиник)
+        — history_ip=None, лента показывает «—», не падает."""
+        from apps.users.audit import build_history_rows
+        HP = self.patient.history.model
+        rows = build_history_rows(HP.objects.all(), "patient", "Пациент", lambda h: str(h.id))
+        self.assertTrue(all("ip" in r for r in rows))
+
+
+class AttemptedLoginTestCase(TestCase):
+    """Сырой введённый логин при отказе входа — ClinicLoginEvent.
+    attempted_login (apps.users.forms.LoginForm.clean())."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника AL", slug="clinic-attempted-login")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.user = User.objects.create(login="al_user", name="Юзер AL", role=self.admin_role, clinic=self.clinic)
+        self.user.set_password("pass1234")
+        self.user.save()
+
+    def test_wrong_password_records_attempted_login(self):
+        from apps.users.models import ClinicLoginEvent
+        self.client.post("/login/", {"login": "al_user", "password": "wrongpass"})
+        ev = ClinicLoginEvent.objects.filter(success=False).first()
+        self.assertIsNotNone(ev)
+        self.assertEqual(ev.attempted_login, "al_user")
+        self.assertIsNone(ev.user)
+
+    def test_nonexistent_login_records_attempted_login(self):
+        from apps.users.models import ClinicLoginEvent
+        self.client.post("/login/", {"login": "ghost_user_xyz", "password": "whatever"})
+        ev = ClinicLoginEvent.objects.filter(success=False).first()
+        self.assertEqual(ev.attempted_login, "ghost_user_xyz")
+
+    def test_feed_shows_attempted_login_as_actor_when_unresolved(self):
+        from apps.users.audit import superadmin_audit_feed
+        self.client.post("/login/", {"login": "ghost_user_xyz", "password": "whatever"})
+        feed = superadmin_audit_feed(category="deny")
+        row = next(r for r in feed["rows"] if "ghost_user_xyz" in (r["actor_label"] or ""))
+        self.assertEqual(row["actor_label"], "Логин: ghost_user_xyz")
+
+
+class GeoBatchTestCase(TestCase):
+    """get_ip_geolocations_batch — закэшированные IP не уходят в сеть."""
+
+    def test_cached_ips_skip_network_call(self):
+        import urllib.request
+        from django.core.cache import cache
+        from apps.users.geoip import get_ip_geolocations_batch
+
+        cache.set("geoip:8.8.8.8", "Bishkek, KG", 3600)
+        cache.set("geoip:1.1.1.1", "", 3600)  # закэшированный «неудача»
+
+        def _boom(*a, **kw):
+            raise AssertionError("не должно идти в сеть для закэшированных IP")
+
+        original = urllib.request.urlopen
+        urllib.request.urlopen = _boom
+        try:
+            result = get_ip_geolocations_batch(["8.8.8.8", "1.1.1.1", "10.0.0.5"])
+        finally:
+            urllib.request.urlopen = original
+
+        self.assertEqual(result["8.8.8.8"], "Bishkek, KG")
+        self.assertIsNone(result["1.1.1.1"])
+        self.assertIsNone(result["10.0.0.5"])  # приватный — без сети, без кэша
+
+
+class StaffLoginAsRedirectTestCase(TestCase):
+    """«Войти как сотрудник» ведёт на новый интерфейс, если им пользуется
+    actor — не безусловно на старый дашборд (apps.users.views.staff_login_as)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника SLA", slug="clinic-sla")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.director = User.objects.create(login="sla_director", name="Директор SLA",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.staff = User.objects.create(login="sla_staff", name="Сотрудник SLA",
+                                          role=self.doctor_role, clinic=self.clinic)
+
+    def test_redirects_to_new_ui_when_actor_uses_it(self):
+        self.director.use_new_interface = True
+        self.director.save(update_fields=["use_new_interface"])
+        self.client.force_login(self.director)
+        resp = self.client.post(f"/users/{self.staff.pk}/login-as/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/new/")
+
+    def test_redirects_to_old_ui_when_actor_uses_it(self):
+        self.director.use_new_interface = False
+        self.director.save(update_fields=["use_new_interface"])
+        self.client.force_login(self.director)
+        resp = self.client.post(f"/users/{self.staff.pk}/login-as/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/")
+
+
+class AuditTimezoneTestCase(TestCase):
+    """Границы «сегодня»/фильтр дат ленты — по Asia/Bishkek (UTC+6), не по
+    UTC (созданное в 01:00 по Бишкеку = 19:00 UTC предыдущего дня —
+    должно попасть в бишкекское «сегодня»)."""
+
+    def test_metrics_today_uses_bishkek_date_not_utc(self):
+        from datetime import timedelta
+        from django.utils import timezone as dj_tz
+        from apps.users.models import AuditEvent
+        from apps.users.audit import superadmin_audit_metrics
+
+        # 01:00 по Бишкеку (UTC+6) сегодня = 19:00 UTC ВЧЕРА.
+        bishkek_today_1am = dj_tz.localtime(dj_tz.now()).replace(
+            hour=1, minute=0, second=0, microsecond=0)
+        if dj_tz.localtime(dj_tz.now()).hour < 2:
+            # если сейчас уже около полуночи по Бишкеку — сдвигаем на
+            # следующий день, чтобы тест не зависел от времени запуска
+            bishkek_today_1am += timedelta(days=1)
+        evt = AuditEvent.objects.create(action="ip_block", category="change")
+        AuditEvent.objects.filter(pk=evt.pk).update(created_at=bishkek_today_1am)
+
+        metrics = superadmin_audit_metrics()
+        self.assertGreaterEqual(metrics["events_today"], 1)
+
+    def test_feed_date_filter_uses_bishkek_date(self):
+        from django.utils import timezone as dj_tz
+        from apps.users.audit import superadmin_audit_feed
+        from apps.users.models import AuditEvent
+
+        bishkek_now = dj_tz.localtime(dj_tz.now())
+        evt = AuditEvent.objects.create(action="ip_block", category="change",
+                                         object_repr="ip_rule/tz-test")
+        AuditEvent.objects.filter(pk=evt.pk).update(created_at=dj_tz.now())
+
+        feed = superadmin_audit_feed(category="change",
+                                      date_from=bishkek_now.date(), date_to=bishkek_now.date())
+        reprs = [r["object_repr"] for r in feed["rows"]]
+        self.assertIn("ip_rule/tz-test", reprs)
+
+
 class ClinicBlockingTestCase(TestCase):
     """Реальная блокировка клиники (Clinic.is_active=False) — мгновенный
     разлогин активных сессий + запрет нового входа, оба ведут на

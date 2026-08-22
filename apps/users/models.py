@@ -463,6 +463,10 @@ class ClinicLoginEvent(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=300, blank=True)
     success = models.BooleanField(default=True)
+    # Сырой введённый логин — пишем ВСЕГДА (успех/отказ). При отказе `user`
+    # обычно null (логин не найден/неверный пароль) — без этого поля Аудит-
+    # центр не мог показать, ПОД КАКИМ ЛОГИНОМ пытались войти.
+    attempted_login = models.CharField(max_length=150, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

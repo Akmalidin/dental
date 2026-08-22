@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
-from apps.tenancy import ClinicSoftDeleteModel, ClinicScopedModel
+from apps.tenancy import ClinicSoftDeleteModel, ClinicScopedModel, HistoricalIPAddressModel
 from .models_insurance import InsuranceCompany  # noqa: F401 — re-exported
 
 
@@ -193,7 +193,9 @@ class Patient(ClinicSoftDeleteModel):
         verbose_name="Создал",
     )
 
-    history = HistoricalRecords()
+    # IP автора правки — history_ip, см. apps.tenancy.HistoricalIPAddressModel/
+    # _add_history_ip (используется в Аудит-центре, apps.users.audit).
+    history = HistoricalRecords(bases=[HistoricalIPAddressModel])
 
     class Meta:
         verbose_name = "Пациент"
