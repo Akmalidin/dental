@@ -8,4 +8,5 @@ from apps.marketing import views
 urlpatterns = [
     path("", views.landing, name="marketing_landing"),
     path("lead/", views.landing_lead, name="marketing_lead"),
+    path("book/", views.directory, name="marketing_directory"),
 ]

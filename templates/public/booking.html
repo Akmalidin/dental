@@ -79,7 +79,9 @@
     <template x-if="!done">
       <div>
         <h1 style="font-size:30px;margin-bottom:6px">Запись на приём</h1>
-        <p class="muted" style="margin-bottom:24px">Выберите врача, дату и удобное время — мы перезвоним для подтверждения.</p>
+        <p class="muted" style="margin-bottom:24px">
+          {% if selected_branch %}Филиал: <b>{{ selected_branch.name }}</b>{% if selected_branch.address %} · {{ selected_branch.address }}{% endif %} — {% endif %}Выберите врача, дату и удобное время — мы перезвоним для подтверждения.
+        </p>
 
         <!-- Врач -->
         <div class="glass card">
@@ -165,12 +167,17 @@
   <script>
     function booking(){
       return {
-        doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'kg',
+        doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'kg', branch:'',
         slots:[], loading:false, sending:false, done:false, error:'',
         today:new Date().toISOString().slice(0,10),
         init(){
-          const p = new URLSearchParams(location.search).get('doctor');
+          const params = new URLSearchParams(location.search);
+          const p = params.get('doctor');
           if(p) this.doctor = parseInt(p, 10) || '';
+          // Филиал — пришёл из каталога клиник stom.asia (карта + список),
+          // просто прокидываем его в заявку, сама страница его не выбирает.
+          const b = params.get('branch');
+          if(b) this.branch = parseInt(b, 10) || '';
         },
         get maxLen(){ return this.country==='ru' ? 10 : 9; },
         get fullPhone(){ return (this.country==='ru' ? '+7' : '+996') + this.phone; },
@@ -189,7 +196,7 @@
           if(!this.canSubmit) return;
           this.sending=true; this.error='';
           const token=document.querySelector('[name=csrfmiddlewaretoken]').value;
-          const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.fullPhone});
+          const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.fullPhone,branch:this.branch});
           try{
             const r=await fetch('/book/submit/',{method:'POST',headers:{'X-CSRFToken':token},body});
             const j=await r.json();

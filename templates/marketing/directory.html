@@ -1,0 +1,138 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Найти клинику — stom.asia</title>
+<meta name="description" content="Выберите стоматологическую клинику на карте stom.asia и запишитесь на приём онлайн.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap&subset=cyrillic" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'marketing/landing.css' %}">
+{% if map_points %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">{% endif %}
+<style>
+  /* Страница каталога клиник — те же токены, что и у лендинга (landing.css),
+     собственные блоки под карту/список ниже. */
+  .dir-hero{padding:52px 28px 8px;}
+  .dir-map-wrap{margin:26px 0 8px;}
+  #dir-map{height:420px;width:100%;border-radius:var(--radius-tooth);border:1px solid var(--border);z-index:1;}
+  .dir-map-empty{padding:34px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:var(--radius-tooth);}
+  .dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin:28px 0 60px;}
+  .dir-card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:10px;}
+  .dir-card h3{font-size:17px;color:var(--film);margin:0;}
+  .dir-branch{border-top:1px solid var(--border);padding-top:10px;margin-top:2px;display:flex;flex-direction:column;gap:6px;}
+  .dir-branch:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+  .dir-addr{font-size:13.5px;color:var(--muted);line-height:1.5;}
+  .dir-soon{font-size:13px;color:var(--accent-2);font-family:"JetBrains Mono",monospace;}
+  .dir-book{align-self:flex-start;padding:9px 18px;font-size:13.5px;}
+  .dir-book-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .leaflet-popup-content{font-family:"Inter",sans-serif;font-size:13px;color:#0b0f14;}
+  .leaflet-popup-content a{color:#1d4ed8;font-weight:600;}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-brand"><span class="dot"></span>stom.asia</a>
+  <div class="nav-links">
+    <a href="/book/">Найти клинику</a>
+    <a href="/#modules">Продукт</a>
+    <a href="/#contact">Контакты</a>
+  </div>
+  <div class="nav-right">
+    <form class="clinic-login" data-clinic-login="stom.asia">
+      <input type="text" placeholder="ваша-клиника" aria-label="Название клиники">
+      <span>.stom.asia</span>
+      <button type="submit" title="Войти">→</button>
+    </form>
+  </div>
+</nav>
+
+<header class="dir-hero">
+  <div class="wrap">
+    <div class="eyebrow">Каталог клиник</div>
+    <h1 style="font-size:clamp(26px,3.4vw,38px);font-weight:800;max-width:640px;">Выберите клинику на карте и запишитесь на приём</h1>
+    <p class="sub" style="max-width:560px;color:var(--muted);margin-top:12px;">Все клиники, подключённые к stom.asia. Если у клиники несколько филиалов — выберите нужный, а дальше врач, день и время — как обычно.</p>
+
+    <div class="dir-map-wrap">
+      {% if map_points %}
+        <div id="dir-map"></div>
+      {% else %}
+        <div class="dir-map-empty">Клиник с указанным адресом на карте пока нет — но список ниже уже доступен.</div>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="dir-grid">
+      {% for c in clinics %}
+      <div class="dir-card">
+        <h3>{{ c.clinic.name }}</h3>
+        {% if c.branches %}
+          {% for b in c.branches %}
+          <div class="dir-branch">
+            <div class="dir-book-row">
+              <div>
+                {% if c.branches|length > 1 %}<b style="color:var(--film);font-size:13.5px;">{{ b.name }}</b><br>{% endif %}
+                <span class="dir-addr">{{ b.address }}{% if b.phone %} · {{ b.phone }}{% endif %}</span>
+              </div>
+              {% if c.bookable %}
+                <a class="btn btn-primary dir-book" href="{{ c.book_url }}?branch={{ b.id }}">Записаться</a>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <span class="dir-addr">Адрес: скоро добавим</span>
+        {% endif %}
+        {% if not c.bookable %}
+          <span class="dir-soon">Запись скоро будет доступна</span>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p class="sub">Пока нет ни одной клиники в каталоге.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-row">
+    <a href="/" class="nav-brand"><span class="dot"></span>stom.asia</a>
+    <span class="mono">CRM для стоматологий · {% now "Y" %}</span>
+  </div>
+</footer>
+
+{{ map_points|json_script:"dir-map-points" }}
+{% if map_points %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endif %}
+<script src="{% static 'marketing/landing.js' %}"></script>
+<script>
+(function(){
+  // Карта клиник (Leaflet / OpenStreetMap) — тот же приём, что и на карте
+  // филиалов одной клиники (templates/public/home.html): один маркер на
+  // филиал, попап с адресом и ссылкой «Записаться».
+  const el = document.getElementById('dir-map');
+  if(!el || typeof L === 'undefined') return;
+  let pts = [];
+  try{ pts = JSON.parse(document.getElementById('dir-map-points').textContent); }catch(e){}
+  if(!pts.length) return;
+  const map = L.map('dir-map', {scrollWheelZoom:false}).setView([pts[0].lat, pts[0].lng], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  const group = [];
+  pts.forEach(p => {
+    const m = L.marker([p.lat, p.lng]).addTo(map);
+    m.bindPopup(
+      '<b>' + p.clinicName + '</b><br>' + p.address +
+      (p.phone ? '<br>' + p.phone : '') +
+      '<br><a href="' + p.bookUrl + '">Записаться →</a>'
+    );
+    group.push([p.lat, p.lng]);
+  });
+  if(group.length > 1) map.fitBounds(group, {padding:[40,40]});
+  el.addEventListener('click', () => map.scrollWheelZoom.enable());
+})();
+</script>
+</body>
+</html>

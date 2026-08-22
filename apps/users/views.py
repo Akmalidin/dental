@@ -2532,6 +2532,17 @@ def _apply_access_from_form(actor, target, form):
     target.save(update_fields=["allowed_sections"])
 
 
+def _clinic_public_url(clinic):
+    """Ссылка на публичный сайт клиники, которую видит персонал (обзор
+    клиники, конструктор сайта). Предпочитает CRM_BASE_DOMAIN (stom.asia —
+    там же `<slug>.stom.asia` реально отдаёт сайт, см.
+    apps.tenancy.StomAsiaRoutingMiddleware), иначе — старый
+    PUBLIC_BASE_DOMAIN (sadaf.kg-стиль, apps.tenancy.PublicSiteMiddleware)."""
+    from django.conf import settings as dj_settings
+    domain = getattr(dj_settings, "CRM_BASE_DOMAIN", "") or getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru")
+    return f"https://{clinic.slug}.{domain}"
+
+
 @login_required
 def clinic_overview(request, clinic_id):
     """Сводка по клинике + управление доступами сотрудников.
@@ -2586,9 +2597,8 @@ def clinic_overview(request, clinic_id):
 
     from apps.users.models import ClinicSite, TIMEZONE_CHOICES
     from apps.settings_clinic.models import ClinicSettings
-    from django.conf import settings as dj_settings
     site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
-    public_url = "https://{}.{}".format(clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+    public_url = _clinic_public_url(clinic)
 
     return render(request, "users/clinic_overview.html", {
         "clinic": clinic,
@@ -2828,7 +2838,6 @@ def _can_edit_site(user, clinic):
 def clinic_site_edit(request, clinic_id):
     """Конструктор публичного сайта клиники (суперадмин/Директор)."""
     from apps.users.models import Clinic, ClinicSite
-    from django.conf import settings as dj_settings
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     if not _can_edit_site(request.user, clinic):
         messages.error(request, _("Нет доступа к редактированию сайта"))
@@ -2861,7 +2870,7 @@ def clinic_site_edit(request, clinic_id):
         messages.success(request, _("Сайт сохранён"))
         return redirect(f"/users/clinic/{clinic_id}/site/")
 
-    public_url = "https://{}.{}".format(clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+    public_url = _clinic_public_url(clinic)
     return render(request, "users/site_edit.html", {
         "clinic": clinic, "site": site, "public_url": public_url,
     })
@@ -2920,10 +2929,8 @@ def clinic_site_doctors(request, clinic_id):
             messages.success(request, _("Отзыв удалён"))
         return redirect(f"/users/clinic/{clinic_id}/site/doctors/")
 
-    from django.conf import settings as dj_settings
     doctors = list(clinic_doctors(clinic).prefetch_related("reviews"))
-    public_url = "https://{}.{}".format(
-        clinic.slug, getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru"))
+    public_url = _clinic_public_url(clinic)
     return render(request, "users/site_doctors.html", {
         "clinic": clinic, "doctors": doctors, "public_url": public_url,
     })

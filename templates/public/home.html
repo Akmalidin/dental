@@ -31,17 +31,17 @@
     "name": "{{ clinic.name|escapejs }}",
     "url": "{{ request.build_absolute_uri|escapejs }}",
     {% if site.logo %}"image": "{{ request.scheme }}://{{ request.get_host }}{{ site.logo.url|escapejs }}",{% endif %}
-    "telephone": "{{ site.phone|default:branches.0.phone|escapejs }}",
+    "telephone": "{{ seo_phone|escapejs }}",
     "address": {
       "@type": "PostalAddress",
-      "streetAddress": "{{ site.address|default:branches.0.address|escapejs }}"
-    }{% if branches.0.latitude %},
+      "streetAddress": "{{ seo_address|escapejs }}"
+    }{% if first_branch.latitude %},
     "geo": {
       "@type": "GeoCoordinates",
-      "latitude": {{ branches.0.latitude }},
-      "longitude": {{ branches.0.longitude }}
-    }{% endif %}{% if site.hours or branches.0.hours %},
-    "openingHours": "{{ site.hours|default:branches.0.hours|escapejs }}"{% endif %}
+      "latitude": {{ first_branch.latitude }},
+      "longitude": {{ first_branch.longitude }}
+    }{% endif %}{% if seo_hours %},
+    "openingHours": "{{ seo_hours|escapejs }}"{% endif %}
   }
   </script>
   <style>

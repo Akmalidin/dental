@@ -66,11 +66,22 @@ def public_home(request):
          "lat": b.latitude, "lng": b.longitude}
         for b in branches if b.latitude is not None and b.longitude is not None
     ]
+    # Клиника с включённым сайтом, но ещё без единого филиала (только
+    # завели ClinicSite, филиалы не добавили) — реальный, хоть и краевой,
+    # случай: JSON-LD в шаблоне раньше падал (VariableDoesNotExist) на
+    # `default:branches.0.phone` — filter-аргумент с индексом по пустому
+    # списку Django не прощает (в отличие от {% if branches.0.x %}).
+    # Считаем безопасные строки здесь, а не в шаблоне.
+    first_branch = branches[0] if branches else None
+    seo_phone = site.phone or (first_branch.phone if first_branch else "")
+    seo_address = site.address or (first_branch.address if first_branch else "")
+    seo_hours = site.hours or (first_branch.hours if first_branch else "")
 
     return render(request, "public/home.html", {
         "clinic": clinic, "site": site,
         "doctors": doctors, "services": services, "branches": branches,
-        "map_points": map_points,
+        "map_points": map_points, "first_branch": first_branch,
+        "seo_phone": seo_phone, "seo_address": seo_address, "seo_hours": seo_hours,
     })
 
 
@@ -119,16 +130,30 @@ WORK_START, WORK_END, SLOT_HOURS = 9, 18, 1  # рабочие часы и шаг
 
 
 def public_book(request):
-    """Страница онлайн-записи."""
+    """Страница онлайн-записи. ?branch=<id> — переход из центрального
+    каталога клиник stom.asia (templates/marketing/directory.html): если
+    филиал указан и реально принадлежит этой клинике/активен — список
+    врачей сужается до закреплённых за ним (тот же приём, что и в
+    _newui_schedule_data для фильтра расписания по филиалу), иначе — все
+    врачи клиники, как раньше."""
     clinic, site = _ctx(request)
     if not site.show_booking:
         raise Http404("Запись недоступна")
-    from apps.users.models import clinic_doctors
+    from apps.users.models import clinic_doctors, Branch
     from apps.services.models import Service
-    doctors = list(clinic_doctors(clinic))
+    try:
+        branch_id = int(request.GET.get("branch") or 0)
+    except (TypeError, ValueError):
+        branch_id = 0
+    selected_branch = Branch.objects.filter(pk=branch_id, clinic=clinic, is_active=True).first() if branch_id else None
+    doctors_qs = clinic_doctors(clinic)
+    if selected_branch:
+        doctors_qs = doctors_qs.filter(branches=selected_branch).distinct()
+    doctors = list(doctors_qs)
     services = list(Service.objects.filter(is_active=True).order_by("name"))
     return render(request, "public/booking.html", {
         "clinic": clinic, "site": site, "doctors": doctors, "services": services,
+        "selected_branch": selected_branch,
     })
 
 
@@ -199,7 +224,19 @@ def public_book_submit(request):
     if clash:
         return JsonResponse({"ok": False, "error": "Это время уже занято, выберите другое"}, status=409)
 
-    branch = Branch.objects.filter(is_main=True).first() or Branch.objects.first()
+    # Филиал, выбранный на странице записи (см. public_book, ?branch=<id>
+    # из каталога клиник stom.asia) — если передан и реально принадлежит
+    # клинике/активен, используем его; иначе — старое поведение (главный,
+    # затем любой филиал), чтобы не задеть однофилиальные клиники.
+    branch = None
+    try:
+        branch_id = int(request.POST.get("branch") or 0)
+    except (TypeError, ValueError):
+        branch_id = 0
+    if branch_id:
+        branch = Branch.objects.filter(pk=branch_id, clinic=clinic, is_active=True).first()
+    if branch is None:
+        branch = Branch.objects.filter(is_main=True).first() or Branch.objects.first()
     if branch is None:
         return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
 
