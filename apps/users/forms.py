@@ -47,6 +47,7 @@ class LoginForm(forms.Form):
                     ip_address=ip,
                     user_agent=(self.request.META.get("HTTP_USER_AGENT", "") if self.request else "")[:300],
                     success=success,
+                    attempted_login=login[:150],
                 )
             except Exception:
                 pass

@@ -51,7 +51,7 @@
           <div class="card" style="padding:0;overflow:hidden;">
             <table>
               <thead><tr>
-                <th>Время</th><th>Актор</th><th>Действие</th><th>Объект</th><th>IP</th><th>Результат</th>
+                <th>Время</th><th>Актор</th><th>Действие</th><th>Объект</th><th>IP</th><th>Локация</th><th>Результат</th>
               </tr></thead>
               <tbody id="saFeedTableBody"></tbody>
             </table>
@@ -64,7 +64,7 @@
               </div>
             </div>
           </div>
-          <div class="card" id="saDetailCard" style="padding:16px;min-height:200px;">
+          <div class="card" id="saDetailCard" style="padding:16px;min-height:200px;position:sticky;top:76px;max-height:calc(100vh - 96px);overflow-y:auto;">
             <div style="color:var(--ink-soft);font-size:12.5px;text-align:center;padding:24px 0;">Выберите событие в списке слева</div>
           </div>
         </div>
@@ -621,7 +621,7 @@
 
   function saRenderFeedRows(rows){
     const body = document.getElementById('saFeedTableBody');
-    if(!rows.length){ body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Событий нет</td></tr>`; return; }
+    if(!rows.length){ body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">Событий нет</td></tr>`; return; }
     body.innerHTML = rows.map(r=>`
       <tr class="clickable" onclick="saOpenEventDetail('${r.id}')">
         <td style="white-space:nowrap;font-size:12px;color:var(--ink-soft);">${r.created_at}</td>
@@ -629,6 +629,7 @@
         <td><span class="pill ${CAT_PILL[r.category]||'grey'}">${CAT_LABELS[r.category]||r.category}</span> ${r.action_label}</td>
         <td class="mono" style="font-size:11.5px;">${r.object_repr}</td>
         <td class="mono" style="font-size:11.5px;">${r.ip}</td>
+        <td style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${r.geo || '—'}</td>
         <td>${r.result==='success'?'✅':'❌'}</td>
       </tr>`).join('');
   }
@@ -683,9 +684,24 @@
       <h4 style="margin:14px 0 8px;font-size:11.5px;color:var(--ink-soft);letter-spacing:.03em;">ИЗМЕНЕНИЯ</h4>
       ${diffHtml}
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px;">
-        ${d.open_user_url ? `<a class="btn btn-ghost btn-sm" href="${d.open_user_url}">Открыть карточку пользователя</a>` : ''}
+        ${d.open_user_id ? `<button class="btn btn-ghost btn-sm" onclick="saOpenUserInNewUI(${d.open_user_clinic_id||'null'},${d.open_user_id})">Открыть карточку пользователя</button>` : ''}
         ${d.ip && d.ip !== '—' ? `<button class="btn btn-danger btn-sm" onclick="saOpenBlockReason('ip',{ip:'${d.ip}'})">Заблокировать этот IP</button>` : ''}
       </div>`;
+  };
+
+  // «Открыть карточку пользователя» — ведёт в НОВЫЙ интерфейс (/new/staff/),
+  // не на старую /users/<pk>/edit/. Редактирование сотрудника в новом
+  // интерфейсе клиент-side (editStaff(id) в base.html) и привязано к
+  // ТЕКУЩЕЙ выбранной клинике — сначала переключаем клинику (тот же приём,
+  // что и у «Войти →», saEnterClinicById), затем идём на список сотрудников.
+  window.saOpenUserInNewUI = async function(clinicId, userId){
+    if(clinicId){
+      const fd = new FormData();
+      fd.append('clinic', clinicId);
+      fd.append('next', '/new/staff/');
+      await postForm('/users/set-clinic/', fd);
+    }
+    location.href = '/new/staff/';
   };
 
   document.getElementById('saFeedDateFrom').addEventListener('change', e=>{ saFeedState.dateFrom=e.target.value; saFeedState.page=1; saLoadFeed(); });
@@ -721,7 +737,7 @@
         <td>${u.clinicName}</td>
         <td>${u.phone||'—'}</td>
         <td>${u.isActive?'<span class="pill teal">Активен</span>':'<span class="pill coral">Отключён</span>'}</td>
-        <td>${u.clinicId ? `<a class="btn btn-ghost btn-sm" href="/users/clinic/${u.clinicId}/overview/">Обзор клиники</a>` : ''}</td>
+        <td>${u.clinicId ? `<button class="btn btn-ghost btn-sm" onclick="saShowTab('clinics');openSaEdit(${u.clinicId})">Обзор клиники</button>` : ''}</td>
       </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">Никого не найдено</td></tr>`;
     document.getElementById('saUsersTotalLabel').textContent = `Всего: ${data.total ?? 0}`;
     document.getElementById('saUsersPageLabel').textContent = `${data.page ?? 1} из ${data.num_pages ?? 1}`;

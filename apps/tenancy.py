@@ -607,3 +607,36 @@ class ClinicSoftDeleteModel(_ClinicSaveMixin, models.Model):
             )
         except Exception:
             pass
+
+
+# ─── IP в истории правок (django-simple-history) ─────────────────────────────
+# HistoryRequestMiddleware (в MIDDLEWARE) кладёт текущий request в
+# HistoricalRecords.context.request на время запроса — используем это, чтобы
+# писать IP автора правки в исторические записи Patient/Treatment (см.
+# apps/patients/models.py, apps/treatments/models.py: history = HistoricalRecords(
+# bases=[HistoricalIPAddressModel])). Подключение через сигнал
+# pre_create_historical_record — ровно тот приём, что показан в тестах самого
+# django-simple-history (ExtraFieldsDynamicIPAddressTestCase) для этого же
+# сценария (IP). Без sender= — безопасно для любых будущих исторических
+# моделей без поля history_ip (hasattr-проверка ниже просто ничего не делает).
+
+class HistoricalIPAddressModel(models.Model):
+    history_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+
+def _add_history_ip(sender, **kwargs):
+    from simple_history.models import HistoricalRecords
+    request = getattr(HistoricalRecords.context, "request", None)
+    history_instance = kwargs.get("history_instance")
+    if request is not None and hasattr(history_instance, "history_ip"):
+        history_instance.history_ip = get_client_ip(request)
+
+
+try:
+    from simple_history.signals import pre_create_historical_record
+    pre_create_historical_record.connect(_add_history_ip, dispatch_uid="tenancy_add_history_ip")
+except ImportError:
+    pass

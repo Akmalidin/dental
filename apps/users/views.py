@@ -2100,6 +2100,7 @@ def _newui_superadmin_data():
     clinic_set_access, set_active_clinic, toggle_clinic_site/channel) — POST +
     res.redirected → flashAndReload, тот же паттерн, что и везде в новом
     интерфейсе; бизнес-логика супер-админ-действий не дублируется здесь."""
+    from django.utils import timezone
     from apps.tenancy import unscoped
     from apps.users.models import Clinic, ClinicLoginEvent, ClinicAccessRequest, BlockedIP, TIMEZONE_CHOICES
     from apps.settings_clinic.models import ClinicSettings
@@ -2131,19 +2132,19 @@ def _newui_superadmin_data():
                     "user": e.user.name if e.user else "—",
                     "ip": e.ip_address or "—",
                     "success": e.success,
-                    "at": e.created_at.strftime("%d.%m.%Y %H:%M"),
+                    "at": timezone.localtime(e.created_at).strftime("%d.%m.%Y %H:%M"),
                 } for e in events],
             })
         access_requests = [{
             "id": r.pk, "clinicName": r.clinic_name, "clinicSlug": r.clinic_slug,
             "contactName": r.contact_name, "phone": r.phone, "email": r.email,
             "message": r.message, "ip": r.ip_address or "—", "status": r.status,
-            "at": r.created_at.strftime("%d.%m.%Y %H:%M"),
+            "at": timezone.localtime(r.created_at).strftime("%d.%m.%Y %H:%M"),
         } for r in ClinicAccessRequest.objects.exclude(status=ClinicAccessRequest.STATUS_RESOLVED).order_by("-created_at")[:50]]
         blocked_ips = [{
             "id": b.pk, "ip": b.ip_address, "note": b.note,
-            "at": b.created_at.strftime("%d.%m.%Y %H:%M"),
-            "expiresAt": b.expires_at.strftime("%d.%m.%Y %H:%M") if b.expires_at else "",
+            "at": timezone.localtime(b.created_at).strftime("%d.%m.%Y %H:%M"),
+            "expiresAt": timezone.localtime(b.expires_at).strftime("%d.%m.%Y %H:%M") if b.expires_at else "",
             "isActive": b.is_active_block,
         } for b in BlockedIP.objects.all().order_by("-created_at")]
     return {
@@ -3597,7 +3598,10 @@ def staff_login_as(request, pk):
     request.session["imp_as"] = target.pk
     request.session.modified = True
     messages.success(request, _("Вы вошли как %(n)s. Режим просмотра.") % {"n": target.name})
-    return redirect("/")
+    # На новый интерфейс, если actor им пользуется (тот же принцип выбора,
+    # что и в login_view) — иначе «Войти как сотрудник» из /new/superadmin/
+    # приземляет обратно на старый дашборд.
+    return redirect("/new/" if actor.use_new_interface else "/")
 
 
 @login_required

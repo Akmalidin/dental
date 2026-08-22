@@ -124,6 +124,9 @@ def build_history_rows(qs, model_key, model_label, title_fn):
             "user": h.history_user.name if h.history_user else "—",
             "date": h.history_date, "hid": h.history_id,
             "diff": diff,
+            # history_ip — см. apps.tenancy.HistoricalIPAddressModel/_add_history_ip;
+            # у записей ДО этой правки его нет — getattr с фолбэком на None.
+            "ip": getattr(h, "history_ip", None),
         })
     return out
 
@@ -143,11 +146,16 @@ def _event_row(e):
 
 
 def _login_row(ev):
+    # Если пользователь не резолвлен (отказ — неверный логин/пароль),
+    # показываем сырой введённый логин вместо «—», чтобы было видно, ПОД
+    # КАКИМ ИМЕНЕМ пытались войти (см. ClinicLoginEvent.attempted_login).
+    actor_label = ev.user.name if ev.user else (
+        f"Логин: {ev.attempted_login}" if ev.attempted_login else "—")
     return {
         "id": f"login:{ev.pk}", "source": "login", "created_at": ev.created_at,
         "category": CATEGORY_LOGIN if ev.success else CATEGORY_DENY,
         "action_label": "Вход в систему" if ev.success else "Отказ во входе",
-        "actor_label": ev.user.name if ev.user else "—",
+        "actor_label": actor_label,
         "object_repr": f"user/{ev.user_id}" if ev.user_id else "—",
         "ip": ev.ip_address or "—",
         "result": "success" if ev.success else "fail",
@@ -162,7 +170,7 @@ def _history_row(r):
         "action_label": f"{r['type']}: {r['model_label']}",
         "actor_label": r["user"],
         "object_repr": r["title"],
-        "ip": "—",
+        "ip": r.get("ip") or "—",
         "result": "success",
     }
 
@@ -193,10 +201,13 @@ def superadmin_audit_feed(*, category="all", date_from=None, date_to=None, searc
     rows += [_login_row(ev) for ev in logins_qs]
     rows += _history_source_rows()
 
+    # Сравниваем по БИШКЕКСКОЙ календарной дате, не по UTC — иначе диапазон
+    # дат, выбранный в интерфейсе, «плывёт» на 6 часов около полуночи
+    # (created_at хранится в UTC, TIME_ZONE=Asia/Bishkek).
     if date_from:
-        rows = [r for r in rows if r["created_at"].date() >= date_from]
+        rows = [r for r in rows if timezone.localtime(r["created_at"]).date() >= date_from]
     if date_to:
-        rows = [r for r in rows if r["created_at"].date() <= date_to]
+        rows = [r for r in rows if timezone.localtime(r["created_at"]).date() <= date_to]
 
     if category and category != "all":
         rows = [r for r in rows if r["category"] == category]
@@ -237,7 +248,10 @@ def superadmin_audit_metrics():
     from apps.treatments.models import Treatment
 
     now = timezone.now()
-    today = now.date()
+    # localdate(), не now().date() — иначе «сегодня» считается по UTC-
+    # суткам, а не по Asia/Bishkek (TIME_ZONE), и метрика «за сутки»
+    # ошибается на 6 часов у границы дня.
+    today = timezone.localdate()
     yesterday = today - timedelta(days=1)
 
     events_today = AuditEvent.objects.filter(created_at__date=today).count()

@@ -9,7 +9,7 @@ from simple_history.models import HistoricalRecords
 from apps.users.models import Branch
 from apps.patients.models import Patient
 from apps.services.models import Service
-from apps.tenancy import ClinicSoftDeleteModel
+from apps.tenancy import ClinicSoftDeleteModel, HistoricalIPAddressModel
 
 
 class Treatment(ClinicSoftDeleteModel):
@@ -71,7 +71,9 @@ class Treatment(ClinicSoftDeleteModel):
     # Публичный токен для QR (открывается без логина при сканировании чека).
     public_token = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
 
-    history = HistoricalRecords()
+    # IP автора правки — history_ip, см. apps.tenancy.HistoricalIPAddressModel/
+    # _add_history_ip (используется в Аудит-центре, apps.users.audit).
+    history = HistoricalRecords(bases=[HistoricalIPAddressModel])
 
     class Meta:
         verbose_name = "Приём"
