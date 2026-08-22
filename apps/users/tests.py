@@ -2528,6 +2528,40 @@ class BlockedIPTestCase(TestCase):
         resp = self.client.get("/new/", REMOTE_ADDR="203.0.113.8")
         self.assertEqual(resp.status_code, 200)
 
+    def test_blocked_ip_screen_shows_reason(self):
+        """BlockedIPMiddleware показывает причину (BlockedIP.note), если она
+        указана при блокировке — та же логика, что и Clinic.blocked_reason
+        на /access-request/."""
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="203.0.113.9", note="Множественные неудачные попытки входа")
+        resp = self.client.get("/new/", REMOTE_ADDR="203.0.113.9")
+        self.assertContains(resp, "Множественные неудачные попытки входа", status_code=403)
+
+    def test_blocked_ip_screen_omits_empty_reason_block(self):
+        """Без указанной причины — просто факт блокировки, без пустого блока."""
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="203.0.113.10")
+        resp = self.client.get("/new/", REMOTE_ADDR="203.0.113.10")
+        self.assertNotContains(resp, "Причина", status_code=403)
+
+    def test_superadmin_can_block_ip_with_note(self):
+        """/users/block-ip/ (панель супер-админа, модалка «Причина блокировки») —
+        сохраняет note (шаблон или свой текст), который потом покажет
+        BlockedIPMiddleware заблокированному IP."""
+        from apps.users.models import BlockedIP
+        superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        superadmin = User.objects.create(
+            login="ip_super", name="Супер IP", email="ipsup@test.local", role=superadmin_role,
+        )
+        self.client.force_login(superadmin)
+        resp = self.client.post("/users/block-ip/", {
+            "ip_address": "203.0.113.11", "note": "Спам / автоматизированные запросы",
+        })
+        self.assertEqual(resp.status_code, 302)
+        blocked = BlockedIP.objects.get(ip_address="203.0.113.11")
+        self.assertEqual(blocked.note, "Спам / автоматизированные запросы")
+        self.assertEqual(blocked.blocked_by, superadmin)
+
     def test_login_events_logged_success_and_failure(self):
         from apps.users.models import ClinicLoginEvent
         self.client.post("/login/", {"login": "ip_director", "password": "wrong"}, REMOTE_ADDR="203.0.113.9")

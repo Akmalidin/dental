@@ -32,10 +32,7 @@
         </div>
         <div class="card" style="padding:16px;">
           <h3 style="margin-bottom:10px;" data-i18n="w_sa_blocked_ips">🚫 Заблокированные IP</h3>
-          <form onsubmit="event.preventDefault();saBlockIp();" style="display:flex;gap:8px;margin-bottom:12px;">
-            <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="saNewIp" placeholder="192.0.2.1" style="flex:1;">
-            <button type="submit" class="btn btn-soft btn-sm" data-i18n="w_sa_block">Заблокировать</button>
-          </form>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:12px;" onclick="saOpenBlockReason('ip',{})" data-i18n="w_sa_add_blocked_ip">+ Заблокировать IP</button>
           <div id="saBlockedIpsList"></div>
         </div>
       </div>
@@ -128,6 +125,35 @@
           </div>
         </div>
       </div>
+
+      <!-- Модалка: причина блокировки (клиника ИЛИ IP — общая, см. saOpenBlockReason) —
+           готовые шаблоны причин (клик заполняет текст) + отдельное поле для
+           своего текста. Причина сохраняется и показывается тому, кого
+           заблокировали (клиника — на /access-request/, IP — на экране
+           блокировки), см. Clinic.blocked_reason / BlockedIP.note. -->
+      <div class="modal-backdrop" id="m-sa-block-reason">
+        <div class="modal">
+          <div class="modal-head"><h3 id="saBlockReasonTitle" data-i18n="w_sa_block_reason_title">Причина блокировки</h3><button class="modal-close" onclick="closeModal('m-sa-block-reason')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group" id="saBlockReasonIpWrap" style="display:none;">
+              <label data-i18n="w_sa_ip_address">IP-адрес</label>
+              <input type="text" id="saBlockReasonIp" placeholder="192.0.2.1" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_reason_templates">Готовые причины (клик — подставить):</label>
+              <div id="saReasonTemplates" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            </div>
+            <div class="form-group">
+              <label data-i18n="w_sa_reason_custom">Причина (покажется тому, кого блокируете):</label>
+              <textarea id="saBlockReasonText" rows="3" style="width:100%;resize:vertical;"></textarea>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-block-reason')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-danger" onclick="saSubmitBlockReason()" data-i18n="w_sa_block">Заблокировать</button>
+          </div>
+        </div>
+      </div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -200,18 +226,68 @@
       </div>`).join('');
   };
 
-  window.saBlockIp = async function(){
-    const ip = document.getElementById('saNewIp').value.trim();
-    if(!ip) return;
-    const fd = new FormData();
-    fd.append('ip_address', ip);
-    const res = await postForm('/users/block-ip/', fd);
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
-  };
-
   window.saUnblockIp = async function(id){
     const res = await postForm(`/users/block-ip/${id}/unblock/`, new FormData());
     if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  };
+
+  // ── Модалка «Причина блокировки» — общая для клиники и IP ──────────────
+  // Готовые шаблоны причин: клик по чипу подставляет текст в textarea, но
+  // сам текст остаётся редактируемым — это не жёсткий выбор из списка, а
+  // быстрый старт + возможность дописать/заменить своими словами.
+  const SA_REASON_TEMPLATES = {
+    clinic: [
+      'Просрочена оплата тарифа',
+      'Нарушение условий использования',
+      'Подозрительная активность на аккаунте',
+      'Заблокировано по запросу клиники',
+    ],
+    ip: [
+      'Подозрительная активность',
+      'Множественные неудачные попытки входа',
+      'Спам / автоматизированные запросы',
+      'Попытка несанкционированного доступа',
+    ],
+  };
+  let saBlockReasonCtx = null;  // {type:'clinic', id} | {type:'ip', ip}
+
+  window.saOpenBlockReason = function(type, payload){
+    saBlockReasonCtx = {type, ...payload};
+    document.getElementById('saBlockReasonText').value = '';
+    document.getElementById('saBlockReasonTitle').textContent =
+      type === 'clinic' ? t('w_sa_block_clinic_reason_title') : t('w_sa_block_ip_reason_title');
+    const ipWrap = document.getElementById('saBlockReasonIpWrap');
+    const ipInput = document.getElementById('saBlockReasonIp');
+    if(type === 'ip'){
+      ipWrap.style.display = '';
+      ipInput.value = payload.ip || '';
+      ipInput.readOnly = !!payload.ip;  // из «Последних входов» — IP уже известен, редактировать нечего
+    } else {
+      ipWrap.style.display = 'none';
+    }
+    document.getElementById('saReasonTemplates').innerHTML = SA_REASON_TEMPLATES[type].map(tpl => `
+      <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('saBlockReasonText').value=this.textContent">${tpl}</button>
+    `).join('');
+    openModal('m-sa-block-reason');
+  };
+
+  window.saSubmitBlockReason = async function(){
+    if(!saBlockReasonCtx) return;
+    const reason = document.getElementById('saBlockReasonText').value.trim();
+    const fd = new FormData();
+    let url;
+    if(saBlockReasonCtx.type === 'clinic'){
+      fd.append('reason', reason);
+      url = `/users/clinic/${saBlockReasonCtx.id}/toggle-active/`;
+    } else {
+      const ip = document.getElementById('saBlockReasonIp').value.trim();
+      if(!ip) return;
+      fd.append('ip_address', ip);
+      fd.append('note', reason);
+      url = '/users/block-ip/';
+    }
+    const res = await postForm(url, fd);
+    if(res.redirected){ closeModal('m-sa-block-reason'); flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   window.openNewClinicModal = function(){
@@ -309,25 +385,22 @@
     openModal('m-sa-edit');
   };
 
-  window.saBlockIpQuick = async function(ip){
-    const fd = new FormData();
-    fd.append('ip_address', ip);
-    const res = await postForm('/users/block-ip/', fd);
-    if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
+  window.saBlockIpQuick = function(ip){
+    saOpenBlockReason('ip', {ip});
   };
 
   window.saToggleActive = async function(){
     if(!saCurrentId) return;
     const c = SA.clinics.find(x=>x.id===saCurrentId);
-    const fd = new FormData();
     if(c && c.isActive){
-      // Блокируем — причина обязательна, клиника увидит её на странице
-      // «Запросить доступ» вместо простого «недоступна».
-      const reason = prompt(t('w_sa_block_reason_prompt'));
-      if(reason===null) return;  // отмена
-      fd.append('reason', reason.trim());
+      // Блокируем — причина указывается в отдельной модалке (шаблоны +
+      // свой текст), клиника увидит её на странице «Запросить доступ»
+      // вместо простого «недоступна».
+      saOpenBlockReason('clinic', {id: saCurrentId});
+      return;
     }
-    const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, fd);
+    // Разблокируем — причина не нужна, действие мгновенное.
+    const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, new FormData());
     if(res.redirected){ flashAndReload(t('w_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
