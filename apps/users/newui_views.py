@@ -667,6 +667,91 @@ def newui_superadmin_users(request):
 
 
 @login_required
+def newui_superadmin_deletions_breakdown(request):
+    """AJAX: вкладка «Удаления» — сколько мягко-удалённых записей (по всем
+    клиникам) старше порога (по умолчанию 30 дней) и потому доступно для
+    безвозвратной массовой очистки. См. apps.users.audit.
+    bulk_purge_eligible_summary. Только чтение — сама очистка в
+    newui_superadmin_bulk_purge."""
+    from django.http import JsonResponse
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from .audit import bulk_purge_eligible_summary
+    return JsonResponse(bulk_purge_eligible_summary())
+
+
+@login_required
+def newui_superadmin_bulk_purge(request):
+    """AJAX: безвозвратная массовая очистка «Удалений в очереди» (>30 дней,
+    все клиники) — необратимое действие, поэтому требует POST с фразой
+    подтверждения (сервер — вторая линия защиты, основная — сам
+    is_superadmin-гейт). См. apps.users.audit.bulk_purge_old_deletions:
+    не больше 1000 объектов за вызов (см. докстринг там же), UI сам
+    предложит нажать ещё раз, если после прогона что-то осталось."""
+    from django.http import JsonResponse
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    if request.POST.get("confirm") != "УДАЛИТЬ":
+        return JsonResponse({"error": "Неверная фраза подтверждения"}, status=400)
+    from .audit import bulk_purge_old_deletions
+    result = bulk_purge_old_deletions(actor=request.user, request=request)
+    return JsonResponse(result)
+
+
+@login_required
+def newui_superadmin_backups(request):
+    """AJAX: вкладка «Резервные копии» — список файлов из settings.BACKUPS_DIR
+    (создаются apps.users.management.commands.backup_database по ночам).
+    Сканирование диска, а не отдельная модель БД — файлов немного (хранится
+    последние 14), а модель могла бы разойтись с реальным диском, если файл
+    удалить вручную."""
+    from datetime import datetime, timezone as dt_timezone
+    from django.conf import settings
+    from django.http import JsonResponse
+    from pathlib import Path
+    from django.utils import timezone
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    backups_dir = Path(settings.BACKUPS_DIR)
+    rows = []
+    if backups_dir.is_dir():
+        for p in sorted(backups_dir.glob("sadaf_backup_*"), key=lambda x: x.stat().st_mtime, reverse=True):
+            st = p.stat()
+            # st_mtime — Unix-эпоха (UTC-момент), поэтому строим aware-datetime
+            # в UTC явно, а не через timezone.make_aware (который трактовал бы
+            # наивное значение как уже находящееся в settings.TIME_ZONE и дал
+            # бы двойной сдвиг на серверах, где системные часы — тоже UTC).
+            local_dt = timezone.localtime(datetime.fromtimestamp(st.st_mtime, tz=dt_timezone.utc))
+            rows.append({"name": p.name, "size": st.st_size, "mtime": local_dt.strftime("%d.%m.%Y %H:%M:%S")})
+    return JsonResponse({"rows": rows})
+
+
+@login_required
+def newui_superadmin_backup_download(request, filename):
+    """Скачивание файла резервной копии — is_superadmin-гейт + защита от
+    path traversal (имя файла должно совпадать со своим basename и начинаться
+    с ожидаемого префикса, путь должен резолвиться строго внутри BACKUPS_DIR)."""
+    import os
+    from django.conf import settings
+    from django.http import FileResponse, Http404, HttpResponseForbidden
+    from pathlib import Path
+    if not request.user.is_superadmin:
+        return HttpResponseForbidden("Доступно только суперадмину")
+    if filename != os.path.basename(filename) or not filename.startswith("sadaf_backup_"):
+        return HttpResponseForbidden("Недопустимое имя файла")
+    backups_dir = Path(settings.BACKUPS_DIR).resolve()
+    path = (backups_dir / filename).resolve()
+    if not str(path).startswith(str(backups_dir)) or not path.is_file():
+        raise Http404
+    from .audit import log_audit_event
+    log_audit_event(action="backup_download", category="view", actor=request.user,
+                     request=request, object_repr=filename)
+    return FileResponse(open(path, "rb"), as_attachment=True, filename=filename)
+
+
+@login_required
 def newui_clinic_create(request):
     """AJAX: создание клиники из новой супер-админ-панели. В отличие от
     остальных мутаций этой страницы (которые идут через старые POST-вьюхи

@@ -122,6 +122,12 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# ─── Резервные копии БД (apps.users.management.commands.backup_database) ─────
+# Вне /static/ и /media/ — не отдаётся nginx напрямую (см. deploy/nginx-sadaf.conf,
+# у него только location /static/ и /media/), доступ только через
+# apps.users.newui_views.newui_superadmin_backup_download (is_superadmin).
+BACKUPS_DIR = BASE_DIR / "backups"
+
 # ─── Cache (локальная память) ─────────────────────────────────────────────────
 CACHES = {
     "default": {
