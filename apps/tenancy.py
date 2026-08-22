@@ -310,9 +310,11 @@ class StomAsiaRoutingMiddleware:
     """Новый бренд/домен stom.asia (параллельно с sadaf.kg, см. PublicSiteMiddleware):
 
     - апекс/www.stom.asia → лендинг о продукте (отдельный urlconf, без CRM-урлов)
-    - <slug>.stom.asia → CRM этой клиники ОТКРЫВАЕТСЯ НАПРЯМУЮ (без редиректа на
-      общий app-хост, в отличие от *.sadaf.kg) — только помечаем клинику по хосту
-      для страницы входа (см. login_view), сам urlconf/маршруты не меняются.
+    - <slug>.stom.asia → если у клиники включён и опубликован публичный сайт
+      (ClinicSite.enabled/published) — публичный сайт клиники (тот же
+      urls_site, что и на *.sadaf.kg); иначе — CRM этой клиники ОТКРЫВАЕТСЯ
+      НАПРЯМУЮ (без редиректа на общий app-хост, в отличие от *.sadaf.kg) —
+      просто помечаем клинику по хосту для страницы входа (см. login_view).
     """
     # Редирект на «запросить доступ» ниже остаётся НА ТОМ ЖЕ поддомене
     # (в отличие от PublicSiteMiddleware, который уводит на другой app-хост) —
@@ -338,10 +340,22 @@ class StomAsiaRoutingMiddleware:
             slug = host[: -(len(crm_base) + 1)]
             superadmin_host = (getattr(dj, "SUPERADMIN_HOST", "") or "").lower()
             if slug and slug not in ("www", "app") and host != superadmin_host:
-                from apps.users.models import Clinic
+                from apps.users.models import Clinic, ClinicSite
                 clinic = Clinic.objects.filter(slug=slug).first()
                 if clinic and clinic.is_active:
-                    request.host_clinic = clinic
+                    # Если у клиники включён и опубликован публичный сайт
+                    # (тот же переключатель, что и на *.sadaf.kg —
+                    # ClinicSite.enabled/published, см. PublicSiteMiddleware) —
+                    # поддомен показывает ЕГО, а не CRM напрямую. Без сайта —
+                    # поведение не меняется (CRM напрямую, как и раньше).
+                    site = ClinicSite.objects.filter(clinic=clinic).first()
+                    if site and site.enabled and site.published:
+                        request.public_clinic = clinic
+                        request.public_site = site
+                        request.urlconf = "config.urls_site"
+                        set_current_clinic(clinic)
+                    else:
+                        request.host_clinic = clinic
                 else:
                     # Слаг не резолвится ни в одну клинику, ИЛИ клиника
                     # заблокирована — та же форма «запросить доступ», что и

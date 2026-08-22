@@ -1,7 +1,7 @@
 import json
 import re
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from apps.users.models import User, Permission, PermissionCategory, Role, Clinic, Branch
 from apps.users.forms import UserForm
 
@@ -2970,3 +2970,111 @@ class BranchFilterTestCase(TestCase):
         resp = self.client.get("/new/reports/")
         data = _extract_newui_real_data(resp.content.decode())
         self.assertEqual(data["reportsData"]["revenueMonth"], 3000.0)
+
+
+class StomAsiaPublicSiteTestCase(TestCase):
+    """<slug>.stom.asia показывает публичный сайт клиники (ClinicSite),
+    если он включён и опубликован — вместо CRM напрямую; без сайта
+    поведение НЕ меняется (CRM напрямую — то самое, что пользователь уже
+    похвалил на kuldashov.stom.asia). См. план «Публичный сайт клиники на
+    stom.asia»."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Сайт", slug="site-clinic")
+
+    def test_clinic_with_enabled_site_shows_public_home(self):
+        from apps.users.models import ClinicSite
+        ClinicSite.objects.create(clinic=self.clinic, enabled=True, published=True, headline="Привет")
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/", HTTP_HOST="site-clinic.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "public/home.html")
+
+    def test_clinic_without_site_still_shows_crm(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="site-clinic.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateNotUsed(resp, "public/home.html")
+
+    def test_clinic_with_disabled_site_still_shows_crm(self):
+        from apps.users.models import ClinicSite
+        ClinicSite.objects.create(clinic=self.clinic, enabled=False, published=True)
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="site-clinic.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateNotUsed(resp, "public/home.html")
+
+    def test_clinic_public_url_prefers_crm_base_domain(self):
+        from apps.users.views import _clinic_public_url
+        with override_settings(CRM_BASE_DOMAIN="stom.asia", PUBLIC_BASE_DOMAIN="denta.tw1.ru"):
+            self.assertEqual(_clinic_public_url(self.clinic), "https://site-clinic.stom.asia")
+        with override_settings(CRM_BASE_DOMAIN="", PUBLIC_BASE_DOMAIN="denta.tw1.ru"):
+            self.assertEqual(_clinic_public_url(self.clinic), "https://site-clinic.denta.tw1.ru")
+
+
+class PublicBookingBranchTestCase(TestCase):
+    """Онлайн-запись с публичного сайта клиники (apps.users.site_views)
+    учитывает выбранный филиал (?branch=<id> на странице / branch в
+    POST-заявке) — переход из центрального каталога клиник stom.asia.
+    Без выбранного филиала — старое поведение (главный/первый) не
+    меняется, регрессии для однофилиальных клиник нет."""
+
+    def setUp(self):
+        from apps.users.models import ClinicSite
+        self.clinic = Clinic.objects.create(name="Клиника Запись", slug="book-clinic")
+        self.branch_main = Branch.objects.create(
+            name="Центр", address="ул. А", phone="0", is_main=True, clinic=self.clinic,
+        )
+        self.branch_south = Branch.objects.create(
+            name="Юг", address="ул. Б", phone="0", clinic=self.clinic,
+        )
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.doctor = User.objects.create(
+            login="book_doc", name="Врач Юг", email="bookdoc@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor.branches.set([self.branch_south])
+        ClinicSite.objects.create(clinic=self.clinic, enabled=True, published=True, show_booking=True)
+
+    def _post_submit(self, phone, **extra):
+        import datetime as dt
+        from django.utils import timezone
+        tomorrow = (timezone.localdate() + dt.timedelta(days=1)).isoformat()
+        data = {
+            "doctor": self.doctor.pk, "date": tomorrow, "slot": "10:00",
+            "name": "Пациент Тест", "phone": phone,
+        }
+        data.update(extra)
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            return self.client.post("/book/submit/", data, HTTP_HOST="book-clinic.stom.asia")
+
+    def test_submit_with_branch_id_uses_that_branch(self):
+        from apps.appointments.models import Appointment
+        resp = self._post_submit("+996700333444", branch=self.branch_south.pk)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        appt = Appointment.objects.filter(patient__phone="+996700333444").first()
+        self.assertIsNotNone(appt)
+        self.assertEqual(appt.branch_id, self.branch_south.pk)
+
+    def test_submit_without_branch_id_uses_main_branch(self):
+        from apps.appointments.models import Appointment
+        resp = self._post_submit("+996700333445")
+        self.assertTrue(resp.json()["ok"])
+        appt = Appointment.objects.filter(patient__phone="+996700333445").first()
+        self.assertEqual(appt.branch_id, self.branch_main.pk)
+
+    def test_submit_with_foreign_branch_id_falls_back_to_main(self):
+        """branch_id чужой клиники/несуществующий — не ломается, откатывается
+        на дефолт (главный филиал), как без параметра вообще."""
+        from apps.appointments.models import Appointment
+        resp = self._post_submit("+996700333446", branch=999999)
+        self.assertTrue(resp.json()["ok"])
+        appt = Appointment.objects.filter(patient__phone="+996700333446").first()
+        self.assertEqual(appt.branch_id, self.branch_main.pk)
+
+    def test_public_book_page_filters_doctors_by_branch(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get(f"/book/?branch={self.branch_south.pk}", HTTP_HOST="book-clinic.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Врач Юг")
