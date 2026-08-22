@@ -72,6 +72,50 @@ def _is_unscoped():
     return getattr(_state, "unscoped", False)
 
 
+class BlockedIPMiddleware:
+    """Блокировка по IP (apps.users.models.BlockedIP) — apps.users.forms.
+    LoginForm.clean() останавливает только НОВЫЙ вход (POST /login/), уже
+    открытая сессия с этого же IP до этого продолжала работать без
+    ограничений. По прямому запросу («проверка IP не должна быть только при
+    входе, должна проверять действия») — здесь блокировка проверяется на
+    КАЖДОМ запросе: заблокированный IP не может выполнить ни одного
+    действия в системе, даже если сессия была открыта ДО того, как IP
+    заблокировали — разлогиниваем немедленно.
+
+    Отвечаем напрямую (без редиректа) — редирект на /login/ здесь
+    зациклился бы (тот же IP, та же блокировка, тот же middleware на
+    следующем запросе), см. аналогичный баг с StomAsiaRoutingMiddleware."""
+    ALLOWED_PREFIXES = ("/static", "/i18n", "/sw.js", "/manifest.json")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not request.path.startswith(self.ALLOWED_PREFIXES):
+            from apps.users.models import BlockedIP
+            ip = get_client_ip(request)
+            if ip and BlockedIP.objects.filter(ip_address=ip).exists():
+                user = getattr(request, "user", None)
+                if user is not None and user.is_authenticated:
+                    from django.contrib.auth import logout
+                    logout(request)
+                from django.http import HttpResponse
+                return HttpResponse(
+                    "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\">"
+                    "<title>Доступ заблокирован</title>"
+                    "<style>body{font-family:sans-serif;background:#14171F;color:#fff;"
+                    "display:flex;align-items:center;justify-content:center;min-height:100vh;"
+                    "margin:0;text-align:center;padding:24px;}"
+                    "div{max-width:420px;}h1{font-size:20px;}p{color:#8B93A3;font-size:14px;}"
+                    "</style></head><body><div>"
+                    "<h1>⛔ Доступ с этого IP заблокирован</h1>"
+                    "<p>Обратитесь к администратору клиники, если считаете, что это ошибка.</p>"
+                    "</div></body></html>",
+                    status=403,
+                )
+        return self.get_response(request)
+
+
 class ImpersonationMiddleware:
     """«Войти как сотрудник» (директор/суперадмин) — оверлей request.user на время запроса.
 

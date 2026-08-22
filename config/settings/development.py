@@ -64,6 +64,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.tenancy.BlockedIPMiddleware",
     "apps.tenancy.ImpersonationMiddleware",
     "apps.tenancy.StomAsiaRoutingMiddleware",
     "apps.tenancy.SuperadminHostMiddleware",

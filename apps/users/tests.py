@@ -2502,8 +2502,31 @@ class BlockedIPTestCase(TestCase):
         BlockedIP.objects.create(ip_address="203.0.113.5")
         resp = self.client.post("/login/", {"login": "ip_director", "password": "pass1234"},
                                  REMOTE_ADDR="203.0.113.5")
-        self.assertContains(resp, "заблокирован")
+        self.assertContains(resp, "заблокирован", status_code=403)
         self.assertFalse(resp.wsgi_request.user.is_authenticated)
+
+    def test_blocked_ip_rejected_on_every_request_not_just_login(self):
+        """apps.tenancy.BlockedIPMiddleware — блокировка проверяется на КАЖДОМ
+        запросе, а не только при входе: уже открытая (до блокировки) сессия
+        с этого IP разлогинивается и не может выполнить ни одного действия."""
+        from apps.users.models import BlockedIP
+        self.client.force_login(self.director)
+        # ДО блокировки — обычный доступ.
+        resp0 = self.client.get("/new/", REMOTE_ADDR="203.0.113.7")
+        self.assertEqual(resp0.status_code, 200)
+
+        BlockedIP.objects.create(ip_address="203.0.113.7")
+        resp = self.client.get("/new/", REMOTE_ADDR="203.0.113.7")
+        self.assertEqual(resp.status_code, 403)
+        self.assertContains(resp, "заблокирован", status_code=403)
+        self.assertFalse(resp.wsgi_request.user.is_authenticated)
+
+    def test_unblocked_ip_not_affected(self):
+        from apps.users.models import BlockedIP
+        BlockedIP.objects.create(ip_address="203.0.113.7")
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/", REMOTE_ADDR="203.0.113.8")
+        self.assertEqual(resp.status_code, 200)
 
     def test_login_events_logged_success_and_failure(self):
         from apps.users.models import ClinicLoginEvent
