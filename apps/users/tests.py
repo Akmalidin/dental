@@ -2751,6 +2751,29 @@ class HistoryIPTestCase(TestCase):
         rows = build_history_rows(HP.objects.all(), "patient", "Пациент", lambda h: str(h.id))
         self.assertTrue(all("ip" in r for r in rows))
 
+    def test_history_row_ip_hint_for_pre_rollout_rows(self):
+        """_history_row(): строка без IP, созданная ДО IP_TRACKING_SINCE,
+        получает ip_hint с датой; после — ip_hint=None (просто «неизвестно
+        технически», не «не отслеживалось тогда»); строка с реальным IP —
+        ip_hint всегда None."""
+        from datetime import timedelta
+        from apps.users.audit import _history_row, IP_TRACKING_SINCE
+        base_row = {"model": "treatment", "model_label": "Приём", "obj_id": 1,
+                    "title": "Приём #1", "type": "Изменение", "raw_type": "~",
+                    "user": "Кто-то", "hid": 1}
+
+        before = _history_row({**base_row, "date": IP_TRACKING_SINCE - timedelta(days=1), "ip": None})
+        self.assertEqual(before["ip"], "—")
+        self.assertIsNotNone(before["ip_hint"])
+
+        after = _history_row({**base_row, "date": IP_TRACKING_SINCE + timedelta(days=1), "ip": None})
+        self.assertEqual(after["ip"], "—")
+        self.assertIsNone(after["ip_hint"])
+
+        with_ip = _history_row({**base_row, "date": IP_TRACKING_SINCE - timedelta(days=1), "ip": "1.2.3.4"})
+        self.assertEqual(with_ip["ip"], "1.2.3.4")
+        self.assertIsNone(with_ip["ip_hint"])
+
 
 class AttemptedLoginTestCase(TestCase):
     """Сырой введённый логин при отказе входа — ClinicLoginEvent.

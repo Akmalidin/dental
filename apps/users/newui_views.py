@@ -560,13 +560,16 @@ def newui_superadmin_event_detail(request, event_id):
                         for c in delta.changes if c.field not in _AUDIT_DIFF_SKIP_FIELDS]
             model_label = "Пациент" if model_key == "patient" else "Приём"
             hist_ip = getattr(h, "history_ip", None)
+            from .audit import IP_TRACKING_SINCE
+            ip_hint = ("IP не отслеживался до 22.08.2026"
+                       if not hist_ip and h.history_date < IP_TRACKING_SINCE else None)
             data = {
                 "action_label": f"{type_label.get(h.history_type, h.history_type)}: {model_label}",
                 "created_at": timezone.localtime(h.history_date).strftime("%d.%m.%Y %H:%M:%S"),
                 "actor_label": h.history_user.name if h.history_user else "—",
                 "actor_role": (h.history_user.role_name or "") if h.history_user else "",
                 "object_repr": f"{model_key}/{h.id}",
-                "ip": hist_ip or "—",
+                "ip": hist_ip or "—", "ip_hint": ip_hint,
                 "geo": get_ip_geolocation(hist_ip) if hist_ip else None,
                 "device": "—",
                 "result": "Успех",
