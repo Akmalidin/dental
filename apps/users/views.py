@@ -2350,6 +2350,15 @@ def set_active_clinic(request):
         try:
             request.session["active_clinic"] = int(cid)
             request.session.pop("active_branch", None)  # сбросить филиал при смене клиники
+            from apps.users.models import Clinic
+            clinic = Clinic.objects.filter(pk=int(cid)).first()
+            if clinic:
+                from .audit import log_audit_event
+                log_audit_event(
+                    action="clinic_enter", category="view", actor=request.user, request=request,
+                    clinic=clinic, object_model="clinic", object_id=clinic.pk,
+                    object_repr=f"clinic/{clinic.slug} — {clinic.name}",
+                )
         except (TypeError, ValueError):
             pass
     return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
@@ -2575,6 +2584,17 @@ def clinic_overview(request, clinic_id):
     if not (user.is_superadmin or (user.is_admin_main and user.clinic_id == clinic.pk)):
         messages.error(request, _("Нет доступа к обзору этой клиники"))
         return redirect("/")
+
+    if user.is_superadmin:
+        # Просмотр admin_main своей же клиники — рутина, не логируем (иначе
+        # лента заполнится шумом обычной работы директора); интересен именно
+        # супер-админ, заглянувший в ЧУЖУЮ клинику.
+        from .audit import log_audit_event
+        log_audit_event(
+            action="clinic_view", category="view", actor=user, request=request,
+            clinic=clinic, object_model="clinic", object_id=clinic.pk,
+            object_repr=f"clinic/{clinic.slug} — {clinic.name}",
+        )
 
     stats = {"revenue": None}
     with unscoped():
@@ -3568,6 +3588,12 @@ def staff_login_as(request, pk):
         return redirect("staff_list")
     if target.pk == actor.pk:
         return redirect("staff_list")
+    from .audit import log_audit_event
+    log_audit_event(
+        action="impersonate_start", category="view", actor=actor, request=request,
+        clinic=target.clinic, object_model="user", object_id=target.pk,
+        object_repr=f"user/{target.pk} — {target.name}",
+    )
     request.session["imp_as"] = target.pk
     request.session.modified = True
     messages.success(request, _("Вы вошли как %(n)s. Режим просмотра.") % {"n": target.name})

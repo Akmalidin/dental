@@ -18,10 +18,14 @@
        чтобы не дублировать код между старой страницей /users/audit/ и
        новой лентой).
 
-«Просмотры» (категория "view") — вкладка есть в интерфейсе, но событий в
-неё пока никто не пишет (в коде нет ни одного места, логирующего «открыл
-запись») — лента просто возвращает для неё пустой список, а не выдумывает
-данные (see план «Аудит-центр»).
+«Просмотры» (категория "view") — НЕ общий трекинг каждого клика по
+приложению (это был бы шум обычной работы персонала, а не журнал
+безопасности), а только надзорные действия супер-админа/директора над
+чужими данными: вход в конкретную клинику (apps.users.views.
+set_active_clinic → action="clinic_enter"), открытие сводки клиники
+супер-админом (clinic_overview → action="clinic_view", только для
+is_superadmin — просмотр admin_main своей же клиники не логируется, это
+рутина) и «Войти как сотрудник» (staff_login_as → action="impersonate_start").
 """
 from datetime import timedelta
 
@@ -55,6 +59,9 @@ ACTION_LABELS = {
     "purge": "Окончательное удаление",
     "soft_delete": "Удаление",
     "restore": "Восстановление",
+    "clinic_view": "Просмотр клиники",
+    "clinic_enter": "Вход в клинику (супер-админ)",
+    "impersonate_start": "Вход как сотрудник",
 }
 
 
@@ -191,11 +198,7 @@ def superadmin_audit_feed(*, category="all", date_from=None, date_to=None, searc
     if date_to:
         rows = [r for r in rows if r["created_at"].date() <= date_to]
 
-    if category == CATEGORY_VIEW:
-        # «Просмотры» — вкладка есть, событий пока нигде не пишем (см.
-        # докстринг модуля) — не подделываем данные.
-        rows = []
-    elif category and category != "all":
+    if category and category != "all":
         rows = [r for r in rows if r["category"] == category]
 
     if search:

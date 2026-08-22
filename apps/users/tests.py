@@ -2451,6 +2451,47 @@ class AuditEventLoggingTestCase(TestCase):
         self.assertEqual(evt.actor_id, self.superadmin.pk)
         self.assertEqual(evt.diff, [{"field": "is_deleted", "old": "Нет", "new": "Да"}])
 
+    def test_set_active_clinic_writes_view_event(self):
+        """«Войти →» в консоли — надзорный просмотр (вкладка «Просмотры»)."""
+        from apps.users.models import AuditEvent
+        self.client.post("/users/set-clinic/", {"clinic": self.clinic.pk})
+        evt = AuditEvent.objects.filter(action="clinic_enter", clinic=self.clinic).first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.category, "view")
+
+    def test_set_active_clinic_all_does_not_write_event(self):
+        """Сброс выбора клиники ("все") — не «вход», событие не пишем."""
+        from apps.users.models import AuditEvent
+        self.client.post("/users/set-clinic/", {"clinic": "all"})
+        self.assertFalse(AuditEvent.objects.filter(action="clinic_enter").exists())
+
+    def test_clinic_overview_by_superadmin_writes_view_event(self):
+        from apps.users.models import AuditEvent
+        self.client.get(f"/users/clinic/{self.clinic.pk}/overview/")
+        evt = AuditEvent.objects.filter(action="clinic_view", clinic=self.clinic).first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.category, "view")
+
+    def test_clinic_overview_by_admin_main_own_clinic_does_not_write_event(self):
+        """Директор смотрит свою же клинику — рутина, не событие безопасности."""
+        from apps.users.models import AuditEvent
+        admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        director = User.objects.create(login="ae_director", name="Директор AE", role=admin_role, clinic=self.clinic)
+        client = Client()
+        client.force_login(director)
+        client.get(f"/users/clinic/{self.clinic.pk}/overview/")
+        self.assertFalse(AuditEvent.objects.filter(action="clinic_view").exists())
+
+    def test_staff_login_as_writes_view_event(self):
+        from apps.users.models import AuditEvent
+        doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        staff = User.objects.create(login="ae_doctor", name="Доктор AE", role=doctor_role, clinic=self.clinic)
+        self.client.post(f"/users/{staff.pk}/login-as/")
+        evt = AuditEvent.objects.filter(action="impersonate_start").first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.category, "view")
+        self.assertEqual(evt.object_repr, f"user/{staff.pk} — {staff.name}")
+
 
 class BlockedIPExpiryTestCase(TestCase):
     """BlockedIP.expires_at — блокировка со сроком перестаёт действовать
@@ -2585,12 +2626,27 @@ class SuperadminAuditFeedTestCase(TestCase):
         self.assertTrue(all(r["category"] == "deny" for r in resp_deny.json()["rows"]))
         self.assertIn("5.5.5.5", [r["ip"] for r in resp_deny.json()["rows"]])
 
-    def test_feed_view_category_is_empty_not_fabricated(self):
-        """«Просмотры» — вкладка есть, событий туда нигде не пишем (см.
-        apps.users.audit докстринг) — пустой список, не выдуманные данные."""
+    def test_feed_view_category_empty_when_no_view_events(self):
+        """«Просмотры» без реальных событий — пустой список, не выдуманные
+        данные (в этом тесте намеренно не создаём ни одного view-события)."""
         self.client.force_login(self.superadmin)
         resp = self.client.get("/new/superadmin/feed/?category=view")
         self.assertEqual(resp.json()["rows"], [])
+
+    def test_feed_view_category_returns_real_view_events(self):
+        """Надзорные просмотры (вход в клинику/за сотрудника) реально
+        попадают во вкладку «Просмотры» — см. apps.users.views.
+        set_active_clinic/staff_login_as/clinic_overview."""
+        from apps.users.audit import log_audit_event
+        self.client.force_login(self.superadmin)
+        log_audit_event(action="clinic_enter", category="view", actor=self.superadmin,
+                         clinic=self.clinic, object_model="clinic", object_id=self.clinic.pk,
+                         object_repr=f"clinic/{self.clinic.slug} — {self.clinic.name}")
+        resp = self.client.get("/new/superadmin/feed/?category=view")
+        rows = resp.json()["rows"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["category"], "view")
+        self.assertEqual(rows[0]["object_repr"], f"clinic/{self.clinic.slug} — {self.clinic.name}")
 
     def test_feed_search_filters_by_ip(self):
         from apps.users.audit import log_audit_event

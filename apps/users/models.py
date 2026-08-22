@@ -515,12 +515,14 @@ class AuditEvent(models.Model):
     что уже используется в audit_center) — эта модель нужна только для
     действий, которые больше нигде не логируются: блокировки клиник/IP,
     выдача/запрет доступов, удаления объектов (через
-    ClinicSoftDeleteModel.soft_delete/restore, см. apps.tenancy) и т.п.
-    Пишется через apps.users.audit.log_audit_event() — никогда не должна
-    ронять вызывающую вьюху при ошибке записи."""
+    ClinicSoftDeleteModel.soft_delete/restore, см. apps.tenancy),
+    надзорные просмотры (супер-админ входит в клинику/за сотрудника —
+    category="view") и т.п. Пишется через apps.users.audit.log_audit_event()
+    — никогда не должна ронять вызывающую вьюху при ошибке записи."""
     CATEGORY_CHOICES = [
         ("change", "Изменение"),
         ("delete", "Удаление"),
+        ("view", "Просмотр"),
     ]
     RESULT_CHOICES = [
         ("success", "Успех"),
