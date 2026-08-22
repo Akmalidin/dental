@@ -774,7 +774,10 @@
     });
     if(activeHidden) vcTab('teeth');
   };
-  vwSetSimpleMode(localStorage.getItem(SIMPLE_MODE_KEY)==='1');
+  // По умолчанию (пока пользователь ни разу не переключал вручную на этом
+  // устройстве) приём открывается в простом режиме — переключение на
+  // полноценный запоминается и дальше не сбрасывается.
+  vwSetSimpleMode(localStorage.getItem(SIMPLE_MODE_KEY)!=='0');
 })();
 </script>
 {% endblock %}
