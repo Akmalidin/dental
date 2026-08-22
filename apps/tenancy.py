@@ -94,22 +94,35 @@ class BlockedIPMiddleware:
         if not request.path.startswith(self.ALLOWED_PREFIXES):
             from apps.users.models import BlockedIP
             ip = get_client_ip(request)
-            if ip and BlockedIP.objects.filter(ip_address=ip).exists():
+            blocked = BlockedIP.objects.filter(ip_address=ip).first() if ip else None
+            if blocked is not None:
                 user = getattr(request, "user", None)
                 if user is not None and user.is_authenticated:
                     from django.contrib.auth import logout
                     logout(request)
                 from django.http import HttpResponse
+                from django.utils.html import escape
+                # Причину (BlockedIP.note) супер-админ указывает в момент
+                # блокировки — если её нет (заблокировали без причины),
+                # показываем только сам факт блокировки, без пустого блока.
+                reason_html = (
+                    "<div style=\"background:rgba(232,93,45,.12);border:1px solid rgba(232,93,45,.35);"
+                    "border-radius:11px;padding:11px 13px;margin-top:14px;text-align:left;\">"
+                    "<p style=\"color:#FBD9C9;font-size:11px;text-transform:uppercase;"
+                    "letter-spacing:.02em;margin:0 0 4px;\">Причина</p>"
+                    f"<p style=\"color:#fff;font-size:13px;margin:0;\">{escape(blocked.note)}</p></div>"
+                ) if blocked.note else ""
                 return HttpResponse(
                     "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\">"
                     "<title>Доступ заблокирован</title>"
                     "<style>body{font-family:sans-serif;background:#14171F;color:#fff;"
                     "display:flex;align-items:center;justify-content:center;min-height:100vh;"
                     "margin:0;text-align:center;padding:24px;}"
-                    "div{max-width:420px;}h1{font-size:20px;}p{color:#8B93A3;font-size:14px;}"
-                    "</style></head><body><div>"
+                    "div.wrap{max-width:420px;}h1{font-size:20px;}p{color:#8B93A3;font-size:14px;}"
+                    "</style></head><body><div class=\"wrap\">"
                     "<h1>⛔ Доступ с этого IP заблокирован</h1>"
                     "<p>Обратитесь к администратору клиники, если считаете, что это ошибка.</p>"
+                    f"{reason_html}"
                     "</div></body></html>",
                     status=403,
                 )
