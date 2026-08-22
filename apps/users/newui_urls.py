@@ -23,6 +23,7 @@ urlpatterns = [
     path("schedule/", v.newui_schedule, name="newui_schedule"),
     path("schedule/data/", v.newui_schedule_data_json, name="newui_schedule_data"),
     path("treatplans/", v.newui_treatplans, name="newui_treatplans"),
+    path("treatplans/<int:pk>/", v.newui_treatplan_detail, name="newui_treatplan_detail"),
     path("staff/", v.newui_staff, name="newui_staff"),
     path("services/", v.newui_services, name="newui_services"),
     path("warehouse/", v.newui_warehouse, name="newui_warehouse"),

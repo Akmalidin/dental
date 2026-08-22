@@ -17,7 +17,7 @@ from .views import (
     _newui_role_data, _newui_staff_data, _newui_dashboard_data,
     _newui_patients_data, _newui_patients_page_data, _newui_patient_by_pk, _newui_services_data, _newui_finance_data,
     _newui_lab_data, _newui_warehouse_data, _newui_reports_data,
-    _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data,
+    _newui_schedule_data, _newui_blacklist_data, _newui_treatplans_data, _newui_treatplan_detail_data,
     _newui_visits_data, _newui_accounting_data, _newui_audit_data, _newui_notifications_data,
     _newui_patientcard_detail_data, _newui_cashdesk_data, _newui_messages_data,
     _newui_settings_data, _newui_funnel_data, _newui_salary_data, _newui_profile_data,
@@ -817,6 +817,27 @@ def newui_treatplans(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     return _render(request, "treatplans", "treatplans.html", {"treatplansData": _newui_treatplans_data(clinic)})
+
+
+@login_required
+def newui_treatplan_detail(request, pk):
+    """Один план лечения (этапы/услуги/скидки/печать) в новом интерфейсе —
+    заменяет собой переход на старый /treatments/plans/<pk>/
+    (apps.treatments.views.plan_detail). Мутации (добавить/изменить/
+    удалить этап или услугу, переместить/дублировать, переключить статус)
+    идут на те же старые POST-эндпоинты через postForm()+flashAndReload()
+    — бизнес-логика не дублируется, см. apps/treatments/views.py
+    plan_stage_*/plan_item_*."""
+    from django.shortcuts import get_object_or_404
+    from apps.tenancy import get_current_clinic
+    from apps.treatments.models_plan import TreatmentPlan
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    plan = get_object_or_404(
+        TreatmentPlan.objects.select_related("patient", "doctor"),
+        pk=pk, patient__clinic=clinic,
+    )
+    return _render(request, "treatplandetail", "treatplan_detail.html",
+                   {"planDetail": _newui_treatplan_detail_data(plan)})
 
 
 @login_required
