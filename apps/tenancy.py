@@ -440,6 +440,8 @@ class SectionAccessMiddleware:
         # ODONTIS-интерфейса.
         ("/new/staff", "staff"),
         ("/new/settings", "settings"),
+        ("/new/funnel", "funnel"),
+        ("/new/marketing", "marketing"),
         ("/new/schedule", "appointments"),
         ("/new/visitcard", "treatments"),
         ("/new/treatplans", "treatments"),
