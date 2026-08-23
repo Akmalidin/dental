@@ -3476,6 +3476,7 @@ function renderCashdesk(){
   renderCashShift();
   renderCashQueue();
   renderCashPayments();
+  renderCashTodayPayments();
 }
 // Поиск на «Кассе» — фильтрует и «Пациенты на сегодня» (renderCashTodayRow,
 // cashdesk.html), и «Ожидают оплаты» (renderCashQueue ниже) одним полем, по
@@ -3525,6 +3526,31 @@ function renderCashPayments(){
       <button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button>
       <a class="btn btn-ghost btn-sm" href="/finance/payments/${p.id}/edit/">${t('w_edit')}</a>
       ${IS_SUPERADMIN ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="deletePayment(${p.id})">${t('w_delete')}</button>` : ''}
+    </td>
+  </tr>`).join('');
+}
+// «Сегодняшние платежи» — прямо на главной панели кассы (не за вкладкой
+// «Оплаты», которая хранит полную историю без фильтра по дате), быстрая
+// печать чека / переход в карточку пациента, без правки/удаления (для
+// этого уже есть вкладка «Оплаты») — see cashdesk.html #cashTodayPaymentsBody.
+function renderCashTodayPayments(){
+  const body=document.getElementById('cashTodayPaymentsBody');
+  const countEl=document.getElementById('cashTodayPaymentsCount');
+  if(!body || !cashdeskData) return;
+  const list=(cashdeskData.payments||[]).filter(p=>p.isToday);
+  if(countEl) countEl.textContent = list.length ? (list.length+' '+t('w_items_count')) : '';
+  if(list.length===0){
+    body.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_payments_today','Сегодня платежей ещё не было')}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(p=>`<tr>
+    <td>${p.time.slice(11)}</td>
+    <td>${p.patientId?`<a href="/new/patients/${p.patientId}/" style="color:var(--cobalt);">${p.patientName}</a>`:p.patientName}</td>
+    <td>${p.method}</td>
+    <td class="mono" style="color:${p.isRefund?'var(--coral)':'var(--teal)'};font-weight:600;">${p.isRefund?'−':'+'}${fmtSom(p.amount)}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button>
+      ${p.patientId?`<a class="btn btn-ghost btn-sm" href="/new/patients/${p.patientId}/">${t('w_patient_card')}</a>`:''}
     </td>
   </tr>`).join('');
 }
