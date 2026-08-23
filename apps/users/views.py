@@ -1874,10 +1874,20 @@ def _newui_cashdesk_data(request, clinic):
     from apps.notifications.models import Notification
     from apps.patients.models import Patient
 
+    # Филиал кассы — сначала пробуем переключатель сайдбара (тот же
+    # get_active_branch_id, что уже используют расписание/пациенты/склад/
+    # финансы/отчёты), и только если выбрано «Все филиалы» (None) — падаем
+    # на главный/первый филиал клиники: кассовая смена физически привязана
+    # к одному филиалу, «всё сразу» для неё не имеет смысла.
     branch = None
     if clinic:
         from apps.users.models import Branch
-        branch = Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
+        from apps.tenancy import get_active_branch_id
+        active_bid = get_active_branch_id(request)
+        if active_bid:
+            branch = Branch.objects.filter(pk=active_bid, clinic=clinic).first()
+        if branch is None:
+            branch = Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
 
     shift = CashShift.objects.filter(branch=branch, status=CashShift.STATUS_OPEN).first() if branch else None
     shift_data = None
@@ -1965,11 +1975,14 @@ def _newui_cashdesk_data(request, clinic):
     from apps.treatments.models import Treatment
 
     today = timezone.localdate()
-    today_appts = list(
+    today_appts_qs = (
         Appointment.objects.filter(start_at__date=today)
         .exclude(status=Appointment.STATUS_CANCELLED)
         .select_related("patient").order_by("start_at")
     )
+    if branch:
+        today_appts_qs = today_appts_qs.filter(branch=branch)
+    today_appts = list(today_appts_qs)
     appt_ids = [a.pk for a in today_appts]
     treat_by_appt = defaultdict(list)
     for tr in (Treatment.objects.filter(appointment_id__in=appt_ids)
@@ -2018,6 +2031,10 @@ def _newui_cashdesk_data(request, clinic):
         "isRefund": pm.type == Payment.TYPE_REFUND,
         "receivedBy": pm.received_by.name if pm.received_by else "—",
         "time": timezone.localtime(pm.created_at).strftime("%d.%m.%Y %H:%M"),
+        # Признак «сегодня» считаем на сервере (Бишкек-дата, та же `today`,
+        # что и у «Пациентов на сегодня» выше) — не парсим строку `time` на
+        # фронте, надёжнее и не расходится с остальным проектом.
+        "isToday": timezone.localtime(pm.created_at).date() == today,
     } for pm in payments_qs[:200]]
 
     return {

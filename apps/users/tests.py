@@ -4008,6 +4008,66 @@ class BranchFilterTestCase(TestCase):
         data = _extract_newui_real_data(resp.content.decode())
         self.assertEqual(data["reportsData"]["revenueMonth"], 3000.0)
 
+    def test_cashdesk_filtered_by_active_branch(self):
+        """Касса (_newui_cashdesk_data) раньше сама вычисляла филиал как
+        «главный/первый» и НЕ читала переключатель сайдбара — теперь при
+        выбранном конкретном филиале использует именно его."""
+        self._set_branch(self.branch2)
+        resp = self.client.get("/new/cashdesk/")
+        data = _extract_newui_real_data(resp.content.decode())
+        cd = data["cashdeskData"]
+        self.assertEqual(cd["branchId"], self.branch2.pk)
+        payment_patients = [p["patientName"] for p in cd["payments"]]
+        self.assertIn(self.patient2.full_name, payment_patients)
+        self.assertNotIn(self.patient1.full_name, payment_patients)
+
+    def test_cashdesk_falls_back_to_main_branch_when_none_selected(self):
+        """«Все филиалы» (branch не выбран) — касса, как и раньше, падает на
+        главный филиал (кассовая смена физически привязана к одному месту,
+        «всё сразу» для неё не имеет смысла)."""
+        resp = self.client.get("/new/cashdesk/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["cashdeskData"]["branchId"], self.branch1.pk)
+
+
+class CashdeskTodayPaymentsTestCase(TestCase):
+    """«Сегодняшние платежи» на кассе — apps.users.views._newui_cashdesk_data
+    помечает isToday=True только для платежей текущего (Бишкек-)дня."""
+
+    def setUp(self):
+        from apps.finance.models import Payment
+        from apps.patients.models import Patient
+        from django.utils import timezone
+
+        self.clinic = Clinic.objects.create(name="Клиника CTP", slug="clinic-ctp")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="ctp_director", name="Директор CTP",
+                                             role=self.admin_role, clinic=self.clinic)
+        patient = Patient.objects.create(first_name="Тест", last_name="Кассовый", phone="+996700000020",
+                                          branch=self.branch, clinic=self.clinic)
+
+        self.today_payment = Payment.objects.create(
+            patient=patient, amount=500, branch=self.branch, received_by=self.director,
+            type=Payment.TYPE_INCOME, clinic=self.clinic,
+        )
+        self.yday_payment = Payment.objects.create(
+            patient=patient, amount=700, branch=self.branch, received_by=self.director,
+            type=Payment.TYPE_INCOME, clinic=self.clinic,
+        )
+        yesterday = timezone.now() - timedelta(days=1)
+        Payment.objects.filter(pk=self.yday_payment.pk).update(created_at=yesterday)
+
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_only_todays_payment_marked_is_today(self):
+        resp = self.client.get("/new/cashdesk/")
+        data = _extract_newui_real_data(resp.content.decode())
+        by_id = {p["id"]: p["isToday"] for p in data["cashdeskData"]["payments"]}
+        self.assertTrue(by_id[self.today_payment.pk])
+        self.assertFalse(by_id[self.yday_payment.pk])
+
 
 class StomAsiaPublicSiteTestCase(TestCase):
     """<slug>.stom.asia показывает публичный сайт клиники (ClinicSite),
