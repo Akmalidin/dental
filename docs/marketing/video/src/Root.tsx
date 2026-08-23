@@ -6,6 +6,7 @@ import { OdontisShort, SHORT_TOTAL_FRAMES } from "./ShortVideo";
 import { LogoBridge, TOTAL as LOGO_BRIDGE_TOTAL } from "./bridge/LogoBridgeVideo";
 import { PatientSearch, TOTAL as PATIENT_SEARCH_TOTAL } from "./bridge/PatientSearchVideo";
 import { TreatmentHistory, TOTAL as TREATMENT_HISTORY_TOTAL } from "./bridge/TreatmentHistoryVideo";
+import { FullAdVO, TOTAL_FRAMES_VO } from "./vo/FullAdVO";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -16,6 +17,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition id="LogoBridge" component={LogoBridge} durationInFrames={LOGO_BRIDGE_TOTAL} fps={30} width={1920} height={1080} />
       <Composition id="PatientSearch" component={PatientSearch} durationInFrames={PATIENT_SEARCH_TOTAL} fps={30} width={1920} height={1080} />
       <Composition id="TreatmentHistory" component={TreatmentHistory} durationInFrames={TREATMENT_HISTORY_TOTAL} fps={30} width={1920} height={1080} />
+      <Composition id="FullAdVO" component={FullAdVO} durationInFrames={TOTAL_FRAMES_VO} fps={30} width={1920} height={1080} />
     </>
   );
 };
