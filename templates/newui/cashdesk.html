@@ -230,6 +230,10 @@
 <script>
 let cashAcceptItem=null;
 let lastAcceptedPaymentId=null;
+// Заполняется только если касса открыта переходом из расписания
+// (?open_payment=ID&return=...) — тогда после «выдать чек?» возвращаем
+// администратора обратно на расписание, а не оставляем на кассе.
+let cashReturnUrl=null;
 function openCashAcceptModal(notifId){
   const item=(cashdeskData.queue||[]).find(i=>i.id===notifId);
   if(!item) return;
@@ -359,16 +363,28 @@ async function submitCashAcceptGeneral(){
   closeModal('m-cash-accept-general');
   openModal('m-cash-receipt');
 }
+// После решения «выдать чек?» — если касса была открыта из расписания
+// (cashReturnUrl задан), возвращаемся туда (тот же тост-приём, что и у
+// flashAndReload, просто редирект вместо reload той же страницы);
+// иначе — прежнее поведение, остаёмся на кассе.
+function cashReceiptDone(){
+  if(cashReturnUrl){
+    sessionStorage.setItem('newui_flash', JSON.stringify({msg: t('w_payment_accepted'), type: 'success'}));
+    location.href = cashReturnUrl;
+  } else {
+    flashAndReload(t('w_payment_accepted'));
+  }
+}
 function cashReceiptYes(){
   closeModal('m-cash-receipt');
   if(lastAcceptedPaymentId){
     window.open('/finance/payments/'+lastAcceptedPaymentId+'/receipt/', '_blank');
   }
-  flashAndReload(t('w_payment_accepted'));
+  cashReceiptDone();
 }
 function cashReceiptNo(){
   closeModal('m-cash-receipt');
-  flashAndReload(t('w_payment_accepted'));
+  cashReceiptDone();
 }
 
 /* ================= «Пациенты на сегодня» — приёмы сегодня с реальным долгом ================= */
@@ -498,8 +514,12 @@ renderCashTodayRow();
 // модалку, что и по клику на его карточку там; иначе (долг за прошлый визит)
 // падаем на общую модалку «Принять оплату» с пациентом уже выбранным.
 (function openPaymentFromScheduleQuery(){
-  const pid=Number(new URLSearchParams(location.search).get('open_payment'));
+  const params=new URLSearchParams(location.search);
+  const pid=Number(params.get('open_payment'));
   if(!pid) return;
+  // return= — куда вернуться после «выдать чек?» (см. cashReceiptDone
+  // выше) — считываем ДО того, как чистим query-строку из адресной строки.
+  cashReturnUrl = params.get('return') || null;
   history.replaceState(null, '', location.pathname);
   const inTodayQueue=((cashdeskData && cashdeskData.todayPatients) || []).some(c=>c.patientId===pid);
   if(inTodayQueue){ openCashVisitModal(pid); }
