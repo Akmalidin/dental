@@ -3697,7 +3697,7 @@ function acceptCashierPayment(id){
 
 /* ================= REPORTS: tabs + charts + AI assistant ================= */
 let reportsActiveTab='overview';
-const REPORTS_TAB_IDMAP={overview:'Overview', expenses:'Expenses', debtors:'Debtors', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
+const REPORTS_TAB_IDMAP={overview:'Overview', expenses:'Expenses', debtors:'Debtors', ai:'AI', cancelled:'Cancelled', doctors:'Doctors', branches:'Branches', rooms:'Rooms', repeat:'Repeat', sources:'Sources'};
 function reportsTab(which){
   reportsActiveTab=which;
   const idMap=REPORTS_TAB_IDMAP;
@@ -3713,6 +3713,7 @@ function reportsTab(which){
   if(which==='expenses') renderReportsExpenses();
   if(which==='debtors') renderReportsDebtors();
   if(which==='doctors') renderReportsDoctors();
+  if(which==='branches') renderReportsBranches();
   if(which==='rooms') renderReportsRooms();
   if(which==='cancelled') renderReportsCancelled();
   if(which==='repeat') renderReportsRepeat();
@@ -3824,6 +3825,18 @@ function renderReportsDoctors(){
   body.innerHTML = stats.length===0
     ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
     : stats.map(s=>`<tr><td>${s.doctor}</td><td class="mono">${s.count}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td><span class="pill ${s.fillRatePct>=70?'teal':(s.fillRatePct>=40?'amber':'coral')}">${s.fillRatePct}%</span></td></tr>`).join('');
+}
+function renderReportsBranches(){
+  const d=reportsRealData;
+  if(!d) return;
+  const stats=d.branchStats||[];
+  document.getElementById('branchesChart').innerHTML = buildDonutChart(
+    stats.map((s,i)=>({label:s.branch, value:s.revenue, color:['cobalt','teal','amber','coral'][i%4]})), ' '+CUR_SYM
+  );
+  const body=document.getElementById('branchStatsTableBody');
+  body.innerHTML = stats.length===0
+    ? `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : stats.map(s=>`<tr><td>${s.branch}</td><td class="mono">${s.completed}</td><td class="mono">${s.cancelled}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td class="mono">${fmtSom(s.expenses)}</td><td class="mono" style="color:${s.debt>0?'var(--coral)':'inherit'}">${fmtSom(s.debt)}</td></tr>`).join('');
 }
 function renderReportsRooms(){
   const d=reportsRealData;
@@ -3996,6 +4009,11 @@ function renderReportConstructor(){
 }
 function renderOverviewCharts(){
   if(!document.getElementById('ovSourcesChart')) return;  // графики есть только на /new/reports/
+  // Вкладка «По филиалам» скрыта, если у клиники всего 1 филиал — сравнивать
+  // нечего, тот же принцип, что и у переключателя филиала в сайдбаре
+  // (nav_branches|length>1 в base.html).
+  const rtBranches=document.getElementById('rtBranches');
+  if(rtBranches) rtBranches.classList.toggle('hidden', !(branchOptions && branchOptions.length>1));
   renderReportConstructor();
   const d=reportsRealData;
   const palette=['cobalt','teal','amber','coral'];
@@ -4800,6 +4818,7 @@ const translations={
   w_specify_amount: {ru:'Укажите сумму', ky:'Сумманы көрсөтүңүз', en:'Enter an amount', uz:'Summani kiriting'},
   w_cancel_reasons_share: {ru:'Причины отмен — доля', ky:'Жокко чыгаруу себептери — үлүшү', en:'Cancellation reasons — share', uz:'Bekor qilish sabablari — ulushi'},
   w_revenue_share_doctors: {ru:'Доля выручки по врачам', ky:'Дарыгерлер боюнча түшүм үлүшү', en:'Revenue share by doctor', uz:'Shifokorlar bo\'yicha tushum ulushi'},
+  w_revenue_share_branches: {ru:'Доля выручки по филиалам', ky:'Филиалдар боюнча түшүм үлүшү', en:'Revenue share by branch', uz:'Filiallar bo\'yicha tushum ulushi'},
   w_visits: {ru:'Приёмов', ky:'Кабыл алуулар', en:'Visits', uz:'Qabullar'},
   w_utilization_short: {ru:'Загрузка', ky:'Жүктөлүү', en:'Utilization', uz:'Bandlik'},
   w_share_short: {ru:'Доля', ky:'Үлүшү', en:'Share', uz:'Ulushi'},
@@ -4859,6 +4878,7 @@ const translations={
   w_ai_assistant: {ru:'ИИ-помощник', ky:'ИИ-жардамчы', en:'AI assistant', uz:'AI-yordamchi'},
   w_cancelled_visits: {ru:'Отменённые визиты', ky:'Жокко чыгарылган визиттер', en:'Cancelled visits', uz:'Bekor qilingan tashriflar'},
   w_doctor_stats: {ru:'Статистика по врачам', ky:'Дарыгерлер боюнча статистика', en:'Doctor statistics', uz:'Shifokorlar statistikasi'},
+  w_branch_stats: {ru:'По филиалам', ky:'Филиалдар боюнча', en:'By branch', uz:'Filiallar bo\'yicha'},
   w_room_load: {ru:'Загрузка кабинетов', ky:'Кабинеттердин жүктөлүшү', en:'Room utilization', uz:'Xonalar bandligi'},
   w_repeat_visits: {ru:'Повторные визиты', ky:'Кайталама визиттер', en:'Repeat visits', uz:'Takroriy tashriflar'},
   w_lead_sources: {ru:'Источники заявок', ky:'Кайрылуулардын булактары', en:'Lead sources', uz:'Murojaatlar manbalari'},
@@ -4939,6 +4959,7 @@ const translations={
   w_cq_accepted_btn: {ru:'Принято', ky:'Кабыл алынды', en:'Accepted', uz:'Qabul qilindi'},
   w_cancelled_visits_month: {ru:'Отменённые визиты · этот месяц', ky:'Жокко чыгарылган визиттер · бул ай', en:'Cancelled visits · this month', uz:'Bekor qilingan tashriflar · shu oy'},
   w_doctor_stats_month: {ru:'Статистика по врачам · этот месяц', ky:'Дарыгерлер боюнча статистика · бул ай', en:'Doctor stats · this month', uz:'Shifokorlar statistikasi · shu oy'},
+  w_branch_stats_month: {ru:'По филиалам · этот месяц', ky:'Филиалдар боюнча · бул ай', en:'By branch · this month', uz:'Filiallar bo\'yicha · shu oy'},
   w_fill_rate: {ru:'Заполняемость', ky:'Толуктук', en:'Fill rate', uz:'To\'ldirilganlik'},
   w_lead_sources_month: {ru:'Аналитика по источникам заявок · этот месяц', ky:'Кайрылуулардын булактары боюнча аналитика · бул ай', en:'Lead sources analytics · this month', uz:'Murojaat manbalari tahlili · shu oy'},
   w_on_deposits: {ru:'На депозитах', ky:'Депозиттерде', en:'On deposits', uz:'Depozitlarda'},
