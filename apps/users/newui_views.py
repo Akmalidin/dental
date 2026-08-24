@@ -46,6 +46,7 @@ def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
     from apps.patients.models import LeadSource
+    from apps.appointments.models import CancellationReason
     from apps.settings_clinic.models import ClinicSettings
     from apps.notifications.voice import voice_enabled, ai_enabled
     cs = ClinicSettings.get()
@@ -84,6 +85,18 @@ def _shared_options(request, clinic):
         ],
         "doctorOptions": [{"id": u.pk, "name": u.name} for u in clinic_doctors(clinic).order_by("name")],
         "sourceOptions": [{"id": s.pk, "name": s.name} for s in LeadSource.objects.all().order_by("name")],
+        # Причины отмены записи — нужны на КАЖДОЙ странице (не только в
+        # Настройках, где уже есть свой _newui_settings_data()["cancelReasons"]):
+        # отменить запись можно и с расписания, и из карточки приёма
+        # (apptViewSetStatus/schedQuickSetStatus, base.html) — модалка
+        # «Причина отмены визита» (#m-cancel) должна знать реальные причины
+        # клиники сразу при заходе на любую страницу. CancellationReason —
+        # общий справочник без привязки к клинике (так было устроено
+        # изначально, apps.appointments.models), не меняю.
+        "cancelReasons": [
+            {"id": r.pk, "name": r.name}
+            for r in CancellationReason.objects.filter(is_active=True).order_by("sort_order", "name")
+        ],
         # Шаблоны сообщений (Мессенджеры → «Шаблоны», карта приёма → выбор
         # шаблона) — реальные MessageTemplate из БД, общие со старым
         # интерфейсом (apps.notifications.views.message_templates). Раньше

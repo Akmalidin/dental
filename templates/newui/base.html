@@ -1623,18 +1623,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
-<!-- Причина отмены/переноса -->
+<!-- Причина отмены записи — раньше эта модалка была мёртвой заготовкой
+     (варианты причин мок-текстом, кнопка просто закрывала модалку, ничего
+     не отправляя); теперь реально используется apptViewSetStatus/
+     schedQuickSetStatus (base.html) при отмене записи вместо голого
+     confirm() — причины подтягиваются из cancelReasonsOptions
+     (CancellationReason, apps.appointments.models, тот же справочник, что
+     и в Настройках/старом интерфейсе), оба поля необязательны — так же,
+     как принимает их бэкенд (apps.appointments.views.appointment_status). -->
 <div class="modal-backdrop" id="m-cancel">
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_cancel">Причина отмены визита</h3><button class="modal-close" onclick="closeModal('m-cancel')">✕</button></div>
     <div class="modal-body">
-      <label class="reason-opt"><input autocomplete="off" type="radio" name="cr" checked><span style="font-size:13px">Заболел</span></label>
-      <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Не успевает</span></label>
-      <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Не получается</span></label>
-      <label class="reason-opt"><input autocomplete="off" type="radio" name="cr"><span style="font-size:13px">Забыл</span></label>
-      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div id="cancelReasonRadios"></div>
+      <div class="form-group" style="margin-top:10px;"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" id="cancelNoteText" maxlength="300" rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-cancel')">Назад</button><button class="btn btn-danger" onclick="closeModal('m-cancel')">Отменить визит</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-cancel')">Назад</button><button class="btn btn-danger" onclick="submitApptCancel()">Отменить визит</button></div>
   </div>
 </div>
 
@@ -7594,10 +7598,49 @@ function maybeOfferStartVisit(apptId, newStatus){
     location.href='/new/visit/start/?appointment='+apptId;
   }
 }
+/* ── Отмена записи с причиной (#m-cancel) — вместо голого confirm().
+   Причины — реальный справочник CancellationReason (cancelReasonsOptions,
+   грузится на каждой странице, см. _shared_options/base.html), оба поля
+   необязательны, как и принимает бэкенд (appointment_status). Общая для
+   apptViewSetStatus (карточка «Запись») и schedQuickSetStatus (меню из
+   трёх точек на сетке расписания) — apptCancelCtx.onDone делает то, что
+   раньше шло сразу после успешного POST в каждой из них (закрыть свою
+   модалку/меню), прежде чем flashAndReload перезагрузит страницу. ── */
+let apptCancelCtx=null;
+function renderCancelReasonOptions(){
+  const list=cancelReasonsOptions||[];
+  document.getElementById('cancelReasonRadios').innerHTML = list.length
+    ? list.map(r=>`<label class="reason-opt"><input autocomplete="off" type="radio" name="cr" value="${r.id}"><span style="font-size:13px">${r.name}</span></label>`).join('')
+    : `<div style="font-size:12.5px;color:var(--ink-soft);">Причины не заданы — можно добавить в Настройках → Справочники</div>`;
+}
+function apptOpenCancelModal(apptId, onDone){
+  apptCancelCtx={apptId, onDone: onDone || null};
+  renderCancelReasonOptions();
+  document.getElementById('cancelNoteText').value='';
+  openModal('m-cancel');
+}
+async function submitApptCancel(){
+  if(!apptCancelCtx) return;
+  const {apptId, onDone}=apptCancelCtx;
+  const checked=document.querySelector('#m-cancel input[name="cr"]:checked');
+  const fd=new FormData();
+  fd.append('status', 'cancelled');
+  if(checked) fd.append('cancellation_reason', checked.value);
+  const note=document.getElementById('cancelNoteText').value.trim();
+  if(note) fd.append('cancel_note', note);
+  const res=await postForm('/appointments/'+apptId+'/status/', fd);
+  if(res.redirected){
+    closeModal('m-cancel');
+    if(onDone) onDone();
+    flashAndReload('Статус записи обновлён');
+  } else {
+    showToast('Не удалось отменить запись', 'error');
+  }
+}
 async function apptViewSetStatus(status){
   if(!apptViewData) return;
-  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
   const apptId=apptViewData.appointment.id;
+  if(status==='cancelled'){ apptOpenCancelModal(apptId, ()=>closeModal('m-appt-view')); return; }
   const fd=new FormData();
   fd.append('status', status);
   const res=await postForm('/appointments/'+apptId+'/status/', fd);
@@ -7765,8 +7808,8 @@ async function schedApptQuickMenu(event, apptId){
 }
 async function schedQuickSetStatus(status){
   if(!schedQuickMenuData) return;
-  if(status==='cancelled' && !confirm(t('w_confirm_cancel_appt','Отменить запись?'))) return;
   const apptId=schedQuickMenuData.appointment.id;
+  if(status==='cancelled'){ closeSchedApptQuickMenu(); apptOpenCancelModal(apptId); return; }
   const fd=new FormData();
   fd.append('status', status);
   const res=await postForm('/appointments/'+apptId+'/status/', fd);
@@ -8623,6 +8666,7 @@ let dashboardData=null;
 let patientsList=[];
 let doctorOptions=[];
 let sourceOptions=[];
+let cancelReasonsOptions=[];
 let currentPatientCardId=null;
 let scheduleRealData=null;
 let apptsByDateDoc={};
@@ -9274,6 +9318,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_
     patientsList=data.patients || [];
     doctorOptions=data.doctorOptions || [];
     sourceOptions=data.sourceOptions || [];
+    cancelReasonsOptions=data.cancelReasons || [];
     scheduleRealData=data.schedule || null;
     rebuildApptsByDateDoc();
     scheduleDoctors=(scheduleRealData && scheduleRealData.doctors) || [];
