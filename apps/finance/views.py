@@ -12,7 +12,7 @@ from decimal import Decimal
 from .models import Payment, Expense, ExpenseCategory, PatientAdvance, CashShift
 from .forms import PaymentForm, ExpenseForm
 from apps.patients.models import Patient
-from apps.users.decorators import require_permission
+from apps.users.decorators import require_permission, require_superadmin
 
 
 def _get_own_payment_or_404(pk, queryset=None):
@@ -474,9 +474,13 @@ def payment_allocations(request, pk):
 
 @login_required
 @require_POST
-@require_permission("finance.delete_payment")
+@require_superadmin
 def payment_delete(request, pk):
-    """Удалить платёж."""
+    """Удалить платёж. Только суперадмин — необратимо и напрямую влияет на
+    баланс пациента, раньше это была делегируемая через RBAC-права
+    finance.delete_payment (её мог выдать себе/другим любой admin_main через
+    редактор ролей), теперь — жёстко только суперадмин (см.
+    apps.users.decorators.require_superadmin)."""
     payment = get_object_or_404(Payment.all_clinics, pk=pk)
     patient = payment.patient
     affected = [a.treatment for a in payment.allocations.select_related("treatment").all()]

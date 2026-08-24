@@ -3579,10 +3579,11 @@ async function showPaymentDetails(pk, patientName, receivedBy, time, amount){
     document.getElementById('pdRows').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--coral);padding:14px;">${t('w_save_failed')}</td></tr>`;
   }
 }
-// Удалить платёж — только superadmin (та же граница, что и в старом
-// интерфейсе, apps.finance.views.payment_delete: @require_permission
-// "finance.delete_payment"; кнопка скрыта у остальных, сервер — вторая
-// линия защиты, если кто-то дойдёт до эндпоинта в обход UI).
+// Удалить платёж — только superadmin, жёстко (apps.finance.views.
+// payment_delete: @require_superadmin — не через RBAC-права, их мог
+// выдать себе/другим любой admin_main через редактор ролей); кнопка
+// скрыта у остальных, сервер — вторая линия защиты, если кто-то
+// дойдёт до эндпоинта в обход UI.
 async function deletePayment(pk){
   if(!confirm(t('w_confirm_delete_payment'))) return;
   const res=await postForm('/finance/payments/'+pk+'/delete/', new FormData());
