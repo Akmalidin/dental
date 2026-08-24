@@ -25,6 +25,27 @@ def require_permission(perm_code):
     return decorator
 
 
+def require_superadmin(view_func):
+    """Строже, чем require_permission(...) — не делегируется через RBAC-права
+    вообще, только реальный суперадмин (никакая роль/грант не подходит).
+    Для действий вроде удаления платежа: раньше это была
+    require_permission("finance.delete_payment") — но тогда её мог выдать
+    себе/другим любой admin_main через редактор ролей, а кнопка в новом
+    интерфейсе (deletePayment(), base.html) и так уже скрыта у всех, кроме
+    IS_SUPERADMIN, — сервер должен требовать ровно то же самое, а не более
+    широкий permission-based доступ. Тот же формат ответа, что и у
+    require_permission (403 напрямую, не redirect) — чтобы JS, который
+    проверяет res.redirected, не принял отказ за успех."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect("/login/")
+        if not request.user.is_superadmin:
+            return HttpResponseForbidden("Superadmin only")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
 def role_required(*roles):
     """Restrict view to users with specified roles."""
     def decorator(view_func):

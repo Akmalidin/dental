@@ -51,3 +51,61 @@ class PaymentPermissionTestCase(TestCase):
     def test_expense_create_blocked_without_permission(self):
         resp = self.client.post("/finance/expenses/create/", {"amount": "50", "description": "x"})
         self.assertEqual(resp.status_code, 403)
+
+
+class PaymentDeleteSuperadminOnlyTestCase(TestCase):
+    """Удаление платежа — жёстко только суперадмин (apps.users.decorators.
+    require_superadmin), не через RBAC-права: раньше это была делегируемая
+    require_permission("finance.delete_payment"), которую мог выдать
+    себе/другим любой admin_main через редактор ролей."""
+
+    def setUp(self):
+        from apps.finance.models import Payment
+
+        self.clinic = Clinic.objects.create(name="Клиника PD", slug="clinic-pay-del")
+        self.branch = Branch.objects.create(name="PD", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.patient = Patient.objects.create(
+            first_name="Плательщик", last_name="Тест", phone="998", branch=self.branch, clinic=self.clinic
+        )
+        self.admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+
+        self.admin_main = User.objects.create(
+            login="pd_admin_main", name="Директор PD", email="pdam@test.local",
+            role=self.admin_main_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="pd_superadmin", name="Супер PD", email="pdsa@test.local",
+            role=self.superadmin_role, clinic=self.clinic,
+        )
+        self.payment = Payment.objects.create(
+            patient=self.patient, branch=self.branch, amount=1000,
+            method=Payment.METHOD_CASH, type=Payment.TYPE_INCOME,
+            received_by=self.admin_main, clinic=self.clinic,
+        )
+
+    def test_admin_main_cannot_delete_even_though_seeded_with_old_permission(self):
+        """admin_main получает все права из каталога по умолчанию (см. seed
+        0022) — до этой правки этого было достаточно, чтобы удалить платёж
+        напрямую через эндпоинт, в обход скрытой в UI кнопки."""
+        from apps.finance.models import Payment
+
+        client = Client()
+        client.force_login(self.admin_main)
+        resp = client.post(f"/finance/payments/{self.payment.pk}/delete/")
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(Payment.objects.filter(pk=self.payment.pk).exists())
+
+    def test_superadmin_can_delete(self):
+        from apps.finance.models import Payment
+
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/finance/payments/{self.payment.pk}/delete/")
+        self.assertRedirects(resp, "/finance/payments/")
+        self.assertFalse(Payment.objects.filter(pk=self.payment.pk).exists())
+
+    def test_finance_delete_payment_permission_removed_from_catalog(self):
+        from apps.users.models import Permission
+
+        self.assertFalse(Permission.objects.filter(code="finance.delete_payment").exists())
