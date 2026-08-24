@@ -7554,7 +7554,10 @@ function apptActionsHtml(a, p, setStatusFn, sendToCashierFn){
     // и искать пациента заново. Переход на /new/cashdesk/?open_payment=ID —
     // касса САМА открывает уже существующую модалку оплаты (см. extra_js
     // cashdesk.html), бизнес-логика приёма платежа не дублируется здесь.
-    html+=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/cashdesk/?open_payment=${p.id}'">${t('w_accept_payment')} (${Math.round(p.debt).toLocaleString('ru-RU')} ${CUR_SYM})</button>`;
+    // return=текущий URL расписания — касса вернёт сюда после решения
+    // «выдать чек?» (см. cashReceiptYes/cashReceiptNo, cashdesk.html),
+    // вместо того чтобы оставлять администратора на кассе.
+    html+=`<button class="btn btn-cobalt btn-sm" onclick="location.href='/new/cashdesk/?open_payment=${p.id}&return=${encodeURIComponent(location.pathname+location.search)}'">${t('w_accept_payment')} (${Math.round(p.debt).toLocaleString('ru-RU')} ${CUR_SYM})</button>`;
     html+=`<button class="btn btn-ghost btn-sm" onclick="${sendToCashierFn}()">Отправить в кассу (долг ${Math.round(p.debt).toLocaleString('ru-RU')} сом)</button>`;
   }
   return html;
