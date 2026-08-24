@@ -803,14 +803,14 @@ def _newui_reports_data(branch_id=None):
     по Appointment.cabinet за текущую неделю), а «загрузка» — честная доля
     кабинета от суммарных часов по всем кабинетам (не % от «рабочих часов» —
     такой модели в системе нет, у кабинета нет своего графика работы в
-    отличие от врача). Конструктор сравнения — реальные датасеты по 4
-    измерениям (doctors/rooms/services/sources), см. comparison ниже; кроме
-    «Материалы» — списания склада не привязаны ни к пациенту, ни к приёму,
-    выручку/количество по материалам посчитать нечем без новых полей в
-    модели, поэтому этого измерения в выборе больше нет вообще (не показываем
-    вкладку с обещанием, которое нечем выполнить). ИИ-помощник НЕ подключен —
-    см. баннер на странице; ИИ-рекомендаций как функции в системе не
-    существует.
+    отличие от врача). Конструктор сравнения — реальные датасеты по 5
+    измерениям (doctors/rooms/services/sources/branches), см. comparison
+    ниже; кроме «Материалы» — списания склада не привязаны ни к пациенту, ни
+    к приёму, выручку/количество по материалам посчитать нечем без новых
+    полей в модели, поэтому этого измерения в выборе больше нет вообще (не
+    показываем вкладку с обещанием, которое нечем выполнить). ИИ-помощник НЕ
+    подключен — см. баннер на странице; ИИ-рекомендаций как функции в системе
+    не существует.
 
     branch_id — активный филиал переключателя сайдбара (None = «Все
     филиалы»). Фильтруются метрики, у которых есть прямая или однохоповая
@@ -820,7 +820,11 @@ def _newui_reports_data(branch_id=None):
     повторные визиты, загрузка кабинетов, выручка по неделям). «Источники
     заявок» (Lead) НЕ фильтруются — у модели нет поля branch и однозначной
     связи с филиалом нет (как и «Материалы» выше — не показываем то, что
-    нечем честно посчитать)."""
+    нечем честно посчитать). Вкладка «По филиалам» (branchStats) —
+    единственное место в этой функции, которое НАРОЧНО игнорирует branch_id:
+    смысл сравнения теряется, если оно само уже отфильтровано до одного
+    филиала, поэтому branch_stats всегда считается по всем активным филиалам
+    клиники независимо от выбора в переключателе."""
     from datetime import timedelta
     from collections import defaultdict
     from django.db.models import Sum, Count, Max
@@ -1013,7 +1017,34 @@ def _newui_reports_data(branch_id=None):
         for name, hrs in cabinet_hours.items()
     ], key=lambda x: -x["hours"])
 
-    # ── Конструктор сравнения — реальные датасеты по 4 измерениям (не 5:
+    # ── Статистика по филиалам — та же выручка/приёмы/расходы/должники, что
+    # и в шапке «Общего отчёта», но по каждому филиалу отдельно и БЕЗ учёта
+    # активного фильтра филиала (branch_id выше) — иначе сравнивать нечего:
+    # выбрав в переключателе конкретный филиал, эта вкладка всё равно должна
+    # показывать все филиалы рядом. У клиники с одним филиалом — таблица из
+    # одной строки, вкладка на фронтенде в этом случае скрыта (см.
+    # branchOptions.length>1 в base.html, тот же принцип, что и у самого
+    # переключателя филиала в сайдбаре). ──
+    from apps.users.models import Branch
+    branch_stats = []
+    for b in Branch.objects.filter(is_active=True).order_by("-is_main", "name"):
+        b_payments = Payment.objects.filter(branch_id=b.pk, created_at__date__gte=month_start)
+        b_income = b_payments.filter(type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
+        b_refund = b_payments.filter(type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
+        b_appts = Appointment.objects.filter(branch_id=b.pk, start_at__date__gte=month_start)
+        b_completed = b_appts.filter(status=Appointment.STATUS_COMPLETED).count()
+        b_cancelled = b_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).count()
+        b_expenses = float(Expense.objects.filter(branch_id=b.pk, date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
+        b_debt = float(-(Patient.objects.filter(branch_id=b.pk, balance__lt=0).aggregate(s=Sum("balance"))["s"] or 0))
+        b_revenue = float(b_income - b_refund)
+        branch_stats.append({
+            "id": b.pk, "branch": b.name,
+            "revenue": b_revenue, "completed": b_completed, "cancelled": b_cancelled,
+            "expenses": b_expenses, "debt": b_debt,
+            "avgCheck": round(b_revenue / b_completed, 2) if b_completed else 0,
+        })
+
+    # ── Конструктор сравнения — реальные датасеты по 5 измерениям (не 6:
     # «Материалы» убраны из выбора — списания склада не привязаны ни к
     # пациенту, ни к приёму (WarehouseDistribution.issued_to — это сотрудник,
     # получивший материал, а не потраченный на кого-то), выручку/количество
@@ -1041,6 +1072,11 @@ def _newui_reports_data(branch_id=None):
             "count": [{"label": s["source"], "value": s["count"]} for s in lead_sources],
             "revenue": [{"label": s["source"], "value": source_revenue.get(s["source"], 0)} for s in lead_sources],
         },
+        "branches": {
+            "revenue": [{"label": b["branch"], "value": b["revenue"]} for b in branch_stats],
+            "count": [{"label": b["branch"], "value": b["completed"]} for b in branch_stats],
+            "avgcheck": [{"label": b["branch"], "value": b["avgCheck"]} for b in branch_stats],
+        },
     }
 
     return {
@@ -1061,6 +1097,7 @@ def _newui_reports_data(branch_id=None):
         "cancelReasons": cancel_reasons_chart,
         "repeatVisits": repeat_visits,
         "roomLoad": room_load,
+        "branchStats": branch_stats,
         "comparison": comparison,
     }
 

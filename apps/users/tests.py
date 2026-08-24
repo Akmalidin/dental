@@ -859,6 +859,59 @@ class NewUIReportsTestCase(TestCase):
         self.assertEqual(row["count"], 2)
         self.assertEqual(row["conversionPct"], 50.0)
 
+    def test_reports_branch_stats_covers_all_branches_regardless_of_active_filter(self):
+        """branchStats — единственный разрез в _newui_reports_data, который
+        НАРОЧНО игнорирует активный филиал переключателя (иначе сравнивать
+        нечего): выбрав в сессии конкретный филиал, вкладка «По филиалам»
+        должна всё равно показать оба филиала клиники."""
+        from apps.patients.models import Patient
+        from apps.finance.models import Payment
+        from apps.appointments.models import Appointment
+        from apps.services.models import Service
+        from apps.treatments.models import Treatment
+        import datetime as dt
+        from django.utils import timezone
+
+        branch2 = Branch.objects.create(name="Второй филиал RP", address="-", phone="0", clinic=self.clinic)
+        service = Service.objects.create(name="Приём 2", price=100, clinic=self.clinic)
+        patient2 = Patient.objects.create(
+            first_name="Второй", last_name="Филиал", phone="+996700777888",
+            branch=branch2, clinic=self.clinic,
+        )
+        today = timezone.localdate()
+        start = timezone.make_aware(dt.datetime.combine(today, dt.time(9, 0)))
+        end = timezone.make_aware(dt.datetime.combine(today, dt.time(10, 0)))
+        appt2 = Appointment.objects.create(
+            patient=patient2, doctor=self.director, branch=branch2, service=service,
+            start_at=start, end_at=end, status=Appointment.STATUS_COMPLETED, clinic=self.clinic,
+        )
+        # total_amount 5000, оплачено только 3000 — реальный долг 2000
+        # (Patient.balance пересчитывается сигналом от Payment, поэтому
+        # долг проверяем именно так, а не выставляем balance напрямую).
+        Treatment.objects.create(
+            patient=patient2, doctor=self.director, branch=branch2, appointment=appt2,
+            status=Treatment.STATUS_COMPLETED, total_amount=5000, clinic=self.clinic,
+        )
+        Payment.objects.create(
+            patient=patient2, branch=branch2, amount=3000, type=Payment.TYPE_INCOME,
+            method=Payment.METHOD_CASH, received_by=self.director, clinic=self.clinic,
+        )
+
+        # Активный филиал в сессии — первый (self.branch), а не второй.
+        session = self.client.session
+        session["active_branch"] = self.branch.pk
+        session.save()
+
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
+        stats = data["reportsData"]["branchStats"]
+        names = [s["branch"] for s in stats]
+        self.assertIn(self.branch.name, names)
+        self.assertIn(branch2.name, names)
+        row2 = next(s for s in stats if s["branch"] == branch2.name)
+        self.assertEqual(row2["revenue"], 3000.0)
+        self.assertEqual(row2["completed"], 1)
+        self.assertEqual(row2["debt"], 2000.0)
+
 
 class NewUIBlacklistTestCase(TestCase):
     """Чёрный список — та же модель BlacklistEntry и тот же view

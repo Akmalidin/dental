@@ -11,6 +11,10 @@
           <button class="chip" id="rtAI" onclick="reportsTab('ai')">✦ <span data-i18n="w_ai_assistant">ИИ-помощник</span></button>
           <button class="chip" id="rtCancelled" onclick="reportsTab('cancelled')"><span data-i18n="w_cancelled_visits">Отменённые визиты</span></button>
           <button class="chip" id="rtDoctors" onclick="reportsTab('doctors')"><span data-i18n="w_doctor_stats">Статистика по врачам</span></button>
+          <!-- Скрыта, если у клиники всего 1 филиал — сравнивать нечего, тот
+               же принцип, что и у переключателя филиала в сайдбаре (см.
+               toggle branchOptions.length>1 в renderOverviewCharts, base.html). -->
+          <button class="chip hidden" id="rtBranches" onclick="reportsTab('branches')"><span data-i18n="w_branch_stats">По филиалам</span></button>
           <button class="chip" id="rtRooms" onclick="reportsTab('rooms')"><span data-i18n="w_room_load">Загрузка кабинетов</span></button>
           <button class="chip" id="rtRepeat" onclick="reportsTab('repeat')"><span data-i18n="w_repeat_visits">Повторные визиты</span></button>
           <button class="chip" id="rtSources" onclick="reportsTab('sources')"><span data-i18n="w_lead_sources">Источники заявок</span></button>
@@ -61,6 +65,7 @@
                     <option value="rooms" data-i18n="w_rooms">Кабинеты</option>
                     <option value="services" data-i18n="w_services">Услуги</option>
                     <option value="sources" data-i18n="w_lead_sources">Источники заявок</option>
+                    <option value="branches" data-i18n="w_branches">Филиалы</option>
                   </select>
                 </div>
                 <div class="form-group"><label data-i18n="w_metric">Показатель</label>
@@ -157,6 +162,20 @@
             <table>
               <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_fill_rate">Заполняемость</th></tr></thead>
               <tbody id="doctorStatsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="rpBranches" class="hidden">
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3 data-i18n="w_revenue_share_branches">Доля выручки по филиалам</h3></div>
+            <div class="card-body" id="branchesChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 data-i18n="w_branch_stats_month">По филиалам · этот месяц</h3></div>
+            <table>
+              <thead><tr><th data-i18n="w_branch">Филиал</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_visits_cancelled">Отменено</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_expenses">Расходы</th><th data-i18n="w_debt">Долг</th></tr></thead>
+              <tbody id="branchStatsTableBody"></tbody>
             </table>
           </div>
         </div>
