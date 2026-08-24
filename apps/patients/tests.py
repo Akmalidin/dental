@@ -25,7 +25,16 @@ class PatientMergeTestCase(TestCase):
 
     def setUp(self):
         self.branch = Branch.objects.create(name="Main", address="-", phone="0", is_main=True)
-        self.doctor = User.objects.create(login="doc_merge", name="Doctor Merge", email="d@test.local")
+        # merge/mark-not-duplicate теперь гейтятся тем же правом, что и
+        # удаление пациента (patient_merge_confirm/patient_mark_not_duplicate
+        # → @require_permission("patients.delete")) — без него слияние
+        # объективно не должно быть доступно любому залогиненному сотруднику.
+        perm = Permission.objects.filter(code="patients.delete").first() or Permission.objects.create(
+            code="patients.delete", category="patients", label="Удаление пациентов",
+        )
+        role = Role.objects.create(name="merge_test_role", is_system=True)
+        role.granular_permissions.add(perm)
+        self.doctor = User.objects.create(login="doc_merge", name="Doctor Merge", email="d@test.local", role=role)
         self.original = Patient.objects.create(
             first_name="Ориг", last_name="Настоящий", phone="+996555000111", branch=self.branch,
         )
@@ -66,6 +75,16 @@ class PatientMergeTestCase(TestCase):
         candidate_ids = [row["id"] for row in resp.json()["candidates"]]
         self.assertIn(self.original.pk, candidate_ids)
 
+    def test_merge_search_candidate_includes_full_related_summary(self):
+        """Раньше кандидат нёс только `treatments` — теперь та же сводка,
+        что и в related_summary() (для честного превью перед слиянием)."""
+        c = Client()
+        c.force_login(self.doctor)
+        resp = c.get(f"/patients/{self.dup.pk}/merge/search/")
+        row = next(r for r in resp.json()["candidates"] if r["id"] == self.original.pk)
+        for key in ("treatments", "plans", "payments", "advances", "medicines", "appointments", "debt"):
+            self.assertIn(key, row)
+
     def test_merge_confirm_view_end_to_end(self):
         """Полный путь через view (не только функцию): POST на merge/confirm/ переносит
         приём и удаляет дубликат, как в реальном UI."""
@@ -81,6 +100,29 @@ class PatientMergeTestCase(TestCase):
         self.dup.refresh_from_db()
         self.assertEqual(treatment.patient_id, self.original.pk)
         self.assertTrue(self.dup.is_deleted)
+
+    def test_merge_reassigns_previously_missing_models(self):
+        """merge_patients() раньше молча пропускал 5 моделей с полем patient —
+        TreatmentFile/ToothSurfaceCondition/ToothGumCondition/Lead/PatientVisit
+        (у них своё отдельное поле patient, не через treatment). Теперь тоже
+        переезжают на target."""
+        from django.utils import timezone
+        from apps.patients.views import merge_patients
+        from apps.treatments.models import TreatmentFile
+        from apps.treatments.models_teeth import ToothSurfaceCondition, ToothGumCondition
+        from apps.patients.models import Lead, PatientVisit
+
+        tfile = TreatmentFile.objects.create(patient=self.dup, file="test.jpg")
+        surface = ToothSurfaceCondition.objects.create(patient=self.dup, tooth_number=11, surface_index=0)
+        gum = ToothGumCondition.objects.create(patient=self.dup, tooth_number=11)
+        lead = Lead.objects.create(name="Заявка тест", patient=self.dup)
+        visit = PatientVisit.objects.create(patient=self.dup, visited_at=timezone.now())
+
+        merge_patients(self.dup, self.original, self.doctor)
+
+        for obj in (tfile, surface, gum, lead, visit):
+            obj.refresh_from_db()
+            self.assertEqual(obj.patient_id, self.original.pk)
 
     def test_merge_always_keeps_older_patient_regardless_of_which_button_was_clicked(self):
         """Кнопку «Есть в базе» могли нажать на ЛЮБОЙ из двух карточек — но
@@ -102,6 +144,121 @@ class PatientMergeTestCase(TestCase):
         self.assertFalse(self.original.is_deleted, "старая карточка должна остаться")
         self.assertTrue(self.dup.is_deleted, "новая карточка должна быть удалена")
         self.assertEqual(treatment.patient_id, self.original.pk)
+
+    def test_merge_writes_audit_event(self):
+        from apps.patients.views import merge_patients
+        from apps.users.models import AuditEvent
+        merge_patients(self.dup, self.original, self.doctor)
+        evt = AuditEvent.objects.filter(action="patient_merge", object_id=str(self.original.pk)).first()
+        self.assertIsNotNone(evt)
+        self.assertEqual(evt.actor_id, self.doctor.pk)
+
+
+class PatientMergePermissionTestCase(TestCase):
+    """merge/mark-not-duplicate без права patients.delete — 403 (раньше был
+    доступен любому залогиненному сотруднику, без ролевой проверки)."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name="Main", address="-", phone="0", is_main=True)
+        self.role_no_delete = Role.objects.create(name="no_delete_merge_test", is_system=True)
+        self.nurse = User.objects.create(login="nurse_merge_perm", name="Медсестра",
+                                          email="nmp@test.local", role=self.role_no_delete)
+        self.p1 = Patient.objects.create(first_name="A", last_name="B", phone="+996700000010", branch=self.branch)
+        self.p2 = Patient.objects.create(first_name="A", last_name="B", phone="0700 000 010", branch=self.branch)
+        self.client = Client()
+        self.client.force_login(self.nurse)
+
+    def test_merge_confirm_blocked_without_permission(self):
+        resp = self.client.post(f"/patients/{self.p2.pk}/merge/confirm/", {"target": self.p1.pk})
+        self.assertEqual(resp.status_code, 403)
+        self.p2.refresh_from_db()
+        self.assertFalse(self.p2.is_deleted)
+
+    def test_mark_not_duplicate_blocked_without_permission(self):
+        resp = self.client.post(f"/patients/{self.p1.pk}/mark-not-duplicate/")
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(SharedPhoneNumber.objects.filter(phone_norm=self.p1.phone_norm).exists())
+
+
+class ExactDuplicateAutoMergeTestCase(TestCase):
+    """«Слить все точные дубли» — авто-объединение ТОЛЬКО пар, где и телефон,
+    и ФИО совпадают; пары с общим только телефоном (разное имя) не трогает —
+    для них остаётся ручной обзор (SharedPhoneNumber-сценарий)."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name="Main", address="-", phone="0", is_main=True)
+        perm = Permission.objects.filter(code="patients.delete").first() or Permission.objects.create(
+            code="patients.delete", category="patients", label="Удаление пациентов",
+        )
+        role = Role.objects.create(name="bulk_merge_test_role", is_system=True)
+        role.granular_permissions.add(perm)
+        self.admin = User.objects.create(login="bulkmerge_admin", name="Admin BM", role=role)
+
+        # Точный дубль: телефон + ФИО совпадают.
+        self.exact_a = Patient.objects.create(first_name="Иван", last_name="Иванов",
+                                               phone="+996700111000", branch=self.branch)
+        self.exact_b = Patient.objects.create(first_name="Иван", last_name="Иванов",
+                                               phone="0700 111 000", branch=self.branch)
+        # Общий телефон, но разное имя — семейный случай, НЕ авто-сливается.
+        self.shared_a = Patient.objects.create(first_name="Пётр", last_name="Петров",
+                                                phone="+996700222000", branch=self.branch)
+        self.shared_b = Patient.objects.create(first_name="Анна", last_name="Петрова",
+                                                phone="0700 222 000", branch=self.branch)
+
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_find_exact_duplicate_groups(self):
+        from apps.patients.views import find_exact_duplicate_groups
+        groups = find_exact_duplicate_groups()
+        group_id_sets = [{p.pk for p in g} for g in groups]
+        self.assertIn({self.exact_a.pk, self.exact_b.pk}, group_id_sets)
+        for g in group_id_sets:
+            self.assertNotIn(self.shared_a.pk, g)
+            self.assertNotIn(self.shared_b.pk, g)
+
+    def test_find_exact_duplicate_groups_respects_shared_phone_number(self):
+        """Даже если бы имена совпали, подтверждённое SharedPhoneNumber-
+        исключение всё равно исключает пару из авто-слияния."""
+        from apps.patients.views import find_exact_duplicate_groups
+        SharedPhoneNumber.objects.create(phone_norm=self.exact_a.phone_norm)
+        groups = find_exact_duplicate_groups()
+        group_id_sets = [{p.pk for p in g} for g in groups]
+        self.assertNotIn({self.exact_a.pk, self.exact_b.pk}, group_id_sets)
+
+    def test_preview_counts_only_exact_groups(self):
+        resp = self.client.get("/patients/bulk-merge/exact/preview/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["groups"], 1)
+        self.assertEqual(data["patients"], 1)
+
+    def test_confirm_merges_exact_but_not_shared_phone_pair(self):
+        from apps.users.models import AuditEvent
+        resp = self.client.post("/patients/bulk-merge/exact/confirm/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["merged_groups"], 1)
+        self.assertEqual(data["patients_merged"], 1)
+        self.assertEqual(data["errors"], 0)
+
+        self.exact_b.refresh_from_db()
+        self.shared_a.refresh_from_db()
+        self.shared_b.refresh_from_db()
+        self.assertTrue(self.exact_b.is_deleted)
+        self.assertFalse(self.shared_a.is_deleted)
+        self.assertFalse(self.shared_b.is_deleted)
+        self.assertTrue(AuditEvent.objects.filter(action="patient_merge").exists())
+
+    def test_confirm_blocked_without_permission(self):
+        role = Role.objects.create(name="no_perm_bulk_merge", is_system=True)
+        nurse = User.objects.create(login="nurse_bulk_merge", name="Медсестра", role=role)
+        c = Client()
+        c.force_login(nurse)
+        resp = c.post("/patients/bulk-merge/exact/confirm/")
+        self.assertEqual(resp.status_code, 403)
+        self.exact_b.refresh_from_db()
+        self.assertFalse(self.exact_b.is_deleted)
 
 
 class PatientPinFilterTestCase(TestCase):
@@ -162,7 +319,12 @@ class SharedPhoneNumberTestCase(TestCase):
 
     def setUp(self):
         self.branch = Branch.objects.create(name="Main", address="-", phone="0", is_main=True)
-        self.staff = User.objects.create(login="staff_shared", name="Staff", email="sh@test.local")
+        perm = Permission.objects.filter(code="patients.delete").first() or Permission.objects.create(
+            code="patients.delete", category="patients", label="Удаление пациентов",
+        )
+        role = Role.objects.create(name="shared_phone_test_role", is_system=True)
+        role.granular_permissions.add(perm)
+        self.staff = User.objects.create(login="staff_shared", name="Staff", email="sh@test.local", role=role)
         self.p1 = Patient.objects.create(
             first_name="Родственник1", last_name="Общий", phone="+996700999888", branch=self.branch,
         )

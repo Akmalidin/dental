@@ -329,6 +329,53 @@ class NewUIPatientsTestCase(TestCase):
         self.assertEqual(resp.status_code, 302)
 
 
+class NewUIPatientsDupesChipTestCase(TestCase):
+    """«⚠ Возможные дубли» — перенос ручного обзора дублей в новый интерфейс
+    (/new/patients/data/): apps.users.views._newui_patients_page_data
+    считает counts["dupes"]/isDupe тем же способом, что и старый
+    /patients/ список (apps.patients.views.patient_list)."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+
+        self.clinic = Clinic.objects.create(name="Клиника DupChip", slug="clinic-dupchip")
+        self.branch = Branch.objects.create(name="Филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="dc_director", name="Директор DC",
+                                             role=self.admin_role, clinic=self.clinic)
+        self.client = Client()
+        self.client.force_login(self.director)
+
+        self.dup1 = Patient.objects.create(first_name="Один", last_name="Дубль",
+                                            phone="+996700777001", branch=self.branch, clinic=self.clinic)
+        self.dup2 = Patient.objects.create(first_name="Два", last_name="Дубль",
+                                            phone="0700 777 001", branch=self.branch, clinic=self.clinic)
+        self.unique = Patient.objects.create(first_name="Уник", last_name="Пациент",
+                                              phone="+996700777002", branch=self.branch, clinic=self.clinic)
+
+    def test_dupes_count_and_chip_filter(self):
+        resp = self.client.get("/new/patients/data/")
+        data = resp.json()
+        self.assertEqual(data["counts"]["dupes"], 2)
+        by_id = {r["id"]: r["isDupe"] for r in data["results"]}
+        self.assertTrue(by_id[self.dup1.pk])
+        self.assertTrue(by_id[self.dup2.pk])
+        self.assertFalse(by_id[self.unique.pk])
+
+        resp2 = self.client.get("/new/patients/data/?filter=dupes")
+        ids = {r["id"] for r in resp2.json()["results"]}
+        self.assertEqual(ids, {self.dup1.pk, self.dup2.pk})
+
+    def test_shared_phone_number_excludes_from_dupes(self):
+        from apps.patients.models import SharedPhoneNumber
+        SharedPhoneNumber.objects.create(phone_norm=self.dup1.phone_norm)
+        resp = self.client.get("/new/patients/data/")
+        data = resp.json()
+        self.assertEqual(data["counts"]["dupes"], 0)
+        by_id = {r["id"]: r["isDupe"] for r in data["results"]}
+        self.assertFalse(by_id[self.dup1.pk])
+
+
 class NewUIScheduleTestCase(TestCase):
     """Раздел «Записи/Календарь» — реальные врачи и реальные приёмы в окне
     ±30 дней. Создание записи и перетаскивание в календаре нового интерфейса

@@ -411,6 +411,19 @@ def _newui_patients_page_data(request):
         status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
     ).values_list("patient_id", flat=True)
 
+    # Возможные дубли — тот же расчёт, что и в старом /patients/ списке
+    # (apps.patients.views.patient_list): телефоны, встречающиеся у
+    # нескольких пациентов, кроме подтверждённых SharedPhoneNumber-
+    # исключений («это разные люди с общим телефоном»).
+    from django.db.models import Count as _Count
+    from apps.patients.models import SharedPhoneNumber
+    confirmed_shared = set(SharedPhoneNumber.objects.values_list("phone_norm", flat=True))
+    dupe_phones = set(
+        Patient.objects.exclude(phone_norm="").exclude(phone_norm__in=confirmed_shared)
+        .values("phone_norm").annotate(c=_Count("id")).filter(c__gt=1)
+        .values_list("phone_norm", flat=True)
+    )
+
     # Активный филиал переключателя сайдбара — фильтруем ВЕСЬ список (и
     # KPI-блоки ниже, через all_patients_qs), а не только сам queryset
     # результатов: выбор филиала — явное намерение «покажи мне этот
@@ -426,6 +439,7 @@ def _newui_patients_page_data(request):
         "all": base_qs.count(),
         "debt": base_qs.filter(balance__lt=0).count(),
         "treatment": base_qs.filter(pk__in=active_treatment_qs).distinct().count(),
+        "dupes": base_qs.filter(phone_norm__in=dupe_phones).distinct().count(),
     }
 
     # KPI-блоки сверху страницы (как в старом интерфейсе, templates/patients/list.html)
@@ -460,6 +474,8 @@ def _newui_patients_page_data(request):
         qs = qs.filter(balance__lt=0)
     elif chip == "treatment":
         qs = qs.filter(pk__in=active_treatment_qs)
+    elif chip == "dupes":
+        qs = qs.filter(phone_norm__in=dupe_phones)
     qs = qs.distinct()
 
     paginator = Paginator(qs, per_page)
@@ -494,6 +510,7 @@ def _newui_patients_page_data(request):
             "hasActiveTreatment": p.pk in active_treatment_ids,
             "statusLabel": status_label,
             "statusColor": status_color,
+            "isDupe": p.phone_norm in dupe_phones,
         })
     return {
         "results": results,
