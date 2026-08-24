@@ -239,15 +239,21 @@ def patient_merge_search(request, pk):
             last_name__iexact=patient.last_name.strip(),
             first_name__iexact=patient.first_name.strip(),
         ))
-    rows = [{
-        "id": c.pk, "number": c.display_number, "name": c.full_name,
-        "phone": c.phone, "birth_date": c.birth_date.strftime("%d.%m.%Y") if c.birth_date else "",
-        "treatments": Treatment.all_objects.filter(patient=c, is_deleted=False).count(),
-    } for c in cand]
+    rows = []
+    for c in cand:
+        s = c.related_summary()
+        rows.append({
+            "id": c.pk, "number": c.display_number, "name": c.full_name,
+            "phone": c.phone, "birth_date": c.birth_date.strftime("%d.%m.%Y") if c.birth_date else "",
+            "treatments": s["treatments"], "plans": s["plans"], "payments": s["payments"],
+            "advances": s["advances"], "medicines": s["medicines"], "appointments": s["appointments"],
+            "debt": float(s["debt"]),
+        })
     return JsonResponse({"ok": True, "candidates": rows})
 
 
 @login_required
+@require_permission("patients.delete")
 @require_POST
 def patient_merge_confirm(request, pk):
     """Объединить двух пациентов — переносит ВСЕ связанные записи (приёмы, платежи,
@@ -275,6 +281,7 @@ def patient_merge_confirm(request, pk):
 
 
 @login_required
+@require_permission("patients.delete")
 @require_POST
 def patient_mark_not_duplicate(request, pk):
     """Подтвердить, что пациент с этим номером телефона — НЕ дубль (например,
@@ -294,27 +301,40 @@ def patient_mark_not_duplicate(request, pk):
 
 def merge_patients(source, target, user=None):
     """Перенести ВСЕ связанные записи source → target и мягко удалить source.
-    Затрагивает: приёмы, ЭМК, планы лечения, зубную карту, платежи, авансы,
-    записи на приём, назначенные лекарства, WhatsApp-переписку, заказы/гарантии
-    техникам, теги. Всё в одной транзакции — либо переносится целиком, либо
-    ничего (при ошибке)."""
+    Затрагивает: приёмы, ЭМК, планы лечения, зубную карту (состояние зуба +
+    поверхностей + дёсен), файлы приёма/пациента, платежи, авансы, записи на
+    приём, назначенные лекарства, WhatsApp-переписку, заказы/гарантии
+    техникам, CRM-заявки, журнал посещений, теги. Всё в одной транзакции —
+    либо переносится целиком, либо ничего (при ошибке)."""
     from django.db import transaction
-    from apps.treatments.models import Treatment
+    from apps.treatments.models import Treatment, TreatmentFile
     from apps.treatments.models_emr import MedicalRecord
     from apps.treatments.models_plan import TreatmentPlan
-    from apps.treatments.models_teeth import ToothCondition
+    from apps.treatments.models_teeth import ToothCondition, ToothSurfaceCondition, ToothGumCondition
     from apps.finance.models import Payment
     from apps.finance.models import PatientAdvance
     from apps.appointments.models import Appointment
     from apps.medicines.models import PatientMedicine
     from apps.notifications.models import WaMessage
     from apps.technicians.models import TechnicianTask, TechnicianWarrantyCase
+    from .models import PatientVisit
 
     with transaction.atomic():
         Treatment.all_objects.filter(patient=source).update(patient=target)
         MedicalRecord.objects.filter(patient=source).update(patient=target)
         TreatmentPlan.objects.filter(patient=source).update(patient=target)
         ToothCondition.objects.filter(patient=source).update(patient=target)
+        # ToothSurfaceCondition/ToothGumCondition/TreatmentFile.patient — своё
+        # отдельное поле patient (не то же самое, что treatment.patient), и
+        # Lead/PatientVisit — раньше сюда никогда не заглядывали: после
+        # слияния эти записи молча оставались привязаны к мягко удалённому
+        # source, "теряя" файлы/детали зубной карты/CRM-заявку/журнал
+        # посещений с объединённой карточки.
+        ToothSurfaceCondition.objects.filter(patient=source).update(patient=target)
+        ToothGumCondition.objects.filter(patient=source).update(patient=target)
+        TreatmentFile.objects.filter(patient=source).update(patient=target)
+        Lead.objects.filter(patient=source).update(patient=target)
+        PatientVisit.objects.filter(patient=source).update(patient=target)
         Payment.all_clinics.filter(patient=source).update(patient=target)
         PatientAdvance.objects.filter(patient=source).update(patient=target)
         Appointment.all_objects.filter(patient=source).update(patient=target)
@@ -331,7 +351,72 @@ def merge_patients(source, target, user=None):
         target.save()
         source.soft_delete(user)
         target.recalc_balance()
+    from apps.users.audit import log_audit_event
+    log_audit_event(
+        action="patient_merge", category="delete", actor=user,
+        object_model="patient", object_id=target.pk,
+        object_repr=f"№{source.display_number} → №{target.display_number} ({target.full_name})",
+    )
     return target
+
+
+def find_exact_duplicate_groups():
+    """Группы пациентов ТЕКУЩЕЙ клиники, где phone_norm И точное ФИО
+    совпадают — тот же критерий, что уже используется при СОЗДАНИИ пациента
+    для блокировки дубля (patient_create_quick ниже), поэтому доверие к нему
+    как «безопасному для авто-слияния» уже есть в продукте. SharedPhoneNumber-
+    исключения тоже уважаем — если администратор уже пометил номер как общий
+    (муж/жена и т.п.), не трогаем его пары автоматически, даже если имена
+    совпали. Каждая группа отсортирована по (created_at, pk) — первый элемент
+    станет получателем при слиянии (та же логика, что и в merge_patients:
+    выживает более старая карточка)."""
+    from collections import defaultdict
+    confirmed_shared = set(SharedPhoneNumber.objects.values_list("phone_norm", flat=True))
+    groups = defaultdict(list)
+    qs = Patient.objects.exclude(phone_norm="").exclude(phone_norm__in=confirmed_shared)
+    for p in qs.only("id", "phone_norm", "first_name", "last_name", "created_at"):
+        key = (p.phone_norm, p.last_name.strip().lower(), p.first_name.strip().lower())
+        groups[key].append(p)
+    return [sorted(g, key=lambda p: (p.created_at, p.pk)) for g in groups.values() if len(g) > 1]
+
+
+@login_required
+@require_permission("patients.delete")
+def patient_bulk_merge_exact_preview(request):
+    """AJAX: сколько групп точных дублей (телефон+имя) найдено сейчас — для
+    превью перед кнопкой «Слить все точные дубли» в новом интерфейсе."""
+    from django.http import JsonResponse
+    groups = find_exact_duplicate_groups()
+    return JsonResponse({
+        "groups": len(groups),
+        "patients": sum(len(g) - 1 for g in groups),
+    })
+
+
+@login_required
+@require_permission("patients.delete")
+@require_POST
+def patient_bulk_merge_exact_confirm(request):
+    """Слить ВСЕ точные дубли (телефон+имя совпадают) одним кликом — не
+    больше 200 групп за вызов (нет очереди задач в проде, синхронная чистка
+    сотен слияний рискует не уложиться в таймаут gunicorn — тот же мотив,
+    что и у apps.users.audit.bulk_purge_old_deletions). Ошибка в одной
+    группе не прерывает остальные."""
+    from django.http import JsonResponse
+    groups = find_exact_duplicate_groups()[:200]
+    merged_groups, patients_merged, errors = 0, 0, 0
+    for group in groups:
+        target = group[0]
+        try:
+            for source in group[1:]:
+                merge_patients(source, target, request.user)
+                patients_merged += 1
+            merged_groups += 1
+        except Exception:
+            errors += 1
+    return JsonResponse({
+        "merged_groups": merged_groups, "patients_merged": patients_merged, "errors": errors,
+    })
 
 
 @login_required

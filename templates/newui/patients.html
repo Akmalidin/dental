@@ -6,6 +6,7 @@
         <div class="topbar-right">
           <div class="search-box"><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="patientSearchInput" placeholder="⌕ ФИО, телефон…" data-i18n-placeholder="w_search_fullname_phone" oninput="patientsSearchInput()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           <button class="btn btn-ghost" onclick="location.href='/new/blacklist/'" style="position:relative;">🚫 <span data-i18n="nav_черный_список">Чёрный список</span><span class="nav-badge" id="blacklistNavBadge" style="margin-left:6px;">0</span></button>
+          <button class="btn btn-ghost hidden" id="patientsMergeExactBtn" onclick="openBulkMergeExact()">🔀 <span data-i18n="w_merge_exact_dupes">Слить все точные дубли</span></button>
           <button class="btn btn-cobalt" onclick="openNewPatient()">+ <span data-i18n="w_new_patient">Новый пациент</span></button>
         </div>
       </div>
@@ -30,5 +31,41 @@
           </table>
         </div>
         <div id="patientsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;"></div>
+      </div>
+
+      <!-- Проверка дубликата — «Есть в базе» у строки с телефоном, который
+           встречается ещё у кого-то. Переносит функционал старой страницы
+           /patients/ (⚠ Возможные дубли) в новый интерфейс: те же
+           эндпоинты (/patients/<id>/merge/search|confirm/,
+           /mark-not-duplicate/), без дублирования бизнес-логики. -->
+      <div class="modal-backdrop" id="m-patient-merge">
+        <div class="modal wide">
+          <div class="modal-head"><h3 data-i18n="w_merge_check_title">Проверка дубликата</h3><button class="modal-close" onclick="closeModal('m-patient-merge')">✕</button></div>
+          <div class="modal-body">
+            <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;" id="pmSubtitle"></p>
+            <div id="pmCandidates"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-patient-merge')" data-i18n="w_close">Закрыть</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Авто-слияние точных дублей (телефон + ФИО совпадают) — тот же
+           критерий, что уже используется при создании пациента для блокировки
+           дубля, поэтому доверие к нему как безопасному уже есть в продукте.
+           Пары с совпадением ТОЛЬКО по телефону сюда не попадают — для них
+           остаётся ручной обзор через «⚠ Возможные дубли» выше. -->
+      <div class="modal-backdrop" id="m-bulk-merge-exact">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_merge_exact_dupes">Слить все точные дубли</h3><button class="modal-close" onclick="closeModal('m-bulk-merge-exact')">✕</button></div>
+          <div class="modal-body">
+            <p style="font-size:13px;color:var(--ink-soft);" id="bmePreviewText">Загрузка…</p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-bulk-merge-exact')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" id="bmeSubmitBtn" onclick="submitBulkMergeExact()" disabled data-i18n="w_merge_now">Слить</button>
+          </div>
+        </div>
       </div>
 {% endblock %}

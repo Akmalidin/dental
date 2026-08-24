@@ -9301,6 +9301,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     CAN_DELETE_PATIENT=!!data.canDeletePatient;
+    if(document.getElementById('patientsMergeExactBtn')) document.getElementById('patientsMergeExactBtn').classList.toggle('hidden', !CAN_DELETE_PATIENT);
     IS_SUPERADMIN=!!data.isSuperadmin;
     IS_ADMIN=!!data.isAdmin;
     IS_ADMIN_MAIN=!!data.isAdminMain;
@@ -9392,7 +9393,7 @@ function renderDashboard(){
 let patientChipFilter='all';
 let patientsPage=1;
 let patientsPerPage=25;
-let patientsCounts={all:0, treatment:0, debt:0};
+let patientsCounts={all:0, treatment:0, debt:0, dupes:0};
 let patientsStats={allCount:0, newCount:0, birthdayCount:0, debtorsCount:0, debtorsTotal:0};
 let patientsSearchTimer=null;
 // KPI-блоки сверху страницы «Пациенты» — те же 4 показателя, что и в старом
@@ -9423,6 +9424,9 @@ function renderPatientChips(){
     {key:'treatment', label:`${t('w_active_treatment')} · ${patientsCounts.treatment}`},
     {key:'debt', label:`${t('w_debtors')} · ${patientsCounts.debt}`},
   ];
+  if(patientsCounts.dupes > 0){
+    chips.push({key:'dupes', label:`⚠ ${t('w_possible_dupes','Возможные дубли')} · ${patientsCounts.dupes}`});
+  }
   wrap.innerHTML = chips.map(c=>`<button class="chip${patientChipFilter===c.key?' active':''}" onclick="patientChipFilter='${c.key}';patientsPage=1;renderPatientChips();renderPatientsTable();">${c.label}</button>`).join('');
 }
 // Поиск — debounce 300мс, чтобы не слать запрос на каждый нажатый символ.
@@ -9467,7 +9471,12 @@ async function renderPatientsTable(){
     // «Должники», но у любого пациента с долгом в общем списке тоже.
     const debtStyle = p.hasDebt ? ' style="background:var(--coral-tint);color:var(--coral);"' : '';
     const delBtn = CAN_DELETE_PATIENT ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral)" title="${t('w_delete')}" onclick="event.stopPropagation();deletePatientRow(${p.id},'${(p.fullName||'').replace(/'/g,"\\'")}')">🗑</button>` : '';
-    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}${delBtn}</td></tr>`;
+    // «Есть в базе» — только у пациентов с потенциальным дублем (isDupe,
+    // тот же phone_norm встречается у кого-то ещё, не отменённый через
+    // SharedPhoneNumber) и только при праве patients.delete — само
+    // слияние без него всё равно недоступно (403 на сервере).
+    const dupeBtn = (p.isDupe && CAN_DELETE_PATIENT) ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openMergeCheck(${p.id},'${(p.fullName||'').replace(/'/g,"\\'")}')">⚠ ${t('w_check_in_base','Есть в базе')}</button>` : '';
+    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}${dupeBtn}${delBtn}</td></tr>`;
   }).join('');
   renderPatientsPagination(data);
 }
@@ -9481,6 +9490,106 @@ async function deletePatientRow(id, name){
   if(res.redirected){ flashAndReload(t('w_patient_deleted')); }
   else { showToast(t('w_save_failed'), 'error'); }
 }
+
+// «Есть в базе» — перенос ручного обзора дублей из старого /patients/
+// (⚠ Возможные дубли) в новый интерфейс. Переиспользует СТАРЫЕ эндпоинты
+// без изменений (patient_merge_search/confirm/mark_not_duplicate) — та же
+// бизнес-логика, никакого дублирования. Слияние необратимо, поэтому оба
+// действия подтверждаются через confirm() (тот же уровень защиты, что и в
+// старом UI — там тоже только нативный confirm(), без ввода фразы).
+let pmCurrentPatientId=null;
+window.openMergeCheck = async function(patientId, name){
+  pmCurrentPatientId=patientId;
+  document.getElementById('pmSubtitle').textContent=t('w_merge_check_subtitle','Пациент')+': '+(name||'');
+  document.getElementById('pmCandidates').innerHTML=`<div style="text-align:center;color:var(--ink-soft);padding:20px 0;">…</div>`;
+  openModal('m-patient-merge');
+  let data;
+  try{
+    const res=await fetch('/patients/'+patientId+'/merge/search/');
+    data=await res.json();
+  }catch(e){
+    document.getElementById('pmCandidates').innerHTML=`<p style="color:var(--coral);font-size:12.5px;">${t('w_load_failed','Не удалось загрузить')}</p>`;
+    return;
+  }
+  const candidates=(data && data.candidates) || [];
+  if(candidates.length===0){
+    document.getElementById('pmCandidates').innerHTML=`<p style="color:var(--ink-soft);font-size:12.5px;">${t('w_no_candidates_found','Совпадений не найдено')}</p>`;
+    return;
+  }
+  document.getElementById('pmCandidates').innerHTML=candidates.map(c=>`
+    <div style="border:1px solid var(--mist-line);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <b>№${c.number} · ${c.name}</b>
+        <span class="mono" style="font-size:12px;color:var(--ink-soft);">${c.phone||'—'}</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">
+        ${c.birth_date ? c.birth_date+' · ' : ''}${t('w_treatments_short','приёмов')}: ${c.treatments}
+        · ${t('w_plans_short','планов')}: ${c.plans} · ${t('w_payments_short','платежей')}: ${c.payments}
+        · ${t('w_appointments_short','записей')}: ${c.appointments}
+        ${c.debt ? ` · <span style="color:var(--coral);">${t('w_debt')}: ${Math.round(c.debt).toLocaleString('ru-RU')} ${CUR_SYM}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-cobalt btn-sm" onclick="confirmMergeCandidate(${c.id})">${t('w_same_patient_merge','Это тот же пациент → слить')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="dismissNotDuplicate()">${t('w_different_patient','Это другой пациент')}</button>
+      </div>
+    </div>`).join('');
+};
+window.confirmMergeCandidate = async function(targetId){
+  if(!pmCurrentPatientId) return;
+  if(!confirm(t('w_confirm_merge_irreversible','Объединить карточки? Действие необратимо: вся история одной карточки перенесётся в другую.'))) return;
+  const fd=new FormData();
+  fd.append('target', targetId);
+  const res=await postForm('/patients/'+pmCurrentPatientId+'/merge/confirm/', fd);
+  if(res.redirected){ closeModal('m-patient-merge'); flashAndReload(t('w_patients_merged','Пациенты объединены')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+};
+window.dismissNotDuplicate = async function(){
+  if(!pmCurrentPatientId) return;
+  if(!confirm(t('w_confirm_not_duplicate','Отметить, что это разные люди с общим номером телефона?'))) return;
+  const res=await postForm('/patients/'+pmCurrentPatientId+'/mark-not-duplicate/', new FormData());
+  if(res.redirected){ closeModal('m-patient-merge'); flashAndReload(t('w_saved')); }
+  else { showToast(t('w_save_failed'), 'error'); }
+};
+
+// «Слить все точные дубли» — авто-объединение пар, где И телефон, И ФИО
+// совпадают (apps.patients.views.find_exact_duplicate_groups) — не тихий
+// фоновый процесс, а видимая кнопка с превью и итоговым отчётом. Пары с
+// совпадением ТОЛЬКО по телефону сюда не попадают (остаются на ручной
+// обзор через «Есть в базе» выше) — см. докстринг find_exact_duplicate_groups.
+window.openBulkMergeExact = async function(){
+  document.getElementById('bmePreviewText').textContent=t('w_loading','Загрузка…');
+  document.getElementById('bmeSubmitBtn').disabled=true;
+  openModal('m-bulk-merge-exact');
+  let data;
+  try{
+    const res=await fetch('/patients/bulk-merge/exact/preview/');
+    data=await res.json();
+  }catch(e){
+    document.getElementById('bmePreviewText').textContent=t('w_load_failed','Не удалось загрузить');
+    return;
+  }
+  if(!data.groups){
+    document.getElementById('bmePreviewText').textContent=t('w_no_exact_dupes','Точных дублей (телефон+ФИО) не найдено');
+    return;
+  }
+  document.getElementById('bmePreviewText').textContent=
+    t('w_exact_dupes_preview','Будет объединено')+`: ${data.groups} `+t('w_groups_short','групп')+` (${data.patients} `+t('w_cards_short','карточек')+` `+t('w_will_disappear','исчезнет')+`).`;
+  document.getElementById('bmeSubmitBtn').disabled=false;
+};
+window.submitBulkMergeExact = async function(){
+  document.getElementById('bmeSubmitBtn').disabled=true;
+  let data;
+  try{
+    const res=await postForm('/patients/bulk-merge/exact/confirm/', new FormData());
+    data=await res.json();
+  }catch(e){
+    showToast(t('w_save_failed'), 'error');
+    return;
+  }
+  closeModal('m-bulk-merge-exact');
+  showToast(t('w_merged_groups_report','Объединено групп')+`: ${data.merged_groups} (${data.patients_merged} `+t('w_cards_short','карточек')+`)`+(data.errors?`, ${t('w_errors_short','ошибок')}: ${data.errors}`:''));
+  renderPatientsTable();
+};
 function renderPatientsPagination(data){
   const el=document.getElementById('patientsPagination');
   if(!el) return;
