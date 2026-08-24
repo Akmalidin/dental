@@ -415,6 +415,20 @@ let cashVisitSelectedIds=new Set();
 function openCashVisitModal(patientId){
   const client=(cashdeskData.todayPatients||[]).find(c=>c.patientId===patientId);
   if(!client) return;
+  if(client.items.length===0){
+    // У сегодняшнего приёма нет своей суммы к оплате (уже оплачен либо
+    // лечение не заведено) — но общий долг у пациента может быть (см.
+    // кнопку на расписании, apptActionsHtml/base.html, берёт Patient.debt).
+    // Ведём на общую форму «Принять оплату» — она сама подставит
+    // Patient.balance и распределит платёж по всем неоплаченным приёмам
+    // пациента (payment_create → _allocate_income), а не только по
+    // сегодняшнему — тот же бэкенд-механизм, что уже использует эта
+    // общая модалка для «Пациенты на сегодня»/поиска.
+    showToast(t('w_no_today_debt_use_general', 'У сегодняшнего приёма нет своей суммы — открыта форма по общему долгу пациента'));
+    openCashAcceptGeneral();
+    agSelectPatient(patientId);
+    return;
+  }
   currentCashVisitPatientId=patientId;
   currentCashVisitItemId=null;
   cashVisitSelectedIds=new Set();
