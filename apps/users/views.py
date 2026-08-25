@@ -2263,6 +2263,8 @@ def _newui_superadmin_data():
             clinics.append({
                 "id": c.pk, "name": c.name, "slug": c.slug,
                 "isActive": c.is_active,
+                "isArchived": c.is_archived,
+                "archivedAt": timezone.localtime(c.archived_at).strftime("%d.%m.%Y %H:%M") if c.archived_at else "",
                 "tariffPlan": c.tariff_plan,
                 "tariffUntil": c.tariff_until.isoformat() if c.tariff_until else "",
                 "isExpired": c.is_expired,
@@ -3000,6 +3002,59 @@ def clinic_notify(request, clinic_id):
         diff=[{"field": "notification", "old": "—", "new": f"{title} → {len(recipients)} чел."}],
     )
     messages.success(request, _("Уведомление отправлено (%(n)s чел.)") % {"n": len(recipients)})
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@require_superadmin
+@require_POST
+def clinic_archive(request, clinic_id):
+    """Архивировать клинику — «удаление» без потери данных (полное удаление
+    рискованно: Payment/Treatment/Appointment.branch и т.д. внутри клиники
+    имеют on_delete=PROTECT, наивный .delete() упадёт, а восстановить
+    данные после реального удаления нельзя). is_active=False — тот же
+    флаг, что и у обычной блокировки, переиспользует всю уже работающую
+    фильтрацию (логин, фоновые задачи, публичные списки). is_archived —
+    отдельно, чтобы отличать архивную клинику от просто заблокированной
+    и корректно восстановить именно то, что архивировали.
+    confirm_name — ввод названия клиники (не просто клик) — тот же уровень
+    защиты, что и у безвозвратной очистки в супер-админке (только тут
+    действие обратимое, поэтому подтверждение проще, без спец-фразы)."""
+    from django.utils import timezone
+    from apps.users.models import Clinic
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    if request.POST.get("confirm_name", "").strip() != clinic.name:
+        messages.error(request, _("Название клиники не совпадает"))
+        return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    clinic.is_active = False
+    clinic.is_archived = True
+    clinic.archived_at = timezone.now()
+    clinic.save(update_fields=["is_active", "is_archived", "archived_at"])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_archive", category="delete", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk, object_repr=f"clinic/{clinic.slug}",
+    )
+    messages.success(request, _("Клиника архивирована"))
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@require_superadmin
+@require_POST
+def clinic_restore(request, clinic_id):
+    """Восстановить архивную клинику — обратное к clinic_archive, без
+    доп. подтверждения (обратимое действие)."""
+    from apps.users.models import Clinic
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    clinic.is_active = True
+    clinic.is_archived = False
+    clinic.archived_at = None
+    clinic.save(update_fields=["is_active", "is_archived", "archived_at"])
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_restore", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk, object_repr=f"clinic/{clinic.slug}",
+    )
+    messages.success(request, _("Клиника восстановлена"))
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
 
 

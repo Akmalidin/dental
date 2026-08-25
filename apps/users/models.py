@@ -77,6 +77,17 @@ class Clinic(models.Model):
     # «Запросить доступ» вместо простого «недоступна».
     blocked_reason = models.TextField(blank=True, verbose_name="Причина блокировки")
     created_at = models.DateTimeField(auto_now_add=True)
+    # Архивация (супер-админ, «удаление» клиники без потери данных) —
+    # отдельно от is_active: обычная блокировка обратима одним кликом без
+    # подтверждения, архивация — осознанное действие с вводом названия
+    # клиники (см. clinic_archive/clinic_restore, apps.users.views). При
+    # архивации is_active тоже выставляется в False (переиспользуем уже
+    # везде работающую фильтрацию логина/фоновых задач/публичных списков
+    # по is_active — см. её использования в apps.marketing, apps.settings_clinic,
+    # apps.notifications.tasks/management.commands, вход в систему), но
+    # is_archived различает «просто заблокирована» от «архивная» в UI.
+    is_archived = models.BooleanField(default=False, verbose_name="Архивирована")
+    archived_at = models.DateTimeField(null=True, blank=True, verbose_name="Дата архивации")
 
     def has_access(self, key):
         return key in (self.granted_access or [])

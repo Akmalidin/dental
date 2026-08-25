@@ -3702,6 +3702,87 @@ class ClinicBlockingTestCase(TestCase):
         self.assertTrue(resp.wsgi_request.user.is_authenticated)
 
 
+class ClinicArchiveTestCase(TestCase):
+    """Архивация клиники из супер-админ-панели — apps.users.views.
+    clinic_archive/clinic_restore, только суперадмин (require_superadmin),
+    требует ввода точного названия клиники для подтверждения. is_active
+    выставляется в False заодно (переиспользуется существующая фильтрация
+    логина/фоновых задач), данные не удаляются."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Архив", slug="clinic-archive")
+        admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        self.superadmin = User.objects.create(
+            login="ca_superadmin", name="Супер CA", email="casa@test.local",
+            role=superadmin_role, clinic=self.clinic,
+        )
+        self.director = User.objects.create(
+            login="ca_director", name="Директор CA", email="cad@test.local",
+            role=admin_main_role, clinic=self.clinic,
+        )
+
+    def test_superadmin_archives_with_correct_name(self):
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/archive/", {"confirm_name": "Клиника Архив"})
+        self.assertRedirects(resp, "/users/superadmin/", fetch_redirect_response=False)
+        self.clinic.refresh_from_db()
+        self.assertTrue(self.clinic.is_archived)
+        self.assertFalse(self.clinic.is_active)
+        self.assertIsNotNone(self.clinic.archived_at)
+
+    def test_wrong_name_does_not_archive(self):
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/archive/", {"confirm_name": "Не то название"})
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertFalse(self.clinic.is_archived)
+        self.assertTrue(self.clinic.is_active)
+
+    def test_non_superadmin_forbidden(self):
+        client = Client()
+        client.force_login(self.director)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/archive/", {"confirm_name": "Клиника Архив"})
+        self.assertEqual(resp.status_code, 403)
+        self.clinic.refresh_from_db()
+        self.assertFalse(self.clinic.is_archived)
+
+    def test_restore_brings_clinic_back(self):
+        self.clinic.is_active = False
+        self.clinic.is_archived = True
+        from django.utils import timezone
+        self.clinic.archived_at = timezone.now()
+        self.clinic.save()
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/restore/")
+        self.assertRedirects(resp, "/users/superadmin/", fetch_redirect_response=False)
+        self.clinic.refresh_from_db()
+        self.assertFalse(self.clinic.is_archived)
+        self.assertTrue(self.clinic.is_active)
+        self.assertIsNone(self.clinic.archived_at)
+
+    def test_archived_clinic_blocks_login_like_inactive(self):
+        """Регрессия: is_active=False уже отфильтровывает вход
+        (TariffGuardMiddleware/login_view, см. ClinicBlockingTestCase) —
+        архивация переиспользует этот же флаг, отдельного кода для
+        блокировки входа не нужно."""
+        client = Client()
+        client.force_login(self.director)
+        resp = client.get("/new/", follow=False)
+        self.assertEqual(resp.status_code, 200)  # ещё активна
+
+        self.clinic.is_active = False
+        self.clinic.is_archived = True
+        self.clinic.save(update_fields=["is_active", "is_archived"])
+
+        resp2 = client.get("/new/", follow=True)
+        self.assertRedirects(resp2, f"/access-request/?clinic={self.clinic.slug}",
+                              fetch_redirect_response=False)
+
+
 class ClinicNotifyTestCase(TestCase):
     """Уведомление клинике из супер-админ-панели — apps.users.views.
     clinic_notify, только суперадмин (require_superadmin), уходит всем
