@@ -338,6 +338,17 @@ class User(AbstractUser):
     def has_role(self, *role_names):
         return bool(self.all_role_names & set(role_names))
 
+    def has_granular_perm(self, perm_code):
+        """В отличие от role.has_perm() (проверяет только ОДНУ роль) —
+        учитывает и основную роль, и дополнительные (self.roles, M2M), как
+        уже делает has_role()/all_role_names. require_permission() должен
+        использовать именно этот метод, а не request.user.role.has_perm()
+        напрямую — иначе доп. роль права не даёт (была асимметрия с
+        role_required/has_role(), которая обе роли учитывает всегда)."""
+        if self.role_id and self.role.has_perm(perm_code):
+            return True
+        return self.roles.filter(granular_permissions__code=perm_code).exists()
+
     @property
     def is_superadmin(self):
         return self.is_superuser or Role.SUPERADMIN in self.all_role_names

@@ -45,6 +45,7 @@ def _message_templates_queryset():
 def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
+    from django.db.models import Q
     from apps.patients.models import LeadSource
     from apps.appointments.models import CancellationReason
     from apps.settings_clinic.models import ClinicSettings
@@ -75,8 +76,17 @@ def _shared_options(request, clinic):
             # зависит от языка/переименования display_name) — нужен, чтобы
             # подсказывать разумный набор разделов при первом снятии «Полного
             # доступа» в карточке сотрудника (см. ROLE_SECTION_DEFAULTS в base.html).
+            # Системные роли + свои кастомные (Role.objects.filter(clinic=...),
+            # is_system=False, созданные через «Дублировать» в редакторе
+            # ролей) — иначе продублированную роль некому назначить: оба
+            # select'а формы сотрудника («Роль»/«Доп. роль») читают именно
+            # этот список. Права системной роли теперь может менять только
+            # супер-админ (roles_views.role_edit) — «Дублировать» и есть тот
+            # способ, которым клиника задаёт свои права, поэтому копия
+            # обязана быть назначаемой так же, как оригинал.
             {"id": r.pk, "name": r.display_name, "roleKey": r.name}
-            for r in Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).order_by("name")
+            for r in Role.objects.filter(Q(clinic__isnull=True) | Q(clinic=clinic))
+                .exclude(name=Role.SUPERADMIN).order_by("-is_system", "name")
         ],
         "branchOptions": [{"id": b.pk, "name": b.name} for b in Branch.objects.all().order_by("name")],
         "permCatalog": [
