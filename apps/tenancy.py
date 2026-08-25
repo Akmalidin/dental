@@ -181,28 +181,41 @@ class CurrentClinicMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        set_current_clinic(None)
-        try:
-            user = getattr(request, "user", None)
-            if user is not None and user.is_authenticated:
-                if getattr(user, "is_superadmin", False):
-                    # Если зашли через поддомен клиники (<slug>.stom.asia) — это
-                    # и есть выбор клиники, приоритетнее старого переключателя
-                    # вверху (иначе клиника из сессии "перетягивает" все действия
-                    # суперадмина на себя, даже когда он физически на другом поддомене).
-                    host_clinic = getattr(request, "host_clinic", None)
-                    if host_clinic is not None:
-                        set_current_clinic(host_clinic)
-                    else:
-                        # суперадмин: либо выбранная клиника, либо все (None = без фильтра)
-                        cid = request.session.get("active_clinic")
-                        if cid:
-                            from apps.users.models import Clinic
-                            set_current_clinic(Clinic.objects.filter(pk=cid).first())
-                else:
-                    set_current_clinic(getattr(user, "clinic", None))
-        except Exception:
+        public_clinic = getattr(request, "public_clinic", None)
+        if public_clinic is not None:
+            # Уже определена StomAsiaRoutingMiddleware (выполняется раньше в
+            # MIDDLEWARE) для анонимного посетителя публичного сайта клиники
+            # на *.stom.asia — не сбрасываем и не пере-выводим из
+            # request.user: анонимный посетитель, user.is_authenticated
+            # всегда False, поэтому веткой ниже клиника всё равно осталась
+            # бы None до конца запроса, и авто-скоуп менеджеров (_apply_clinic)
+            # тихо отдавал бы данные ВСЕХ клиник платформы вместо этой одной
+            # (был найден именно так — утечка услуг/филиалов на публичном
+            # сайте клиники «Nobel»).
+            set_current_clinic(public_clinic)
+        else:
             set_current_clinic(None)
+            try:
+                user = getattr(request, "user", None)
+                if user is not None and user.is_authenticated:
+                    if getattr(user, "is_superadmin", False):
+                        # Если зашли через поддомен клиники (<slug>.stom.asia) — это
+                        # и есть выбор клиники, приоритетнее старого переключателя
+                        # вверху (иначе клиника из сессии "перетягивает" все действия
+                        # суперадмина на себя, даже когда он физически на другом поддомене).
+                        host_clinic = getattr(request, "host_clinic", None)
+                        if host_clinic is not None:
+                            set_current_clinic(host_clinic)
+                        else:
+                            # суперадмин: либо выбранная клиника, либо все (None = без фильтра)
+                            cid = request.session.get("active_clinic")
+                            if cid:
+                                from apps.users.models import Clinic
+                                set_current_clinic(Clinic.objects.filter(pk=cid).first())
+                    else:
+                        set_current_clinic(getattr(user, "clinic", None))
+            except Exception:
+                set_current_clinic(None)
         # Часовой пояс клиники: время записей/расписания одинаково на всех устройствах.
         activated_tz = False
         clinic = get_current_clinic()

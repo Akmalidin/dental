@@ -3574,7 +3574,18 @@ def login_view(request):
             set_current_clinic(clinic)
         # clinic_settings в контекст добавляет apps.settings_clinic.context_processors
         # (по текущей клинике, см. set_current_clinic выше) — здесь его задавать не нужно.
-        return render(request, template_name, {"form": form, "clinic_slug": clinic_slug})
+        ctx = {"form": form, "clinic_slug": clinic_slug}
+        if is_stom_asia and clinic is None:
+            # Нейтральный app.stom.asia без конкретной клиники (slug/
+            # host_clinic не определены) — не должно быть видно чужого лого.
+            # ClinicSettings.get() без текущей клиники (apps/settings_clinic/
+            # models.py) откатывается на служебную запись pk=1 —
+            # исторически названную "SADAF" ещё с single-tenant времён, на
+            # ней уже загружено реальное лого — перекрываем её явно, чтобы
+            # login_stom.html показал нейтральный бренд ODONTIS
+            # ({% if clinic_settings %}...{% else %}ODONTIS{% endif %}).
+            ctx["clinic_settings"] = None
+        return render(request, template_name, ctx)
     finally:
         clear_current_clinic()
 

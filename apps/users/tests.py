@@ -4210,6 +4210,39 @@ class StomAsiaLoginTemplateTestCase(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "auth/login.html")
 
+    def test_neutral_app_host_shows_odontis_not_leftover_clinic_settings(self):
+        """Регрессия: на нейтральном app.stom.asia (без конкретной клиники)
+        ClinicSettings.get() без текущей клиники откатывается на служебную
+        запись pk=1 (исторически названную "SADAF" ещё с single-tenant
+        времён) — раньше это лого/название утекало на страницу входа вместо
+        нейтрального бренда ODONTIS."""
+        from apps.settings_clinic.models import ClinicSettings
+        from django.test import override_settings
+        ClinicSettings.objects.get_or_create(pk=1, defaults={"name": "SADAF", "clinic": None})
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/", HTTP_HOST="app.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertNotIn("SADAF", body)
+        self.assertIn("ODONTIS", body)
+
+    def test_clinic_subdomain_still_shows_own_branding(self):
+        """Регрессия: у конкретной клиники (<slug>.stom.asia) своё название
+        по-прежнему показывается как обычно — фикс не должен задеть этот
+        путь (clinic не None → ветка ODONTIS-заглушки не применяется)."""
+        from apps.settings_clinic.models import ClinicSettings
+        from django.test import override_settings
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        set_current_clinic(self.clinic)
+        try:
+            ClinicSettings.objects.get_or_create(clinic=self.clinic, defaults={"name": "Клиника Demo Бренд"})
+        finally:
+            clear_current_clinic()
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/login/?clinic=demo", HTTP_HOST="app.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Клиника Demo Бренд", resp.content.decode())
+
 
 class BranchFilterTestCase(TestCase):
     """Переключатель филиала (session["active_branch"], /users/set-branch/)
@@ -4466,6 +4499,79 @@ class StomAsiaPublicSiteTestCase(TestCase):
             self.assertEqual(_clinic_public_url(self.clinic), "https://site-clinic.stom.asia")
         with override_settings(CRM_BASE_DOMAIN="", PUBLIC_BASE_DOMAIN="denta.tw1.ru"):
             self.assertEqual(_clinic_public_url(self.clinic), "https://site-clinic.denta.tw1.ru")
+
+
+class PublicSiteCrossTenantLeakTestCase(TestCase):
+    """Регрессия: публичный сайт клиники A не должен показывать услуги/
+    филиалы клиники B (найдено на живом сайте — «Nobel» показывал чужие
+    демо-услуги и контакты ВСЕХ клиник платформы). Два независимых слоя
+    защиты проверяются вместе: явный clinic= фильтр в apps.users.site_views
+    + CurrentClinicMiddleware больше не сбрасывает request.public_clinic
+    для анонимного посетителя *.stom.asia (apps/tenancy.py)."""
+
+    def setUp(self):
+        from apps.users.models import ClinicSite, Branch
+        from apps.services.models import Service, ServiceCategory
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+
+        self.clinic_a = Clinic.objects.create(name="Клиника A", slug="leak-a")
+        self.clinic_b = Clinic.objects.create(name="Клиника B", slug="leak-b")
+        ClinicSite.objects.create(clinic=self.clinic_a, enabled=True, published=True,
+                                   show_services=True, show_booking=True)
+        ClinicSite.objects.create(clinic=self.clinic_b, enabled=True, published=True)
+
+        self.branch_a = Branch.objects.create(name="Филиал A", address="ул. A", phone="0",
+                                               is_main=True, clinic=self.clinic_a)
+        self.branch_b = Branch.objects.create(name="Филиал B", address="ул. B", phone="0",
+                                               is_main=True, clinic=self.clinic_b)
+
+        set_current_clinic(self.clinic_a)
+        try:
+            cat_a = ServiceCategory.objects.create(name="Терапия A", clinic=self.clinic_a)
+            self.service_a = Service.objects.create(
+                name="Услуга A", price=1000, category=cat_a, clinic=self.clinic_a,
+            )
+        finally:
+            clear_current_clinic()
+        set_current_clinic(self.clinic_b)
+        try:
+            cat_b = ServiceCategory.objects.create(name="Терапия B", clinic=self.clinic_b)
+            self.service_b = Service.objects.create(
+                name="Услуга B", price=2000, category=cat_b, clinic=self.clinic_b,
+            )
+        finally:
+            clear_current_clinic()
+
+    def test_public_home_shows_only_own_services_and_branches(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/", HTTP_HOST="leak-a.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Услуга A", body)
+        self.assertNotIn("Услуга B", body)
+        self.assertIn("Филиал A", body)
+        self.assertNotIn("Филиал B", body)
+
+    def test_public_service_detail_404_for_foreign_clinic(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get(f"/service/{self.service_b.pk}/", HTTP_HOST="leak-a.stom.asia")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_public_book_services_scoped_to_own_clinic(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/book/", HTTP_HOST="leak-a.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Услуга A", body)
+        self.assertNotIn("Услуга B", body)
+
+    def test_public_sitemap_only_lists_own_services(self):
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.get("/sitemap.xml", HTTP_HOST="leak-a.stom.asia")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f"/service/{self.service_a.pk}/", body)
+        self.assertNotIn(f"/service/{self.service_b.pk}/", body)
 
 
 class PublicBookingBranchTestCase(TestCase):
