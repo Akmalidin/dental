@@ -38,6 +38,7 @@ urlpatterns = [
     path("clinic/<int:clinic_id>/update/", views.clinic_update, name="clinic_update"),
     path("clinic/<int:clinic_id>/access/", views.clinic_set_access, name="clinic_set_access"),
     path("clinic/<int:clinic_id>/toggle-active/", views.clinic_toggle_active, name="clinic_toggle_active"),
+    path("clinic/<int:clinic_id>/notify/", views.clinic_notify, name="clinic_notify"),
     path("branches/<int:pk>/toggle-active/", views.branch_toggle_active, name="branch_toggle_active"),
     path("clinic/<int:clinic_id>/blocked-features/", views.clinic_set_blocked_features, name="clinic_set_blocked_features"),
     path("block-ip/", views.block_ip, name="block_ip"),

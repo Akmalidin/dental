@@ -241,12 +241,35 @@
             </div>
           </div>
           <div class="modal-foot" style="justify-content:space-between;">
-            <button class="btn btn-ghost" onclick="saEnterClinic()">→ Войти в клинику</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" onclick="saEnterClinic()">→ Войти в клинику</button>
+              <button class="btn btn-ghost" onclick="saOpenNotify()">🔔 Уведомить</button>
+            </div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-ghost" id="saeToggleActiveBtn" onclick="saToggleActive()"></button>
               <button class="btn btn-ghost" onclick="closeModal('m-sa-edit')">Отмена</button>
               <button class="btn btn-cobalt" onclick="saSaveEdit()">Сохранить</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: уведомление клинике — заголовок + текст, уходит всем
+           активным сотрудникам клиники (Notification.send — колокольчик +
+           попытка web-push), без ссылки: просто текст, никуда не ведёт. -->
+      <div class="modal-backdrop" id="m-sa-notify">
+        <div class="modal">
+          <div class="modal-head"><h3>Уведомление клинике</h3><button class="modal-close" onclick="closeModal('m-sa-notify')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Заголовок</label>
+              <input autocomplete="off" type="text" id="saNotifyTitle" maxlength="300"></div>
+            <div class="form-group"><label>Текст (необязательно)</label>
+              <textarea id="saNotifyBody" rows="4" style="width:100%;resize:vertical;"></textarea></div>
+            <div id="saNotifyRecipientsHint" style="font-size:12px;color:var(--ink-soft);"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-notify')">Отмена</button>
+            <button class="btn btn-cobalt" onclick="saSubmitNotify()">Отправить</button>
           </div>
         </div>
       </div>
@@ -317,6 +340,7 @@
   const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
   const SA = REAL.superadminData || {clinics:[], tariffChoices:[], allModules:[], grantableAccess:[], blockableFeatures:[], timezoneChoices:[], accessRequests:[], blockedIPs:[]};
   let saCurrentId = null;
+  let saNotifyClinicId = null;
 
   function saFmtDate(iso){
     if(!iso) return '—';
@@ -584,6 +608,30 @@
     }
     const res = await postForm(`/users/clinic/${saCurrentId}/toggle-active/`, new FormData());
     if(res.redirected){ flashAndReload('Сохранено'); } else { showToast('Не удалось сохранить', 'error'); }
+  };
+
+  window.saOpenNotify = function(){
+    if(!saCurrentId) return;
+    saNotifyClinicId = saCurrentId;
+    const c = SA.clinics.find(x=>x.id===saCurrentId);
+    document.getElementById('saNotifyTitle').value = '';
+    document.getElementById('saNotifyBody').value = '';
+    document.getElementById('saNotifyRecipientsHint').textContent = c
+      ? `Уйдёт всем активным сотрудникам клиники «${c.name}» (${c.staffCount} чел.)`
+      : '';
+    openModal('m-sa-notify');
+  };
+
+  window.saSubmitNotify = async function(){
+    if(!saNotifyClinicId) return;
+    const title = document.getElementById('saNotifyTitle').value.trim();
+    if(!title){ showToast('Укажите заголовок', 'error'); return; }
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('body', document.getElementById('saNotifyBody').value.trim());
+    const res = await postForm(`/users/clinic/${saNotifyClinicId}/notify/`, fd);
+    if(res.redirected){ closeModal('m-sa-notify'); flashAndReload('Уведомление отправлено'); }
+    else { showToast('Не удалось отправить', 'error'); }
   };
 
   window.saToggleBranch = async function(id){
