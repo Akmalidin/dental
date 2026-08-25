@@ -58,6 +58,7 @@ ACTION_LABELS = {
     "clinic_feature_block": "Изменение запрещённых функций",
     "clinic_access_grant": "Изменение доступов клиники",
     "clinic_update": "Изменение клиники",
+    "clinic_notify": "Уведомление клинике",
     "clinic_create": "Создание клиники",
     "branch_toggle": "Блокировка/разблокировка филиала",
     "channel_toggle": "Переключение канала",

@@ -3583,6 +3583,63 @@ class ClinicBlockingTestCase(TestCase):
         self.assertTrue(resp.wsgi_request.user.is_authenticated)
 
 
+class ClinicNotifyTestCase(TestCase):
+    """Уведомление клинике из супер-админ-панели — apps.users.views.
+    clinic_notify, только суперадмин (require_superadmin), уходит всем
+    активным сотрудникам клиники (Notification.send)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника CN", slug="clinic-notify")
+        admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+
+        self.superadmin = User.objects.create(
+            login="cn_superadmin", name="Супер CN", email="cnsa@test.local",
+            role=superadmin_role, clinic=self.clinic,
+        )
+        self.director = User.objects.create(
+            login="cn_director", name="Директор CN", email="cnd@test.local",
+            role=admin_main_role, clinic=self.clinic,
+        )
+        self.staff_active = User.objects.create(
+            login="cn_staff_active", name="Активный CN", email="cnsta@test.local",
+            role=admin_main_role, clinic=self.clinic, is_active=True,
+        )
+        self.staff_inactive = User.objects.create(
+            login="cn_staff_inactive", name="Неактивный CN", email="cnsti@test.local",
+            role=admin_main_role, clinic=self.clinic, is_active=False,
+        )
+
+    def test_superadmin_sends_notification_to_active_staff_only(self):
+        from apps.notifications.models import Notification
+
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/notify/", {
+            "title": "Важное объявление", "body": "Текст уведомления",
+        })
+        self.assertRedirects(resp, "/users/superadmin/", fetch_redirect_response=False)
+
+        self.assertTrue(Notification.objects.filter(user=self.director, title="Важное объявление").exists())
+        self.assertTrue(Notification.objects.filter(user=self.staff_active, title="Важное объявление").exists())
+        self.assertFalse(Notification.objects.filter(user=self.staff_inactive).exists())
+
+    def test_non_superadmin_forbidden(self):
+        client = Client()
+        client.force_login(self.director)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/notify/", {"title": "X"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_empty_title_rejected(self):
+        from apps.notifications.models import Notification
+
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/clinic/{self.clinic.pk}/notify/", {"title": "  "})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Notification.objects.exists())
+
+
 class ClinicAccessRequestTestCase(TestCase):
     """Форма «запросить доступ» — публичная, создаёт заявку и уведомляет
     супер-админов (apps.notifications.models.Notification)."""

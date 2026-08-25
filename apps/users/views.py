@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 
 from .forms import LoginForm, UserForm, BranchForm
 from .models import User, Branch, Role, Permission
-from .decorators import role_required, require_permission
+from .decorators import role_required, require_permission, require_superadmin
 
 
 def _newui_role_data(clinic):
@@ -2967,6 +2967,39 @@ def clinic_toggle_active(request, clinic_id):
     )
     state = _("разблокирована") if clinic.is_active else _("заблокирована")
     messages.success(request, _("Клиника «%(n)s» %(s)s") % {"n": clinic.name, "s": state})
+    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+
+
+@require_superadmin
+@require_POST
+def clinic_notify(request, clinic_id):
+    """Отправить уведомление всем активным сотрудникам клиники — только
+    суперадмин. Notification.send() (apps.notifications.models) уже делает
+    и запись в БД (колокольчик получателя), и попытку web-push — просто
+    вызываем её для каждого активного пользователя клиники, бизнес-логику
+    не дублируем. require_superadmin (не инлайн-проверка, как у соседних
+    clinic_*-вьюх в этом файле) — 403 напрямую при отказе, а не
+    messages.error+redirect, который postForm()/res.redirected в JS принял
+    бы за успех."""
+    from apps.users.models import Clinic
+    from apps.notifications.models import Notification
+    clinic = get_object_or_404(Clinic, pk=clinic_id)
+    title = request.POST.get("title", "").strip()
+    body = request.POST.get("body", "").strip()
+    if not title:
+        messages.error(request, _("Укажите заголовок уведомления"))
+        return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    recipients = list(User.objects.filter(clinic=clinic, is_active=True))
+    for u in recipients:
+        Notification.send(u, title, body=body, type="system", actor=request.user)
+    from .audit import log_audit_event
+    log_audit_event(
+        action="clinic_notify", category="change", actor=request.user, request=request,
+        clinic=clinic, object_model="clinic", object_id=clinic.pk,
+        object_repr=f"clinic/{clinic.slug}",
+        diff=[{"field": "notification", "old": "—", "new": f"{title} → {len(recipients)} чел."}],
+    )
+    messages.success(request, _("Уведомление отправлено (%(n)s чел.)") % {"n": len(recipients)})
     return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
 
 
