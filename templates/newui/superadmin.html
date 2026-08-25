@@ -244,6 +244,7 @@
             <div style="display:flex;gap:8px;">
               <button class="btn btn-ghost" onclick="saEnterClinic()">→ Войти в клинику</button>
               <button class="btn btn-ghost" onclick="saOpenNotify()">🔔 Уведомить</button>
+              <button class="btn btn-ghost" id="saeArchiveBtn" onclick="saArchiveOrRestore()"></button>
             </div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-ghost" id="saeToggleActiveBtn" onclick="saToggleActive()"></button>
@@ -270,6 +271,32 @@
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-sa-notify')">Отмена</button>
             <button class="btn btn-cobalt" onclick="saSubmitNotify()">Отправить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: архивация клиники — обратимо (восстановить можно в любой
+           момент), но требует ввода названия клиники для подтверждения, а не
+           просто клика — тот же принцип, что и у безвозвратной очистки
+           (#m-sa-bulk-purge), только фраза — само название клиники, не
+           фиксированное слово (специфичнее для конкретной клиники). -->
+      <div class="modal-backdrop" id="m-sa-archive-confirm">
+        <div class="modal">
+          <div class="modal-head"><h3>Архивировать клинику</h3><button class="modal-close" onclick="closeModal('m-sa-archive-confirm')">✕</button></div>
+          <div class="modal-body">
+            <div style="background:var(--coral-tint);color:var(--coral);border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px;">
+              Клиника скроется из активных списков и заблокируется — вход
+              персонала станет недоступен. Все данные останутся в базе,
+              восстановить можно в любой момент кнопкой «Восстановить».
+            </div>
+            <div class="form-group">
+              <label>Чтобы подтвердить, введите название клиники <b id="saArchiveConfirmName"></b>:</label>
+              <input type="text" id="saArchiveConfirmInput" autocomplete="off" oninput="saCheckArchiveConfirmText()">
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal('m-sa-archive-confirm')">Отмена</button>
+            <button class="btn btn-danger" id="saArchiveConfirmBtn" onclick="saSubmitArchive()" disabled>Архивировать</button>
           </div>
         </div>
       </div>
@@ -377,7 +404,7 @@
       const accessBadges = SA.grantableAccess.map(([key,label])=>
         c.grantedAccess.includes(key) ? `<span class="pill cobalt">${label}</span>` : `<span class="pill grey">${label}</span>`
       ).join(' ');
-      const statusBadge = c.isActive ? `<span class="pill teal">Активна</span>` : `<span class="pill coral">Заблокирована</span>`;
+      const statusBadge = c.isArchived ? `<span class="pill grey">Архив</span>` : (c.isActive ? `<span class="pill teal">Активна</span>` : `<span class="pill coral">Заблокирована</span>`);
       return `<tr class="clickable" onclick="openSaEdit(${c.id})">
         <td><b>${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.slug}</div></td>
         <td>${tariffPill}${c.tariffUntil?`<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">до ${saFmtDate(c.tariffUntil)}</div>`:''}</td>
@@ -592,6 +619,9 @@
     const activeBtn = document.getElementById('saeToggleActiveBtn');
     activeBtn.textContent = c.isActive ? 'Заблокировать клинику' : 'Разблокировать клинику';
     activeBtn.style.color = c.isActive ? 'var(--coral)' : 'var(--teal)';
+    const archiveBtn = document.getElementById('saeArchiveBtn');
+    archiveBtn.textContent = c.isArchived ? '↩️ Восстановить' : '🗄 Архивировать';
+    archiveBtn.style.color = c.isArchived ? 'var(--teal)' : 'var(--coral)';
     openModal('m-sa-edit');
   };
 
@@ -632,6 +662,45 @@
     const res = await postForm(`/users/clinic/${saNotifyClinicId}/notify/`, fd);
     if(res.redirected){ closeModal('m-sa-notify'); flashAndReload('Уведомление отправлено'); }
     else { showToast('Не удалось отправить', 'error'); }
+  };
+
+  let saArchiveClinicId = null;
+
+  window.saArchiveOrRestore = async function(){
+    if(!saCurrentId) return;
+    const c = SA.clinics.find(x=>x.id===saCurrentId);
+    if(!c) return;
+    if(c.isArchived){
+      const res = await postForm(`/users/clinic/${saCurrentId}/restore/`, new FormData());
+      if(res.redirected){ closeModal('m-sa-edit'); flashAndReload('Клиника восстановлена'); }
+      else { showToast('Не удалось восстановить', 'error'); }
+      return;
+    }
+    saArchiveClinicId = saCurrentId;
+    document.getElementById('saArchiveConfirmName').textContent = c.name;
+    document.getElementById('saArchiveConfirmInput').value = '';
+    document.getElementById('saArchiveConfirmBtn').disabled = true;
+    openModal('m-sa-archive-confirm');
+  };
+
+  window.saCheckArchiveConfirmText = function(){
+    const c = SA.clinics.find(x=>x.id===saArchiveClinicId);
+    const ok = c && document.getElementById('saArchiveConfirmInput').value.trim() === c.name;
+    document.getElementById('saArchiveConfirmBtn').disabled = !ok;
+  };
+
+  window.saSubmitArchive = async function(){
+    if(!saArchiveClinicId) return;
+    const fd = new FormData();
+    fd.append('confirm_name', document.getElementById('saArchiveConfirmInput').value.trim());
+    const res = await postForm(`/users/clinic/${saArchiveClinicId}/archive/`, fd);
+    if(res.redirected){
+      closeModal('m-sa-archive-confirm');
+      closeModal('m-sa-edit');
+      flashAndReload('Клиника архивирована');
+    } else {
+      showToast('Не удалось архивировать', 'error');
+    }
   };
 
   window.saToggleBranch = async function(id){
