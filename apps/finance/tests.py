@@ -52,6 +52,72 @@ class PaymentPermissionTestCase(TestCase):
         resp = self.client.post("/finance/expenses/create/", {"amount": "50", "description": "x"})
         self.assertEqual(resp.status_code, 403)
 
+    def test_error_body_is_readable_not_generic(self):
+        """require_permission() раньше отдавал голый текст "Missing
+        permission: ...", который фронтенд (apiErrorMessage/extractFormError)
+        не распознавал и подменял на общее "Не удалось сохранить" — теперь
+        обычный (не-XHR) POST получает HTML-фрагмент .bg-red-50 с реальной
+        причиной, который extractFormError() уже умеет искать."""
+        resp = self.client.post("/finance/payments/create/", {
+            "patient": self.patient.pk, "amount": "100", "method": "cash", "type": "income",
+        })
+        self.assertEqual(resp.status_code, 403)
+        body = resp.content.decode()
+        self.assertIn("bg-red-50", body)
+        self.assertIn("Приём оплат", body)  # label права finance.accept_payments
+
+    def test_error_body_is_json_for_xhr(self):
+        """Касса шлёт X-Requested-With и ждёт JSON — apiErrorMessage() читает
+        data.error."""
+        resp = self.client.post(
+            "/finance/payments/create/",
+            {"patient": self.patient.pk, "amount": "100", "method": "cash", "type": "income"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(resp.status_code, 403)
+        data = resp.json()
+        self.assertIn("Приём оплат", data["error"])
+        self.assertEqual(data["error_key"], "missing_permission")
+
+
+class RequirePermissionExtraRoleTestCase(TestCase):
+    """require_permission() должен учитывать не только основную роль
+    (user.role), но и дополнительные (user.roles, M2M) — как уже делает
+    role_required()/has_role(). Раньше была асимметрия (регрессия из
+    commit 212a797): доп. роль с нужным правом require_permission не видел
+    вообще, хотя роль-название-based role_required — видел. Именно это
+    ломало «дали доступ на финансы + роль директора вторым/доп.» —
+    сохранённое на бэкенде добавление доп. роли реально начинает давать
+    granular-права только с этим фиксом."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника RP", slug="clinic-req-perm")
+        self.branch = Branch.objects.create(name="RP", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.no_perm_role = Role.objects.create(name="no_perm_role_rp", clinic=self.clinic)
+        self.admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.patient = Patient.objects.create(
+            first_name="Тест", last_name="Пациент", phone="998", branch=self.branch, clinic=self.clinic
+        )
+        self.user = User.objects.create(
+            login="rp_extra_role_user", name="Доп Ролью", email="rpx@test.local",
+            role=self.no_perm_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_no_extra_role_still_blocked(self):
+        resp = self.client.post("/finance/payments/create/", {
+            "patient": self.patient.pk, "amount": "100", "method": "cash", "type": "income",
+        })
+        self.assertEqual(resp.status_code, 403)
+
+    def test_extra_role_grants_finance_accept_payments(self):
+        self.user.roles.add(self.admin_main_role)
+        resp = self.client.post("/finance/payments/create/", {
+            "patient": self.patient.pk, "amount": "100", "method": "cash", "type": "income",
+        })
+        self.assertNotEqual(resp.status_code, 403)
+
 
 class PaymentDeleteSuperadminOnlyTestCase(TestCase):
     """Удаление платежа — жёстко только суперадмин (apps.users.decorators.

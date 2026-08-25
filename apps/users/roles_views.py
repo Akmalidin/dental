@@ -59,6 +59,19 @@ def role_edit(request, pk):
             if new_name:
                 role.name = new_name
                 role.save(update_fields=["name"])
+        if role.is_system and not request.user.is_superadmin:
+            # Системная роль («Директор», «Доктор» и т.д.) — ОДНА строка в
+            # БД на всю платформу (clinic=None), не только для этой клиники.
+            # Если разрешить менять её права любому директору с staff.manage —
+            # правки применятся ко всем клиникам сразу. Кастомизация — только
+            # через «Дублировать» (role_duplicate) в свою копию, назначаемую
+            # персоналу так же, как системная (см. roleOptions в _shared_options).
+            messages.error(request, _(
+                "Права системной роли «%(name)s» может менять только супер-админ "
+                "платформы — эта роль общая для всех клиник. Чтобы задать свои "
+                "права, нажмите «Дублировать» и настройте копию."
+            ) % {"name": role.display_name})
+            return redirect("role_edit", pk=role.pk)
         codes = request.POST.getlist("permissions")
         role.granular_permissions.set(Permission.objects.filter(code__in=codes))
         messages.success(request, _("Права роли обновлены"))

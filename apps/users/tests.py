@@ -2015,6 +2015,125 @@ class NewUIStaffRoleFetchFlowTestCase(TestCase):
         self.assertTrue(role.has_perm("staff.manage"))
 
 
+class RequirePermissionExtraRoleStaffEditTestCase(TestCase):
+    """staff_edit гейтится require_permission("staff.manage") — доп. роль
+    (не основная) с этим правом должна давать доступ (см. аналогичный тест
+    для payment_create в apps.finance.tests — тот же баг, одна причина)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника RPS", slug="clinic-req-perm-staff")
+        self.no_perm_role = Role.objects.create(name="no_perm_role_rps", clinic=self.clinic)
+        self.admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.actor = User.objects.create(
+            login="rps_actor", name="Действующий", email="rpsa@test.local",
+            role=self.no_perm_role, clinic=self.clinic,
+        )
+        self.target = User.objects.create(
+            login="rps_target", name="Редактируемый", email="rpst@test.local",
+            role=self.no_perm_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.actor)
+
+    def _edit_payload(self, name):
+        return {"login": self.target.login, "name": name, "can_view_all_appointments": "on"}
+
+    def test_no_extra_role_still_blocked(self):
+        resp = self.client.post(f"/users/{self.target.pk}/edit/", self._edit_payload("Переименован без права"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_extra_role_grants_staff_manage(self):
+        self.actor.roles.add(self.admin_main_role)
+        resp = self.client.post(f"/users/{self.target.pk}/edit/", self._edit_payload("Переименован с доп. ролью"))
+        self.assertEqual(resp.status_code, 302)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.name, "Переименован с доп. ролью")
+
+
+class RoleEditSystemRoleGuardTestCase(TestCase):
+    """Системная роль («Директор»=admin_main, «Доктор»=doctor и т.д.) — одна
+    строка в БД на все клиники платформы (clinic=None). Права такой роли
+    может менять только суперадмин — иначе директор ОДНОЙ клиники правит
+    поведение ВСЕХ клиник разом через редактор ролей."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника RES", slug="clinic-role-edit-sys")
+        self.admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name=Role.SUPERADMIN, clinic__isnull=True)
+        self.director = User.objects.create(
+            login="res_director", name="Директор RES", email="resd@test.local",
+            role=self.admin_main_role, clinic=self.clinic,
+        )
+        self.superadmin = User.objects.create(
+            login="res_superadmin", name="Супер RES", email="ress@test.local",
+            role=self.superadmin_role, clinic=self.clinic,
+        )
+
+    def test_clinic_director_cannot_change_system_role_permissions(self):
+        original_codes = set(self.admin_main_role.granular_permissions.values_list("code", flat=True))
+        client = Client()
+        client.force_login(self.director)
+        resp = client.post(f"/users/roles/{self.admin_main_role.pk}/edit/", {
+            "name": "admin_main", "permissions": ["finance.accept_payments"],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.admin_main_role.refresh_from_db()
+        self.assertEqual(
+            set(self.admin_main_role.granular_permissions.values_list("code", flat=True)), original_codes
+        )
+
+    def test_superadmin_can_change_system_role_permissions(self):
+        client = Client()
+        client.force_login(self.superadmin)
+        resp = client.post(f"/users/roles/{self.admin_main_role.pk}/edit/", {
+            "name": "admin_main", "permissions": ["finance.accept_payments"],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.admin_main_role.refresh_from_db()
+        self.assertEqual(
+            set(self.admin_main_role.granular_permissions.values_list("code", flat=True)),
+            {"finance.accept_payments"},
+        )
+
+    def test_custom_clinic_role_unaffected_by_guard(self):
+        custom = Role.objects.create(name="Кастомная RES", clinic=self.clinic)
+        client = Client()
+        client.force_login(self.director)
+        resp = client.post(f"/users/roles/{custom.pk}/edit/", {
+            "name": "Кастомная RES", "permissions": ["staff.manage"],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(custom.has_perm("staff.manage"))
+
+
+class RoleOptionsIncludeCustomClinicRolesTestCase(TestCase):
+    """roleOptions (_shared_options, рендерится на каждой странице нового
+    интерфейса) должен включать и системные роли, и свои кастомные —
+    иначе продублированную/созданную клиникой роль некому назначить (оба
+    select'а формы сотрудника читают именно этот список)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника RO", slug="clinic-role-options")
+        self.admin_main_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.custom_role = Role.objects.create(name="Своя роль RO", clinic=self.clinic)
+        self.other_clinic = Clinic.objects.create(name="Другая RO", slug="clinic-role-options-other")
+        self.other_custom_role = Role.objects.create(name="Чужая роль RO", clinic=self.other_clinic)
+        self.director = User.objects.create(
+            login="ro_director", name="Директор RO", email="rod@test.local",
+            role=self.admin_main_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_role_options_include_own_custom_role_but_not_other_clinics(self):
+        resp = self.client.get("/new/staff/")
+        data = _extract_newui_real_data(resp.content.decode())
+        names = {r["name"] for r in data["roleOptions"]}
+        self.assertIn("Директор", names)  # системная роль всё ещё видна
+        self.assertIn("Своя роль RO", names)
+        self.assertNotIn("Чужая роль RO", names)
+
+
 class UserColorFieldTestCase(TestCase):
     def test_color_optional_and_blank_by_default(self):
         u = User.objects.create(login="staff_nocolor", name="Без цвета", email="nc@test.local")
