@@ -33,7 +33,7 @@ def public_sitemap(request):
             urls.append(f"{base}/doctor/{d.pk}/")
     if site.show_services:
         from apps.services.models import Service
-        for s in Service.objects.filter(is_active=True):
+        for s in Service.objects.filter(clinic=clinic, is_active=True):
             urls.append(f"{base}/service/{s.pk}/")
     parts = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
@@ -55,12 +55,12 @@ def public_home(request):
     if site.show_services:
         from apps.services.models import Service
         services = list(
-            Service.objects.filter(is_active=True).select_related("category")
+            Service.objects.filter(clinic=clinic, is_active=True).select_related("category")
             .order_by("category__sort_order", "name")[:60]
         )
 
     from apps.users.models import Branch
-    branches = list(Branch.objects.filter(is_active=True))
+    branches = list(Branch.objects.filter(clinic=clinic, is_active=True))
     map_points = [
         {"name": b.name, "address": b.address, "phone": b.phone,
          "lat": b.latitude, "lng": b.longitude}
@@ -114,11 +114,11 @@ def public_service(request, pk):
     """Полная страница об услуге/лечении."""
     clinic, site = _ctx(request)
     from apps.services.models import Service
-    service = Service.objects.filter(pk=pk, is_active=True).select_related("category").first()
+    service = Service.objects.filter(pk=pk, clinic=clinic, is_active=True).select_related("category").first()
     if service is None:
         raise Http404("Услуга не найдена")
     related = list(
-        Service.objects.filter(is_active=True, category=service.category)
+        Service.objects.filter(clinic=clinic, is_active=True, category=service.category)
         .exclude(pk=service.pk)[:6]
     )
     return render(request, "public/service.html", {
@@ -150,7 +150,7 @@ def public_book(request):
     if selected_branch:
         doctors_qs = doctors_qs.filter(branches=selected_branch).distinct()
     doctors = list(doctors_qs)
-    services = list(Service.objects.filter(is_active=True).order_by("name"))
+    services = list(Service.objects.filter(clinic=clinic, is_active=True).order_by("name"))
     return render(request, "public/booking.html", {
         "clinic": clinic, "site": site, "doctors": doctors, "services": services,
         "selected_branch": selected_branch,
