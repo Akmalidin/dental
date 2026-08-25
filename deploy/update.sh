@@ -38,7 +38,7 @@ echo ">>> резервные копии: папка + ночной cron (00:00 �
 mkdir -p "$APP/backups"
 chown www-data:www-data "$APP/backups"
 CRON_CMD="cd $APP && DJANGO_SETTINGS_MODULE=config.settings.server $APP/venv/bin/python manage.py backup_database >> $APP/backups/cron.log 2>&1"
-( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py backup_database" ; echo "0 18 * * * $CRON_CMD" ) | crontab -u www-data -
+( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py backup_database" || true; echo "0 18 * * * $CRON_CMD" ) | crontab -u www-data -
 echo ">>> pg_dump: $(command -v pg_dump || echo 'НЕ НАЙДЕН — бэкап Postgres не сработает, поставьте пакет postgresql-client на сервере')"
 
 echo ">>> done"
