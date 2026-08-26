@@ -3529,17 +3529,20 @@ def google_calendar_disconnect(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect("/new/" if request.user.use_new_interface else "/")
+        return redirect("/new/")
     form = LoginForm(request=request, data=request.POST or None)
     if request.method == "POST" and form.is_valid():
         user = form.get_user()
         login(request, user)
-        # Помним, каким интерфейсом пользователь пользовался в прошлый раз
-        # (User.use_new_interface — переключается заходом на /new/* или
-        # ссылкой «Старый интерфейс», см. apps.users.newui_views), чтобы не
-        # приходилось при каждом входе заново нажимать «Новый интерфейс».
-        default_next = "/new/" if user.use_new_interface else "/"
-        next_url = request.GET.get("next") or default_next
+        # Вход в программу — всегда сразу в новый интерфейс (строгое правило,
+        # без исключений); на старый интерфейс переходят только явным кликом
+        # «Старый интерфейс» в сайдбаре нового (newui_use_old_interface,
+        # apps.users.newui_views — она и дальше работает как раньше, эту
+        # правку не задевает). User.use_new_interface (память «последним
+        # пользовался») больше не влияет на посадочную страницу входа —
+        # ?next= (например ссылка из письма/уведомления на конкретную
+        # страницу) по-прежнему в приоритете.
+        next_url = request.GET.get("next") or "/new/"
         return redirect(next_url)
 
     # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники
@@ -3846,10 +3849,10 @@ def staff_login_as(request, pk):
     request.session["imp_as"] = target.pk
     request.session.modified = True
     messages.success(request, _("Вы вошли как %(n)s. Режим просмотра.") % {"n": target.name})
-    # На новый интерфейс, если actor им пользуется (тот же принцип выбора,
-    # что и в login_view) — иначе «Войти как сотрудник» из /new/superadmin/
-    # приземляет обратно на старый дашборд.
-    return redirect("/new/" if actor.use_new_interface else "/")
+    # Вход в программу — всегда сразу в новый интерфейс, без исключений
+    # (тот же принцип, что и в login_view) — actor.use_new_interface больше
+    # не влияет на посадочную страницу.
+    return redirect("/new/")
 
 
 @login_required
