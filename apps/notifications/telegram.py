@@ -204,8 +204,16 @@ def tg_send_contact_request(chat_id, text, token=None):
     return res.get("ok", False)
 
 
-def tg_set_webhook(token, url):
-    return _call("setWebhook", {"url": url, "allowed_updates": ["message", "callback_query"]}, token=token)
+def tg_set_webhook(token, url, secret_token=None):
+    """secret_token — секрет вебхука Telegram (см. ClinicSettings.telegram_webhook_secret):
+    Telegram сохраняет его и потом присылает обратно в заголовке
+    X-Telegram-Bot-Api-Secret-Token на каждый POST — так вебхук отличает
+    настоящие апдейты Telegram от подделанных запросов на тот же URL
+    (clinic_slug в адресе публичный, сам по себе секретом не является)."""
+    payload = {"url": url, "allowed_updates": ["message", "callback_query"]}
+    if secret_token:
+        payload["secret_token"] = secret_token
+    return _call("setWebhook", payload, token=token)
 
 
 def tg_get_webhook_info(token):

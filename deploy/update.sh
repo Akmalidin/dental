@@ -21,6 +21,9 @@ echo ">>> collectstatic"
 echo ">>> прогрев кэша Whisper (один раз, до старта воркеров — иначе гонка)"
 ./venv/bin/python manage.py warm_voice_cache || true
 
+echo ">>> ретрофит секрета вебхука Telegram для уже подключённых клиник (аудит безопасности)"
+./venv/bin/python manage.py backfill_telegram_webhook_secrets || true
+
 echo ">>> chown + restart"
 chown -R www-data:www-data "$APP"
 systemctl restart sadaf.service
