@@ -3234,11 +3234,19 @@ def clinic_site_edit(request, clinic_id):
         site.show_services = bool(request.POST.get("show_services"))
         site.show_booking = bool(request.POST.get("show_booking"))
         site.published = bool(request.POST.get("published"))
-        # изображения
+        # изображения — проверяем, что это реально картинка (не просто имя файла),
+        # прямое присваивание полю ImageField само по себе это не проверяет
+        from .utils import validate_uploaded_image
         if request.FILES.get("logo"):
-            site.logo = request.FILES["logo"]
+            if validate_uploaded_image(request.FILES["logo"]):
+                site.logo = request.FILES["logo"]
+            else:
+                messages.error(request, _("Логотип: файл повреждён или не является изображением"))
         if request.FILES.get("cover"):
-            site.cover = request.FILES["cover"]
+            if validate_uploaded_image(request.FILES["cover"]):
+                site.cover = request.FILES["cover"]
+            else:
+                messages.error(request, _("Обложка: файл повреждён или не является изображением"))
         if request.POST.get("remove_logo"):
             site.logo = None
         if request.POST.get("remove_cover"):
@@ -3281,8 +3289,12 @@ def clinic_site_doctors(request, clinic_id):
             doctor.show_on_site = bool(request.POST.get("show_on_site"))
             update_fields = ["specialty", "bio", "phone", "experience_years", "show_on_site"]
             if request.FILES.get("avatar"):
-                doctor.avatar = request.FILES["avatar"]
-                update_fields.append("avatar")
+                from .utils import validate_uploaded_image
+                if validate_uploaded_image(request.FILES["avatar"]):
+                    doctor.avatar = request.FILES["avatar"]
+                    update_fields.append("avatar")
+                else:
+                    messages.error(request, _("Фото врача: файл повреждён или не является изображением"))
             elif request.POST.get("remove_avatar"):
                 doctor.avatar = None
                 update_fields.append("avatar")
@@ -3379,7 +3391,11 @@ def profile_view(request):
             else:
                 user.login = login_val
         if avatar:
-            user.avatar = avatar
+            from .utils import validate_uploaded_image
+            if validate_uploaded_image(avatar):
+                user.avatar = avatar
+            else:
+                errors.append(_("Фото профиля: файл повреждён или не является изображением"))
         if password:
             if password != password2:
                 errors.append(_("Пароли не совпадают"))

@@ -4692,3 +4692,101 @@ class PublicBookingBranchTestCase(TestCase):
             resp = self.client.get(f"/book/?branch={self.branch_south.pk}", HTTP_HOST="book-clinic.stom.asia")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Врач Юг")
+
+
+def _valid_png_bytes():
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class UploadedImageValidationTestCase(TestCase):
+    """Аудит безопасности: site.logo/site.cover/doctor.avatar/user.avatar
+    раньше присваивались из request.FILES напрямую полю ImageField —
+    Django верифицирует содержимое картинки только через ModelForm, так что
+    под видом .png/.jpg можно было сохранить произвольный файл (например,
+    SVG со скриптом — отдаётся из /media/ напрямую, stored XSS). Проверяем,
+    что «поддельная картинка» теперь отклоняется на всех точках загрузки,
+    а настоящая — по-прежнему сохраняется."""
+
+    def setUp(self):
+        from apps.users.models import ClinicSite
+
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.clinic = Clinic.objects.create(name="Клиника Upload", slug="clinic-upload-img")
+        self.director = User.objects.create(
+            login="upl_director", name="Директор Upload", email="upld@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.doctor = User.objects.create(
+            login="upl_doctor", name="Врач Upload", email="upldoc@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.site = ClinicSite.objects.create(clinic=self.clinic, headline=self.clinic.name)
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_validate_uploaded_image_helper(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.users.utils import validate_uploaded_image
+
+        fake = SimpleUploadedFile("logo.png", b"not-really-a-png", content_type="image/png")
+        self.assertFalse(validate_uploaded_image(fake))
+
+        real = SimpleUploadedFile("logo.png", _valid_png_bytes(), content_type="image/png")
+        self.assertTrue(validate_uploaded_image(real))
+
+    def test_site_edit_rejects_fake_logo_and_cover(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/site/", {
+            "headline": "Клиника Upload", "tagline": "", "about": "", "phone": "",
+            "address": "", "hours": "", "theme_color": "", "whatsapp": "",
+            "instagram": "", "telegram": "", "seo_title": "", "seo_description": "",
+            "logo": SimpleUploadedFile("evil.svg", b"<svg onload=alert(1)>", content_type="image/svg+xml"),
+            "cover": SimpleUploadedFile("evil2.svg", b"<svg onload=alert(2)>", content_type="image/svg+xml"),
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.site.refresh_from_db()
+        self.assertFalse(self.site.logo)
+        self.assertFalse(self.site.cover)
+
+    def test_site_edit_accepts_real_logo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/site/", {
+            "headline": "Клиника Upload", "tagline": "", "about": "", "phone": "",
+            "address": "", "hours": "", "theme_color": "", "whatsapp": "",
+            "instagram": "", "telegram": "", "seo_title": "", "seo_description": "",
+            "logo": SimpleUploadedFile("logo.png", _valid_png_bytes(), content_type="image/png"),
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.site.refresh_from_db()
+        self.assertTrue(self.site.logo)
+
+    def test_site_doctors_rejects_fake_avatar(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        resp = self.client.post(f"/users/clinic/{self.clinic.pk}/site/doctors/", {
+            "action": "save_profile", "doctor_id": self.doctor.pk,
+            "specialty": "Терапевт", "bio": "", "phone": "", "experience_years": "",
+            "avatar": SimpleUploadedFile("evil.svg", b"<svg onload=alert(1)>", content_type="image/svg+xml"),
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.doctor.refresh_from_db()
+        self.assertFalse(self.doctor.avatar)
+
+    def test_profile_rejects_fake_avatar(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        resp = self.client.post("/profile/", {
+            "name": self.director.name, "login": self.director.login,
+            "password": "", "password2": "",
+            "avatar": SimpleUploadedFile("evil.svg", b"<svg onload=alert(1)>", content_type="image/svg+xml"),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.director.refresh_from_db()
+        self.assertFalse(self.director.avatar)
