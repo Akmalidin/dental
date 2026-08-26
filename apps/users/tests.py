@@ -3265,8 +3265,9 @@ class GeoBatchTestCase(TestCase):
 
 
 class StaffLoginAsRedirectTestCase(TestCase):
-    """«Войти как сотрудник» ведёт на новый интерфейс, если им пользуется
-    actor — не безусловно на старый дашборд (apps.users.views.staff_login_as)."""
+    """«Войти как сотрудник» всегда ведёт на новый интерфейс — строгое
+    правило входа в программу, actor.use_new_interface больше не влияет
+    на посадочную страницу (apps.users.views.staff_login_as)."""
 
     def setUp(self):
         self.clinic = Clinic.objects.create(name="Клиника SLA", slug="clinic-sla")
@@ -3277,7 +3278,7 @@ class StaffLoginAsRedirectTestCase(TestCase):
         self.staff = User.objects.create(login="sla_staff", name="Сотрудник SLA",
                                           role=self.doctor_role, clinic=self.clinic)
 
-    def test_redirects_to_new_ui_when_actor_uses_it(self):
+    def test_redirects_to_new_ui_when_actor_used_new(self):
         self.director.use_new_interface = True
         self.director.save(update_fields=["use_new_interface"])
         self.client.force_login(self.director)
@@ -3285,13 +3286,64 @@ class StaffLoginAsRedirectTestCase(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/new/")
 
-    def test_redirects_to_old_ui_when_actor_uses_it(self):
+    def test_redirects_to_new_ui_even_when_actor_used_old(self):
         self.director.use_new_interface = False
         self.director.save(update_fields=["use_new_interface"])
         self.client.force_login(self.director)
         resp = self.client.post(f"/users/{self.staff.pk}/login-as/")
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, "/")
+        self.assertEqual(resp.url, "/new/")
+
+
+class LoginRedirectsToNewInterfaceTestCase(TestCase):
+    """Вход в программу — строго всегда сразу новый интерфейс, независимо
+    от User.use_new_interface (памяти о том, каким интерфейсом пользовались
+    в прошлый раз) — apps.users.views.login_view. ?next= по-прежнему в
+    приоритете (глубокие ссылки не ломаются)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника LR", slug="clinic-lr")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="lr_director", name="Директор LR", email="lrd@test.local",
+            role=self.admin_role, clinic=self.clinic, use_new_interface=False,
+        )
+        self.director.set_password("pass1234")
+        self.director.save()
+
+    def test_post_login_redirects_to_new_ui_when_never_used_it(self):
+        resp = self.client.post("/login/", {"login": "lr_director", "password": "pass1234"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/new/")
+
+    def test_post_login_redirects_to_new_ui_even_when_used_old_last_time(self):
+        self.director.use_new_interface = True
+        self.director.save(update_fields=["use_new_interface"])
+        self.client.logout()
+        # переключился обратно на старый явным кликом «Старый интерфейс»
+        self.director.use_new_interface = False
+        self.director.save(update_fields=["use_new_interface"])
+        resp = self.client.post("/login/", {"login": "lr_director", "password": "pass1234"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/new/")
+
+    def test_next_param_takes_priority_over_default(self):
+        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "pass1234"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/patients/")
+
+    def test_next_param_wins_even_when_used_new_last_time(self):
+        self.director.use_new_interface = True
+        self.director.save(update_fields=["use_new_interface"])
+        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "pass1234"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/patients/")
+
+    def test_already_authenticated_get_login_redirects_to_new_ui(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/login/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/new/")
 
 
 class AuditTimezoneTestCase(TestCase):
