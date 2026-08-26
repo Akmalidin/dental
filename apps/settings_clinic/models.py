@@ -32,6 +32,12 @@ class ClinicSettings(models.Model):
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
     telegram_enabled = models.BooleanField(default=True, verbose_name="Telegram включён для клиники")
     telegram_bot_username = models.CharField(max_length=100, blank=True, verbose_name="Имя бота (@username)")
+    # Секрет вебхука (см. tg_set_webhook/tg_webhook): без него clinic_slug в
+    # URL вебхука — единственная «защита», а он публичный (виден в адресе
+    # <slug>.stom.asia), так что кто угодно мог слать поддельные Telegram-
+    # апдейты на реальный вебхук клиники и, например, привязать чужой
+    # chat_id к карточке пациента по номеру телефона.
+    telegram_webhook_secret = models.CharField(max_length=200, blank=True, verbose_name="Секрет вебхука Telegram")
     # WhatsApp подключение (своё на каждую клинику, Green-API)
     wa_enabled = models.BooleanField(default=True, verbose_name="WhatsApp включён для клиники")
     wa_id_instance = models.CharField(max_length=50, blank=True, verbose_name="Green-API ID инстанса")

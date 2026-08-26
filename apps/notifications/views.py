@@ -590,9 +590,21 @@ def _tg_link_by_phone(chat_id, phone_raw, token):
 @csrf_exempt
 def tg_webhook(request, clinic_slug):
     """Webhook Telegram Bot API — свой URL на каждую клинику (её слаг зашит в
-    адрес, который был передан в setWebhook при подключении бота)."""
+    адрес, который был передан в setWebhook при подключении бота). clinic_slug
+    публичный (виден в адресе <slug>.stom.asia), сам по себе секретом не
+    является — проверяем секрет вебхука (X-Telegram-Bot-Api-Secret-Token),
+    который Telegram присылает на каждый апдейт, см. tg_connect/tg_set_webhook."""
     if request.method != "POST":
         return HttpResponse(status=405)
+    from apps.users.models import Clinic
+    from apps.settings_clinic.models import ClinicSettings
+    clinic = Clinic.objects.filter(slug=clinic_slug, is_active=True).first()
+    if clinic is None:
+        return HttpResponse(status=404)
+    cs = ClinicSettings.objects.filter(clinic=clinic).first()
+    expected_secret = (cs.telegram_webhook_secret if cs else "") or ""
+    if expected_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token", "") != expected_secret:
+        return HttpResponse(status=403)
     body = request.body
     import threading
     threading.Thread(target=_tg_handle_update, args=(body, clinic_slug), daemon=True).start()
@@ -830,8 +842,14 @@ def tg_connect(request):
 
     if request.method == "POST":
         cs.telegram_enabled = bool(request.POST.get("telegram_enabled"))
+        token_changed = (request.POST.get("telegram_bot_token") or "").strip() != cs.telegram_bot_token
         cs.telegram_bot_token = (request.POST.get("telegram_bot_token") or "").strip()
-        cs.save(update_fields=["telegram_enabled", "telegram_bot_token"])
+        # Новый/изменённый токен — перевыпускаем секрет вебхука (см. tg_webhook):
+        # старый URL с прежним секретом больше не должен считаться доверенным.
+        if token_changed or not cs.telegram_webhook_secret:
+            import secrets
+            cs.telegram_webhook_secret = secrets.token_urlsafe(32)
+        cs.save(update_fields=["telegram_enabled", "telegram_bot_token", "telegram_webhook_secret"])
         if cs.telegram_bot_token and clinic is not None:
             me = tg_get_me(cs.telegram_bot_token)
             if me.get("ok"):
@@ -839,7 +857,7 @@ def tg_connect(request):
                 cs.save(update_fields=["telegram_bot_username"])
                 webhook_url = request.build_absolute_uri(
                     "/notifications/tg-webhook/%s/" % clinic.slug)
-                res = tg_set_webhook(cs.telegram_bot_token, webhook_url)
+                res = tg_set_webhook(cs.telegram_bot_token, webhook_url, secret_token=cs.telegram_webhook_secret)
                 if res.get("ok"):
                     messages.success(request, "Бот подключён: @%s" % cs.telegram_bot_username)
                 else:
