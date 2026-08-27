@@ -1472,7 +1472,7 @@ def _newui_treatplan_detail_data(plan):
             "title": s.title,
             "durationMin": s.duration_min,
             "visitId": s.visit_id,
-            "visitLabel": (f"Приём #{s.visit.display_number}" if s.visit_id else ""),
+            "visitNumber": (s.visit.display_number if s.visit_id else None),
             "total": float(s.total),
             "items": items,
         })
@@ -1496,7 +1496,7 @@ def _newui_treatplan_detail_data(plan):
         "stages": stages,
         "services": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),
                      "cat": s["category__name"] or ""} for s in services],
-        "patientTreatments": [{"id": t.pk, "label": f"Приём #{t.display_number} · {t.created_at:%d.%m.%Y}"}
+        "patientTreatments": [{"id": t.pk, "number": t.display_number, "dateStr": t.created_at.strftime("%d.%m.%Y")}
                               for t in patient_treatments],
         "doctors": [{"id": d.pk, "name": d.name} for d in clinic_doctors(get_current_clinic())],
     }

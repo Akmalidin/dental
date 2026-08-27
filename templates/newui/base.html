@@ -1401,20 +1401,31 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   </div>
 </div>
 
-<!-- Приём оплаты -->
+<!-- Приём оплаты — общая модалка (карточка пациента → Финансы, и Пациенты →
+     строка должника). Реально проводит платёж через /finance/payments/create/
+     (см. openPatientAcceptPayment/submitPatientPayment в extra_js базового
+     шаблона) — то же, что и «Принять оплату» на Кассе (m-cash-accept-general),
+     только без поиска пациента (он уже известен по контексту вызова). -->
 <div class="modal-backdrop" id="m-payment">
   <div class="modal">
     <div class="modal-head"><h3 data-i18n="title_m_payment">Приём оплаты</h3><button class="modal-close" onclick="closeModal('m-payment')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input autocomplete="off" type="text" value="Кыдыров Руслан" readonly></div>
+      <div id="pmError" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;"></div>
+      <div class="form-group"><label data-i18n="w_patient">Пациент</label><input autocomplete="off" type="text" id="pmPatientName" readonly><input autocomplete="off" type="hidden" id="pmPatientId"></div>
       <div class="form-row2">
-        <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" placeholder="0" value="4500"></div>
-        <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label><select><option>Наличные</option><option>Карта</option><option>Перевод на карту</option><option>Депозит</option><option>Страховка</option><option>Рассрочка</option></select></div>
+        <div class="form-group"><label data-i18n="w_amount">Сумма</label><input autocomplete="off" type="number" id="pmAmount" min="0" placeholder="0"></div>
+        <div class="form-group"><label data-i18n="w_payment_method">Способ оплаты</label>
+          <select id="pmMethod">
+            <option value="cash" data-i18n="w_cash">Наличные</option>
+            <option value="card" data-i18n="w_card">Карта</option>
+            <option value="transfer" data-i18n="w_transfer">Перевод</option>
+            <option value="online" data-i18n="w_online">Онлайн</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group"><label data-i18n="w_purpose">Назначение</label><select><option>Оплата лечения</option><option>Пополнение депозита</option><option>Взнос рассрочки</option></select></div>
-      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
+      <div class="form-group"><label data-i18n="w_comment">Комментарий</label><textarea autocomplete="off" rows="2" id="pmNotes" placeholder="Необязательно" data-i18n-placeholder="w_optional_placeholder"></textarea></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="closeModal('m-payment')">Провести оплату</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-payment')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" onclick="submitPatientPayment()" data-i18n="w_accept_payment">Принять оплату</button></div>
   </div>
 </div>
 
@@ -1695,14 +1706,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       <div class="form-group"><label data-i18n="w_grid_step">Шаг сетки</label>
         <select id="cs-interval">
-          <option value="15">15 минут</option>
-          <option value="30" selected>30 минут</option>
-          <option value="60">60 минут</option>
-          <option value="120">2 часа</option>
+          <option value="15" data-i18n="w_grid_step_15">15 минут</option>
+          <option value="30" selected data-i18n="w_grid_step_30">30 минут</option>
+          <option value="60" data-i18n="w_grid_step_60">60 минут</option>
+          <option value="120" data-i18n="w_grid_step_120">2 часа</option>
         </select>
       </div>
       <div class="form-group"><label data-i18n="w_default_view">Вид по умолчанию</label>
-        <select id="cs-defaultview"><option value="day" selected>День</option><option value="week">Неделя</option><option value="month">Месяц</option></select>
+        <select id="cs-defaultview"><option value="day" selected data-i18n="w_view_day">День</option><option value="week" data-i18n="w_cal_view_week">Неделя</option><option value="month" data-i18n="w_cal_view_month">Месяц</option></select>
       </div>
       <div class="form-group">
         <label style="display:flex;justify-content:space-between;">
@@ -1716,19 +1727,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
         <label data-i18n="w_calendar_colors">Цвета записей в календаре</label>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:13px;">Обычная запись</span>
+            <span style="font-size:13px;" data-i18n="w_cal_color_normal">Обычная запись</span>
             <input autocomplete="off" type="color" id="cs-color-cobalt" value="#2c4bea" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:13px;">Ожидает подтверждения</span>
+            <span style="font-size:13px;" data-i18n="w_cal_color_pending">Ожидает подтверждения</span>
             <input autocomplete="off" type="color" id="cs-color-amber" value="#b8862e" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:13px;">Срочная / опоздание</span>
+            <span style="font-size:13px;" data-i18n="w_cal_color_urgent">Срочная / опоздание</span>
             <input autocomplete="off" type="color" id="cs-color-coral" value="#e85d2d" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:13px;">Завершена / оплачена</span>
+            <span style="font-size:13px;" data-i18n="w_cal_color_done">Завершена / оплачена</span>
             <input autocomplete="off" type="color" id="cs-color-teal" value="#0e9c7d" style="width:40px;height:28px;border:none;border-radius:6px;padding:0;">
           </div>
         </div>
@@ -1778,8 +1789,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="resetCalSettings()">Сбросить</button>
-      <button class="btn btn-cobalt" onclick="applyCalSettings()">Применить</button>
+      <button class="btn btn-ghost" onclick="resetCalSettings()" data-i18n="w_reset">Сбросить</button>
+      <button class="btn btn-cobalt" onclick="applyCalSettings()" data-i18n="w_apply">Применить</button>
     </div>
   </div>
 </div>
@@ -4180,6 +4191,8 @@ const translations={
   w_comment:      {ru:'Комментарий',       ky:'Комментарий',           en:'Comment',            uz:'Izoh'},
   w_cancel:       {ru:'Отмена',            ky:'Жокко чыгаруу',         en:'Cancel',             uz:'Bekor qilish'},
   w_save:         {ru:'Сохранить',         ky:'Сактоо',                en:'Save',               uz:'Saqlash'},
+  w_reset:        {ru:'Сбросить',          ky:'Баштапкыга кайтаруу',   en:'Reset',              uz:'Qaytarish'},
+  w_apply:        {ru:'Применить',         ky:'Колдонуу',              en:'Apply',              uz:'Qo\'llash'},
   w_close:        {ru:'Закрыть',           ky:'Жабуу',                 en:'Close',              uz:'Yopish'},
   w_delete:       {ru:'Удалить',           ky:'Өчүрүү',                en:'Delete',             uz:"O'chirish"},
   w_add:          {ru:'Добавить',          ky:'Кошуу',                 en:'Add',                uz:"Qo'shish"},
@@ -4258,6 +4271,16 @@ const translations={
   w_shift_open: {ru:'Смена открыта', ky:'Смена ачык', en:'Shift open', uz:'Smena ochiq'},
   w_visit_history: {ru:'История приёмов', ky:'Кабыл алуулар тарыхы', en:'Visit history', uz:'Qabullar tarixi'},
   w_treatment_plan_one: {ru:'План лечения', ky:'Дарылоо планы', en:'Treatment plan', uz:'Davolash rejasi'},
+  /* Статусы TreatmentPlan (apps.treatments.models_plan.TreatmentPlan.STATUS_CHOICES)
+     — с бэкенда приходит уже готовый русский текст (get_status_display()) для
+     старого интерфейса, но statusCode (draft/approved/...) тоже приходит —
+     используем его в renderTreatplans() вместо текста с бэкенда, чтобы пилюля
+     статуса переводилась на выбранный язык. */
+  tp_status_draft: {ru:'Черновик', ky:'Долбоор', en:'Draft', uz:'Qoralama'},
+  tp_status_approved: {ru:'Согласован', ky:'Макулдашылды', en:'Approved', uz:'Kelishildi'},
+  tp_status_in_progress: {ru:'В процессе', ky:'Жүрүп жатат', en:'In progress', uz:'Jarayonda'},
+  tp_status_completed: {ru:'Завершён', ky:'Аякталды', en:'Completed', uz:'Yakunlandi'},
+  tp_status_cancelled: {ru:'Отменён', ky:'Жокко чыгарылды', en:'Cancelled', uz:'Bekor qilindi'},
   w_payments: {ru:'Платежи', ky:'Төлөмдөр', en:'Payments', uz:'To\'lovlar'},
   w_documents: {ru:'Документы', ky:'Документтер', en:'Documents', uz:'Hujjatlar'},
   w_allergies: {ru:'Аллергии / особенности', ky:'Аллергиялар / өзгөчөлүктөр', en:'Allergies / notes', uz:'Allergiyalar / xususiyatlar'},
@@ -4281,8 +4304,19 @@ const translations={
   w_day_start: {ru:'Начало дня', ky:'Күндүн башталышы', en:'Day start', uz:'Kun boshlanishi'},
   w_day_end: {ru:'Конец дня', ky:'Күндүн аягы', en:'Day end', uz:'Kun oxiri'},
   w_grid_step: {ru:'Шаг сетки', ky:'Тор кадамы', en:'Grid step', uz:'Katak qadami'},
+  w_grid_step_15: {ru:'15 минут', ky:'15 мүнөт', en:'15 minutes', uz:'15 daqiqa'},
+  w_grid_step_30: {ru:'30 минут', ky:'30 мүнөт', en:'30 minutes', uz:'30 daqiqa'},
+  w_grid_step_60: {ru:'60 минут', ky:'60 мүнөт', en:'60 minutes', uz:'60 daqiqa'},
+  w_grid_step_120: {ru:'2 часа', ky:'2 саат', en:'2 hours', uz:'2 soat'},
   w_default_view: {ru:'Вид по умолчанию', ky:'Демейки көрүнүш', en:'Default view', uz:'Standart ko\'rinish'},
+  w_view_day: {ru:'День', ky:'Күн', en:'Day', uz:'Kun'},
+  w_cal_view_week: {ru:'Неделя', ky:'Жума', en:'Week', uz:'Hafta'},
+  w_cal_view_month: {ru:'Месяц', ky:'Ай', en:'Month', uz:'Oy'},
   w_calendar_colors: {ru:'Цвета записей в календаре', ky:'Календардагы жазуулардын түстөрү', en:'Calendar entry colors', uz:'Kalendar yozuvlari rangi'},
+  w_cal_color_normal: {ru:'Обычная запись', ky:'Кадимки жазуу', en:'Regular appointment', uz:'Oddiy yozuv'},
+  w_cal_color_pending: {ru:'Ожидает подтверждения', ky:'Ырастоону күтүүдө', en:'Awaiting confirmation', uz:'Tasdiqlashni kutmoqda'},
+  w_cal_color_urgent: {ru:'Срочная / опоздание', ky:'Шашылыш / кечигүү', en:'Urgent / late', uz:'Shoshilinch / kechikish'},
+  w_cal_color_done: {ru:'Завершена / оплачена', ky:'Аякталды / төлөндү', en:'Completed / paid', uz:'Yakunlandi / to\'landi'},
   w_cs_nametime_color_enabled: {ru:'Свой цвет имени пациента и времени (вместо автоматического)', ky:'Бейтаптын аты жана убакыттын өз түсү (автоматтыктын ордуна)', en:'Custom patient name & time color (instead of automatic)', uz:"Bemor ismi va vaqt uchun o'z rangi (avtomatik o'rniga)"},
   w_cs_name_color: {ru:'Цвет имени пациента', ky:'Бейтаптын атынын түсү', en:'Patient name color', uz:'Bemor ismi rangi'},
   w_cs_time_color: {ru:'Цвет времени записи', ky:'Жазуу убактысынын түсү', en:'Appointment time color', uz:'Yozuv vaqti rangi'},
@@ -4343,7 +4377,45 @@ const translations={
   w_no_chat_yet: {ru:'Переписки пока нет', ky:'Азырынча кат алышуу жок', en:'No conversation yet', uz:'Hozircha yozishma yo\'q'},
   w_visit_closed_no_edit: {ru:'Приём завершён — редактирование недоступно', ky:'Кабыл алуу аяктады — түзөтүү мүмкүн эмес', en:'Visit is closed — editing unavailable', uz:'Qabul yakunlandi — tahrirlash mumkin emas'},
   w_save_failed: {ru:'Не удалось сохранить', ky:'Сактоо мүмкүн болгон жок', en:'Failed to save', uz:'Saqlab bo\'lmadi'},
+  w_delete_failed: {ru:'Не удалось удалить', ky:'Өчүрүү мүмкүн болгон жок', en:'Failed to delete', uz:'O\'chirib bo\'lmadi'},
   w_saved: {ru:'Сохранено', ky:'Сакталды', en:'Saved', uz:'Saqlandi'},
+  /* ===== /new/treatplans/<id>/ (treatplan_detail.html) =====
+     w_print/w_price/w_discount_pct/w_total/w_duration_min уже определены
+     ниже по файлу (переиспользуются, не дублируем ключ). */
+  w_back: {ru:'Назад', ky:'Артка', en:'Back', uz:'Orqaga'},
+  w_add_stage: {ru:'Добавить этап', ky:'Этап кошуу', en:'Add stage', uz:'Bosqich qo\'shish'},
+  w_add_first_stage: {ru:'Добавить первый этап', ky:'Биринчи этапты кошуу', en:'Add the first stage', uz:'Birinchi bosqichni qo\'shish'},
+  w_no_stages_yet: {ru:'Этапов пока нет.', ky:'Азырынча этаптар жок.', en:'No stages yet.', uz:'Hozircha bosqichlar yo\'q.'},
+  w_plan_total: {ru:'Итого по плану', ky:'План боюнча жыйынтык', en:'Plan total', uz:'Reja bo\'yicha jami'},
+  w_add_service_title: {ru:'Добавить услугу', ky:'Кызмат кошуу', en:'Add service', uz:'Xizmat qo\'shish'},
+  w_tooth_number: {ru:'№ зуба', ky:'Тиштин №', en:'Tooth #', uz:'Tish №'},
+  w_quantity: {ru:'Количество', ky:'Саны', en:'Quantity', uz:'Miqdori'},
+  w_edit_stage_title: {ru:'Изменить этап', ky:'Этапты өзгөртүү', en:'Edit stage', uz:'Bosqichni o\'zgartirish'},
+  w_stage_name: {ru:'Название этапа', ky:'Этаптын аталышы', en:'Stage name', uz:'Bosqich nomi'},
+  w_linked_visit: {ru:'Привязанный визит', ky:'Байланган ташрип', en:'Linked visit', uz:'Bog\'langan tashrif'},
+  w_move_dup_service_title: {ru:'Переместить/дублировать услугу', ky:'Кызматты жылдыруу/кайталоо', en:'Move/duplicate service', uz:'Xizmatni ko\'chirish/nusxalash'},
+  w_target_stage: {ru:'Целевой этап', ky:'Максаттуу этап', en:'Target stage', uz:'Maqsadli bosqich'},
+  w_duplicate: {ru:'Дублировать', ky:'Кайталоо', en:'Duplicate', uz:'Nusxalash'},
+  w_move: {ru:'Переместить', ky:'Жылдыруу', en:'Move', uz:'Ko\'chirish'},
+  w_no_services_in_stage: {ru:'Услуг в этапе нет', ky:'Этапта кызматтар жок', en:'No services in this stage', uz:'Bosqichda xizmatlar yo\'q'},
+  w_no_duration: {ru:'без длительности', ky:'узактыгы жок', en:'no duration set', uz:'davomiyligi yo\'q'},
+  w_visit_not_assigned: {ru:'визит не назначен', ky:'ташрип дайындалган жок', en:'no visit assigned', uz:'tashrif belgilanmagan'},
+  w_visit_none_dash: {ru:'— не назначен —', ky:'— дайындалган жок —', en:'— not assigned —', uz:'— belgilanmagan —'},
+  w_no_other_stages: {ru:'— нет других этапов —', ky:'— башка этаптар жок —', en:'— no other stages —', uz:'— boshqa bosqichlar yo\'q —'},
+  w_confirm_delete_stage: {ru:'Удалить этап со всеми услугами?', ky:'Этапты бардык кызматтары менен өчүрөсүзбү?', en:'Delete this stage with all its services?', uz:'Bosqichni barcha xizmatlari bilan o\'chirasizmi?'},
+  w_confirm_delete_service_from_plan: {ru:'Удалить услугу из плана?', ky:'Кызматты пландан өчүрөсүзбү?', en:'Remove this service from the plan?', uz:'Xizmatni rejadan o\'chirasizmi?'},
+  w_service_added: {ru:'Услуга добавлена', ky:'Кызмат кошулду', en:'Service added', uz:'Xizmat qo\'shildi'},
+  w_stage_added: {ru:'Этап добавлен', ky:'Этап кошулду', en:'Stage added', uz:'Bosqich qo\'shildi'},
+  w_stage_saved: {ru:'Этап сохранён', ky:'Этап сакталды', en:'Stage saved', uz:'Bosqich saqlandi'},
+  w_stage_deleted: {ru:'Этап удалён', ky:'Этап өчүрүлдү', en:'Stage deleted', uz:'Bosqich o\'chirildi'},
+  w_service_deleted: {ru:'Услуга удалена', ky:'Кызмат өчүрүлдү', en:'Service deleted', uz:'Xizmat o\'chirildi'},
+  w_service_duplicated: {ru:'Услуга продублирована', ky:'Кызмат кайталанды', en:'Service duplicated', uz:'Xizmat nusxalandi'},
+  w_service_moved: {ru:'Услуга перемещена', ky:'Кызмат жылдырылды', en:'Service moved', uz:'Xizmat ko\'chirildi'},
+  w_item_status_updated: {ru:'Статус обновлён', ky:'Статус жаңырды', en:'Status updated', uz:'Holat yangilandi'},
+  ti_status_pending: {ru:'Ожидает', ky:'Күтүүдө', en:'Pending', uz:'Kutmoqda'},
+  ti_status_scheduled: {ru:'Запланирован', ky:'Пландаштырылды', en:'Scheduled', uz:'Rejalashtirilgan'},
+  ti_status_done: {ru:'Выполнен', ky:'Аткарылды', en:'Done', uz:'Bajarildi'},
+  ti_status_cancelled: {ru:'Отменён', ky:'Жокко чыгарылды', en:'Cancelled', uz:'Bekor qilindi'},
   w_ok_understood: {ru:'Понятно', ky:'Түшүнүктүү', en:'Got it', uz:'Tushunarli'},
   w_sa_new_clinic: {ru:'Новая клиника', ky:'Жаңы клиника', en:'New clinic', uz:'Yangi klinika'},
   w_sa_clinic: {ru:'Клиника', ky:'Клиника', en:'Clinic', uz:'Klinika'},
@@ -6011,7 +6083,7 @@ function renderTreatplans(){
     <tr class="clickable" onclick="location.href='/new/treatplans/${p.id}/'">
       <td><b>${p.patient}</b></td><td>${p.stage}</td><td>${p.doctor}</td>
       <td>${p.completionPct}%</td><td class="mono">${Math.round(p.totalPrice).toLocaleString('ru-RU')} ${CUR_SYM}</td>
-      <td><span class="pill ${statusPill[p.statusCode]||'cobalt'}">${p.status}</span></td>
+      <td><span class="pill ${statusPill[p.statusCode]||'cobalt'}">${t('tp_status_'+p.statusCode, p.status)}</span></td>
     </tr>`).join('');
 }
 
@@ -9302,7 +9374,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_PATIENT=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
+let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE_HISTORY=false, CAN_DELETE_PATIENT=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -9370,6 +9442,8 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_DELETE_HISTORY=false, CAN_DELETE_
     hideRestrictedNavItems(data.navSections);
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
+    CAN_ACCEPT_PAYMENTS=!!data.canAcceptPayments;
+    if(document.getElementById('pcAcceptPaymentBtn')) document.getElementById('pcAcceptPaymentBtn').classList.toggle('hidden', !CAN_ACCEPT_PAYMENTS);
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     CAN_DELETE_PATIENT=!!data.canDeletePatient;
     if(document.getElementById('patientsMergeExactBtn')) document.getElementById('patientsMergeExactBtn').classList.toggle('hidden', !CAN_DELETE_PATIENT);
@@ -9547,7 +9621,8 @@ async function renderPatientsTable(){
     // SharedPhoneNumber) и только при праве patients.delete — само
     // слияние без него всё равно недоступно (403 на сервере).
     const dupeBtn = (p.isDupe && CAN_DELETE_PATIENT) ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openMergeCheck(${p.id},'${(p.fullName||'').replace(/'/g,"\\'")}')">⚠ ${t('w_check_in_base','Есть в базе')}</button>` : '';
-    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}${dupeBtn}${delBtn}</td></tr>`;
+    const acceptBtn = (p.hasDebt && CAN_ACCEPT_PAYMENTS) ? `<button class="btn btn-cobalt btn-sm" onclick="event.stopPropagation();openPatientAcceptPayment(${p.id},'${(p.fullName||'').replace(/'/g,"\\'")}',${Math.round(-p.balance)})">${t('w_accept_payment')}</button>` : '';
+    return `<tr class="clickable"${debtStyle} onclick="location.href='/new/patients/${p.id}/'"><td><b>${p.fullName}</b></td><td class="mono">${p.phone||'—'}</td><td>${p.doctorName||'—'}</td><td>${p.lastVisit}</td><td class="mono"${p.hasDebt?' style="color:inherit;font-weight:600;"':''}>${Math.round(p.balance).toLocaleString('ru-RU')} ${CUR_SYM}</td><td><span class="pill ${p.statusColor}">${p.statusLabel}</span></td><td>${acceptBtn}${p.hasDebt?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();patientsSendToCashier(${p.id},this)">${t('w_send_to_cashier')}</button>`:''}${dupeBtn}${delBtn}</td></tr>`;
   }).join('');
   renderPatientsPagination(data);
 }
@@ -9680,6 +9755,58 @@ async function patientsSendToCashier(patientId, btn){
   const res=await postForm('/finance/payments/send-to-cashier/'+patientId+'/', new FormData());
   if(res.redirected){ showToast(t('w_sent_to_cashier')); }
   else { showToast(t('w_send_to_cashier_failed'), 'error'); if(btn) btn.disabled=false; }
+}
+// «Принять оплату» напрямую (без похода в очередь кассы) — с карточки
+// пациента (Финансы) или строки должника в списке пациентов. Открывает
+// общую модалку m-payment (см. templates/newui/base.html) и реально
+// проводит платёж через /finance/payments/create/ — та же вьюха, что и
+// «Принять оплату» на Кассе (submitCashAcceptGeneral, cashdesk.html).
+// name/debt необязательны — если не переданы (вызов с карточки пациента,
+// там patientId уже известен по контексту), подтягиваются из patientsList.
+function openPatientAcceptPayment(patientId, name, debt){
+  if(!patientId) return;
+  if(name===undefined){
+    const p=patientsList.find(x=>x.id===patientId);
+    name=p ? p.fullName : '';
+    debt=(p && p.hasDebt) ? Math.round(-p.balance) : 0;
+  }
+  document.getElementById('pmError').classList.add('hidden');
+  document.getElementById('pmPatientId').value=patientId;
+  document.getElementById('pmPatientName').value=name || '';
+  document.getElementById('pmAmount').value=debt>0 ? debt : '';
+  document.getElementById('pmMethod').value='cash';
+  document.getElementById('pmNotes').value='';
+  openModal('m-payment');
+}
+async function submitPatientPayment(){
+  const errEl=document.getElementById('pmError');
+  errEl.classList.add('hidden');
+  const patientId=document.getElementById('pmPatientId').value;
+  if(!patientId) return;
+  const amount=document.getElementById('pmAmount').value;
+  if(amount===''  || Number(amount)<0){
+    errEl.textContent=t('w_specify_amount'); errEl.classList.remove('hidden');
+    return;
+  }
+  const fd=new FormData();
+  fd.append('patient', patientId);
+  fd.append('amount', amount);
+  fd.append('method', document.getElementById('pmMethod').value);
+  fd.append('notes', document.getElementById('pmNotes').value);
+  fd.append('type', 'income');
+  const res=await fetch('/finance/payments/create/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  });
+  let payload=null;
+  try{ payload=await res.json(); }catch(e){}
+  if(!res.ok || !payload || !payload.ok){
+    errEl.textContent=apiErrorMessage(payload, t('w_save_failed'));
+    errEl.classList.remove('hidden');
+    return;
+  }
+  closeModal('m-payment');
+  flashAndReload(t('w_payment_accepted'));
 }
 
 const PATIENT_TAB_EMPTY = msg => `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--ink-soft);">${msg}</div></div>`;
