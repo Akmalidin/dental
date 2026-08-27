@@ -3512,6 +3512,41 @@ class NewUITreatplanDetailTestCase(TestCase):
         self.assertContains(resp, "/new/treatplans/${p.id}/")
         self.assertNotContains(resp, "/treatments/plans/${p.id}/")
 
+    def test_stage_visit_sent_as_raw_number_not_prebaked_russian_label(self):
+        """Аудит переводов: раньше бэкенд слал уже готовый русский текст
+        ("Приём #N") — экран на другом языке не мог его перевести. Теперь
+        шлём только номер, текст собирает JS через t()."""
+        from apps.treatments.models import Treatment
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+
+        set_current_clinic(self.clinic)
+        try:
+            visit = Treatment.objects.create(patient=self.patient, doctor=self.director,
+                                              branch=self.branch, status="completed")
+        finally:
+            clear_current_clinic()
+        self.stage.visit = visit
+        self.stage.save(update_fields=["visit"])
+
+        self.client.force_login(self.director)
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        data = _extract_newui_real_data(resp.content.decode())["planDetail"]
+        stage = data["stages"][0]
+        self.assertEqual(stage["visitNumber"], visit.display_number)
+        self.assertNotIn("visitLabel", stage)
+
+        self.assertEqual(len(data["patientTreatments"]), 1)
+        pt = data["patientTreatments"][0]
+        self.assertEqual(pt["number"], visit.display_number)
+        self.assertIn("dateStr", pt)
+        self.assertNotIn("label", pt)
+
+    def test_stage_without_visit_has_no_number(self):
+        self.client.force_login(self.director)
+        resp = self.client.get(f"/new/treatplans/{self.plan.pk}/")
+        data = _extract_newui_real_data(resp.content.decode())["planDetail"]
+        self.assertIsNone(data["stages"][0]["visitNumber"])
+
 
 class BackupDatabaseCommandTestCase(TestCase):
     """apps.users.management.commands.backup_database — тесты идут на
@@ -4790,3 +4825,32 @@ class UploadedImageValidationTestCase(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.director.refresh_from_db()
         self.assertFalse(self.director.avatar)
+
+
+class NewUICanAcceptPaymentsFlagTestCase(TestCase):
+    """canAcceptPayments (newui-real-data) — гейтит кнопку «Принять оплату»
+    на строке должника в /new/patients/ и в карточке пациента (см. аудит
+    переводов: раньше эта кнопка либо не существовала, либо (m-payment)
+    была статичным макетом без реального сабмита)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника CAP", slug="clinic-cap")
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.nurse_role = Role.objects.get(name="nurse", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="cap_director", name="Директор CAP", role=self.admin_role, clinic=self.clinic,
+        )
+        self.nurse = User.objects.create(
+            login="cap_nurse", name="Медсестра CAP", role=self.nurse_role, clinic=self.clinic,
+        )
+
+    def test_director_has_flag_nurse_does_not(self):
+        director_client = Client()
+        director_client.force_login(self.director)
+        data = _extract_newui_real_data(director_client.get("/new/").content.decode())
+        self.assertTrue(data["canAcceptPayments"])
+
+        nurse_client = Client()
+        nurse_client.force_login(self.nurse)
+        data = _extract_newui_real_data(nurse_client.get("/new/").content.decode())
+        self.assertFalse(data["canAcceptPayments"])

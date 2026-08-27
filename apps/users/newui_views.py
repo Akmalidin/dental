@@ -126,6 +126,10 @@ def _shared_options(request, clinic):
         # (иначе клик просто упёрся бы в 403 без объяснения).
         "canQuickSale": bool(request.user.is_superadmin or
                              (request.user.role_id and request.user.role.has_perm("finance.quick_sale"))),
+        # Пациенты → «Принять оплату» на строке должника — прячем у тех, у
+        # кого нет права (иначе клик просто упёрся бы в 403 без объяснения).
+        "canAcceptPayments": bool(request.user.is_superadmin or
+                                  (request.user.role_id and request.user.role.has_perm("finance.accept_payments"))),
         # Карта пациента → «История приёмов»: кнопка удаления записи — прячем
         # у тех, у кого нет права (иначе клик просто упёрся бы в 403).
         "canDeleteHistory": bool(request.user.is_superadmin or

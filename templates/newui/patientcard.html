@@ -137,7 +137,7 @@
             <div class="card kpi b-amber"><span class="lbl" data-i18n="w_on_deposit">На депозите</span><b style="font-size:20px">0 сом</b></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3 data-i18n="w_payments">Платежи</h3><button class="btn btn-cobalt btn-sm" onclick="openModal('m-payment')">+ <span data-i18n="w_accept_payment">Приём оплаты</span></button></div>
+            <div class="card-head"><h3 data-i18n="w_payments">Платежи</h3><button class="btn btn-cobalt btn-sm hidden" id="pcAcceptPaymentBtn" onclick="openPatientAcceptPayment(currentPatientCardId)">+ <span data-i18n="w_accept_payment">Приём оплаты</span></button></div>
             <table>
               <thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th></tr></thead>
               <tbody>

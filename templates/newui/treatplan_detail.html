@@ -2,11 +2,11 @@
 {% block page_title %}План лечения{% endblock %}
 {% block content %}
       <div class="topbar">
-        <h1 id="tpTitle">План лечения</h1>
+        <h1 id="tpTitle" data-i18n="w_treatment_plan_one">План лечения</h1>
         <div class="topbar-right" style="gap:8px;">
-          <a class="btn btn-ghost btn-sm" href="{% url 'newui_treatplans' %}">← Назад</a>
-          <a class="btn btn-ghost btn-sm" id="tpPrintLink" href="#" target="_blank">🖨 Печать</a>
-          <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ Добавить этап</button>
+          <a class="btn btn-ghost btn-sm" href="{% url 'newui_treatplans' %}">← <span data-i18n="w_back">Назад</span></a>
+          <a class="btn btn-ghost btn-sm" id="tpPrintLink" href="#" target="_blank">🖨 <span data-i18n="w_print">Печать</span></a>
+          <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ <span data-i18n="w_add_stage">Добавить этап</span></button>
         </div>
       </div>
 
@@ -19,13 +19,13 @@
                 <span class="pill" id="tpStatusPill"></span>
               </div>
               <div style="font-size:12.5px;color:var(--ink-soft);">
-                Пациент: <a id="tpPatientLink" href="#" style="color:var(--cobalt);font-weight:600;"></a>
-                · Врач: <b id="tpDoctorName"></b>
+                <span data-i18n="w_patient">Пациент</span>: <a id="tpPatientLink" href="#" style="color:var(--cobalt);font-weight:600;"></a>
+                · <span data-i18n="w_doctor">Врач</span>: <b id="tpDoctorName"></b>
                 · <span id="tpCreatedAt"></span>
               </div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:11px;color:var(--ink-soft);">Итого по плану</div>
+              <div style="font-size:11px;color:var(--ink-soft);" data-i18n="w_plan_total">Итого по плану</div>
               <div class="mono" style="font-size:20px;font-weight:700;" id="tpTotalPrice">—</div>
             </div>
           </div>
@@ -33,32 +33,32 @@
 
         <div id="tpStages"></div>
         <div id="tpEmptyState" class="card hidden" style="padding:32px;text-align:center;color:var(--ink-soft);">
-          Этапов пока нет. <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ Добавить первый этап</button>
+          <span data-i18n="w_no_stages_yet">Этапов пока нет.</span> <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ <span data-i18n="w_add_first_stage">Добавить первый этап</span></button>
         </div>
       </div>
 
       <!-- Модалка: добавить услугу в этап -->
       <div class="modal-backdrop" id="m-tp-item">
         <div class="modal">
-          <div class="modal-head"><h3>Добавить услугу</h3><button class="modal-close" onclick="closeModal('m-tp-item')">✕</button></div>
+          <div class="modal-head"><h3 data-i18n="w_add_service_title">Добавить услугу</h3><button class="modal-close" onclick="closeModal('m-tp-item')">✕</button></div>
           <div class="modal-body">
-            <div class="form-group"><label>Услуга</label>
+            <div class="form-group"><label data-i18n="w_service">Услуга</label>
               <select id="tpItemService" style="width:100%;" onchange="tpItemRecalc()"></select></div>
             <div class="form-row2">
-              <div class="form-group"><label>№ зуба</label>
+              <div class="form-group"><label data-i18n="w_tooth_number">№ зуба</label>
                 <input type="text" id="tpItemTooth" autocomplete="off" placeholder="напр. 26"></div>
-              <div class="form-group"><label>Количество</label>
+              <div class="form-group"><label data-i18n="w_quantity">Количество</label>
                 <input type="number" id="tpItemQty" value="1" min="1" oninput="tpItemRecalc()"></div>
-              <div class="form-group"><label>Цена</label>
+              <div class="form-group"><label data-i18n="w_price">Цена</label>
                 <input type="number" id="tpItemPrice" step="0.01" oninput="tpItemRecalc()"></div>
-              <div class="form-group"><label>Скидка %</label>
+              <div class="form-group"><label data-i18n="w_discount_pct">Скидка %</label>
                 <input type="number" id="tpItemDiscount" value="0" min="0" max="100" oninput="tpItemRecalc()"></div>
             </div>
-            <div style="text-align:right;font-size:13px;color:var(--ink-soft);">Итого: <b class="mono" id="tpItemTotal">0</b></div>
+            <div style="text-align:right;font-size:13px;color:var(--ink-soft);"><span data-i18n="w_total">Итого</span>: <b class="mono" id="tpItemTotal">0</b></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" onclick="closeModal('m-tp-item')">Отмена</button>
-            <button class="btn btn-cobalt" onclick="tpSaveItem()">Добавить</button>
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-item')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" onclick="tpSaveItem()" data-i18n="w_add">Добавить</button>
           </div>
         </div>
       </div>
@@ -66,18 +66,18 @@
       <!-- Модалка: изменить этап -->
       <div class="modal-backdrop" id="m-tp-stage">
         <div class="modal">
-          <div class="modal-head"><h3>Изменить этап</h3><button class="modal-close" onclick="closeModal('m-tp-stage')">✕</button></div>
+          <div class="modal-head"><h3 data-i18n="w_edit_stage_title">Изменить этап</h3><button class="modal-close" onclick="closeModal('m-tp-stage')">✕</button></div>
           <div class="modal-body">
-            <div class="form-group"><label>Название этапа</label>
+            <div class="form-group"><label data-i18n="w_stage_name">Название этапа</label>
               <input type="text" id="tpStageTitle" autocomplete="off"></div>
-            <div class="form-group"><label>Продолжительность (мин)</label>
+            <div class="form-group"><label data-i18n="w_duration_min">Продолжительность (мин)</label>
               <input type="number" id="tpStageDuration" min="0"></div>
-            <div class="form-group"><label>Привязанный визит</label>
+            <div class="form-group"><label data-i18n="w_linked_visit">Привязанный визит</label>
               <select id="tpStageVisit" style="width:100%;"></select></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" onclick="closeModal('m-tp-stage')">Отмена</button>
-            <button class="btn btn-cobalt" onclick="tpSaveStage()">Сохранить</button>
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-stage')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-cobalt" onclick="tpSaveStage()" data-i18n="w_save">Сохранить</button>
           </div>
         </div>
       </div>
@@ -85,15 +85,15 @@
       <!-- Модалка: переместить/дублировать услугу -->
       <div class="modal-backdrop" id="m-tp-move">
         <div class="modal">
-          <div class="modal-head"><h3>Переместить/дублировать услугу</h3><button class="modal-close" onclick="closeModal('m-tp-move')">✕</button></div>
+          <div class="modal-head"><h3 data-i18n="w_move_dup_service_title">Переместить/дублировать услугу</h3><button class="modal-close" onclick="closeModal('m-tp-move')">✕</button></div>
           <div class="modal-body">
-            <div class="form-group"><label>Целевой этап</label>
+            <div class="form-group"><label data-i18n="w_target_stage">Целевой этап</label>
               <select id="tpMoveStage" style="width:100%;"></select></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" onclick="closeModal('m-tp-move')">Отмена</button>
-            <button class="btn btn-ghost" onclick="tpSaveMove('copy')">Дублировать</button>
-            <button class="btn btn-cobalt" onclick="tpSaveMove('move')">Переместить</button>
+            <button class="btn btn-ghost" onclick="closeModal('m-tp-move')" data-i18n="w_cancel">Отмена</button>
+            <button class="btn btn-ghost" onclick="tpSaveMove('copy')" data-i18n="w_duplicate">Дублировать</button>
+            <button class="btn btn-cobalt" onclick="tpSaveMove('move')" data-i18n="w_move">Переместить</button>
           </div>
         </div>
       </div>
@@ -117,7 +117,7 @@
     document.getElementById('tpTitle').textContent = PLAN.title;
     document.getElementById('tpHeadTitle').textContent = PLAN.title;
     const pill = document.getElementById('tpStatusPill');
-    pill.textContent = PLAN.status;
+    pill.textContent = t('tp_status_'+PLAN.statusCode, PLAN.status);
     pill.className = 'pill ' + (STATUS_PILL[PLAN.statusCode] || 'grey');
     const patientLink = document.getElementById('tpPatientLink');
     patientLink.textContent = PLAN.patientName;
@@ -141,20 +141,20 @@
       <div class="card" style="margin-bottom:14px;overflow:hidden;">
         <div class="card-head" style="flex-wrap:wrap;gap:8px;">
           <div style="font-size:13px;">
-            <b>${stage.title || ('Этап #' + stage.id)}</b>
-            <span style="color:var(--ink-soft);margin-left:10px;">${stage.durationMin ? stage.durationMin + ' мин' : 'без длительности'}</span>
-            <span style="color:var(--ink-soft);margin-left:10px;">${stage.visitLabel || 'визит не назначен'}</span>
+            <b>${stage.title || (t('w_stage') + ' #' + stage.id)}</b>
+            <span style="color:var(--ink-soft);margin-left:10px;">${stage.durationMin ? stage.durationMin + ' ' + t('w_minutes_short') : t('w_no_duration')}</span>
+            <span style="color:var(--ink-soft);margin-left:10px;">${stage.visitNumber ? (t('w_visit_col') + ' #' + stage.visitNumber) : t('w_visit_not_assigned')}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <b class="mono">${fmt(stage.total)}</b>
-            <button class="btn btn-ghost btn-sm" onclick="tpOpenAddItem(${stage.id})">+ Услуга</button>
-            <button class="btn btn-ghost btn-sm" onclick="tpOpenEditStage(${stage.id})">✎ Этап</button>
+            <button class="btn btn-ghost btn-sm" onclick="tpOpenAddItem(${stage.id})">+ ${t('w_service')}</button>
+            <button class="btn btn-ghost btn-sm" onclick="tpOpenEditStage(${stage.id})">✎ ${t('w_stage')}</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="tpDeleteStage(${stage.id})">✕</button>
           </div>
         </div>
         <table>
           <thead><tr>
-            <th>Услуга</th><th>№ зуба</th><th>Кол-во</th><th>Цена</th><th>Скидка</th><th>Итого</th><th>Статус</th><th></th>
+            <th>${t('w_service')}</th><th>${t('w_tooth_number')}</th><th>${t('w_quantity')}</th><th>${t('w_price')}</th><th>${t('w_discount_pct')}</th><th>${t('w_total')}</th><th>${t('w_status')}</th><th></th>
           </tr></thead>
           <tbody>
             ${stage.items.length ? stage.items.map(it => `
@@ -165,12 +165,12 @@
                 <td class="mono">${fmt(it.price)}</td>
                 <td>${it.discount ? it.discount + '%' : '—'}</td>
                 <td class="mono">${fmt(it.subtotal)}</td>
-                <td><span class="pill ${ITEM_STATUS_PILL[it.status]||'grey'}" style="cursor:pointer;" onclick="tpToggleItem(${it.id})">${it.statusLabel}</span></td>
+                <td><span class="pill ${ITEM_STATUS_PILL[it.status]||'grey'}" style="cursor:pointer;" onclick="tpToggleItem(${it.id})">${t('ti_status_'+it.status, it.statusLabel)}</span></td>
                 <td style="white-space:nowrap;">
                   <button class="btn btn-ghost btn-sm" onclick="tpOpenMove(${it.id})">⇄</button>
                   <button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="tpDeleteItem(${it.id})">✕</button>
                 </td>
-              </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:16px;">Услуг в этапе нет</td></tr>`}
+              </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:16px;">${t('w_no_services_in_stage')}</td></tr>`}
           </tbody>
         </table>
       </div>`).join('');
@@ -183,15 +183,15 @@
   }
 
   function populateVisitSelects(){
-    const opts = '<option value="">— не назначен —</option>' +
-      PLAN.patientTreatments.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+    const opts = `<option value="">${t('w_visit_none_dash')}</option>` +
+      PLAN.patientTreatments.map(pt => `<option value="${pt.id}">${t('w_visit_col')} #${pt.number} · ${pt.dateStr}</option>`).join('');
     document.getElementById('tpStageVisit').innerHTML = opts;
   }
 
   function populateStageSelects(excludeId){
     const opts = PLAN.stages.filter(s => s.id !== excludeId)
-      .map(s => `<option value="${s.id}">${s.title || ('Этап #' + s.id)}</option>`).join('');
-    document.getElementById('tpMoveStage').innerHTML = opts || '<option value="">— нет других этапов —</option>';
+      .map(s => `<option value="${s.id}">${s.title || (t('w_stage') + ' #' + s.id)}</option>`).join('');
+    document.getElementById('tpMoveStage').innerHTML = opts || `<option value="">${t('w_no_other_stages')}</option>`;
   }
 
   window.tpItemRecalc = function(){
@@ -239,13 +239,13 @@
     });
     let payload = null;
     try{ payload = await res.json(); }catch(e){}
-    if(res.ok && payload && payload.ok){ flashAndReload('Услуга добавлена'); }
-    else{ showToast((payload && payload.error) || 'Не удалось сохранить', 'error'); }
+    if(res.ok && payload && payload.ok){ flashAndReload(t('w_service_added')); }
+    else{ showToast((payload && payload.error) || t('w_save_failed'), 'error'); }
   };
 
   window.tpAddStage = async function(){
     const res = await postForm(`/treatments/plans/${PLAN.id}/stage/add/`, new FormData());
-    if(res.redirected){ flashAndReload('Этап добавлен'); } else { showToast('Не удалось сохранить', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_stage_added')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   window.tpOpenEditStage = function(stageId){
@@ -266,19 +266,19 @@
     fd.append('duration_min', document.getElementById('tpStageDuration').value);
     fd.append('visit', document.getElementById('tpStageVisit').value);
     const res = await postForm(`/treatments/plans/stages/${tpCurrentStageId}/edit/`, fd);
-    if(res.redirected){ flashAndReload('Этап сохранён'); } else { showToast('Не удалось сохранить', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_stage_saved')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   window.tpDeleteStage = async function(stageId){
-    if(!confirm('Удалить этап со всеми услугами?')) return;
+    if(!confirm(t('w_confirm_delete_stage'))) return;
     const res = await postForm(`/treatments/plans/stages/${stageId}/delete/`, new FormData());
-    if(res.redirected){ flashAndReload('Этап удалён'); } else { showToast('Не удалось удалить', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_stage_deleted')); } else { showToast(t('w_delete_failed'), 'error'); }
   };
 
   window.tpDeleteItem = async function(itemId){
-    if(!confirm('Удалить услугу из плана?')) return;
+    if(!confirm(t('w_confirm_delete_service_from_plan'))) return;
     const res = await postForm(`/treatments/plans/items/${itemId}/delete/`, new FormData());
-    if(res.redirected){ flashAndReload('Услуга удалена'); } else { showToast('Не удалось удалить', 'error'); }
+    if(res.redirected){ flashAndReload(t('w_service_deleted')); } else { showToast(t('w_delete_failed'), 'error'); }
   };
 
   window.tpOpenMove = function(itemId){
@@ -297,13 +297,13 @@
     fd.append('stage_id', targetStage);
     fd.append('mode', mode);
     const res = await postForm(`/treatments/plans/items/${tpCurrentItemId}/move/`, fd);
-    if(res.redirected){ flashAndReload(mode === 'copy' ? 'Услуга продублирована' : 'Услуга перемещена'); }
-    else{ showToast('Не удалось сохранить', 'error'); }
+    if(res.redirected){ flashAndReload(mode === 'copy' ? t('w_service_duplicated') : t('w_service_moved')); }
+    else{ showToast(t('w_save_failed'), 'error'); }
   };
 
   window.tpToggleItem = async function(itemId){
     const res = await postForm(`/treatments/plans/items/${itemId}/toggle/`, new FormData());
-    if(res.ok){ flashAndReload('Статус обновлён'); } else { showToast('Не удалось сохранить', 'error'); }
+    if(res.ok){ flashAndReload(t('w_item_status_updated')); } else { showToast(t('w_save_failed'), 'error'); }
   };
 
   renderHeader();
