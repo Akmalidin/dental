@@ -1758,6 +1758,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
       </div>
       </div>
       <div id="csPanelAdvanced" class="hidden">
+      <!-- Лента дней по умолчанию начинается с сегодня и растёт только вперёд
+           (см. ribbonInitialDates/appendRibbonDays) — перенести запись
+           перетаскиванием на вчера или ранее было физически некуда: в ленте
+           просто нет такой колонки. Данные за прошлые дни уже загружены
+           (окно ±30 дней, см. RIBBON_MAX_DAYS), не хватало только самих
+           колонок в разметке — по прямому запросу пользователя добавляем
+           несколько дней НАЗАД от сегодня при первой отрисовке ленты
+           (фиксированное окно, см. RIBBON_PAST_DAYS, а не бесконечная
+           подгрузка влево при скролле — так безопаснее для уже отлаженной
+           логики scrollLeft/восстановления позиции в appendRibbonDays). -->
+      <div class="form-group toggle">
+        <input autocomplete="off" type="checkbox" id="cs-show-past-days">
+        <span style="font-size:13px;" data-i18n="w_cs_show_past_days">Показывать в ленте вчерашние и прошедшие дни (можно переносить записи на них)</span>
+      </div>
       <!-- Что показывать под именем пациента на карточке — услугу или
            комментарий к записи, по прямому запросу пользователя (раньше
            всегда была услуга). -->
@@ -4322,6 +4336,7 @@ const translations={
   w_cs_time_color: {ru:'Цвет времени записи', ky:'Жазуу убактысынын түсү', en:'Appointment time color', uz:'Yozuv vaqti rangi'},
   w_cs_tab_basic: {ru:'Основные', ky:'Негизги', en:'Basic', uz:'Asosiy'},
   w_cs_tab_advanced: {ru:'Продвинутые настройки', ky:'Өркүндөтүлгөн жөндөөлөр', en:'Advanced settings', uz:'Kengaytirilgan sozlamalar'},
+  w_cs_show_past_days: {ru:'Показывать в ленте вчерашние и прошедшие дни (можно переносить записи на них)', ky:'Лентада кечээги жана өткөн күндөрдү көрсөтүү (жазууларды ошол күндөргө которсо болот)', en:'Show yesterday and past days in the ribbon (appointments can be moved there)', uz:'Lentada kecha va o\'tgan kunlarni ko\'rsatish (yozuvlarni o\'sha kunlarga ko\'chirish mumkin)'},
   w_cs_card_subline: {ru:'Что показывать под именем на карточке', ky:'Карточкада ат астында эмне көрсөтүлсүн', en:'What to show under the name on the card', uz:'Kartochkada ism ostida nima ko\'rsatilsin'},
   w_cs_card_subline_notes: {ru:'Комментарий к записи', ky:'Жазууга комментарий', en:'Appointment comment', uz:'Yozuvga izoh'},
   w_cs_card_subline_service: {ru:'Название услуги', ky:'Кызматтын аталышы', en:'Service name', uz:'Xizmat nomi'},
@@ -6803,7 +6818,7 @@ async function deleteLeadCard(){
 
 /* ================= DOCTOR SCHEDULE — реальные врачи и приёмы ================= */
 let scheduleDoctors=[];
-let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
+let calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, showPastDays:false, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
 let calView='day';
 const baseScheduleDate=new Date(); // сегодня — реальные приёмы листаются в окне ±30 дней
 let currentDayOffset=0; // якорный (первый) день ленты — меняется только кнопками ‹ ›
@@ -6828,6 +6843,7 @@ let scheduleRibbonDates=[];
 const RIBBON_INITIAL_DAYS=4;
 const RIBBON_APPEND_DAYS=3;
 const RIBBON_MAX_DAYS=30; // совпадает с окном загруженных приёмов (±30 дней от сегодня)
+const RIBBON_PAST_DAYS=3; // «Показывать прошедшие дни» (calSettings.showPastDays) — фиксированное окно назад от якоря, см. ribbonInitialDates
 
 /* Настройки календаря раньше нигде не сохранялись (сбрасывались на каждую
    перезагрузку страницы, включая уже существующие начало/конец/интервал/цвета) —
@@ -6848,6 +6864,7 @@ function loadCalSettings(){
   if(byId('cs-offer-start-visit')) byId('cs-offer-start-visit').checked=calSettings.offerStartVisit!==false;
   if(byId('cs-highlight-debt')) byId('cs-highlight-debt').checked=calSettings.highlightDebt!==false;
   if(byId('cs-ribbon-scroll')) byId('cs-ribbon-scroll').checked=calSettings.ribbonScroll!==false;
+  if(byId('cs-show-past-days')) byId('cs-show-past-days').checked=!!calSettings.showPastDays;
   if(byId('cs-col-width')){
     const w=calSettings.colWidth||150;
     byId('cs-col-width').value=String(w);
@@ -7225,10 +7242,18 @@ function schedStatusColor(status){
 // предыдущий день — только кнопками ‹ ›, см. также attachScheduleScrollWatcher,
 // где при выключенном ribbonScroll дозагрузка новых дней по скроллу тоже
 // отключена).
+// showPastDays (тумблер «Показывать прошедшие дни», Продвинутые настройки) —
+// добавляет RIBBON_PAST_DAYS дней ДО якоря, чтобы вчера/позавчера тоже были
+// колонками в ленте и на них можно было перетащить запись (перенос сам по
+// себе бэкендом не запрещён — не хватало только видимой колонки). Окно
+// фиксированное (не растёт дальше в прошлое при скролле, в отличие от
+// appendRibbonDays вперёд) — этого достаточно для «перенести на вчера», а
+// бесконечная подгрузка влево усложнила бы восстановление scrollLeft.
 function ribbonInitialDates(){
   if(calSettings.ribbonScroll===false) return [isoDate(dateAtOffset(currentDayOffset))];
   const out=[];
-  for(let i=0;i<RIBBON_INITIAL_DAYS;i++) out.push(isoDate(dateAtOffset(currentDayOffset+i)));
+  const startOffset = calSettings.showPastDays ? currentDayOffset - RIBBON_PAST_DAYS : currentDayOffset;
+  for(let i=startOffset; i<currentDayOffset+RIBBON_INITIAL_DAYS; i++) out.push(isoDate(dateAtOffset(i)));
   return out;
 }
 // Непрерывная лента дней: каждый день — своя группа врачей-колонок, подписанная
@@ -8672,6 +8697,7 @@ function applyCalSettings(){
   calSettings.offerStartVisit=document.getElementById('cs-offer-start-visit').checked;
   calSettings.highlightDebt=document.getElementById('cs-highlight-debt').checked;
   calSettings.ribbonScroll=document.getElementById('cs-ribbon-scroll').checked;
+  calSettings.showPastDays=document.getElementById('cs-show-past-days').checked;
   calSettings.colWidth=Number(document.getElementById('cs-col-width').value)||150;
 
   const colorMap={
@@ -8711,6 +8737,7 @@ function resetCalSettings(){
   document.getElementById('cs-offer-start-visit').checked=true;
   document.getElementById('cs-highlight-debt').checked=true;
   document.getElementById('cs-ribbon-scroll').checked=true;
+  document.getElementById('cs-show-past-days').checked=false;
   document.getElementById('cs-color-cobalt').value='#2c4bea';
   document.getElementById('cs-color-amber').value='#b8862e';
   document.getElementById('cs-color-coral').value='#e85d2d';
@@ -8723,7 +8750,7 @@ function resetCalSettings(){
   document.getElementById('cs-color-time').value='#1c2430';
   document.getElementById('cs-card-subline').value='notes';
   localStorage.removeItem(CALSETTINGS_KEY);
-  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
+  calSettings={start:9, end:18, interval:30, offerStartVisit:true, highlightDebt:true, colWidth:150, ribbonScroll:true, showPastDays:false, nameTimeColorEnabled:false, nameColor:'#1c2430', timeColor:'#1c2430', cardSubline:'notes'};
   applyCalColors({cobalt:'#2c4bea', amber:'#b8862e', coral:'#e85d2d', teal:'#0e9c7d'});
 }
 
@@ -9762,11 +9789,22 @@ async function patientsSendToCashier(patientId, btn){
 // проводит платёж через /finance/payments/create/ — та же вьюха, что и
 // «Принять оплату» на Кассе (submitCashAcceptGeneral, cashdesk.html).
 // name/debt необязательны — если не переданы (вызов с карточки пациента,
-// там patientId уже известен по контексту), подтягиваются из patientsList.
-function openPatientAcceptPayment(patientId, name, debt){
+// там patientId уже известен по контексту), подтягиваются из patientsList;
+// если пациента там нет (капнут на последние 300, см.
+// apps.users.views._newui_patients_data) — подгружаем напрямую по id,
+// вместо того чтобы молча открыть пустую форму (та же дыра, что была у
+// «Принять оплату» на Кассе, см. agSelectPatient в cashdesk.html).
+async function openPatientAcceptPayment(patientId, name, debt){
   if(!patientId) return;
   if(name===undefined){
-    const p=patientsList.find(x=>x.id===patientId);
+    let p=patientsList.find(x=>x.id===patientId);
+    if(!p){
+      try{
+        const res=await fetch('/new/patients/'+patientId+'/lookup/');
+        const data=await res.json();
+        if(data.ok) p=data.patient;
+      }catch(e){}
+    }
     name=p ? p.fullName : '';
     debt=(p && p.hasDebt) ? Math.round(-p.balance) : 0;
   }

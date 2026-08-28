@@ -328,6 +328,43 @@ class NewUIPatientsTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 302)
 
+    def test_patient_lookup_json_finds_patient_outside_capped_list(self):
+        """/new/patients/<pk>/lookup/ — фикс бага с прода: кнопка «Принять
+        оплату (сумма)» из карточки записи в расписании ведёт на кассу с
+        ?open_payment=<id>, который подставлялся ТОЛЬКО поиском по капнутому
+        на 300 patientsList (apps.users.views._newui_patients_data) —
+        пациент "старше" последних 300 созданных не находился, модалка
+        открывалась пустой. Этот эндпоинт ищет пациента напрямую по pk, без
+        лимита (та же логика, что и у карточки пациента)."""
+        resp = self.client.get(f"/new/patients/{self.patient.pk}/lookup/")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["patient"]["id"], self.patient.pk)
+        self.assertEqual(payload["patient"]["fullName"], "Байгазиева Асель")
+        self.assertTrue(payload["patient"]["hasDebt"])
+        self.assertEqual(payload["patient"]["balance"], -1500.0)
+
+    def test_patient_lookup_json_404_for_unknown_id(self):
+        resp = self.client.get("/new/patients/999999/lookup/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(resp.json()["ok"])
+
+    def test_patient_lookup_json_requires_login(self):
+        self.client.logout()
+        resp = self.client.get(f"/new/patients/{self.patient.pk}/lookup/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_patients_data_search_finds_patient_outside_capped_list(self):
+        """/new/patients/data/?q=... — уже была настоящая серверная выдача
+        (не капнутый patientsList), используем её же как fallback-поиск в
+        модалках «Принять оплату» (см. agPatientSearch, cashdesk.html)."""
+        resp = self.client.get("/new/patients/data/?q=Байгазиева")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        ids = [p["id"] for p in data["results"]]
+        self.assertIn(self.patient.pk, ids)
+
 
 class NewUIPatientsDupesChipTestCase(TestCase):
     """«⚠ Возможные дубли» — перенос ручного обзора дублей в новый интерфейс
