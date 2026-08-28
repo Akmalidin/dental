@@ -254,6 +254,25 @@ def newui_patients_data_json(request):
 
 
 @login_required
+def newui_patient_lookup_json(request, pk):
+    """AJAX: один пациент по pk, БЕЗ лимита 300 (см. _newui_patient_by_pk) —
+    закрывает разрыв, из-за которого модалка «Принять оплату» открывалась бы
+    пустой для пациента "старше" последних 300 созданных: кнопка на
+    расписании ведёт на /new/cashdesk/?open_payment=<id>, а там пациент
+    подставлялся ТОЛЬКО поиском по капнутому patientsList — не нашёл, не
+    подставил (баг с прода, найден на живом сайте: карточка пациента
+    открывалась нормально, а тут — пустая форма). Используется как fallback
+    в openCashAcceptGeneral()/agSelectPatient (templates/newui/cashdesk.html)
+    и в openPatientAcceptPayment() (templates/newui/base.html), когда id не
+    находится в уже загруженном patientsList."""
+    from django.http import JsonResponse
+    patient = _newui_patient_by_pk(pk)
+    if not patient:
+        return JsonResponse({"ok": False}, status=404)
+    return JsonResponse({"ok": True, "patient": patient})
+
+
+@login_required
 def newui_patientcard(request, pk):
     """Карта одного пациента. JS-логика (openPatientCard) написана под поиск
     по массиву patientsList — отдаём список из одного элемента и открываем

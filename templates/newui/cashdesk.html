@@ -305,18 +305,58 @@ function openCashAcceptGeneral(){
   document.getElementById('ag-debt-note').classList.add('hidden');
   openModal('m-cash-accept-general');
 }
+// patientsList капнут на последние 300 созданных (см.
+// apps.users.views._newui_patients_data) — мгновенный локальный фильтр ниже
+// годится для большинства кассиров, но не находит пациента "старше" этих
+// 300 (баг с прода: реальный должник существовал, карточка пациента
+// открывалась нормально, а тут поиск молчал). Дополняем локальный
+// мгновенный результат серверным (debounce, не на каждый символ) —
+// /new/patients/data/ (та же вьюха, что у самого списка «Пациенты», уже
+// умеет искать по всей клинике, не только по капнутым 300).
+let agSearchDebounce=null;
+let agSearchToken=0;
+function agRenderPatientSuggestions(list){
+  const box=document.getElementById('ag-patient-suggestions');
+  box.innerHTML = list.length===0
+    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
+    : list.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="agSelectPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
+  box.classList.remove('hidden');
+}
 function agPatientSearch(q){
   const box=document.getElementById('ag-patient-suggestions');
   const query=(q||'').trim().toLowerCase();
+  clearTimeout(agSearchDebounce);
   if(!query){ box.classList.add('hidden'); box.innerHTML=''; return; }
-  const matches=patientsList.filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
-  box.innerHTML = matches.length===0
-    ? `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`
-    : matches.map(p=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="agSelectPatient(${p.id})"><b>${p.fullName}</b><div style="font-size:11.5px;color:var(--ink-soft);">${p.phone||''}</div></div>`).join('');
-  box.classList.remove('hidden');
+  const localMatches=patientsList.filter(p=>p.fullName.toLowerCase().includes(query) || (p.phone||'').includes(query)).slice(0,8);
+  agRenderPatientSuggestions(localMatches);
+  const myToken=++agSearchToken;
+  agSearchDebounce=setTimeout(async ()=>{
+    let data=null;
+    try{
+      const res=await fetch('/new/patients/data/?q='+encodeURIComponent(query)+'&per_page=8');
+      data=await res.json();
+    }catch(e){ return; }
+    if(myToken!==agSearchToken) return; // пользователь уже напечатал ещё — этот ответ устарел
+    const seen=new Set(localMatches.map(p=>p.id));
+    const extra=(data.results||[]).filter(p=>!seen.has(p.id));
+    if(extra.length===0) return;
+    agRenderPatientSuggestions([...localMatches, ...extra].slice(0,8));
+  }, 300);
 }
-function agSelectPatient(id){
-  const p=patientsList.find(x=>x.id===id);
+async function agSelectPatient(id){
+  let p=patientsList.find(x=>x.id===id);
+  if(!p){
+    // Не нашли в капнутом patientsList — например, кнопка «Принять оплату
+    // (сумма)» из карточки записи в расписании ведёт сюда с
+    // ?open_payment=<id> (см. openPaymentFromScheduleQuery ниже) для
+    // пациента "старше" последних 300 созданных. Подгружаем напрямую по id
+    // вместо того, чтобы молча оставить модалку пустой.
+    try{
+      const res=await fetch('/new/patients/'+id+'/lookup/');
+      const data=await res.json();
+      if(data.ok) p=data.patient;
+    }catch(e){}
+  }
   if(!p) return;
   document.getElementById('ag-patient-search').value=p.fullName;
   document.getElementById('ag-patient-id').value=p.id;
