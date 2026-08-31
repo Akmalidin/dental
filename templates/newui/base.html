@@ -6477,11 +6477,12 @@ function applyMenuPrefs(){
 }
 // Пункты сайдбара → ключ раздела (Personal allowed_sections) — то же
 // сопоставление URL-префиксов, что и в apps.tenancy.SectionAccessMiddleware
-// (PREFIXES для /new/*). Пункт, которого нет в этом словаре (funnel,
-// marketing, visits, messages, salary, dashboard), бэкенд никак не
+// (PREFIXES для /new/*). Пункт, которого нет в этом словаре (visits,
+// messages, salary, dashboard), бэкенд никак не
 // ограничивает через allowed_sections — не прячем и его тут, иначе сайдбар
 // врал бы о том, что реально заблокировано.
 const NAV_VIEW_TO_SECTION = {
+  funnel: 'funnel', marketing: 'marketing',
   patients: 'patients', visitsjournal: 'patients', schedule: 'appointments', treatplans: 'treatments',
   staff: 'staff', services: 'services', warehouse: 'warehouse', lab: 'technicians',
   cashdesk: 'finance', finance: 'finance', accounting: 'finance',
@@ -6533,6 +6534,11 @@ function openMenuSettings(mode){
       html+=`<div class="ms-group-label">${el.textContent.trim()}</div>`;
       return;
     }
+    // Пункт, скрытый по личным правам доступа (allowed_sections — класс
+    // .hidden от hideRestrictedNavItems), не предлагаем показать/скрыть:
+    // раздел всё равно заблокирован на бэкенде (SectionAccessMiddleware),
+    // включить его тут — просто обманывать пользователя лишним пунктом.
+    if(el.classList.contains('hidden')) return;
     const view=el.dataset.view;
     const pinned=PINNED_VIEWS.includes(view);
     const clone=el.cloneNode(true);

@@ -1849,6 +1849,14 @@ class NewUISectionAccessTestCase(TestCase):
         resp = self.client.get("/new/warehouse/")
         self.assertEqual(resp.status_code, 302)
 
+    def test_new_funnel_blocked_for_restricted_user(self):
+        resp = self.client.get("/new/funnel/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_new_marketing_blocked_for_restricted_user(self):
+        resp = self.client.get("/new/marketing/")
+        self.assertEqual(resp.status_code, 302)
+
     def test_new_patients_allowed_for_restricted_user(self):
         resp = self.client.get("/new/patients/")
         self.assertEqual(resp.status_code, 200)
