@@ -52,12 +52,20 @@ def _shared_options(request, clinic):
     from apps.notifications.voice import voice_enabled, ai_enabled
     cs = ClinicSettings.get()
     return {
-        # Язык интерфейса — реальная настройка клиники (Настройки → Общие),
-        # уже сохраняется через ClinicSettingsForm/language. Нужен на КАЖДОЙ
-        # странице (не только settings.html), чтобы подписи меню в base.html
+        # Язык интерфейса — личный (User.interface_language, любой сотрудник
+        # выбирает себе сам в Настройках → Общие), а если сотрудник свой не
+        # выбирал — язык клиники по умолчанию (ClinicSettings.language, меняет
+        # только директор/суперадмин через ClinicSettingsForm). Раньше язык был
+        # только клиникин — POST /settings/ требует role_required("superadmin",
+        # "admin_main"), а остальным сотрудникам (например, врачам, у которых
+        # раздел «Настройки» в меню тоже виден) этот POST молча редиректил на
+        # "/" без изменений; postForm() в settings.html принимал ЛЮБОЙ редирект
+        # за успех и показывал «Настройки сохранены» — язык откатывался
+        # обратно после перезагрузки (баг с прода). Нужен на КАЖДОЙ странице
+        # (не только settings.html), чтобы подписи меню в base.html
         # переводились сразу при заходе, а не только пока открыта сама
         # страница настроек.
-        "clinicLanguage": cs.language or "ru",
+        "clinicLanguage": request.user.interface_language or cs.language or "ru",
         # Валюта клиники — нужна на КАЖДОЙ странице (не только settings.html),
         # т.к. fmtSom()/формат сумм в base.html общий для всего интерфейса.
         "clinicCurrencySymbol": cs.currency_label,
@@ -1058,6 +1066,27 @@ def newui_menu_prefs_save(request):
     else:
         request.user.menu_prefs = prefs
         request.user.save(update_fields=["menu_prefs"])
+    return JsonResponse({"ok": True})
+
+
+@login_required
+def newui_language_save(request):
+    """Личный язык интерфейса (селектор "Язык интерфейса" в Настройках →
+    Общие) — доступен ЛЮБОМУ сотруднику, в отличие от общего POST /settings/
+    (ClinicSettingsForm), который требует role_required("superadmin",
+    "admin_main") и потому у остальных сотрудников молча ничего не сохранял
+    (см. комментарий в _shared_options выше — баг с прода, найден по жалобе:
+    врач выбирает узбекский, видит «Настройки сохранены», но после
+    перезагрузки снова русский). Тот же приём, что и у newui_menu_prefs_save
+    (личная User-настройка отдельно от общеклиникиной ClinicSettings)."""
+    from django.http import JsonResponse
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+    lang = request.POST.get("language", "")
+    if lang not in ("ru", "ky", "uz", "en"):
+        return JsonResponse({"error": "Неизвестный язык"}, status=400)
+    request.user.interface_language = lang
+    request.user.save(update_fields=["interface_language"])
     return JsonResponse({"ok": True})
 
 

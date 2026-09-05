@@ -1516,6 +1516,79 @@ class NewUISettingsTestCase(TestCase):
         self.assertEqual(data["clinicLanguage"], "ky")
 
 
+class NewUIPersonalLanguageTestCase(TestCase):
+    """Личный язык интерфейса (User.interface_language, /new/language/save/) —
+    баг с прода: сотрудник (например, доктор) выбирает язык в Настройках,
+    видит «Настройки сохранены», но после перезагрузки снова русский. Причина:
+    язык раньше отправлялся только через POST /settings/, который требует
+    role_required("superadmin", "admin_main") — у остальных ролей запрос молча
+    редиректил на "/" без изменений, а postForm() в settings.html принимал
+    ЛЮБОЙ редирект за успех. Личный язык сохраняется отдельным эндпоинтом,
+    доступным любому залогиненному сотруднику, независимо от роли."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника PL", slug="clinic-personal-lang")
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.doctor = User.objects.create(
+            login="pl_doctor", name="Доктор PL", role=self.doctor_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.doctor)
+
+    def test_doctor_can_save_own_language_without_admin_role(self):
+        """Ключевой сценарий бага: у роли «доктор» нет прав на POST /settings/,
+        но личный язык всё равно должен сохраняться."""
+        resp = self.client.post("/new/language/save/", {"language": "uz"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.interface_language, "uz")
+
+    def test_personal_language_survives_reload_and_does_not_leak_to_clinic(self):
+        from apps.settings_clinic.models import ClinicSettings
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        self.client.post("/new/language/save/", {"language": "uz"})
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["clinicLanguage"], "uz")
+        # Общий язык клиники (для остальных сотрудников) не должен поменяться —
+        # это личный выбор одного доктора, а не смена языка всей клинике.
+        set_current_clinic(self.clinic)
+        try:
+            self.assertEqual(ClinicSettings.get().language, "ru")
+        finally:
+            clear_current_clinic()
+
+    def test_personal_language_falls_back_to_clinic_default_when_unset(self):
+        from apps.settings_clinic.models import ClinicSettings
+        from apps.tenancy import set_current_clinic, clear_current_clinic
+        set_current_clinic(self.clinic)
+        try:
+            cs = ClinicSettings.get()
+            cs.language = "ky"
+            cs.save(update_fields=["language"])
+        finally:
+            clear_current_clinic()
+        resp = self.client.get("/new/")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["clinicLanguage"], "ky")
+
+    def test_invalid_language_rejected(self):
+        resp = self.client.post("/new/language/save/", {"language": "fr"})
+        self.assertEqual(resp.status_code, 400)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.interface_language, "")
+
+    def test_requires_login(self):
+        self.client.logout()
+        resp = self.client.post("/new/language/save/", {"language": "uz"})
+        self.assertNotEqual(resp.status_code, 200)
+
+    def test_get_not_allowed(self):
+        resp = self.client.get("/new/language/save/")
+        self.assertEqual(resp.status_code, 405)
+
+
 class NewUIVisitWizardTestCase(TestCase):
     """Карточка приёма («Начать приём») — реальный клинический мастер
     (apps.treatments.views_visit), новый интерфейс просто открывает те же
