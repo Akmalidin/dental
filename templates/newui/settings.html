@@ -52,7 +52,7 @@
               </div>
               <div class="field-row">
                 <label><span data-i18n="w_interface_language">Язык интерфейса</span><div class="hint" data-i18n="w_interface_language_hint">Меняет подписи меню сразу, без перезагрузки — сохраняется кнопкой ниже</div></label>
-                <select id="set-language" onchange="setLanguage(this.value)"><option value="ru">Русский</option><option value="ky">Кыргызча</option><option value="uz">O'zbekcha</option><option value="en">English</option></select>
+                <select id="set-language" onchange="saveMyLanguage(this.value)"><option value="ru">Русский</option><option value="ky">Кыргызча</option><option value="uz">O'zbekcha</option><option value="en">English</option></select>
               </div>
               <div class="field-row">
                 <label data-i18n="w_timezone">Часовой пояс</label>
@@ -166,7 +166,10 @@
   if(!s) return;
 
   document.getElementById('set-slot').value = String(s.appointmentSlot);
-  document.getElementById('set-language').value = s.language;
+  // currentLang, а не s.language (общий язык клиники по умолчанию) — у
+  // сотрудника может быть свой личный выбор (User.interface_language),
+  // currentLang уже учитывает это (см. _shared_options.clinicLanguage).
+  document.getElementById('set-language').value = currentLang;
   document.getElementById('set-timezone').innerHTML = s.timezoneChoices.map(t=>`<option value="${t.code}" ${t.code===s.timezone?'selected':''}>${t.label}</option>`).join('');
   document.getElementById('setNavClinicMenu').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
   document.getElementById('set-currency').innerHTML = s.currencyChoices.map(c=>`<option value="${c.code}" ${c.code===s.currency?'selected':''}>${c.label}</option>`).join('');
@@ -394,6 +397,25 @@
     if(res.redirected){ flashAndReload(t('w_settings_saved')); }
     else { showToast(t('w_settings_save_failed'), 'error'); }
   }
+  // Личный язык интерфейса — сохраняется сразу при выборе, отдельным
+  // эндпоинтом (/new/language/save/), доступным ЛЮБОМУ сотруднику. Раньше
+  // язык отправлялся только вместе с остальными «Общими настройками» через
+  // POST /settings/ — тот эндпоинт требует роль директора/суперадмина
+  // (role_required), и у остальных сотрудников (например, врачей, которым
+  // «Настройки» тоже видны в меню) молча ничего не сохранял, при этом
+  // postForm() принимал редирект-отказ за успех и показывал «Настройки
+  // сохранены» — после перезагрузки язык откатывался обратно (баг с прода).
+  window.saveMyLanguage = async function(lang){
+    setLanguage(lang);
+    const fd = new FormData();
+    fd.append('language', lang);
+    try{
+      const res = await fetch('/new/language/save/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+      const data = await res.json().catch(()=>null);
+      if(res.ok && data && data.ok) showToast(t('w_language_saved', 'Язык сохранён — лично для вас'));
+      else showToast(t('w_settings_save_failed'), 'error');
+    }catch(e){ showToast(t('w_settings_save_failed'), 'error'); }
+  };
   window.saveSettingsGeneral = submitSettings;
   window.saveSettingsContacts = submitSettings;
   window.saveSettingsWa = async function(){

@@ -261,6 +261,14 @@ class User(AbstractUser):
     # Пусто — используется меню клиники по умолчанию (ClinicSettings.menu_prefs), если оно
     # задано директором, иначе — стандартный порядок сайдбара как есть.
     menu_prefs = models.JSONField(default=dict, blank=True, verbose_name="Настройка меню (личная)")
+    # Личный язык интерфейса (Настройки → Общие, селектор "Язык интерфейса") —
+    # доступен ЛЮБОМУ сотруднику, в отличие от ClinicSettings.language (общий язык
+    # клиники по умолчанию, меняет только директор/суперадмин). Пусто — используется
+    # ClinicSettings.language. См. newui_views.newui_language_save/_shared_options.
+    interface_language = models.CharField(
+        max_length=5, blank=True, verbose_name="Язык интерфейса (личный)",
+        help_text="Пусто — используется язык клиники по умолчанию",
+    )
     color = models.CharField(
         max_length=7, blank=True, verbose_name="Цвет",
         help_text="Необязательно. Используется для аватара и различения врачей в расписании. "
