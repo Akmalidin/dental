@@ -59,8 +59,19 @@ class AppointmentForm(forms.ModelForm):
         start = cleaned.get("start_at")
         end = cleaned.get("end_at")
         if doctor and start and end:
-            if end <= start:
-                raise forms.ValidationError("Время окончания должно быть позже начала")
+            # Разумный потолок длительности — та же проверка, что и у
+            # быстрых модалок нового интерфейса (см. apps.appointments.
+            # views._duration_sanity_error). Баг с прода: через ЭТУ самую
+            # форму (обычные datetime-local поля «Начало»/«Конец», без
+            # проверки длительности) у записи оказался «Конец» на 7 дней
+            # позже «Начала» — блокировал врачу целую неделю, при этом сам
+            # был виден в сетке расписания только в день начала (группировка
+            # по start_at) — отказ «занято» на СОСЕДНИЕ дни выглядел ничем
+            # не обоснованным.
+            from .views import _duration_sanity_error
+            dur_err = _duration_sanity_error(start, end)
+            if dur_err:
+                raise forms.ValidationError(dur_err)
             # график работы врача — нельзя записать в нерабочий день/часы
             from .views import schedule_violation
             sched_err = schedule_violation(doctor, start, end)
@@ -73,10 +84,6 @@ class AppointmentForm(forms.ModelForm):
                 qs = qs.exclude(pk=self.instance.pk)
             clash = qs.first()
             if clash:
-                from django.utils import timezone as _tz
-                cs, ce = _tz.localtime(clash.start_at), _tz.localtime(clash.end_at)
-                raise forms.ValidationError(
-                    "У врача уже есть запись на это время (%s–%s)" % (
-                        cs.strftime("%d.%m %H:%M"), ce.strftime("%H:%M"))
-                )
+                from .views import _overlap_error_message
+                raise forms.ValidationError(_overlap_error_message(clash))
         return cleaned

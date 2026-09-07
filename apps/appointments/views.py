@@ -12,6 +12,32 @@ from .forms import AppointmentForm
 from .gcal import push_event as gcal_push, delete_event as gcal_delete
 
 
+MAX_APPOINTMENT_HOURS = 12  # разумный потолок длительности одного приёма
+
+
+def _duration_sanity_error(start, end):
+    """Разумный потолок длительности записи. Баг с прода («у доктора Одина
+    не идёт запись» на нескольких датах подряд, хотя на экране в это время
+    пусто): у реальной записи «Конец» оказался на 7 ДНЕЙ позже «Начала»
+    (12:00 07.09.2026 → 13:00 14.09.2026) — судя по всему, при правке через
+    старую форму (templates/appointments/form.html, обычные datetime-local
+    поля «Начало»/«Конец» без единой проверки длительности) промахнулись
+    мимо дня в календарике. Проверка занятости (start_at__lt=end,
+    end_at__gt=start) отработала ВЕРНО — врач физически «занят» все эти
+    дни, раз запись формально длится неделю, — но сетка расписания
+    группирует запись только по дню start_at (см. _newui_schedule_data),
+    поэтому она была видна только 07.09, а блокировала ещё и 08–14.09 без
+    единого намёка в интерфейсе на причину. Эта проверка сама уже
+    испорченные записи не чинит — только не даёт создать/сохранить новую
+    такую же на любом из путей ввода (быстрые модалки, старая форма,
+    перетаскивание в календаре)."""
+    if end <= start:
+        return "Время окончания должно быть позже времени начала"
+    if (end - start) > timedelta(hours=MAX_APPOINTMENT_HOURS):
+        return "Слишком большая длительность записи (больше %d часов) — проверьте дату и время окончания" % MAX_APPOINTMENT_HOURS
+    return None
+
+
 def _overlap_error_message(overlap):
     """Текст ошибки «У врача уже есть запись на это время» — с филиалом,
     пациентом и ID конфликтующей записи. Раньше называл только время, без
@@ -20,15 +46,23 @@ def _overlap_error_message(overlap):
     обоснованным (жалоба с прода: «у доктора Одина не идёт запись», хотя
     на экране в это время пусто). Патент/ID — чтобы администратор мог сам
     найти и проверить эту конкретную запись (поиском по пациенту либо
-    /appointments/<ID>/edit/), не дожидаясь разбора на нашей стороне."""
+    /appointments/<ID>/edit/), не дожидаясь разбора на нашей стороне.
+
+    Дата у времени окончания — только если отличается от даты начала: сама
+    же жалоба с прода была вызвана записью, у которой «Конец» оказался на
+    7 дней позже «Начала» (см. _duration_sanity_error) — старое сообщение
+    показывало только часы:минуты ("12:00–13:00"), из-за чего многодневный
+    конфликт выглядел как обычная часовая запись и только сбивал с толку."""
     from django.utils import timezone as _tz
     ov_start = _tz.localtime(overlap.start_at)
     ov_end = _tz.localtime(overlap.end_at)
+    end_label = (ov_end.strftime("%H:%M") if ov_end.date() == ov_start.date()
+                 else ov_end.strftime("%d.%m.%Y %H:%M"))
     patient_label = overlap.patient.full_name if overlap.patient_id else "без пациента"
     return (
-        "У врача уже есть запись на это время (%s–%s, филиал «%s», ID %s, пациент: %s). "
+        "У врача уже есть запись на это время (%s %s–%s, филиал «%s», ID %s, пациент: %s). "
         "Выберите другое время." % (
-            ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"),
+            ov_start.strftime("%d.%m.%Y"), ov_start.strftime("%H:%M"), end_label,
             overlap.branch.name, overlap.pk, patient_label,
         )
     )
@@ -453,6 +487,10 @@ def appointment_create_quick(request):
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
 
+        dur_err = _duration_sanity_error(start, end)
+        if dur_err:
+            return JsonResponse({"error": dur_err}, status=400)
+
         # Prevent double-booking: doctor can't have overlapping appointments
         # (БЕЗ фильтра по филиалу — врач физически не может вести приём в
         # двух филиалах одновременно, поэтому конфликт проверяется по врачу
@@ -526,6 +564,10 @@ def appointment_update_quick(request, pk):
             services = [service]
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
+
+        dur_err = _duration_sanity_error(start, end)
+        if dur_err:
+            return JsonResponse({"error": dur_err}, status=400)
 
         overlap = Appointment.objects.select_related("branch", "patient").filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
@@ -764,6 +806,9 @@ def appointment_move(request, pk):
             start = _tz.make_aware(start)
         if _tz.is_naive(end):
             end = _tz.make_aware(end)
+        dur_err = _duration_sanity_error(start, end)
+        if dur_err:
+            return JsonResponse({"error": dur_err}, status=400)
         doctor = appt.doctor
         doctor_id = data.get("doctor_id")
         if doctor_id and str(doctor_id) != str(appt.doctor_id):

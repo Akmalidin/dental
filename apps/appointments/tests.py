@@ -195,3 +195,144 @@ class AppointmentMoveTestCase(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.appt.refresh_from_db()
         self.assertEqual(self.appt.doctor_id, self.doctor1.pk)  # не изменилось
+
+
+class AppointmentDurationSanityTestCase(TestCase):
+    """Баг с прода («у доктора Одина не идёт запись» на нескольких датах
+    подряд, хотя на экране в это время пусто): реальная причина — у одной
+    записи «Конец» оказался на 7 ДНЕЙ позже «Начала» (12:00 07.09 → 13:00
+    14.09), что физически заблокировало врачу всю неделю в проверке
+    занятости, при этом сетка расписания показывала запись только в день
+    начала (группировка по start_at) — конфликт был реальным, но невидимым
+    без объяснения. См. apps.appointments.views._duration_sanity_error —
+    разумный потолок длительности (не больше MAX_APPOINTMENT_HOURS),
+    подключён на все пути ввода/правки записи."""
+
+    def setUp(self):
+        from datetime import datetime, time
+        from django.utils import timezone
+        from apps.services.models import Service
+
+        self.clinic = Clinic.objects.create(name="Клиника DS", slug="clinic-duration-sanity")
+        self.branch = Branch.objects.create(name="Филиал DS", address="-", phone="0", is_main=True, clinic=self.clinic)
+        admin_role, _ = Role.objects.get_or_create(name=Role.ADMIN)
+        doctor_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        self.admin = User.objects.create(
+            login="ds_admin", name="Админ DS", email="dsadmin@test.local", role=admin_role, clinic=self.clinic,
+        )
+        self.doctor = User.objects.create(
+            login="ds_doc", name="Врач DS", email="dsdoc@test.local", role=doctor_role, clinic=self.clinic,
+        )
+        self.patient = Patient.objects.create(
+            first_name="Тест", last_name="Пациентов", phone="+996700333999", branch=self.branch, clinic=self.clinic,
+        )
+        self.service = Service.objects.create(name="Приём", price=100, clinic=self.clinic)
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+        today = timezone.localdate()
+        self.start = timezone.make_aware(datetime.combine(today, time(12, 0)))
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def test_create_quick_rejects_week_long_appointment(self):
+        import json
+        from datetime import timedelta
+        bad_end = self.start + timedelta(days=7, hours=1)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": self.start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "duration": int((bad_end - self.start).total_seconds() / 60),
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("длительность", resp.json()["error"])
+
+    def test_update_quick_rejects_week_long_appointment(self):
+        import json
+        from datetime import timedelta
+        appt = Appointment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch, service=self.service,
+            start_at=self.start, end_at=self.start + timedelta(hours=1),
+            status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+        bad_end = self.start + timedelta(days=7, hours=1)
+        resp = self.client.post(
+            f"/appointments/{appt.pk}/update-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": self.start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "duration": int((bad_end - self.start).total_seconds() / 60),
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        appt.refresh_from_db()
+        self.assertEqual(appt.end_at, self.start + timedelta(hours=1))  # не изменилось
+
+    def test_move_rejects_week_long_appointment(self):
+        import json
+        from datetime import timedelta
+        appt = Appointment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch, service=self.service,
+            start_at=self.start, end_at=self.start + timedelta(hours=1),
+            status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+        bad_end = self.start + timedelta(days=7, hours=1)
+        resp = self.client.post(
+            f"/appointments/{appt.pk}/move/",
+            data=json.dumps({
+                "start": self.start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "end": bad_end.strftime("%Y-%m-%dT%H:%M:%S"),
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_old_interface_form_rejects_week_long_appointment(self):
+        from datetime import timedelta
+        bad_end = self.start + timedelta(days=7, hours=1)
+        set_current_clinic(self.clinic)
+        try:
+            form = AppointmentForm(data={
+                "patient": self.patient.pk, "doctor": self.doctor.pk, "branch": self.branch.pk,
+                "services": [self.service.pk],
+                "start_at": self.start.strftime("%Y-%m-%dT%H:%M"),
+                "end_at": bad_end.strftime("%Y-%m-%dT%H:%M"),
+                "status": Appointment.STATUS_SCHEDULED,
+            })
+            self.assertFalse(form.is_valid())
+            self.assertIn("длительность", str(form.errors))
+        finally:
+            clear_current_clinic()
+
+    def test_overlap_message_shows_end_date_when_multi_day(self):
+        """Раньше сообщение показывало только время (без даты) — многодневный
+        конфликт выглядел как обычная часовая запись. Создаём такую запись
+        напрямую (в обход новой защиты) — как ту, что реально нашли на
+        проде — и проверяем, что сообщение честно называет обе даты."""
+        import json
+        from datetime import timedelta
+        Appointment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch, service=self.service,
+            start_at=self.start, end_at=self.start + timedelta(days=7, hours=1),
+            status=Appointment.STATUS_SCHEDULED, clinic=self.clinic,
+        )
+        next_day_same_time = self.start + timedelta(days=1)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": next_day_same_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "duration": 60,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        error = resp.json()["error"]
+        end_date = (self.start + timedelta(days=7, hours=1)).strftime("%d.%m.%Y")
+        self.assertIn(end_date, error)
