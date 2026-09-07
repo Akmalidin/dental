@@ -8440,6 +8440,18 @@ function apptPickTimeChip(label){
 function updateApptAvailabilityHint(){
   apptUpdateEndTimeDefault();
   renderApptTimeChips();
+  // Баг с прода: пробуют создать запись на 12:00-13:00 → сервер отказывает
+  // (слот занят), errBox показывает «У врача уже есть запись на это время
+  // (12:00–13:00)» → меняют время на 10:00-11:00 (свободное), НЕ нажимая
+  // «Создать запись» повторно — errBox раньше очищался только при новой
+  // отправке формы или переоткрытии модалки, поэтому старая ошибка про
+  // 12:00–13:00 продолжала висеть поверх уже другого, свободного выбора —
+  // выглядело так, будто сервер отказывает и на новое время тоже, хотя
+  // занятого приёма там нет вовсе. Любая смена врача/даты/времени должна
+  // сразу убирать УЖЕ НЕАКТУАЛЬНУЮ ошибку прошлой попытки — актуальную
+  // подсказку по текущему выбору ниже даёт живая проверка (schedSlotFree).
+  const errBox=document.getElementById('apptModalError');
+  if(errBox) errBox.classList.add('hidden');
   const hint=document.getElementById('apptAvailabilityHint');
   if(!hint) return;
   const docId=document.getElementById('appt-doctor').value;
