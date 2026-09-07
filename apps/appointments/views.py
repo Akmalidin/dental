@@ -12,6 +12,28 @@ from .forms import AppointmentForm
 from .gcal import push_event as gcal_push, delete_event as gcal_delete
 
 
+def _overlap_error_message(overlap):
+    """Текст ошибки «У врача уже есть запись на это время» — с филиалом,
+    пациентом и ID конфликтующей записи. Раньше называл только время, без
+    самой записи — если конфликт не виден на экране (другой филиал видимой
+    сетки, случайно не совпавший фильтр и т.п.), отказ выглядел ничем не
+    обоснованным (жалоба с прода: «у доктора Одина не идёт запись», хотя
+    на экране в это время пусто). Патент/ID — чтобы администратор мог сам
+    найти и проверить эту конкретную запись (поиском по пациенту либо
+    /appointments/<ID>/edit/), не дожидаясь разбора на нашей стороне."""
+    from django.utils import timezone as _tz
+    ov_start = _tz.localtime(overlap.start_at)
+    ov_end = _tz.localtime(overlap.end_at)
+    patient_label = overlap.patient.full_name if overlap.patient_id else "без пациента"
+    return (
+        "У врача уже есть запись на это время (%s–%s, филиал «%s», ID %s, пациент: %s). "
+        "Выберите другое время." % (
+            ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"),
+            overlap.branch.name, overlap.pk, patient_label,
+        )
+    )
+
+
 def _default_visit_service():
     """Служебная услуга «Визит к врачу» — подставляется автоматически там,
     где форма/модалка записи не даёт выбрать услугу явно (новый интерфейс —
@@ -435,27 +457,11 @@ def appointment_create_quick(request):
         # (БЕЗ фильтра по филиалу — врач физически не может вести приём в
         # двух филиалах одновременно, поэтому конфликт проверяется по врачу
         # в целом, а не только в рамках текущего просматриваемого филиала).
-        overlap = Appointment.objects.select_related("branch").filter(
+        overlap = Appointment.objects.select_related("branch", "patient").filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
-            # start_at/end_at приходят из БД в UTC (USE_TZ=True) — форматировать
-            # напрямую strftime() нельзя, иначе в сообщении об ошибке показывается
-            # время в UTC, а не в локальном поясе клиники (Asia/Bishkek), что выглядит
-            # как случайное/несуществующее время и сбивает администратора с толку.
-            ov_start = _tz.localtime(overlap.start_at)
-            ov_end = _tz.localtime(overlap.end_at)
-            # Название филиала конфликтующей записи — жалоба с прода («у
-            # доктора Одина не идёт запись», а на экране в это время
-            # свободно): сетка расписания и подсказки «Быстрый выбор»
-            # показывают приёмы только ТЕКУЩЕГО выбранного филиала, а эта
-            # проверка — по врачу в целом (см. комментарий выше), поэтому
-            # конфликт мог быть с приёмом в ДРУГОМ филиале, невидимым на
-            # экране, — без названия филиала отказ выглядел необъяснимым.
-            return JsonResponse({
-                "error": "У врача уже есть запись на это время (%s–%s, филиал «%s»). Выберите другое время." % (
-                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"), overlap.branch.name)
-            }, status=400)
+            return JsonResponse({"error": _overlap_error_message(overlap)}, status=400)
 
         sched_err = schedule_violation(doctor, start, end)
         if sched_err:
@@ -521,16 +527,11 @@ def appointment_update_quick(request, pk):
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
 
-        overlap = Appointment.objects.select_related("branch").filter(
+        overlap = Appointment.objects.select_related("branch", "patient").filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
-            ov_start = _tz.localtime(overlap.start_at)
-            ov_end = _tz.localtime(overlap.end_at)
-            return JsonResponse({
-                "error": "У врача уже есть запись на это время (%s–%s, филиал «%s»). Выберите другое время." % (
-                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"), overlap.branch.name)
-            }, status=400)
+            return JsonResponse({"error": _overlap_error_message(overlap)}, status=400)
 
         sched_err = schedule_violation(doctor, start, end)
         if sched_err:

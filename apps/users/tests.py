@@ -4333,11 +4333,16 @@ class AppointmentQuickCrossBranchTestCase(TestCase):
     def test_overlap_error_names_conflicting_branch(self):
         # Существующий приём у врача — создан, пока активным был branch2 (тем
         # же путём, что и сам фикс, чтобы не зависеть от часового пояса теста).
+        from apps.patients.models import Patient
+        patient = Patient.objects.create(
+            first_name="Конфликт", last_name="Пациентов", branch=self.branch2, clinic=self.clinic,
+        )
         self._set_active_branch(self.branch2)
         setup_resp = self.client.post(
             "/appointments/create-quick/",
             data=json.dumps({
                 "doctor_id": self.doctor.pk,
+                "patient_id": patient.pk,
                 "start_at": "2026-09-09T12:00:00",
                 "duration": 60,
             }),
@@ -4345,10 +4350,12 @@ class AppointmentQuickCrossBranchTestCase(TestCase):
         )
         self.assertEqual(setup_resp.status_code, 200)
         from apps.appointments.models import Appointment
-        self.assertEqual(Appointment.objects.get(pk=setup_resp.json()["id"]).branch_id, self.branch2.pk)
+        conflicting_id = setup_resp.json()["id"]
+        self.assertEqual(Appointment.objects.get(pk=conflicting_id).branch_id, self.branch2.pk)
 
         # Теперь активен ДРУГОЙ филиал (branch1) — пересекающееся время
-        # должно отклоняться с указанием, что запись в branch2.
+        # должно отклоняться с указанием, что запись в branch2, а также
+        # с самой записью (пациент/ID), чтобы её можно было найти вручную.
         self._set_active_branch(self.branch1)
         resp = self.client.post(
             "/appointments/create-quick/",
@@ -4360,7 +4367,10 @@ class AppointmentQuickCrossBranchTestCase(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn(self.branch2.name, resp.json()["error"])
+        error = resp.json()["error"]
+        self.assertIn(self.branch2.name, error)
+        self.assertIn(patient.full_name, error)
+        self.assertIn(str(conflicting_id), error)
 
     def test_new_appointment_lands_in_active_branch_when_doctor_assigned_there(self):
         self._set_active_branch(self.branch2)
