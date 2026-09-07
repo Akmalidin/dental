@@ -4390,6 +4390,71 @@ class AppointmentQuickCrossBranchTestCase(TestCase):
         self.assertIn(appt.branch_id, [self.branch1.pk, self.branch2.pk])
 
 
+class DefaultVisitServiceDuplicatesTestCase(TestCase):
+    """Баг с прода: «Новая запись» отказывала сырым текстом исключения
+    "get() returned more than one Service -- it returned 4!" — модалка
+    «Новая запись» нового интерфейса не даёт выбрать услугу явно, поэтому
+    подставляется служебная «Визит к врачу»; get_or_create() на это имя не
+    атомарен без уникального ограничения (гонка запросов без выбранной
+    услуги за время работы клиники успела создать несколько строк с
+    одинаковым именем) — get() внутри get_or_create() у ЛЮБОГО следующего
+    вызова падал с MultipleObjectsReturned. См. _default_visit_service()."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника DV", slug="clinic-dv")
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.branch = Branch.objects.create(
+            name="Филиал DV", address="-", phone="0", is_main=True, clinic=self.clinic,
+        )
+        self.doctor = User.objects.create(
+            login="dv_doctor", name="Врач DV", role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor.branches.set([self.branch])
+        self.staff = User.objects.create(
+            login="dv_staff", name="Сотрудник DV", role=self.admin_role, clinic=self.clinic,
+        )
+        self.client.force_login(self.staff)
+
+    def test_create_quick_survives_duplicate_default_services(self):
+        from apps.services.models import Service
+        for _ in range(4):
+            Service.objects.create(name="Визит к врачу", price=0, duration=60, clinic=self.clinic)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T09:00:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_update_quick_survives_duplicate_default_services(self):
+        from apps.services.models import Service
+        for _ in range(3):
+            Service.objects.create(name="Визит к врачу", price=0, duration=60, clinic=self.clinic)
+        create_resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T09:00:00"}),
+            content_type="application/json",
+        )
+        appt_id = create_resp.json()["id"]
+        resp = self.client.post(
+            f"/appointments/{appt_id}/update-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T10:00:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_no_duplicate_created_when_default_service_missing(self):
+        from apps.services.models import Service
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T09:00:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Service.objects.filter(name="Визит к врачу").count(), 1)
+
+
 class ClinicBlockReasonTestCase(TestCase):
     """Причина блокировки клиники (Clinic.blocked_reason) — задаётся
     супер-админом в момент блокировки, показывается на /access-request/

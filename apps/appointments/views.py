@@ -12,6 +12,33 @@ from .forms import AppointmentForm
 from .gcal import push_event as gcal_push, delete_event as gcal_delete
 
 
+def _default_visit_service():
+    """Служебная услуга «Визит к врачу» — подставляется автоматически там,
+    где форма/модалка записи не даёт выбрать услугу явно (новый интерфейс —
+    поле услуги в «Новая запись» убрано по запросу, appointment_create_quick/
+    update_quick; старый интерфейс — appointment_create, если услугу не
+    выбрали).
+
+    Баг с прода: «Новая запись» отказывала с сырым текстом исключения
+    "get() returned more than one Service -- it returned 4!" — раньше здесь
+    был Service.objects.get_or_create(name="Визит к врачу", ...), а
+    get_or_create() без уникального ограничения на name НЕ атомарен: при
+    гонке (два почти одновременных запроса без выбранной услуги — двойной
+    клик, две вкладки, повтор при сетевом сбое) оба могли пройти внутреннюю
+    проверку "такой записи ещё нет" до того, как первый закоммитил свою
+    .create(), и оба создать по строке — за время работы системы такие
+    гонки накопили несколько дублей с одинаковым именем, и .get() внутри
+    get_or_create() у ЛЮБОГО следующего вызова стал падать с
+    MultipleObjectsReturned. Тут — просто берём первую по pk (самую
+    старую, значит и best-effort самую вероятно уже связанную с реальными
+    записями) вместо падения; при полном отсутствии — создаём."""
+    from apps.services.models import Service
+    service = Service.objects.filter(name="Визит к врачу").order_by("pk").first()
+    if service is None:
+        service = Service.objects.create(name="Визит к врачу", price=0, duration=60, is_active=True)
+    return service
+
+
 def _clinic_work_window():
     """(start_time, end_time) рабочего окна клиники из ClinicSettings.working_hours.
     Берём самое раннее открытие и позднее закрытие по дням. По умолчанию 09:00–21:00."""
@@ -395,12 +422,11 @@ def appointment_create_quick(request):
             # Дефолт длительности — 60 минут (не 30): жалоба «должно показывать
             # с 9:00 до .... автоматически 1 час» — тот же дефолт и в модалке
             # «Новая запись» (templates/newui/base.html::apptServiceDurationMin).
-            # get_or_create применяет defaults только при СОЗДАНИИ записи —
-            # если "Визит к врачу" уже существует в клинике с duration=30 (создан
-            # до этого фикса), это значение не поменяется задним числом.
-            service, _ = Service.objects.get_or_create(
-                name="Визит к врачу", defaults={"price": 0, "duration": 60, "is_active": True}
-            )
+            # _default_visit_service() применяет duration=60 только при
+            # СОЗДАНИИ строки — если "Визит к врачу" уже существует в клинике
+            # с duration=30 (создан до этого фикса), это значение не
+            # поменяется задним числом.
+            service = _default_visit_service()
             services = [service]
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
@@ -490,9 +516,7 @@ def appointment_update_quick(request, pk):
         services = list(Service.objects.filter(pk__in=service_ids)) if service_ids else []
         service = services[0] if services else None
         if not service:
-            service, _ = Service.objects.get_or_create(
-                name="Визит к врачу", defaults={"price": 0, "duration": 60, "is_active": True}
-            )
+            service = _default_visit_service()
             services = [service]
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
@@ -688,10 +712,7 @@ def appointment_create(request):
         if not appt.branch_id:   # по умолчанию активный/основной филиал
             appt.branch = _default_active_branch(request)
         if not appt.service_id:
-            from apps.services.models import Service
-            appt.service, _created = Service.objects.get_or_create(
-                name="Визит к врачу", defaults={"price": 0, "duration": 30, "is_active": True}
-            )
+            appt.service = _default_visit_service()
         appt.save()
         form.save_m2m()
         try:
