@@ -379,7 +379,6 @@ def appointment_create_quick(request):
     """AJAX: create appointment from calendar modal."""
     from apps.patients.models import Patient
     from apps.services.models import Service
-    from apps.users.models import Branch
     try:
         from django.utils import timezone as _tz
         data = json.loads(request.body)
@@ -407,7 +406,10 @@ def appointment_create_quick(request):
         end = start + timedelta(minutes=int(data.get("duration") or duration))
 
         # Prevent double-booking: doctor can't have overlapping appointments
-        overlap = Appointment.objects.filter(
+        # (БЕЗ фильтра по филиалу — врач физически не может вести приём в
+        # двух филиалах одновременно, поэтому конфликт проверяется по врачу
+        # в целом, а не только в рамках текущего просматриваемого филиала).
+        overlap = Appointment.objects.select_related("branch").filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
@@ -417,9 +419,16 @@ def appointment_create_quick(request):
             # как случайное/несуществующее время и сбивает администратора с толку.
             ov_start = _tz.localtime(overlap.start_at)
             ov_end = _tz.localtime(overlap.end_at)
+            # Название филиала конфликтующей записи — жалоба с прода («у
+            # доктора Одина не идёт запись», а на экране в это время
+            # свободно): сетка расписания и подсказки «Быстрый выбор»
+            # показывают приёмы только ТЕКУЩЕГО выбранного филиала, а эта
+            # проверка — по врачу в целом (см. комментарий выше), поэтому
+            # конфликт мог быть с приёмом в ДРУГОМ филиале, невидимым на
+            # экране, — без названия филиала отказ выглядел необъяснимым.
             return JsonResponse({
-                "error": "У врача уже есть запись на это время (%s–%s). Выберите другое время." % (
-                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"))
+                "error": "У врача уже есть запись на это время (%s–%s, филиал «%s»). Выберите другое время." % (
+                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"), overlap.branch.name)
             }, status=400)
 
         sched_err = schedule_violation(doctor, start, end)
@@ -428,8 +437,10 @@ def appointment_create_quick(request):
 
         # Заблокированный супер-админом филиал (Clinic.blocked... нет, тут
         # Branch.is_active — «запретить запись/работу в филиале») не должен
-        # получать новые записи — берём только среди активных филиалов врача.
-        branch = doctor.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
+        # получать новые записи — берём филиал, который сейчас выбран в
+        # переключателе (если врач там работает), иначе первый активный
+        # филиал врача (см. _quick_appt_branch).
+        branch = _quick_appt_branch(request, doctor)
         if branch is None:
             return JsonResponse({"error": "Филиал этого врача заблокирован — запись невозможна"}, status=400)
         appt = Appointment.objects.create(
@@ -466,7 +477,6 @@ def appointment_update_quick(request, pk):
     с собой на прежнем времени)."""
     from apps.patients.models import Patient
     from apps.services.models import Service
-    from apps.users.models import Branch
     appt = get_object_or_404(Appointment, pk=pk)
     try:
         from django.utils import timezone as _tz
@@ -487,15 +497,15 @@ def appointment_update_quick(request, pk):
         duration = sum(s.duration for s in services) or 60
         end = start + timedelta(minutes=int(data.get("duration") or duration))
 
-        overlap = Appointment.objects.filter(
+        overlap = Appointment.objects.select_related("branch").filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).first()
         if overlap:
             ov_start = _tz.localtime(overlap.start_at)
             ov_end = _tz.localtime(overlap.end_at)
             return JsonResponse({
-                "error": "У врача уже есть запись на это время (%s–%s). Выберите другое время." % (
-                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"))
+                "error": "У врача уже есть запись на это время (%s–%s, филиал «%s»). Выберите другое время." % (
+                    ov_start.strftime("%H:%M"), ov_end.strftime("%H:%M"), overlap.branch.name)
             }, status=400)
 
         sched_err = schedule_violation(doctor, start, end)
@@ -504,7 +514,7 @@ def appointment_update_quick(request, pk):
 
         appt.patient = Patient.objects.filter(pk=data.get("patient_id")).first()
         if doctor.pk != appt.doctor_id:
-            new_branch = doctor.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
+            new_branch = _quick_appt_branch(request, doctor)
             if new_branch is None:
                 return JsonResponse({"error": "Филиал этого врача заблокирован — запись невозможна"}, status=400)
             appt.doctor = doctor
@@ -616,6 +626,35 @@ def _default_active_branch(request):
     return (active or Branch.objects.filter(is_main=True, is_active=True).first()
             or request.user.branches.filter(is_active=True).first()
             or Branch.objects.filter(is_active=True).first())
+
+
+def _quick_appt_branch(request, doctor):
+    """Филиал для записи, создаваемой/переносимой через модалку «Новая
+    запись» нового интерфейса (appointment_create_quick/update_quick) —
+    активный филиал переключателя сайдбара, ЕСЛИ врач там работает и филиал
+    активен, иначе первый активный филиал врача, иначе любой активный
+    филиал клиники.
+
+    Баг с прода («именно у доктора Одина не идёт запись» на нескольких
+    датах): раньше здесь брался просто doctor.branches.filter(is_active=
+    True).first() — БЕЗ учёта того, какой филиал сейчас выбран в
+    переключателе. Для врача с несколькими филиалами это давало два эффекта
+    разом: (1) новая запись могла молча уйти в другой филиал, не тот, что
+    сейчас открыт на экране; (2) проверка занятости (Appointment.objects.
+    filter(doctor=doctor, ...) в create_quick/update_quick — БЕЗ фильтра по
+    филиалу, иначе врач мог бы оказаться "записан" в двух местах одновременно)
+    корректно блокировала пересечение с приёмом в ДРУГОМ филиале, но этот
+    приём не показывался ни в сетке расписания, ни в чипах «Быстрый выбор»
+    (обе — только текущий филиал), ни строкой конфликта (не называла
+    филиал) — выглядело так, будто отказ ничем не обоснован."""
+    from apps.tenancy import get_active_branch_id
+    from apps.users.models import Branch
+    active_id = get_active_branch_id(request)
+    if active_id:
+        branch = doctor.branches.filter(pk=active_id, is_active=True).first()
+        if branch:
+            return branch
+    return doctor.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
 
 
 @login_required

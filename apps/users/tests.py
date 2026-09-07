@@ -4291,6 +4291,105 @@ class BranchBlockingTestCase(TestCase):
         self.assertFalse(self.branch.is_active)
 
 
+class AppointmentQuickCrossBranchTestCase(TestCase):
+    """Баг с прода: «именно у доктора Одина не идёт запись» — жалоба на
+    несколько дат подряд, при этом на экране расписания в это время
+    свободно. Причина: врач работает в двух филиалах, у него УЖЕ есть
+    приём в ДРУГОМ филиале (не том, что сейчас открыт на экране) —
+    появление расписания и подсказки «Быстрый выбор» показывают приёмы
+    только текущего выбранного филиала, а проверка занятости врача (верно)
+    смотрит на приёмы врача в целом, без разбивки по филиалу — врач
+    физически не может вести приём в двух местах одновременно. Раньше
+    сообщение об ошибке не называло филиал, из-за чего отказ выглядел
+    необоснованным «записи же нет». См. _quick_appt_branch/apps.appointments.
+    views.appointment_create_quick/update_quick."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника CB", slug="clinic-cb")
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.branch1 = Branch.objects.create(
+            name="Филиал Восток", address="-", phone="0", is_main=True, clinic=self.clinic,
+        )
+        self.branch2 = Branch.objects.create(
+            name="Филиал Запад", address="-", phone="0", clinic=self.clinic,
+        )
+        self.doctor = User.objects.create(
+            login="cb_doctor", name="Одина", email="cbd@test.local",
+            role=self.doctor_role, clinic=self.clinic,
+        )
+        self.doctor.branches.set([self.branch1, self.branch2])
+        self.staff = User.objects.create(
+            login="cb_staff", name="Сотрудник CB", email="cbs@test.local",
+            role=self.admin_role, clinic=self.clinic,
+        )
+        self.client.force_login(self.staff)
+
+    def _set_active_branch(self, branch):
+        session = self.client.session
+        session["active_branch"] = branch.pk
+        session.save()
+
+    def test_overlap_error_names_conflicting_branch(self):
+        # Существующий приём у врача — создан, пока активным был branch2 (тем
+        # же путём, что и сам фикс, чтобы не зависеть от часового пояса теста).
+        self._set_active_branch(self.branch2)
+        setup_resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": "2026-09-09T12:00:00",
+                "duration": 60,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(setup_resp.status_code, 200)
+        from apps.appointments.models import Appointment
+        self.assertEqual(Appointment.objects.get(pk=setup_resp.json()["id"]).branch_id, self.branch2.pk)
+
+        # Теперь активен ДРУГОЙ филиал (branch1) — пересекающееся время
+        # должно отклоняться с указанием, что запись в branch2.
+        self._set_active_branch(self.branch1)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({
+                "doctor_id": self.doctor.pk,
+                "start_at": "2026-09-09T12:30:00",
+                "duration": 30,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(self.branch2.name, resp.json()["error"])
+
+    def test_new_appointment_lands_in_active_branch_when_doctor_assigned_there(self):
+        self._set_active_branch(self.branch2)
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T10:00:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        from apps.appointments.models import Appointment
+        appt = Appointment.objects.get(pk=resp.json()["id"])
+        self.assertEqual(appt.branch_id, self.branch2.pk)
+
+    def test_new_appointment_falls_back_when_active_branch_not_doctors(self):
+        other_branch = Branch.objects.create(
+            name="Чужой филиал", address="-", phone="0", clinic=self.clinic,
+        )
+        self._set_active_branch(other_branch)  # врач тут не работает
+        resp = self.client.post(
+            "/appointments/create-quick/",
+            data=json.dumps({"doctor_id": self.doctor.pk, "start_at": "2026-09-10T11:00:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        from apps.appointments.models import Appointment
+        appt = Appointment.objects.get(pk=resp.json()["id"])
+        self.assertIn(appt.branch_id, [self.branch1.pk, self.branch2.pk])
+
+
 class ClinicBlockReasonTestCase(TestCase):
     """Причина блокировки клиники (Clinic.blocked_reason) — задаётся
     супер-админом в момент блокировки, показывается на /access-request/
