@@ -470,7 +470,8 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
     already = treatment.cures.exists()
     treatment.cures.all().delete()
     for it in done_items:
-        svc = Service.objects.filter(pk=it.get("service_id")).first()
+        svc_id = it.get("service_id") or None
+        svc = Service.objects.filter(pk=svc_id).first() if svc_id else None
         if not svc:
             continue
         qty = max(1, int(it.get("qty") or 1))
@@ -497,7 +498,8 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
         stage = plan.stages.first() or TreatmentPlanStage.objects.create(plan=plan, title="Этап 1", sort_order=0)
         plan.items.all().delete()
         for i, it in enumerate(future_items):
-            svc = Service.objects.filter(pk=it.get("service_id")).first()
+            svc_id = it.get("service_id") or None
+            svc = Service.objects.filter(pk=svc_id).first() if svc_id else None
             if not svc:
                 continue
             TreatmentPlanItem.objects.create(
