@@ -696,6 +696,17 @@ def patient_notify(request, pk):
     if request.method == "POST":
         text = (request.POST.get("text") or "").strip()
         channel = request.POST.get("channel") or "wa"
+        # Подстановка плейсхолдеров — ЗДЕСЬ, а не при выдаче шаблонов: список
+        # шаблонов грузится на всю страницу чата, когда пациент ещё не выбран,
+        # поэтому подставить в него данные там нечем. Без этого шага у
+        # пациентов уходило дословно «*{клиника}*Здравствуйте, *{имя}*!».
+        # Обычному тексту без плейсхолдеров render_message ничего не делает.
+        if text:
+            from apps.appointments.models import Appointment as _Appt
+            from django.utils import timezone as _tz
+            _next = (_Appt.objects.filter(patient=patient, start_at__gte=_tz.now())
+                     .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
+            text = render_message(text, patient=patient, appt=_next)
         if not text:
             messages.error(request, _("Введите текст сообщения"))
         elif channel == "tg":

@@ -1431,6 +1431,21 @@ function chatDayLabel(iso){
   const base=d.getDate()+' '+CHAT_MONTHS[d.getMonth()];
   return d.getFullYear()===today.getFullYear() ? base : base+' '+d.getFullYear()+' г.';
 }
+// Текст сообщения приходит от пациента — в разметку он должен попадать
+// экранированным. Без этого входящее сообщение с HTML внутри выполнялось бы
+// в браузере сотрудника клиники.
+function chatEscape(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// Значок канала на каждом сообщении: отправитель общий на все клиники, и по
+// самому пузырю понять, куда ушло сообщение, было нельзя.
+function chatChannelIcon(ch){
+  if(ch==='tg') return `<span class="chat-ch" title="Telegram">🔵</span>`;
+  if(ch==='wa') return `<span class="chat-ch" title="WhatsApp">🟢</span>`;
+  return '';
+}
 function renderChatThread(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
@@ -1442,11 +1457,11 @@ function renderChatThread(msgs){
     let sep='';
     const day=m.date||'';
     if(day && day!==lastDay){ lastDay=day; sep=`<div class="chat-day">${chatDayLabel(day)}</div>`; }
-    const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${m.media_type||t('w_file')}</div>` : '';
+    const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${chatEscape(m.media_type||t('w_file'))}</div>` : '';
     const failed = (m.dir==='out' && !m.ok) ? ` <span style="color:var(--coral);">(${t('w_not_delivered')})</span>` : '';
     // При наличии разделителя в пузыре достаточно часов: дата уже над ним.
     const stamp = m.hm || m.time;
-    return `${sep}<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${m.body||''}${failed}<span class="time">${stamp}</span></div>`;
+    return `${sep}<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${chatEscape(m.body)}${failed}<span class="time">${chatChannelIcon(m.channel)}${stamp}</span></div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
 }

@@ -565,7 +565,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
    потому что лента выложена flex-колонкой и пузыри жмутся к своим краям. */
 .chat-day{align-self:center;margin:10px 0 6px;padding:3px 12px;border-radius:999px;
   background:var(--cloud);color:var(--ink-soft);font-size:11px;font-weight:600;white-space:nowrap;}
-.chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.4;}
+/* pre-wrap: в шаблонах есть пустые строки, а HTML переносы схлопывает —
+   сообщение показывалось одним слипшимся абзацем. word-break, чтобы длинная
+   ссылка без пробелов не распирала пузырь. */
+.chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.4;
+  white-space:pre-wrap;overflow-wrap:anywhere;}
+.chat-bubble .chat-ch{margin-right:4px;font-size:9px;}
 .chat-bubble.in{align-self:flex-start;background:var(--cloud);border-bottom-left-radius:3px;}
 .chat-bubble.out{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:3px;}
 .chat-bubble .time{display:block;font-size:9.5px;margin-top:4px;opacity:.65;}

@@ -40,7 +40,12 @@
                   <option value="wa">🟢 WhatsApp</option>
                   <option value="tg">🔵 Telegram</option>
                 </select>
-                <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="chatInput" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage();">
+                {% comment %}
+                  textarea, а не input: у шаблонов внутри пустые строки, а
+                  однострочное поле их молча съедало — сообщение уходило одним
+                  слипшимся абзацем. Enter отправляет, Shift+Enter переносит.
+                {% endcomment %}
+                <textarea autocomplete="off" id="chatInput" rows="1" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;resize:vertical;min-height:38px;max-height:160px;font:inherit;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}"></textarea>
                 <button class="btn btn-cobalt" onclick="sendChatMessage()"><span data-i18n="w_send">Отправить</span></button>
               </div>
             </div>
