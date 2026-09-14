@@ -253,7 +253,6 @@ def message_template_delete(request, pk):
     return redirect("message_templates")
 
 
-@csrf_exempt
 def _log_incoming_event(phone, text):
     """Записать входящее событие без содержимого (например, звонок).
 
@@ -271,6 +270,10 @@ def _log_incoming_event(phone, text):
     return patient
 
 
+# ВНИМАНИЕ: @csrf_exempt обязан стоять НЕПОСРЕДСТВЕННО над wa_webhook.
+# Вставленная между ними функция забирает декоратор себе, вьюха остаётся без
+# него, и Django отклоняет POST от Green-API с 403 — входящие молча теряются.
+@csrf_exempt
 def wa_webhook(request):
     """Webhook Green-API: входящие WhatsApp-сообщения → WaMessage(direction=in)."""
     from django.conf import settings as dj
