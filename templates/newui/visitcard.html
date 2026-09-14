@@ -329,7 +329,20 @@
   Object.keys(vw.toothSurfaceConditionsJs||{}).forEach(k=>{ surfaceStates[k]=vw.toothSurfaceConditionsJs[k]; });
   Object.keys(vw.toothGumConditionsJs||{}).forEach(k=>{ gumStates[k]=vw.toothGumConditionsJs[k]; });
   renderAllOdontograms();
-  buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', !readOnlyClosed);
+  // Сколько услуг этого приёма привязано к зубу — источник метки на карте.
+  // Разбор поля «Зуб(ы)» живёт в app.js (toothFieldHas): там может быть
+  // несколько номеров через запятую/пробел.
+  function vwToothServiceCount(num){
+    return vwPlan.filter(p=>toothFieldHas(p.tooth, num)).length;
+  }
+  // Карта строится один раз при загрузке, а план меняется — поэтому её надо
+  // перерисовывать вслед за планом, иначе метки устареют.
+  function vwRefreshOdontogram(){
+    buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', !readOnlyClosed, vwToothServiceCount);
+  }
+  // Первая отрисовка карты — ниже, сразу за объявлением vwPlan: здесь его ещё
+  // нет (let, временная мёртвая зона), и vwToothServiceCount упал бы с
+  // ReferenceError, положив всю карточку приёма.
   window.vwOnToothSaved = function(key, jsCode){
     if(readOnlyClosed) return;
     const num = key.split('-')[1];
@@ -358,6 +371,7 @@
 
   // ---- план/процедуры ----
   let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, discountMode:'%', done:true}));
+  vwRefreshOdontogram(); // теперь vwPlan существует — можно считать метки зубов
   // Единая точка правды для суммы строки плана с учётом скидки (%) — используется
   // и в таблице плана, и в чипах «Выбранные зубы», и при расчёте суммы к оплате.
   // Скидка на бэкенде и в vwPlan хранится ВСЕГДА в процентах (0-100) — режим
@@ -434,6 +448,7 @@
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
       </tr>`;
     }).join('');
+    vwRefreshOdontogram(); // метки зубов идут за планом: добавили/убрали услугу — карта обновилась
   }
   window.vwAddPlanRow = function(){
     if(readOnlyClosed) return;
@@ -454,6 +469,10 @@
     if(field==='discount') val=Math.max(0, Math.min(100, parseFloat(val)||0));
     vwPlan[i][field]=val;
     if(field==='discount' || field==='price' || field==='qty') vwRenderPlan(); // обновить колонку «Итого» вживую
+    // Поле «Зуб» намеренно НЕ перестраивает таблицу (иначе у пользователя
+    // вылетает фокус из поля при наборе) — но метка на карте обновиться
+    // должна, поэтому трогаем только карту.
+    else if(field==='tooth') vwRefreshOdontogram();
   };
   window.vwPlanFillPrice = function(i, serviceId){
     const svc = vw.services.find(s=>String(s.id)===String(serviceId));

@@ -274,7 +274,21 @@ function toothIconSVG(style, extraClass, toothNum){
 
 let selectedTeeth=new Set();
 
-function buildOdontogram(id, upper, lower, prefix, selectable){
+// Поле «Зуб(ы)» у услуги — CharField до 120 символов: там бывает один номер
+// ("18") или несколько через запятую/пробел/точку с запятой ("18, 17").
+// Сравниваем поэлементно, а НЕ поиском подстроки: иначе зуб 18 «нашёлся» бы
+// внутри "180" или "118", и карта отметила бы не тот зуб.
+function toothFieldHas(field, num){
+  if(field===null || field===undefined) return false;
+  const want=String(num).trim();
+  if(!want) return false;
+  return String(field).split(/[^0-9]+/).filter(Boolean).includes(want);
+}
+
+// serviceCountFn — необязательный источник «сколько услуг по этому зубу».
+// Не задан (карточка пациента, где данных приёма нет) — ячейка рисуется
+// ровно как раньше, без метки.
+function buildOdontogram(id, upper, lower, prefix, selectable, serviceCountFn){
   const el=document.getElementById(id);
   if(!el) return;
 
@@ -293,9 +307,16 @@ function buildOdontogram(id, upper, lower, prefix, selectable){
     const gumCode = gumStates[key] || 'norma';
     const gumCond = getCondition(gumCode);
     const gumColor = gumCond.outline ? '#E85D2D' : gumCond.color;
-    return `<div class="tooth-cell-outline" onclick="openToothModal('${key}')" title="Зуб ${n} — ${cond.label}">
+    // Метка «по зубу есть услуги в этом приёме». Намеренно на ЯЧЕЙКЕ, а не на
+    // самом зубе: цвет зуба уже занят клиническим состоянием (кариес, имплант),
+    // и два разных смысла в одном цвете слились бы.
+    const svcCount = serviceCountFn ? (serviceCountFn(n) || 0) : 0;
+    const svcCls = svcCount>0 ? ' has-services' : '';
+    const svcBadge = svcCount>0 ? `<span class="tooth-svc-badge">${svcCount}</span>` : '';
+    const svcTitle = svcCount>0 ? ` · услуг в приёме: ${svcCount}` : '';
+    return `<div class="tooth-cell-outline${svcCls}" onclick="openToothModal('${key}')" title="Зуб ${n} — ${cond.label}${svcTitle}">
       ${checkboxHtml}
-      <div class="tooth-num-cell">${n}</div>
+      <div class="tooth-num-cell">${n}${svcBadge}</div>
       ${toothIconSVG(style, iconClass, hasReal?realPathKey:null)}
       ${chartIconSVG(key)}
       <div class="tooth-gum-dot" style="background:${gumColor};${gumCode==='norma'?'opacity:.35;':''}" onclick="event.stopPropagation();openGumModal('${key}')" title="Дёсны — ${gumCond.label}"></div>
