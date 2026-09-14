@@ -560,6 +560,67 @@ def wa_connect(request):
     })
 
 
+def _wa_staff_ok(user):
+    """Кому доступно подключение WhatsApp.
+
+    Токен инстанса — учётные данные клиники, а «Настройки» в новом интерфейсе
+    видны в том числе врачам. Прятать блок в вёрстке недостаточно, поэтому
+    проверка стоит на сервере.
+    """
+    return bool(getattr(user, "is_superadmin", False) or getattr(user, "is_admin", False))
+
+
+@login_required
+def wa_status(request):
+    """Состояние подключения и QR одним JSON — для экрана настроек newui.
+
+    Отдельный эндпоинт нужен потому, что QR у Green-API обновляется примерно
+    раз в 20 секунд, и перезагружать ради него всю страницу нельзя.
+    """
+    if not _wa_staff_ok(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    from .whatsapp import wa_state, wa_qr
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    has_keys = bool((cs.wa_id_instance or "").strip() and (cs.wa_token or "").strip())
+    # Значения полей отдаём как есть — ровно то же самое показывает старый
+    # экран подключения; здесь доступ вдобавок ограничен ролью.
+    payload = {
+        "ok": True,
+        "has_keys": has_keys,
+        "enabled": bool(cs.wa_enabled),
+        "id_instance": cs.wa_id_instance or "",
+        "token": cs.wa_token or "",
+        "api_url": cs.wa_api_url or "",
+        "phone": cs.wa_phone or "",
+        "state": "",               # authorized | notAuthorized | starting | "" (связи нет)
+        "qr_type": "",             # qrCode | alreadyLogged | timeout | error | passkeyRequired
+        "qr": "",
+    }
+    if not has_keys:
+        # Без ключей инстанса спрашивать Green-API не о чем.
+        return JsonResponse(payload)
+    payload["state"] = wa_state()
+    if payload["state"] and payload["state"] != "authorized":
+        qr_type, qr = wa_qr()
+        payload["qr_type"] = qr_type
+        payload["qr"] = qr if qr_type == "qrCode" else ""
+    return JsonResponse(payload)
+
+
+@login_required
+@require_POST
+def wa_auth_code_view(request):
+    """Код привязки по номеру телефона — когда QR отсканировать нечем."""
+    if not _wa_staff_ok(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    from .whatsapp import wa_auth_code
+    ok, result = wa_auth_code(request.POST.get("phone") or "")
+    if ok:
+        return JsonResponse({"ok": True, "code": result})
+    return JsonResponse({"ok": False, "error": result}, status=400)
+
+
 # ─── Telegram ────────────────────────────────────────────────────────────
 
 def _tg_staff_ok(user):

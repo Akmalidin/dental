@@ -16,6 +16,10 @@ urlpatterns = [
     path("wa-settings/", views.wa_settings, name="wa_settings"),
     path("wa-groups/", views.wa_groups, name="wa_groups"),
     path("wa-connect/", views.wa_connect, name="wa_connect"),
+    # JSON для экрана подключения в новом интерфейсе: QR обновляется раз в
+    # ~20 секунд, поэтому состояние опрашивается без перезагрузки страницы.
+    path("wa-status/", views.wa_status, name="wa_status"),
+    path("wa-auth-code/", views.wa_auth_code_view, name="wa_auth_code"),
     path("tg-webhook/<slug:clinic_slug>/", views.tg_webhook, name="tg_webhook"),
     path("tg-inbox/", views.tg_inbox, name="tg_inbox"),
     path("tg-link/<int:chat_id>/", views.tg_link_chat, name="tg_link_chat"),

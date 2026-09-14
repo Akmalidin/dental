@@ -152,6 +152,50 @@ def wa_qr():
         return ("", "")
 
 
+def wa_auth_code(phone):
+    """Код привязки по номеру телефона — запасной путь, когда QR не отсканировать.
+
+    На телефоне: WhatsApp → Связанные устройства → Привязка устройства →
+    «Связать по номеру телефона», и там вводится полученный код.
+
+    Возвращает (ok, code) либо (False, причина): 'keys' — не заданы ключи
+    инстанса, 'phone' — пустой/нецифровой номер, 'busy' — инстанс уже
+    авторизован или Green-API не смог выдать код, 'error' — сбой запроса.
+
+    Таймаут больше обычного: по документации выдача кода занимает до 30 секунд.
+    Сам код живёт около 2.5 минут — продлевать его нечем, нужно запрашивать заново.
+    """
+    _enabled, idi, token, _url = _wa_config()
+    if not (idi and token):
+        return (False, "keys")
+    # Green-API ждёт ЧИСЛО: только цифры, без «+» и ведущих нулей страны.
+    # Локальный формат 0XXXXXXXXX (KG) разворачиваем так же, как в _chat_id.
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    if digits.startswith("0") and len(digits) == 10:
+        digits = "996" + digits[1:]
+    if not digits:
+        return (False, "phone")
+    payload = {"phoneNumber": int(digits)}
+    req = urllib.request.Request(
+        _api_url("getAuthorizationCode"),
+        data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        log.warning("WhatsApp(Green-API) getAuthorizationCode (%s): %s", e.code, e.read()[:400])
+        return (False, "error")
+    except Exception as e:  # noqa: BLE001
+        log.warning("WhatsApp(Green-API) getAuthorizationCode ошибка: %s", e)
+        return (False, "error")
+    # status=false — по документации это «уже авторизован» либо сбой выдачи.
+    if not data.get("status"):
+        return (False, "busy")
+    return (True, str(data.get("code") or ""))
+
+
 # Совместимость с возможными вызовами шаблонов — у Green-API шаблоны не нужны
 def wa_notify(phone, text, template_setting=None, params=None):
     return wa_send_text(phone, text)

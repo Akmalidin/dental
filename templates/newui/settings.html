@@ -97,7 +97,12 @@
             <div class="card-body" style="padding:4px 18px;">
               <div class="field-row">
                 <label><span data-i18n="w_wa_connected">WhatsApp подключён</span><div class="hint" id="setWaState">—</div></label>
-                <a class="btn btn-ghost btn-sm" href="/notifications/wa-connect/"><span data-i18n="w_configure_connection">Настроить подключение →</span></a>
+                {# Токен инстанса — учётные данные клиники, а «Настройки» видны и врачам.
+                   Проверка на сервере, а не по JS-флагам IS_ADMIN: те приходят
+                   асинхронно и на момент отрисовки ещё не определены. #}
+                {% if request.user.is_superadmin or request.user.is_admin %}
+                <button class="btn btn-ghost btn-sm" type="button" id="setWaConnectBtn" onclick="waOpenConnect()"><span data-i18n="w_configure_connection">Настроить подключение</span></button>
+                {% endif %}
               </div>
               <div class="field-row">
                 <label><span data-i18n="w_tg_bot">Telegram-бот</span><div class="hint" id="setTgState">—</div></label>
@@ -156,6 +161,46 @@
             <div id="ds-days"></div>
           </div>
           <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-doctorSchedule')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" type="button" onclick="submitDoctorSchedule()"><span data-i18n="w_save">Сохранить</span></button></div>
+        </div>
+      </div>
+
+      <!-- Подключение WhatsApp: ключи инстанса + QR, а если сканировать нечем —
+           привязка по номеру телефона (Green-API getAuthorizationCode). -->
+      <div class="modal-backdrop" id="m-waConnect">
+        <div class="modal">
+          <div class="modal-head"><h3 data-i18n="w_wa_connect_title">Подключение WhatsApp</h3><button class="modal-close" onclick="waCloseConnect()">✕</button></div>
+          <div class="modal-body">
+
+            <div id="wa-keys">
+              <div class="form-group"><label data-i18n="w_wa_id_instance">ID инстанса Green-API</label><input autocomplete="off" type="text" id="wa-id-instance" placeholder="1101234567"></div>
+              <div class="form-group"><label data-i18n="w_wa_token">Токен инстанса</label><input autocomplete="off" type="text" id="wa-token" placeholder="d75b3a66..."></div>
+              <div class="form-group"><label data-i18n="w_wa_phone">Номер WhatsApp клиники</label><input autocomplete="off" type="text" id="wa-phone" placeholder="+996 700 123456"></div>
+              <div class="form-group"><label><span data-i18n="w_wa_api_url">API URL</span> <span class="hint" data-i18n="w_optional">необязательно</span></label><input autocomplete="off" type="text" id="wa-api-url" placeholder="https://api.greenapi.com"></div>
+              <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <div class="toggle"><input autocomplete="off" type="checkbox" id="wa-enabled"></div>
+                <label style="margin:0;" data-i18n="w_wa_enabled_for_clinic">WhatsApp включён для клиники</label>
+              </div>
+              <button class="btn btn-cobalt" type="button" onclick="waSaveKeys()"><span data-i18n="w_save_and_connect">Сохранить и подключить</span></button>
+              <div class="hint" style="margin-top:8px;" data-i18n="w_wa_keys_hint">ID инстанса и токен берутся в личном кабинете green-api.com.</div>
+            </div>
+
+            <div id="wa-status-box" style="margin-top:14px;"></div>
+
+            <div id="wa-qr-box" class="hidden" style="text-align:center;margin-top:12px;">
+              <img id="wa-qr-img" alt="QR" style="width:236px;height:236px;image-rendering:pixelated;border:1px solid var(--mist-line);border-radius:10px;background:#fff;">
+              <div class="hint" style="margin-top:10px;" data-i18n="w_wa_qr_hint">На телефоне: WhatsApp → Связанные устройства → Привязка устройства.</div>
+              <button class="btn btn-ghost btn-sm" type="button" style="margin-top:10px;" onclick="waShowCodeForm()"><span data-i18n="w_wa_cant_scan">Не получается отсканировать? Привязать по номеру</span></button>
+            </div>
+
+            <div id="wa-code-box" class="hidden" style="margin-top:12px;">
+              <div class="form-group"><label data-i18n="w_wa_code_phone">Номер телефона, на котором установлен WhatsApp</label><input autocomplete="off" type="text" id="wa-code-phone" placeholder="+996 700 123456"></div>
+              <button class="btn btn-cobalt" type="button" id="wa-code-btn" onclick="waRequestCode()"><span data-i18n="w_wa_get_code">Получить код</span></button>
+              <div id="wa-code-result" style="margin-top:12px;"></div>
+              <button class="btn btn-ghost btn-sm" type="button" style="margin-top:10px;" onclick="waShowQr()"><span data-i18n="w_wa_back_to_qr">← Вернуться к QR</span></button>
+            </div>
+
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" onclick="waCloseConnect()"><span data-i18n="w_close">Закрыть</span></button></div>
         </div>
       </div>
 {% endblock %}
@@ -418,6 +463,150 @@
   };
   window.saveSettingsGeneral = submitSettings;
   window.saveSettingsContacts = submitSettings;
+  // ─── Подключение WhatsApp ──────────────────────────────────────────────
+  // QR у Green-API живёт около 20 секунд, поэтому состояние опрашивается, а не
+  // рисуется один раз. Таймер обязательно гасится при закрытии модалки: иначе
+  // вкладка продолжит дёргать Green-API бесконечно, даже когда окно не видно.
+  let waPoll = null, waCodeTimer = null;
+
+  function waStopPolling(){
+    if(waPoll){ clearInterval(waPoll); waPoll = null; }
+    if(waCodeTimer){ clearInterval(waCodeTimer); waCodeTimer = null; }
+  }
+
+  function waSetStatus(html, kind){
+    const box = document.getElementById('wa-status-box');
+    const color = kind === 'ok' ? 'var(--teal)' : (kind === 'err' ? 'var(--coral)' : 'var(--ink-soft)');
+    box.innerHTML = '<div style="font-size:12px;color:' + color + ';">' + html + '</div>';
+  }
+
+  function waShow(id, on){ document.getElementById(id).classList.toggle('hidden', !on); }
+
+  window.waShowCodeForm = function(){ waShow('wa-qr-box', false); waShow('wa-code-box', true); };
+  window.waShowQr = function(){
+    waShow('wa-code-box', false);
+    document.getElementById('wa-code-result').innerHTML = '';
+    if(waCodeTimer){ clearInterval(waCodeTimer); waCodeTimer = null; }
+    waShow('wa-qr-box', !!document.getElementById('wa-qr-img').src);
+  };
+
+  async function waLoadStatus(fillFields){
+    let d;
+    try{
+      const res = await fetch('/notifications/wa-status/', {credentials:'same-origin'});
+      if(res.status === 403){ waStopPolling(); waSetStatus(t('w_wa_no_access','Доступно только директору клиники.'), 'err'); return; }
+      d = await res.json();
+    }catch(e){ waSetStatus(t('w_wa_status_failed','Не удалось получить состояние.'), 'err'); return; }
+    if(!d || !d.ok) return;
+
+    if(fillFields){
+      document.getElementById('wa-id-instance').value = d.id_instance || '';
+      document.getElementById('wa-token').value = d.token || '';
+      document.getElementById('wa-phone').value = d.phone || '';
+      document.getElementById('wa-api-url').value = d.api_url || '';
+      document.getElementById('wa-enabled').checked = !!d.enabled;
+      if(!document.getElementById('wa-code-phone').value) document.getElementById('wa-code-phone').value = d.phone || '';
+    }
+
+    if(!d.has_keys){
+      waStopPolling();
+      waShow('wa-qr-box', false); waShow('wa-code-box', false);
+      waSetStatus(t('w_wa_need_keys','Заполните ID инстанса и токен, затем нажмите «Сохранить и подключить».'));
+      return;
+    }
+    // alreadyLogged приходит от метода QR, когда номер уже привязан.
+    if(d.state === 'authorized' || d.qr_type === 'alreadyLogged'){
+      waStopPolling();
+      waShow('wa-qr-box', false); waShow('wa-code-box', false);
+      waSetStatus('✅ ' + t('w_wa_connected_ok','Номер подключён. WhatsApp готов к работе.'), 'ok');
+      const hint = document.getElementById('setWaState');
+      if(hint) hint.textContent = t('w_wa_enabled','включён');
+      return;
+    }
+    if(!d.state){
+      waSetStatus(t('w_wa_no_link','Green-API не отвечает — проверьте ID инстанса, токен и доступ в интернет.'), 'err');
+      return;
+    }
+    if(d.qr_type === 'qrCode' && d.qr){
+      document.getElementById('wa-qr-img').src = 'data:image/png;base64,' + d.qr;
+      if(document.getElementById('wa-code-box').classList.contains('hidden')) waShow('wa-qr-box', true);
+      waSetStatus(t('w_wa_waiting_scan','Ожидаем сканирование. Код обновляется автоматически.'));
+    } else if(d.qr_type === 'passkeyRequired'){
+      waSetStatus(t('w_wa_passkey','WhatsApp требует подтверждение паролем на телефоне — подтвердите и попробуйте снова.'), 'err');
+    } else if(d.qr_type === 'timeout'){
+      waSetStatus(t('w_wa_qr_timeout','Код устарел, получаем новый…'));
+    } else if(d.state === 'starting'){
+      waSetStatus(t('w_wa_starting','Инстанс запускается, подождите…'));
+    }
+  }
+
+  window.waOpenConnect = async function(){
+    openModal('m-waConnect');
+    waSetStatus(t('w_loading','Загрузка…'));
+    await waLoadStatus(true);
+    waStopPolling();
+    // 3 секунды: QR меняется раз в ~20, чаще опрашивать незачем.
+    waPoll = setInterval(()=>waLoadStatus(false), 3000);
+  };
+
+  window.waCloseConnect = function(){ waStopPolling(); closeModal('m-waConnect'); };
+
+  window.waSaveKeys = async function(){
+    const fd = new FormData();
+    if(document.getElementById('wa-enabled').checked) fd.append('wa_enabled', 'on');
+    fd.append('wa_id_instance', document.getElementById('wa-id-instance').value.trim());
+    fd.append('wa_token', document.getElementById('wa-token').value.trim());
+    fd.append('wa_phone', document.getElementById('wa-phone').value.trim());
+    fd.append('wa_api_url', document.getElementById('wa-api-url').value.trim());
+    const res = await postForm('/notifications/wa-connect/', fd);
+    if(!res.redirected){ showToast(t('w_settings_save_failed'), 'error'); return; }
+    showToast(t('w_wa_keys_saved','Ключи сохранены'));
+    await waLoadStatus(false);
+    waStopPolling();
+    waPoll = setInterval(()=>waLoadStatus(false), 3000);
+  };
+
+  window.waRequestCode = async function(){
+    const btn = document.getElementById('wa-code-btn');
+    const out = document.getElementById('wa-code-result');
+    // Выдача кода занимает до 30 секунд — без явного ожидания окно выглядит зависшим.
+    btn.disabled = true;
+    out.innerHTML = '<div class="hint">' + t('w_wa_code_wait','Запрашиваем код, это может занять до 30 секунд…') + '</div>';
+    const fd = new FormData();
+    fd.append('phone', document.getElementById('wa-code-phone').value.trim());
+    let d = null;
+    try{
+      const res = await fetch('/notifications/wa-auth-code/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+      d = await res.json().catch(()=>null);
+    }catch(e){ d = null; }
+    btn.disabled = false;
+    if(!d || !d.ok){
+      const reasons = {
+        keys: t('w_wa_need_keys','Заполните ID инстанса и токен, затем нажмите «Сохранить и подключить».'),
+        phone: t('w_wa_bad_phone','Укажите номер телефона.'),
+        busy: t('w_wa_code_busy','Номер уже подключён либо Green-API не выдал код. Обновите окно.'),
+        forbidden: t('w_wa_no_access','Доступно только директору клиники.')
+      };
+      out.innerHTML = '<div style="font-size:12px;color:var(--coral);">' + (reasons[d && d.error] || t('w_wa_code_failed','Не удалось получить код.')) + '</div>';
+      return;
+    }
+    // Код действует около 2.5 минут — показываем обратный отсчёт, иначе
+    // пользователь будет вводить уже протухший код и не поймёт, почему не выходит.
+    let left = 150;
+    const render = ()=>{
+      const mm = String(Math.floor(left/60)), ss = String(left%60).padStart(2,'0');
+      out.innerHTML =
+        '<div style="font-size:26px;font-weight:700;letter-spacing:3px;font-family:\'JetBrains Mono\',monospace;">' + d.code + '</div>' +
+        '<div class="hint" style="margin-top:6px;">' + t('w_wa_code_hint','На телефоне: WhatsApp → Связанные устройства → Привязка устройства → «Связать по номеру телефона».') + '</div>' +
+        (left > 0
+          ? '<div class="hint" style="margin-top:6px;">' + t('w_wa_code_left','Код действует ещё') + ' ' + mm + ':' + ss + '</div>'
+          : '<div style="font-size:12px;color:var(--coral);margin-top:6px;">' + t('w_wa_code_expired','Код истёк — получите новый.') + '</div>');
+    };
+    render();
+    if(waCodeTimer) clearInterval(waCodeTimer);
+    waCodeTimer = setInterval(()=>{ left--; render(); if(left <= 0){ clearInterval(waCodeTimer); waCodeTimer = null; } }, 1000);
+  };
+
   window.saveSettingsWa = async function(){
     const fd = new FormData();
     if(document.getElementById('set-remind-day').checked) fd.append('wa_remind_day', 'on');
