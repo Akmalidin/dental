@@ -75,17 +75,26 @@ def normalize_phone(phone):
     return d[-9:] if len(d) >= 9 else d
 
 
-def find_patient_by_phone(phone):
+def find_patient_by_phone(phone, id_instance=None):
     """Карточка пациента по номеру в ЛЮБОМ написании.
 
     Ищем по phone_norm — индексированному полю с последними 9 цифрами, которое
-    заполняется в Patient.save(). Раньше входящие искали подстрокой по сырому
-    phone: «+996 553 552 595» не содержит подстроки «553552595», поэтому
-    сообщение оставалось без карточки. А чат строится по пациентам — такие
-    сообщения не показывались нигде, хотя в базе лежали.
+    заполняется в Patient.save(). Подстрокой по сырому phone искать нельзя:
+    «+996 553 552 595» не содержит подстроки «553552595», и сообщение
+    оставалось без карточки, а значит не показывалось в чате вовсе.
 
-    Если карточек с одним номером несколько (дубли), берём ту, где уже есть
-    переписка, иначе диалог рвётся между дублями.
+    Один номер часто заведён в НЕСКОЛЬКИХ клиниках (на проде 996553565674 есть
+    сразу в трёх). Инстанс WhatsApp общий, и в уведомлении провайдера нет
+    указания, чья это клиника, поэтому выбираем так:
+
+    1. id_instance — если клиника подключила СВОЙ инстанс, это точное
+       соответствие, и гадать не нужно;
+    2. иначе — клиника, которая недавно сама писала на этот номер: переписку
+       ведёт та клиника, что с пациентом и общается;
+    3. иначе — карточка с уже имеющейся перепиской, затем самая новая.
+
+    Без пункта 2 входящие пациента SADAF складывались в клинику AKM только
+    потому, что там оказался тёзка-дубль с тем же номером.
     """
     norm = normalize_phone(phone)
     if not norm:
@@ -94,17 +103,43 @@ def find_patient_by_phone(phone):
                 .order_by("-id")[:20])
     if not cand:
         return None
-    if len(cand) > 1:
+    if len(cand) == 1:
+        return cand[0]
+
+    by_clinic = {}
+    for c in cand:
+        by_clinic.setdefault(c.clinic_id, c)
+
+    # 1. Свой инстанс клиники — однозначное соответствие.
+    if id_instance:
         try:
-            from apps.notifications.models import WaMessage
-            ids = [c.pk for c in cand]
-            with_msgs = set(WaMessage.all_clinics.filter(patient_id__in=ids)
-                            .values_list("patient_id", flat=True))
-            for c in cand:
-                if c.pk in with_msgs:
-                    return c
+            from apps.settings_clinic.models import ClinicSettings
+            owner = (ClinicSettings.all_clinics
+                     .filter(wa_id_instance=str(id_instance).strip())
+                     .values_list("clinic_id", flat=True).first())
+            if owner and owner in by_clinic:
+                return by_clinic[owner]
         except Exception:  # noqa: BLE001
             pass
+
+    try:
+        from apps.notifications.models import WaMessage
+        # 2. Кто недавно писал на этот номер — тот и ведёт переписку.
+        out = (WaMessage.all_clinics.filter(phone__contains=norm, direction="out")
+               .exclude(clinic=None).order_by("-created_at")
+               .values_list("clinic_id", flat=True).first())
+        if out and out in by_clinic:
+            return by_clinic[out]
+
+        # 3. Карточка, где переписка уже есть.
+        ids = [c.pk for c in cand]
+        with_msgs = set(WaMessage.all_clinics.filter(patient_id__in=ids)
+                        .values_list("patient_id", flat=True))
+        for c in cand:
+            if c.pk in with_msgs:
+                return c
+    except Exception:  # noqa: BLE001
+        pass
     return cand[0]
 
 

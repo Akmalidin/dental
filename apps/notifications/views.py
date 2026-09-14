@@ -253,7 +253,7 @@ def message_template_delete(request, pk):
     return redirect("message_templates")
 
 
-def _log_incoming_event(phone, text, channel="wa"):
+def _log_incoming_event(phone, text, channel="wa", id_instance=None):
     """Записать входящее событие без содержимого (например, звонок).
 
     Пациент ищется по последним 9 цифрам — так же, как для сообщений.
@@ -262,7 +262,7 @@ def _log_incoming_event(phone, text, channel="wa"):
     from apps.patients.models import find_patient_by_phone
     from apps.tenancy import unscoped
     with unscoped():
-        patient = find_patient_by_phone(phone)
+        patient = find_patient_by_phone(phone, id_instance=id_instance)
         m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
                       channel=channel, read=False)
         if patient is not None:
@@ -292,6 +292,10 @@ def wa_webhook(request):
     # пометкой в адресе вебхука (?ch=tg) — так не пришлось дублировать весь
     # разбор сообщений и рисковать расхождением двух копий.
     channel = "tg" if request.GET.get("ch") == "tg" else "wa"
+    # Инстанс, на который пришло уведомление. Если клиника подключила свой —
+    # это точное указание, чья переписка. Общий инстанс такого не даёт, и
+    # тогда клиника определяется по недавним исходящим на этот номер.
+    inst = str((data.get("instanceData") or {}).get("idInstance") or "").strip()
     # Входящий звонок. Этот тип уведомления раньше молча игнорировался:
     # пациент звонил в WhatsApp клиники, и в его карточке не оставалось ничего.
     # Требует включённого incomingCallWebhook на инстансе (SetSettings).
@@ -308,7 +312,8 @@ def wa_webhook(request):
         if status in CALL_LABEL:
             try:
                 _log_incoming_event(str(data.get("from") or "").split("@")[0],
-                                    CALL_LABEL[status], channel=channel)
+                                    CALL_LABEL[status], channel=channel,
+                                    id_instance=inst)
             except Exception as exc:  # noqa: BLE001
                 # Не роняем ответ вебхуку, но и не глотаем молча: без записи в
                 # лог сбой здесь выглядел бы как «звонки не приходят».
@@ -378,7 +383,7 @@ def wa_webhook(request):
                         # Поиск по phone_norm, а не подстрокой: номера в
                         # карточках записаны с пробелами и скобками.
                         from apps.patients.models import find_patient_by_phone
-                        p = find_patient_by_phone(sp)
+                        p = find_patient_by_phone(sp, id_instance=inst)
                         cl = p.clinic if p else None
                     if cl is None:
                         from apps.users.models import Clinic
@@ -404,7 +409,7 @@ def wa_webhook(request):
                 # в карточках записаны по-разному, и «+996 553 552 595» не
                 # содержит подстроки «553552595» — сообщение оставалось без
                 # карточки и не показывалось в чате вовсе.
-                patient = find_patient_by_phone(phone)
+                patient = find_patient_by_phone(phone, id_instance=inst)
                 m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
                               media_type=media_type, channel=channel, read=False)
                 if patient is not None:
