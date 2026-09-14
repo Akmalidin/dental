@@ -254,6 +254,27 @@ def message_template_delete(request, pk):
 
 
 @csrf_exempt
+def _log_incoming_event(phone, text):
+    """Записать входящее событие без содержимого (например, звонок).
+
+    Пациент ищется по последним 9 цифрам — так же, как для сообщений.
+    """
+    import re
+    from apps.notifications.models import WaMessage
+    from apps.patients.models import Patient
+    from apps.tenancy import unscoped
+    digits = re.sub(r"\D", "", phone or "")
+    tail = digits[-9:] if len(digits) >= 9 else digits
+    with unscoped():
+        patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
+                   .order_by("-id").first() if tail else None)
+        m = WaMessage(patient=patient, direction="in", phone=phone, body=text, read=False)
+        if patient is not None:
+            m.clinic = patient.clinic
+        m.save()
+    return patient
+
+
 def wa_webhook(request):
     """Webhook Green-API: входящие WhatsApp-сообщения → WaMessage(direction=in)."""
     from django.conf import settings as dj
@@ -266,6 +287,26 @@ def wa_webhook(request):
         data = json.loads(request.body or b"{}")
     except Exception:
         return HttpResponse("bad", status=400)
+    # Входящий звонок. Этот тип уведомления раньше молча игнорировался:
+    # пациент звонил в WhatsApp клиники, и в его карточке не оставалось ничего.
+    # Требует включённого incomingCallWebhook на инстансе (SetSettings).
+    if data.get("typeWebhook") == "incomingCall":
+        CALL_LABEL = {
+            "pickUp": "📞 Входящий звонок — принят",
+            "hungUp": "📞 Входящий звонок — сброшен",
+            "missed": "📞 Пропущенный звонок",
+            "declined": "📞 Входящий звонок — отклонён",
+        }
+        status = (data.get("status") or "").strip()
+        # 'offer' — начало звонка, следом по тому же звонку приходит итоговый
+        # статус. Пишем только итоговый, иначе на один звонок будет две записи.
+        if status in CALL_LABEL:
+            try:
+                _log_incoming_event(str(data.get("from") or "").split("@")[0],
+                                    CALL_LABEL[status])
+            except Exception:  # noqa: BLE001
+                pass
+        return JsonResponse({"ok": True})
     if data.get("typeWebhook") == "incomingMessageReceived":
         md = data.get("messageData", {}) or {}
         tm = md.get("typeMessage")
@@ -278,18 +319,37 @@ def wa_webhook(request):
         media_file, media_type, snippet_media = None, "", ""
         MEDIA_TYPE_MAP = {"audioMessage": "audio", "imageMessage": "image",
                           "videoMessage": "video", "documentMessage": "document"}
+        MEDIA_LABEL = {"voice": "🎤 Голосовое сообщение", "audio": "🎵 Аудио", "image": "🖼 Фото",
+                       "video": "🎬 Видео", "document": "📎 Документ"}
+        # Типы, которые мы не разбираем детально. Без подписи такое сообщение
+        # сохранялось с ПУСТЫМ телом и выглядело в чате как ничего — приходило,
+        # но администратор его не видел.
+        OTHER_LABEL = {
+            "stickerMessage": "🩹 Стикер",
+            "locationMessage": "📍 Геолокация",
+            "contactMessage": "👤 Контакт",
+            "contactsArrayMessage": "👥 Контакты",
+            "pollMessage": "📊 Опрос",
+            "reactionMessage": "👍 Реакция на сообщение",
+        }
         if tm in MEDIA_TYPE_MAP:
             fmd = md.get("fileMessageData") or {}
             text = fmd.get("caption") or ""
             is_voice = tm == "audioMessage" and "ogg" in (fmd.get("mimeType") or "").lower()
+            media_type = "voice" if is_voice else MEDIA_TYPE_MAP[tm]
+            snippet_media = MEDIA_LABEL[media_type]
             from .whatsapp import wa_download_media
             data_bytes, fname = wa_download_media(fmd.get("downloadUrl"))
             if data_bytes:
                 from django.core.files.base import ContentFile
                 media_file = ContentFile(data_bytes, name=fname or "file")
-                media_type = "voice" if is_voice else MEDIA_TYPE_MAP[tm]
-                snippet_media = {"voice": "🎤 Голосовое сообщение", "audio": "🎵 Аудио", "image": "🖼 Фото",
-                                 "video": "🎬 Видео", "document": "📎 Документ"}[media_type]
+            elif not text:
+                # Файл не скачался (ссылка Green-API живёт ограниченное время).
+                # Раньше в этом случае media_type тоже не проставлялся, и в чат
+                # падал пустой пузырь — теперь хотя бы видно, что прислали.
+                text = snippet_media + " — файл не удалось загрузить"
+        elif tm and not text:
+            text = OTHER_LABEL.get(tm, "Сообщение типа «%s» — показать не умеем" % tm)
         sender = data.get("senderData") or {}
         chat_id = sender.get("chatId", "") or ""
         # Группа: автоматически регистрируем (для выбора Директором), уведомления по умолчанию выкл.
@@ -373,6 +433,12 @@ def wa_webhook(request):
 
 
 def _wa_staff_ok(user):
+    """Кому доступны настройки и подключение WhatsApp.
+
+    Токен инстанса — учётные данные клиники, а «Настройки» в новом интерфейсе
+    видны в том числе врачам, поэтому проверка нужна на сервере, а не только
+    в вёрстке.
+    """
     return user.is_superadmin or user.is_admin
 
 
@@ -570,16 +636,6 @@ def wa_connect(request):
         "qr_type": qr_type,
         "qr_b64": qr_msg if qr_type == "qrCode" else "",
     })
-
-
-def _wa_staff_ok(user):
-    """Кому доступно подключение WhatsApp.
-
-    Токен инстанса — учётные данные клиники, а «Настройки» в новом интерфейсе
-    видны в том числе врачам. Прятать блок в вёрстке недостаточно, поэтому
-    проверка стоит на сервере.
-    """
-    return bool(getattr(user, "is_superadmin", False) or getattr(user, "is_admin", False))
 
 
 @login_required
