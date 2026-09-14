@@ -1,0 +1,718 @@
+
+:root{
+  --ink:#14171F;
+  --ink-soft:#5B6472;
+  --ink-faint:#8B93A3;
+  --cobalt:#2C4BEA;
+  --cobalt-dark:#1E37B8;
+  --cobalt-tint:#EAEDFC;
+  --coral:#E85D2D;
+  --coral-tint:#FCE9E0;
+  --teal:#0E9C7D;
+  --teal-tint:#E4F7F1;
+  --amber:#B8862E;
+  --amber-tint:#FBF1E0;
+  --cloud:#F2F4F9;
+  --paper:#FFFFFF;
+  --mist:#E4E8F0;
+  --mist-line:#EDF0F6;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(20,23,31,.05),0 10px 24px -12px rgba(20,23,31,.14);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:'Inter',sans-serif;background:var(--cloud);color:var(--ink);-webkit-font-smoothing:antialiased;}
+h1,h2,h3,.disp{font-family:'Space Grotesk',sans-serif;}
+.mono{font-family:'JetBrains Mono',monospace;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+input,select,textarea{font-family:inherit;font-size:13.5px;}
+::selection{background:var(--cobalt-tint);color:var(--cobalt-dark);}
+
+/* pulse signature element */
+.pulse-line{width:100%;height:34px;}
+.pulse-line path{fill:none;stroke:var(--coral);stroke-width:2;stroke-linecap:round;}
+.dot-live{width:7px;height:7px;border-radius:50%;background:var(--teal);display:inline-block;box-shadow:0 0 0 3px var(--teal-tint);}
+
+/* ===== APP SHELL ===== */
+.app-shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
+/* min-height:0 — без него грид-ячейка по умолчанию min-height:auto, т.е. не
+   сжимается меньше своего содержимого: длинный список разделов в сайдбаре
+   (много пунктов меню) растягивал саму ячейку и весь .app-shell выше 100vh,
+   несмотря на явный height:100vh на контейнере (grid его не обрезает без
+   min-height:0 на ребёнке) — итог: у страницы появлялся ВТОРОЙ, внешний
+   скролл документа поверх уже собственного скролла .main (жалоба «нужно
+   убрать один из этих скролов», два скроллбара рядом на скриншоте с
+   Windows — там скроллбары всегда видимы, в отличие от оверлейных на Mac/
+   мобильных, где эта же проблема была, просто незаметна). overflow-y:auto —
+   сам сайдбар получает свой скролл, если пунктов меню больше, чем помещается
+   по высоте, вместо распирания всей страницы. Мобильный .sidebar (media
+   query ниже, position:fixed) не задет — там сайдбар уже не часть грида. */
+.sidebar{background:var(--ink);color:#fff;padding:20px 14px;display:flex;flex-direction:column;min-height:0;overflow-y:auto;}
+/* Кнопка-гамбургер и подложка для мобильного меню — скрыты по умолчанию,
+   показываются только ниже брейкпоинта (см. @media(max-width:900px) ниже).
+   Кнопка зафиксирована в углу экрана независимо от разметки topbar конкретной
+   страницы (topbar у каждой страницы своя, в блоке "content") — так не
+   нужно трогать разметку ни одного из ~20 шаблонов страниц. */
+.hamburger-btn{display:none;position:fixed;top:14px;left:14px;z-index:101;width:38px;height:38px;border-radius:9px;background:var(--ink);color:#fff;border:none;font-size:18px;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);cursor:pointer;}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.45);z-index:90;}
+.sidebar-backdrop.open{display:block;}
+.sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
+.sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
+.sidebar-clinic{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:12px;color:#B7BECB;display:flex;justify-content:space-between;align-items:center;}
+.sidebar-branch-switcher{margin:-12px 0 18px;}
+.sidebar-branch-switcher select{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px;font-size:12px;color:#B7BECB;cursor:pointer;}
+.sidebar-branch-switcher select:focus{outline:none;border-color:var(--coral);}
+.nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6E7686;padding:14px 10px 6px;font-weight:600;}
+.nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;border-radius:8px;font-size:13.5px;color:#C4CAD6;margin-bottom:2px;width:100%;text-align:left;transition:.12s;}
+.nav-item svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
+.nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+.nav-item.active{background:#fff;color:var(--ink);}
+.nav-item.active svg{opacity:1;}
+.nav-item.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--coral);border-radius:3px;}
+.nav-badge{margin-left:auto;background:var(--coral);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;font-family:'JetBrains Mono',monospace;}
+.sidebar-user{margin-top:auto;display:flex;align-items:center;gap:9px;padding:12px 10px 4px;border-top:1px solid rgba(255,255,255,.08);}
+.avatar{width:32px;height:32px;border-radius:9px;background:var(--cobalt);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px;flex-shrink:0;}
+.sidebar-user b{display:block;font-size:12.5px;}
+.sidebar-user span{font-size:11px;color:#8890A0;}
+
+.main{overflow-y:auto;height:100vh;}
+.topbar{position:sticky;top:0;background:var(--cloud);border-bottom:1px solid var(--mist);padding:16px 28px;display:flex;justify-content:space-between;align-items:center;z-index:5;}
+.topbar h1{font-size:19px;font-weight:600;}
+.topbar-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.topbar-right{display:flex;align-items:center;gap:12px;}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--mist);border-radius:9px;padding:9px 13px;font-size:13px;color:var(--ink-faint);width:250px;}
+.icon-btn{width:34px;height:34px;border-radius:9px;background:var(--paper);border:1px solid var(--mist);display:flex;align-items:center;justify-content:center;position:relative;font-size:14px;}
+/* Колокольчик уведомлений — в шапке (navbar) каждой страницы /new/*, а не
+   пункт в сайдбаре (запрос пользователя: «уведомление сделай на navbar а не
+   на sidebar»). Один и тот же .icon-btn, что и у остальных иконок в topbar
+   (например ⚙ настроек расписания) — вставляется в начало .topbar-right
+   через JS (см. initNavNotifBell), т.к. разметка topbar своя у каждого
+   шаблона страницы, а не общая. */
+.navbar-notif-bell{cursor:pointer;}
+.navbar-notif-bell .nav-badge{position:absolute;top:-5px;right:-5px;margin-left:0;min-width:16px;text-align:center;line-height:1.4;}
+#schedDateLabel{font-size:16px;font-weight:700;color:var(--ink);min-width:100px;display:inline-block;text-align:center;}
+@keyframes schedDatePulse{0%{opacity:0;transform:translateY(-4px);}100%{opacity:1;transform:translateY(0);}}
+#schedDateLabel.sched-date-anim{animation:schedDatePulse .25s ease-out;}
+/* Плавная смена дня (скроллом до края или стрелками ‹ ›): текущая сетка
+   «уезжает» в сторону, в которую и так крутили/жали стрелку, а новый день
+   «въезжает» с противоположной стороны — ощущение непрерывного движения
+   дальше по календарю, а не мгновенной подмены/«обновления» содержимого. */
+#scheduleContent{transition:transform .2s cubic-bezier(.32,.72,.35,1);transform:translateX(var(--sched-slide,0));}
+#scheduleContent.sched-day-notransition{transition:none !important;}
+.icon-btn .badge-dot{position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--coral);}
+.page{padding:24px 28px 64px;}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:9px;font-size:13.5px;font-weight:600;transition:.12s;}
+.btn-primary{background:var(--ink);color:#fff;}
+.btn-primary:hover{background:#000;}
+.btn-cobalt{background:var(--cobalt);color:#fff;}
+.btn-cobalt:hover{background:var(--cobalt-dark);}
+.btn-ghost{background:var(--paper);color:var(--ink);border:1px solid var(--mist);}
+.btn-ghost:hover{background:var(--cloud);}
+.btn-danger{background:var(--coral-tint);color:var(--coral);}
+.btn-sm{padding:7px 12px;font-size:12.5px;}
+
+/* cards */
+.card{background:var(--paper);border:1px solid var(--mist);border-radius:var(--radius);box-shadow:var(--shadow);}
+.card-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--mist-line);}
+.card-head h3{font-size:14.5px;font-weight:600;}
+.card-body{padding:16px 18px;}
+/* Таблица часто лежит прямо в .card (без обёртки .card-body) — на узких
+   экранах это раньше просто раздвигало всю страницу вбок. Скроллим саму
+   карточку по горизонтали, если её прямой потомок — table (не задевает
+   карточки без таблиц). */
+.card:has(> table){overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.link-btn{font-size:12.5px;color:var(--cobalt);font-weight:600;}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+.kpi{padding:18px;border-left:3px solid transparent;}
+.kpi.b-cobalt{border-left-color:var(--cobalt);}
+.kpi.b-teal{border-left-color:var(--teal);}
+.kpi.b-amber{border-left-color:var(--amber);}
+.kpi.b-coral{border-left-color:var(--coral);}
+.kpi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.kpi-top span{font-size:11px;color:var(--ink-soft);}
+.kpi-delta{font-size:11px;font-weight:600;padding:2px 7px;border-radius:100px;}
+.kpi-delta.up{background:var(--teal-tint);color:var(--teal);}
+.kpi-delta.down{background:var(--coral-tint);color:var(--coral);}
+.kpi b{display:block;font-family:'JetBrains Mono',monospace;font-size:23px;}
+.kpi span.lbl{font-size:12px;color:var(--ink-soft);}
+.kpi.kpi-click{cursor:pointer;transition:box-shadow .12s,transform .12s;}
+.kpi.kpi-click:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.kpi.kpi-active{box-shadow:inset 0 0 0 2px var(--cobalt);}
+
+.grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:14px;}
+.bars{display:flex;align-items:flex-end;gap:9px;height:140px;padding-top:8px;}
+.bars .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end;}
+.bars .bar{width:100%;border-radius:4px 4px 0 0;background:var(--cobalt);}
+.bars .bar.light{background:var(--cobalt-tint);}
+.bars .lbl{font-size:10px;color:var(--ink-soft);}
+
+.row{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--mist-line);}
+.row:last-child{border-bottom:none;}
+.row-avatar{width:30px;height:30px;border-radius:8px;background:var(--mist);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;}
+.row-main{flex:1;min-width:0;}
+.row-main b{display:block;font-size:13px;}
+.row-main span{font-size:11.5px;color:var(--ink-soft);}
+.pill{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap;}
+.pill.cobalt{background:var(--cobalt-tint);color:var(--cobalt-dark);}
+.pill.teal{background:var(--teal-tint);color:var(--teal);}
+.pill.amber{background:var(--amber-tint);color:var(--amber);}
+.pill.coral{background:var(--coral-tint);color:var(--coral);}
+.pill.grey{background:var(--mist);color:var(--ink-soft);}
+
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--mist);}
+td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--mist-line);}
+tr:last-child td{border-bottom:none;}
+tr.clickable:hover{background:var(--cloud);cursor:pointer;}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+.toolbar-left{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{padding:7px 13px;border-radius:8px;font-size:12.5px;border:1px solid var(--mist);background:var(--paper);color:var(--ink-soft);font-weight:500;}
+.chip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+/* ===== CRM FUNNEL (kanban) ===== */
+.funnel{display:grid;grid-template-columns:repeat(8,1fr);gap:12px;}
+.funnel-col{background:var(--paper);border:1px solid var(--mist);border-radius:var(--radius);min-height:60vh;}
+.funnel-head{padding:12px 12px 10px;border-bottom:1px solid var(--mist-line);}
+.funnel-head b{font-size:11.5px;display:block;}
+.funnel-head span{font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;}
+.funnel-body{padding:10px;}
+.lead-card{background:var(--cloud);border-radius:9px;padding:10px;margin-bottom:8px;cursor:grab;border:1px solid transparent;user-select:none;}
+.lead-card.dragging-card{cursor:grabbing;box-shadow:0 14px 28px -10px rgba(20,23,31,.35);opacity:.92;}
+.funnel-col.drop-target{background:var(--cobalt-tint);box-shadow:inset 0 0 0 2px var(--cobalt);}
+.lead-card:hover{border-color:var(--mist);}
+.lead-card b{display:block;font-size:12.5px;margin-bottom:3px;}
+.lead-card span{font-size:11px;color:var(--ink-soft);display:block;}
+.lead-src{display:inline-block;margin-top:6px;font-size:10px;padding:2px 6px;border-radius:5px;background:var(--paper);color:var(--ink-faint);}
+
+/* ===== PATIENT CARD ===== */
+.patient-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;}
+.patient-id{display:flex;align-items:center;gap:14px;}
+.patient-avatar{width:52px;height:52px;border-radius:14px;background:var(--cobalt);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;font-family:'Space Grotesk',sans-serif;}
+.patient-id h2{font-size:20px;font-weight:600;}
+.patient-id span{font-size:12px;color:var(--ink-soft);}
+.tab-strip{display:flex;gap:0;border-bottom:1px solid var(--mist);margin-bottom:18px;}
+.tab-strip button{padding:10px 0;font-size:13px;color:var(--ink-soft);border-bottom:2px solid transparent;margin-right:22px;font-weight:500;}
+.tab-strip button.active{color:var(--ink);border-color:var(--coral);font-weight:600;}
+
+/* overflow-x:auto — на узких экранах зубная карта скроллится по горизонтали
+   (тот же паттерн, что и у .sched-wrap), а не сжимает 16 зубов до нечитаемого
+   размера; min-width на .odonto-jaws задаёт минимальную ширину строки. */
+.odontogram-lg{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.odonto-jaws{position:relative;display:flex;flex-direction:column;gap:22px;min-width:480px;}
+.odonto-jaws::before{content:'';position:absolute;top:0;bottom:0;left:50%;border-left:1px dashed rgba(0,0,0,0.12);pointer-events:none;}
+.odonto-row{display:grid;grid-template-columns:repeat(16,minmax(28px,1fr));gap:4px;}
+.tooth-cell-outline{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:8px;cursor:pointer;position:relative;transition:transform .12s ease, background .12s ease;transform-origin:center;}
+.tooth-cell-outline:hover{background:#E23F63;transform:scale(1.15);z-index:5;box-shadow:0 8px 20px -8px rgba(226,63,99,.45);}
+.tooth-cell-outline:hover .tooth-num-cell{color:#fff;}
+.tooth-cell-outline:has(.tooth-outline-icon.real:hover){background:var(--paper);box-shadow:0 8px 20px -8px rgba(20,23,31,.22);}
+.tooth-cell-outline:has(.tooth-outline-icon.real:hover) .tooth-num-cell{color:var(--amber);}
+.tooth-cell-outline:has(.tooth-chart-icon path:hover){background:var(--paper);box-shadow:0 8px 20px -8px rgba(20,23,31,.22);}
+.tooth-cell-outline:has(.tooth-chart-icon path:hover) .tooth-num-cell{color:var(--amber);}
+.tooth-cell-outline:has(.tooth-outline-icon.real:hover) .tooth-outline-icon.real path{fill:#B9BFC9 !important;stroke:#A5ABB6 !important;}
+.tooth-cell-outline:has(.tooth-outline-icon.real:hover) .tooth-outline-icon.real rect{fill:transparent !important;}
+.tooth-select-abs{height:13px;}
+.tooth-select-abs input{width:12px;height:12px;margin:0;cursor:pointer;}
+.tooth-num-cell{text-align:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--amber);font-weight:600;cursor:pointer;}
+.tooth-outline-icon{width:100%;max-width:42px;display:block;}
+.tooth-outline-icon.real{max-width:42px;}
+.tooth-outline-icon.flip{transform:scaleY(-1);}
+.tooth-chart-icon{width:28px;height:28px;display:block;}
+.tooth-chart-icon path{cursor:pointer;}
+.tooth-chart-icon path:hover{fill:#B9BFC9 !important;stroke:#A5ABB6 !important;}
+.tooth-gum-dot{width:9px;height:9px;border-radius:50%;cursor:pointer;margin-top:1px;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08);}
+.tooth-gum-dot:hover{transform:scale(1.3);}
+.ms-group-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding:14px 2px 6px;}
+.ms-group-label:first-child{padding-top:0;}
+.ms-item{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--mist-line);}
+.ms-item svg{width:16px;height:16px;color:var(--ink-soft);flex-shrink:0;}
+.ms-item .ms-drag-handle{flex-shrink:0;}
+.ms-item .ms-item-label{font-size:13px;flex:1;min-width:0;overflow-wrap:break-word;}
+.ms-item .toggle{flex-shrink:0;}
+.ms-item.dragging{opacity:.4;}
+.ms-item-hidden{opacity:.45;}
+.ms-item-hidden .ms-item-label{text-decoration:line-through;}
+/* Панель «Врачи» на расписании — тот же формат строки-чекбокса, что и .ms-item */
+.sdf-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--mist-line);}
+.sdf-item:last-child{border-bottom:none;}
+.sdf-item-label{font-size:13px;flex:1;min-width:0;overflow-wrap:break-word;}
+.sdf-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid var(--mist-line);}
+.sdf-swatch-empty{background:var(--mist);}
+.sdf-item-hidden{opacity:.45;}
+.sdf-item-hidden .sdf-item-label{text-decoration:line-through;}
+.sdf-drag-handle{flex-shrink:0;cursor:grab;color:var(--ink-faint);font-size:14px;line-height:1;user-select:none;}
+.sdf-item:active .sdf-drag-handle{cursor:grabbing;}
+/* Индикатор места вставки при перетаскивании строки врача — верхняя граница
+   ячейки-цели, куда попадёт перетаскиваемый врач при отпускании. */
+.sdf-drop-target{border-top:2px solid var(--cobalt);}
+.ms-home-btn{flex-shrink:0;cursor:pointer;opacity:.25;filter:grayscale(1);font-size:14px;}
+.ms-home-btn:hover{opacity:.7;}
+.ms-home-btn.ms-home-active{opacity:1;filter:none;}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--ink-soft);flex-wrap:wrap;}
+.legend span{display:flex;align-items:center;gap:6px;}
+.legend i{width:8px;height:8px;border-radius:3px;display:inline-block;}
+
+/* ===== DOCTOR SCHEDULE (columns = doctors) ===== */
+.sched-wrap{border:1px solid var(--mist);border-radius:var(--radius);overflow-x:auto;overflow-y:hidden;background:var(--paper);}
+/* Только у месячного вида нужен ещё и вертикальный скролл — 5-6 строк по
+   88px+ на невысоком экране телефона легко превышают viewport, а в дне/неделе
+   overflow-y:hidden специально не мешает sticky-шапке времени. */
+.sched-wrap.sched-wrap-month{overflow-y:auto;max-height:76vh;}
+.sched-grid{display:grid;grid-template-columns:60px repeat(5,1fr);min-width:max-content;position:relative;}
+/* Красная линия «сейчас» (только дневной вид — у недели/месяца нет часовой
+   сетки, см. positionScheduleNowLine) — position:absolute внутри
+   .sched-grid (её нужный position:relative уже выше), а не grid-row/-column:
+   реальное время редко попадает точно на границу слота. Ставится и
+   пересчитывается в JS (positionScheduleNowLine), CSS только рисует. */
+.sched-now-line{position:absolute;height:0;border-top:2px solid var(--coral);z-index:6;pointer-events:none;}
+.sched-now-line::before{content:'';position:absolute;left:-5px;top:-5px;width:9px;height:9px;border-radius:50%;background:var(--coral);}
+/* «Плавающая» копия шапки (подписи дат + врачи, только дневной вид) —
+   position:fixed поверх страницы при прокрутке вниз, см. JS
+   syncFixedScheduleHeader/renderFixedScheduleHeaderContent. Не сам элемент
+   #schedGrid через position:sticky — внутри .sched-wrap с overflow-x:auto
+   (горизонтальная лента дней) sticky по вертикали физически не может
+   «прилипнуть» к скроллу .main: overflow-x создаёт свой контекст скролла,
+   который перехватывает stickiness раньше, чем она дошла бы до страницы.
+   overflow:hidden обрезает копию по видимой ширине ленты — сама колонка
+   внутри (.sched-fixed-header-inner) шире и сдвигается влево/вправо через
+   translateX синхронно с scrollLeft настоящей ленты (см. JS). */
+.sched-fixed-header{position:fixed;overflow:hidden;z-index:20;background:var(--paper);border-bottom:1px solid var(--mist);box-shadow:0 3px 10px rgba(0,0,0,.08);display:none;}
+.sched-fixed-header.show{display:block;}
+.sched-fixed-header-inner{display:grid;grid-template-rows:auto auto;}
+.sched-head{padding:12px 10px;border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);text-align:center;min-width:150px;}
+.sched-head:first-child{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
+/* Лента дней (дневной вид): подпись-дата над каждой группой врачей одного
+   дня, и угловая ячейка колонки времени — теперь их ДВЕ (над строкой дат и
+   над строкой врачей), :first-child уже не покрывает вторую. */
+.sched-day-group-label{text-align:left;font-size:12.5px;font-weight:700;color:var(--ink);background:var(--cloud);border-bottom:1px solid var(--mist);border-left:1px solid var(--mist-line);}
+.sched-day-group-label:first-of-type{border-left:none;}
+/* Подпись даты «прилипает» к видимой части своей группы колонок при
+   горизонтальном скролле (но не вылезает за её границы — не пересекается с
+   соседним днём) — чтобы всегда было видно, какой это день, а не только
+   когда доскроллил ровно до центра его группы. */
+.sched-day-group-label span{position:sticky;left:66px;right:6px;display:inline-block;padding:8px 4px;border-radius:6px;transition:background-color .15s,color .15s;}
+/* День, сейчас находящийся в фокусе прокрутки ленты (см. updateVisibleDayLabelFromScroll) —
+   единственная подсветка на всю ленту одновременно, чтобы всегда было
+   однозначно видно, какой день сейчас смотрит пользователь. */
+.sched-day-group-label.sched-day-group-current{background:var(--cobalt-tint);}
+.sched-day-group-label.sched-day-group-current span{background:var(--cobalt);color:#fff;}
+.sched-head-corner{border-left:none;background:var(--cloud);position:sticky;left:0;z-index:3;min-width:60px;}
+/* Цвет врача (выбирается в карточке сотрудника) — теперь сплошная плашка на
+   всю шапку колонки (как просили: «цвета для сотрудников — выше»), а не
+   тонкая полоска сверху. Текст/аватар красятся инлайн через contrastTextColor
+   (см. buildDayRibbonHTML) под конкретный фон, статикой в CSS это не выразить. */
+.sched-doc{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.sched-doc .av{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.sched-doc b{font-size:11px;}
+.sched-doc span{font-size:10.5px;}
+/* Ячейки крупнее (56px→76px) — имя и время записи должны читаться сразу,
+   без прищуривания. */
+.sched-time{padding:0 8px;font-size:10.5px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;text-align:right;border-top:1px solid var(--mist-line);display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px;height:76px;position:sticky;left:0;background:var(--paper);z-index:2;min-width:60px;}
+/* height НЕ фиксируем — ячейка приёма теперь может занимать несколько строк
+   сетки (grid-row: span N, по длительности приёма) и должна растянуться на
+   всю высоту своей области; для обычных (1 строка) ячеек высота и так равна
+   76px за счёт grid-template-rows на самой сетке. */
+.sched-cell{border-left:1px solid var(--mist-line);border-top:1px solid var(--mist-line);padding:3px;position:relative;background:var(--doc-tint,transparent);}
+.sched-cell-empty{cursor:pointer;}
+.sched-cell-empty:hover{background:var(--cobalt-tint);}
+.sched-cell-empty:hover::after{content:'+ Записать';position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--cobalt-dark);font-weight:600;pointer-events:none;}
+.sched-cell.drop-target{background:var(--cobalt-tint);}
+.sched-cell-leftover{position:absolute;left:0;right:0;bottom:0;cursor:pointer;border-radius:0 0 6px 6px;}
+.sched-cell-leftover:hover{background:var(--cobalt-tint);}
+.sched-cell-leftover:hover::after{content:'+ Записать на ' attr(data-time);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1.1;color:var(--cobalt-dark);font-weight:600;pointer-events:none;text-align:center;padding:0 2px;overflow:hidden;}
+.sched-cell-leftover.drop-target{background:var(--cobalt-tint);}
+.sched-appt{background:var(--cobalt-tint);border-left:3px solid var(--cobalt);border-radius:8px;padding:6px 8px 6px 30px;font-size:11px;height:100%;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
+/* Имя пациента и время приёма — главное, что должно бросаться в глаза на
+   карточке (жалоба: «имена, время записи должны явно выделяться»). */
+.sched-appt-name{display:block;color:var(--cobalt-dark);font-size:12.5px;font-weight:700;line-height:1.25;padding-right:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sched-appt-time{color:var(--cobalt-dark);font-size:11px;font-weight:600;opacity:.85;white-space:nowrap;}
+.sched-appt-service{color:var(--cobalt-dark);opacity:.6;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sched-appt-menu-btn{position:absolute;top:2px;right:2px;width:16px;height:16px;line-height:14px;text-align:center;border-radius:4px;font-size:12px;font-weight:700;opacity:0;color:inherit;background:rgba(255,255,255,.6);}
+.sched-appt:hover .sched-appt-menu-btn{opacity:1;}
+/* Короткие приёмы (напр. 15–20 минут в получасовом/часовом слоте) сжимаются
+   ниже удобного для чтения размера — жалоба «записали на 20 минут, ничего не
+   видно». Полностью раздувать карточку всегда — обратный эффект (жалоба
+   «время должно явно выделяться», решённая через сжатие по факту
+   длительности), поэтому вместо этого при наведении карточка «выскакивает»
+   поверх соседних ячеек на реальную (нужную для чтения) высоту — запрос
+   «при наведении сделай увеличение». !important — единственный способ
+   перебить инлайновый style="height:NN%;", который ставит JS
+   (buildDayRibbonHTML) для сжатия по умолчанию. */
+.sched-appt:hover{
+  position:absolute !important;
+  left:0; right:0; top:0;
+  z-index:30;
+  overflow:visible;
+  box-shadow:0 8px 20px rgba(20,23,31,.22);
+}
+/* height:auto/min-height — ТОЛЬКО для коротких карточек (.compact, см. ниже
+   и buildDayRibbonHTML), которым реально нужно вырасти для читаемости.
+   Раньше это применялось ко ВСЕМ карточкам без разбора — у длинных приёмов
+   (например 2 часа, height:100% растянут на несколько строк грида) при
+   наведении height:auto схлопывал карточку до высоты её контента (3 короткие
+   строки текста), которая МЕНЬШЕ исходной высоты — визуально карточка на
+   ховере не «увеличивалась», а заметно УМЕНЬШАЛАСЬ (баг с прода: «другие
+   большие записи уменьшаются»). Обычные (не компактные) карточки при
+   наведении просто всплывают поверх соседей (z-index/shadow выше), не меняя
+   высоту — им и так хватает места для чтения. */
+.sched-appt.compact:hover{
+  height:auto !important;
+  min-height:64px;
+}
+.sched-appt-menu-btn:hover{background:rgba(255,255,255,.95);}
+/* Компактная карточка (класс .compact, ставится в JS по фактической высоте
+   — см. buildDayRibbonHTML) — вместо стека имя/время/услуга в несколько
+   строк (не помещается по высоте) — одна строка: имя слева, время справа.
+   По прямому запросу пользователя время теперь ВСЕГДА показывается (раньше
+   пряталось целиком, если не помещалось рядом с именем) — вместо этого
+   ужимается/обрезается многоточием само имя (flex:1 1 auto + ellipsis из
+   базового .sched-appt-name), а время закреплено за правым краем
+   (flex-shrink:0 — никогда не обрезается посередине). */
+.sched-appt.compact:not(:hover){
+  flex-direction:row;
+  align-items:center;
+  gap:8px;
+}
+.sched-appt.compact:not(:hover) .sched-appt-name{
+  flex:1 1 auto;
+  min-width:0;
+  padding-right:0;
+}
+.sched-appt.compact:not(:hover) .sched-appt-time{
+  flex-shrink:0;
+}
+.sched-appt.compact:not(:hover) .sched-appt-service{
+  display:none;
+}
+/* Долг пациента (независимо от статуса/оплаты именно этой записи) — точка
+   внизу слева (верхний левый угол теперь занят бейджем статуса ниже). */
+.sched-appt-debt-dot{position:absolute;bottom:2px;left:3px;font-size:8px;line-height:1;color:var(--coral);text-shadow:0 0 2px rgba(255,255,255,.9);}
+.sched-appt.teal{background:var(--teal-tint);border-color:var(--teal);}
+.sched-appt.teal .sched-appt-name,.sched-appt.teal .sched-appt-time,.sched-appt.teal .sched-appt-service{color:var(--teal);}
+.sched-appt.coral{background:var(--coral-tint);border-color:var(--coral);}
+.sched-appt.coral .sched-appt-name,.sched-appt.coral .sched-appt-time,.sched-appt.coral .sched-appt-service{color:var(--coral);}
+.sched-appt.amber{background:var(--amber-tint);border-color:var(--amber);}
+.sched-appt.amber .sched-appt-name,.sched-appt.amber .sched-appt-time,.sched-appt.amber .sched-appt-service{color:var(--amber);}
+/* Бейдж статуса (ожидание/подтверждено/пришёл/оплачен/...) — цветной кружок
+   с иконкой в верхнем левом углу карточки + маленький суб-бейдж в углу самого
+   кружка (✔ подтверждено / ? ещё не подтверждено), по уточнению пользователя:
+   часы (синие) для записан/подтверждён — отличаются только суб-бейджем; $
+   зелёный — завершён и оплачен; $ красный — завершён, есть долг. Сама
+   подсказка при наведении — отдельный плавающий элемент #apptHoverTip, не
+   CSS :hover — см. apptStatusBadgeHtml/schedApptHoverShow. */
+.sched-appt-status-badge{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.sched-appt-status-badge svg{width:13px;height:13px;display:block;}
+.sched-appt-status-sub{position:absolute;bottom:-3px;right:-3px;width:12px;height:12px;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1.5px #fff;display:flex;align-items:center;justify-content:center;}
+.sched-appt-status-sub svg{width:8px;height:8px;display:block;}
+.week-appt-chip .sched-appt-status-badge{position:relative;top:auto;left:auto;margin-right:5px;box-shadow:none;flex-shrink:0;}
+/* pointer-events не none (в отличие от первой версии) — жалоба: «хочу
+   скопировать данные, не успеваю, сразу закрывается»: подсказка теперь сама
+   ловит наведение (см. IIFE привязки #apptHoverTip ниже) и текст в ней можно
+   выделить/скопировать, пока курсор внутри неё. */
+.appt-hover-tip{position:fixed;z-index:520;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;
+  box-shadow:var(--shadow);padding:10px 13px;font-size:12px;line-height:1.55;min-width:220px;max-width:280px;user-select:text;}
+.appt-hover-tip .aht-row{display:flex;gap:6px;}
+.appt-hover-tip .aht-row .k{color:var(--ink-soft);flex-shrink:0;}
+.appt-hover-tip .aht-row .v{color:var(--ink);font-weight:600;user-select:text;}
+
+/* kanban lab */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.kanban-col{background:var(--mist-line);border-radius:var(--radius);padding:12px;}
+.kanban-col-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 4px;}
+.kanban-col-head b{font-size:12.5px;}
+.kanban-count{background:var(--paper);font-size:10.5px;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:100px;color:var(--ink-soft);}
+.kcard{background:var(--paper);border-radius:9px;padding:11px;margin-bottom:9px;box-shadow:var(--shadow);}
+.kcard-top{display:flex;justify-content:space-between;margin-bottom:7px;}
+.kcard-top span{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--ink-soft);}
+.kcard b{display:block;font-size:12.5px;margin-bottom:4px;}
+.kcard p{font-size:11px;color:var(--ink-soft);margin-bottom:8px;}
+
+/* settings grouped */
+.settings-grid{display:grid;grid-template-columns:220px 1fr;gap:18px;}
+.settings-nav{display:flex;flex-direction:column;gap:2px;}
+.settings-nav .grp{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);padding:12px 10px 5px;font-weight:600;}
+.settings-nav button{text-align:left;padding:8px 10px;border-radius:8px;font-size:12.5px;color:var(--ink-soft);}
+.settings-nav button.active{background:var(--paper);color:var(--ink);font-weight:600;box-shadow:var(--shadow);}
+.field-row{display:grid;grid-template-columns:220px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid var(--mist-line);align-items:center;}
+.field-row:last-child{border-bottom:none;}
+.field-row label{font-size:12.5px;font-weight:600;}
+.field-row .hint{font-size:11px;color:var(--ink-soft);margin-top:3px;font-weight:400;}
+input[type=text],input[type=tel],input[type=number],input[type=date],select,textarea{
+  width:100%;padding:9px 12px;border:1px solid var(--mist);border-radius:8px;background:var(--paper);color:var(--ink);
+}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);border-color:var(--cobalt);}
+/* Пикер времени в «Новая/Изменить запись» (см. #appt-time-h и соседние) —
+   4 select'а в половине ширины модалки с обычным паддингом 9px 12px
+   (24px только на паддинг с каждой стороны) не оставляли места для текста
+   самого значения ("09") — виден был только значок стрелки, жалоба «не
+   видно что выбрали». Паддинг уменьшен и текст отцентрован. */
+.appt-time-select{padding:9px 2px;text-align:center;text-align-last:center;}
+.toggle{display:flex;align-items:center;gap:9px;}
+.toggle input{width:36px;height:20px;-webkit-appearance:none;appearance:none;background:var(--mist);border-radius:100px;position:relative;cursor:pointer;transition:.15s;}
+.toggle input:checked{background:var(--cobalt);}
+.toggle input::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.15s;}
+.toggle input:checked::before{left:18px;}
+
+/* ===== MODALS ===== */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(20,23,31,.5);z-index:50;align-items:center;justify-content:center;padding:24px;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--paper);border-radius:16px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-shadow:0 30px 60px -20px rgba(20,23,31,.35);}
+.modal.wide{max-width:640px;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--mist-line);position:sticky;top:0;background:var(--paper);}
+.modal-head h3{font-size:16px;font-weight:600;}
+.modal-close{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:16px;}
+.modal-close:hover{background:var(--cloud);}
+.modal-body{padding:20px;}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid var(--mist-line);position:sticky;bottom:0;background:var(--paper);}
+.form-group{margin-bottom:14px;}
+.form-group label{display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:var(--ink-soft);}
+.form-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.reason-opt{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid var(--mist);border-radius:9px;margin-bottom:8px;cursor:pointer;}
+.reason-opt:hover{background:var(--cloud);}
+.reason-opt input{width:auto;}
+
+.cond-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;cursor:pointer;break-inside:avoid;margin-bottom:1px;}
+.cond-item:hover{background:var(--cloud);}
+.cond-item.selected{background:var(--cobalt-tint);}
+.cond-item span{font-size:12.5px;line-height:1.3;}
+.cond-edit-icon{margin-left:auto;opacity:0;color:var(--ink-faint);font-size:12px;padding:3px 5px;border-radius:5px;flex-shrink:0;}
+.cond-item:hover .cond-edit-icon{opacity:1;}
+.cond-edit-icon:hover{background:var(--mist);color:var(--cobalt);}
+.cond-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid var(--mist);}
+
+.hidden{display:none !important;}
+
+/* week / month calendar views */
+.week-table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;}
+.week-table th{background:var(--cloud);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:10px 8px;text-align:center;border-bottom:1px solid var(--mist);font-weight:600;}
+.week-table td{padding:8px;vertical-align:top;border:1px solid var(--mist-line);min-width:118px;}
+.week-doc-col{font-size:12px;font-weight:600;white-space:nowrap;background:var(--cloud);}
+.week-doc-col span{display:block;font-size:10.5px;font-weight:400;color:var(--ink-soft);margin-top:2px;}
+.week-appt-chip{position:relative;background:var(--cobalt-tint);color:var(--cobalt-dark);border-radius:6px;padding:3px 20px 3px 6px;margin-bottom:4px;font-size:10.5px;line-height:1.35;}
+.week-appt-chip b{display:block;font-size:10.5px;}
+.week-appt-chip.amber{background:var(--amber-tint);color:var(--amber);}
+.week-appt-chip.coral{background:var(--coral-tint);color:var(--coral);}
+.week-appt-chip.teal{background:var(--teal-tint);color:var(--teal);}
+/* В недельном виде карточки мелкие и часто открываются с телефона — ⋮ виден
+   всегда (приглушённо), а не только по ховеру, как в дневном виде. */
+.week-appt-chip .sched-appt-menu-btn{opacity:.55;}
+.week-appt-chip .sched-appt-menu-btn:hover{opacity:1;}
+.week-empty{font-size:10.5px;color:var(--ink-faint);}
+.week-cell-empty{cursor:pointer;}
+.week-cell-empty:hover{background:var(--cobalt-tint);}
+.week-cell-empty:hover .week-empty{color:var(--cobalt-dark);}
+
+/* minmax(90px,1fr)+min-width — как и у .sched-grid (день/неделя): на широком
+   экране 7 колонок делят ширину поровну, на узком — не сжимаются до
+   нечитаемого размера, а .sched-wrap.sched-wrap-month скроллит по горизонтали. */
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));min-width:630px;border:1px solid var(--mist);border-radius:var(--radius);overflow:hidden;background:var(--mist-line);gap:1px;}
+.month-headrow{display:contents;}
+.month-head{padding:10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);background:var(--cloud);font-weight:600;}
+.month-cell{background:var(--paper);min-height:88px;padding:8px;display:flex;flex-direction:column;gap:6px;}
+.month-cell.other{background:var(--cloud);}
+.month-cell.other .dnum{color:var(--ink-faint);}
+.month-cell .dnum{font-size:12.5px;font-weight:600;color:var(--ink-soft);}
+.month-cell.today{box-shadow:inset 0 0 0 2px var(--cobalt);}
+.month-cell.today .dnum{color:var(--cobalt);}
+.month-badge{align-self:flex-start;font-size:10px;background:var(--cobalt-tint);color:var(--cobalt-dark);border-radius:100px;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-weight:600;}
+.month-badge.zero{background:transparent;color:var(--ink-faint);padding:0;}
+
+.accordion-item{border:1px solid var(--mist);border-radius:10px;overflow:hidden;margin-bottom:10px;background:var(--paper);}
+.accordion-head{width:100%;text-align:left;background:var(--cobalt);color:#fff;padding:12px 14px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;}
+.accordion-head .chev{transition:transform .15s;font-size:11px;}
+.accordion-head.open .chev{transform:rotate(180deg);}
+.accordion-body{padding:0;max-height:0;overflow:hidden;transition:max-height .18s ease;}
+.accordion-body.open{padding:14px;max-height:1600px;}
+.selected-tooth-block{display:grid;grid-template-columns:100px 1fr;gap:18px;padding:16px 0;border-bottom:1px solid var(--mist-line);}
+.selected-tooth-block:last-child{border-bottom:none;}
+.selected-tooth-side{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.selected-tooth-side .tooth-num-cell{font-size:13px;cursor:default;}
+.selected-tooth-side .tooth-outline-icon{width:34px;max-width:34px;}
+.selected-tooth-side .remove-tooth-btn{color:var(--coral);font-size:11px;background:none;margin-top:4px;}
+.accordion-body textarea{width:100%;}
+.stage-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--mist-line);}
+.stage-row:last-child{border-bottom:none;}
+.stage-row input{width:auto;}
+.stage-row span.done{text-decoration:line-through;color:var(--ink-soft);}
+
+/* messages / chat */
+.client-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--mist-line);cursor:pointer;}
+.client-row:hover{background:var(--cloud);}
+.client-row.active{background:var(--cobalt-tint);}
+.client-row .ch-badge{position:absolute;margin-left:22px;margin-top:20px;font-size:9px;}
+.client-avatar-wrap{position:relative;flex-shrink:0;}
+.client-avatar-wrap .ch-icon{position:absolute;bottom:-2px;right:-2px;font-size:10px;background:var(--paper);border-radius:50%;line-height:1;}
+.client-row-main{flex:1;min-width:0;}
+.client-row-main b{display:block;font-size:13px;}
+.client-row-main span{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:180px;}
+.client-row-meta{text-align:right;flex-shrink:0;}
+.client-row-meta .time{font-size:10px;color:var(--ink-faint);display:block;}
+.unread-badge{background:var(--coral);color:#fff;font-size:10px;font-weight:700;border-radius:100px;padding:1px 6px;display:inline-block;margin-top:4px;}
+
+.chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.4;}
+.chat-bubble.in{align-self:flex-start;background:var(--cloud);border-bottom-left-radius:3px;}
+.chat-bubble.out{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:3px;}
+.chat-bubble .time{display:block;font-size:9.5px;margin-top:4px;opacity:.65;}
+
+.tpl-item{border:1px solid var(--mist);border-radius:10px;padding:12px 14px;margin-bottom:8px;}
+.tpl-item b{display:block;font-size:13px;margin-bottom:4px;}
+.tpl-item p{font-size:12px;color:var(--ink-soft);line-height:1.4;}
+.tpl-item .tpl-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+
+/* AI insights */
+.ai-insight{display:flex;gap:12px;padding:14px 16px;border-radius:10px;background:var(--cobalt-tint);border-left:3px solid var(--cobalt);margin-bottom:10px;}
+.ai-insight.warn{background:var(--coral-tint);border-left-color:var(--coral);}
+.ai-insight.good{background:var(--teal-tint);border-left-color:var(--teal);}
+.ai-insight-icon{font-size:18px;flex-shrink:0;line-height:1;}
+.ai-insight b{display:block;font-size:13px;margin-bottom:3px;}
+.ai-insight p{font-size:12.5px;color:var(--ink-soft);line-height:1.45;margin-bottom:6px;}
+.ai-insight .ai-action{font-size:11.5px;font-weight:600;color:var(--cobalt-dark);cursor:pointer;}
+.ai-insight.warn .ai-action{color:var(--coral);}
+.ai-insight.good .ai-action{color:var(--teal);}
+
+/* report charts */
+.donut-wrap{display:flex;align-items:center;gap:28px;flex-wrap:wrap;}
+.donut-chart{width:130px;height:130px;border-radius:50%;position:relative;flex-shrink:0;}
+.donut-chart::after{content:'';position:absolute;inset:22px;border-radius:50%;background:var(--paper);}
+.donut-legend{display:flex;flex-direction:column;gap:9px;min-width:180px;}
+.donut-legend-item{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+.donut-legend-item i{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.donut-legend-item b{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+.hbar-row{display:flex;align-items:center;gap:10px;padding:7px 0;}
+.hbar-label{width:150px;font-size:12.5px;flex-shrink:0;}
+.hbar-track{flex:1;background:var(--cloud);border-radius:6px;height:10px;position:relative;overflow:hidden;}
+.hbar-fill{height:100%;border-radius:6px;}
+.hbar-value{width:100px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:11.5px;flex-shrink:0;color:var(--ink-soft);}
+
+/* Бухгалтерия — график выручки/расходов по дням (SVG, без внешних библиотек). */
+.acct-chart-wrap{position:relative;}
+.acct-chart-legend{display:flex;gap:16px;margin-bottom:8px;}
+.acct-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);}
+.acct-legend-line{width:14px;height:2px;border-radius:1px;display:inline-block;}
+.acct-chart-svg{width:100%;height:auto;display:block;cursor:crosshair;}
+.acct-chart-tooltip{position:absolute;background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px;font-size:11.5px;pointer-events:none;box-shadow:0 8px 20px rgba(20,23,31,.25);min-width:130px;z-index:5;}
+.acct-tip-date{font-weight:700;margin-bottom:4px;}
+.acct-tip-row{display:flex;align-items:center;gap:6px;padding:1px 0;}
+.acct-tip-row b{margin-left:auto;font-family:'JetBrains Mono',monospace;}
+.acct-tip-key{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+
+@media(max-width:1100px){.kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr 1fr;}.funnel{grid-template-columns:repeat(4,1fr);overflow-x:auto;}.sched-grid{grid-template-columns:52px repeat(3,1fr);}}
+
+/* ===== АДАПТАЦИЯ ПОД ПЛАНШЕТЫ/ТЕЛЕФОНЫ =====
+   Ниже 900px sidebar (240px, обычно занимает грид-колонку) превращается в
+   выезжающую off-canvas панель (тот же приём, что уже используется в
+   @media print ниже — "спрятать sidebar, .app-shell → block", только теперь
+   через класс-переключатель вместо display:none, см. toggleSidebar()/JS).
+   Ниже 640px дополнительно схлопываем 2-колоночные сетки в 1 колонку и
+   уменьшаем паддинги — тесная, но полностью читаемая раскладка на телефоне. */
+@media(max-width:900px){
+  .hamburger-btn{display:flex;}
+  .app-shell{display:block;height:auto;}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
+  .main{height:auto;min-height:100vh;overflow-x:hidden;}
+  .topbar{padding-left:62px;flex-wrap:wrap;row-gap:10px;}
+  .search-box{width:auto;flex:1;min-width:0;}
+  /* Любая таблица внутри карточки получает собственный горизонтальный скролл
+     вместо того, чтобы раздвигать всю страницу — тот же паттерн, что уже
+     годами работает у .sched-wrap (расписание). Не задевает карточки без
+     таблиц — overflow-x:auto на пустом месте не влияет на раскладку. */
+  .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+}
+@media(max-width:640px){
+  .kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr;}
+  .page{padding:16px 14px 48px;}
+  .topbar{padding:14px 14px 14px 58px;}
+  .kpi-grid{gap:10px;}
+  /* Ряд услуги в «Быстрой продаже» (7 колонок фиксированной ширины —
+     220px+ гарантированно) не влезает в модалку на телефоне (~320px) —
+     переключаем на перенос по строкам вместо горизонтального сжатия. */
+  .qs-row{display:flex !important;flex-wrap:wrap;gap:6px !important;}
+  .qs-field-service{flex:1 1 100%;}
+  .qs-field-tooth{flex:1 1 64px;}
+  .qs-field-qty{flex:1 1 56px;}
+  .qs-field-price{flex:1 1 76px;}
+  .qs-field-discount{flex:1 1 84px;}
+  .qs-field-total{flex:1 1 76px;text-align:right;}
+  .qs-field-remove{flex:0 0 auto;margin-left:auto;}
+}
+
+@media print{
+  body{background:#fff;}
+  .sidebar,.modal-backdrop,.topbar .search-box,.topbar .icon-btn,#schedPrintBtn,#finPrintBtn,.btn-cobalt,.toolbar-right-nav{display:none !important;}
+  .app-shell{display:block;height:auto;}
+  .main{height:auto;overflow:visible;}
+  .topbar{position:static;border-bottom:2px solid var(--ink);}
+  .page{padding:8px 0;}
+  .toolbar .chip:not(.active){display:none;}
+  .sched-appt,.week-appt-chip,.month-badge{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+
+/* Лайтбокс фото/видео (Документы в карточке пациента) — тот же слайдер, что в
+   старом интерфейсе (templates/base.html #lightbox), портирован сюда 1:1 по
+   стилю + добавлена поддержка видео (старый умел только фото). */
+.lb{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center;}
+.lb.open{display:flex;}
+.lb-img,.lb-video{max-width:92vw;max-height:86vh;border-radius:10px;box-shadow:0 10px 50px rgba(0,0,0,.5);object-fit:contain;user-select:none;}
+.lb-btn{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:none;cursor:pointer;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+.lb-btn:hover{background:rgba(255,255,255,.28);}
+.lb-close{top:18px;right:20px;width:44px;height:44px;font-size:26px;line-height:1;}
+.lb-prev,.lb-next{top:50%;transform:translateY(-50%);width:52px;height:64px;font-size:38px;line-height:1;}
+.lb-prev{left:16px;}.lb-next{right:16px;}
+.lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#e2e8f0;font-size:13px;padding:0 16px;}
+.cash-today-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+.cash-client-card{width:180px;border:1.5px solid var(--mist);border-radius:12px;padding:14px;cursor:pointer;background:var(--paper);transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease;}
+.cash-client-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px -10px rgba(20,23,31,.25);border-color:var(--cobalt);}
+.cash-client-card .cc-time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);}
+.cash-client-card .cc-name{font-size:13.5px;font-weight:600;margin:4px 0 8px;}
+.cash-client-card .cc-amount{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--coral);}
+.cash-client-card .cc-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+.cash-client-card.paid{opacity:.5;border-style:dashed;cursor:default;}
+.cash-client-card.paid:hover{transform:none;box-shadow:none;border-color:var(--mist);}
+.cash-item-opt{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border:1px solid var(--mist);border-radius:9px;margin-bottom:8px;cursor:pointer;}
+.cash-item-opt:hover{background:var(--cloud);}
+.cash-item-opt.selected{border-color:var(--cobalt);background:var(--cobalt-tint);}
+.cash-item-opt label{display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;}
+.cash-item-opt input[type=checkbox]{width:16px;height:16px;cursor:pointer;}
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
+.docs-grid .doc-item{display:flex;flex-direction:column;cursor:pointer;}
+.docs-grid .doc-tile{border-radius:10px;overflow:hidden;background:var(--cloud);position:relative;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
+.docs-grid .doc-tile img,.docs-grid .doc-tile video{width:100%;height:100%;object-fit:cover;}
+.docs-grid .doc-tile .doc-play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:rgba(15,23,42,.25);}
+.docs-grid .doc-tile .doc-file-icon{font-size:32px;}
+.docs-grid .doc-name{font-size:11px;color:var(--ink-soft);padding:6px 4px 0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:640px){.lb-prev,.lb-next{width:40px;height:52px;font-size:30px;}}
+/* Голосовой ввод — плавающий виджет, см. #voiceFab выше и initVoiceFabDrag в
+   основном скрипте. bottom:84px по умолчанию (не 20px), чтобы не перекрывать
+   другие плавающие элементы внизу справа. */
+.voice-fab{position:fixed;right:20px;bottom:84px;width:46px;height:46px;border-radius:50%;border:none;background:var(--cobalt);color:#fff;font-size:19px;box-shadow:0 4px 16px rgba(0,0,0,.22);cursor:grab;z-index:500;touch-action:none;}
+.voice-fab:active{cursor:grabbing;}
+.voice-fab.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
+.voice-fab.voice-busy{opacity:.55;pointer-events:none;}
+@keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(232,93,45,.45);}50%{box-shadow:0 0 0 10px rgba(232,93,45,0);}}
+/* Панель ассистента (#voiceChatPanel) — открывается кликом по #voiceFab,
+   когда нет сфокусированного текстового поля. Текст + голос, помнит
+   разговор (voiceChatHistory), отвечает и текстом, и голосом (speakText). */
+.voice-chat-panel{position:fixed;right:20px;bottom:140px;width:320px;max-width:calc(100vw - 32px);height:420px;max-height:calc(100vh - 180px);background:var(--paper);border:1px solid var(--mist-line);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.24);z-index:501;display:flex;flex-direction:column;overflow:hidden;}
+.voice-chat-panel .vcp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--mist-line);font-size:13px;font-weight:600;flex-shrink:0;}
+.voice-chat-panel .vcp-close{border:none;background:transparent;font-size:16px;cursor:pointer;color:var(--ink-soft);line-height:1;padding:2px 4px;}
+.voice-chat-panel .vcp-messages{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px;}
+.voice-chat-panel .chat-bubble{max-width:88%;padding:7px 10px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+.voice-chat-panel .chat-bubble.out{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:3px;}
+.voice-chat-panel .chat-bubble.in{align-self:flex-start;background:var(--cloud);color:var(--ink);border-bottom-left-radius:3px;}
+.voice-chat-panel .vcp-foot{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--mist-line);flex-shrink:0;}
+.voice-chat-panel .vcp-foot input{flex:1;border:1px solid var(--mist-line);border-radius:20px;padding:7px 12px;font-size:13px;outline:none;background:var(--cloud);}
+.voice-chat-panel .vcp-mic,.voice-chat-panel .vcp-send{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:none;background:var(--cobalt);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.voice-chat-panel .vcp-mic.voice-recording{background:var(--coral);animation:voicePulse 1.1s infinite;}
+.voice-chat-panel .vcp-mic.voice-busy{opacity:.55;pointer-events:none;}
+.voice-chat-panel .vcp-settings{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-bottom:1px solid var(--mist-line);flex-shrink:0;background:var(--cloud);}
+.voice-chat-panel .vcp-settings-label{font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+.voice-chat-panel .vcp-settings input[type=text]{border:1px solid var(--mist-line);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;background:var(--paper);}
+.voice-chat-panel .vcp-settings-check{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.35;cursor:pointer;}
+.voice-chat-panel .vcp-settings-check input{margin-top:2px;flex-shrink:0;}
+.voice-chat-panel .vcp-settings-hint{font-size:11px;color:var(--ink-faint);line-height:1.35;}
+@media(max-width:480px){.voice-chat-panel{right:8px;left:8px;width:auto;bottom:132px;}}

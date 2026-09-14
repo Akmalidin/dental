@@ -245,8 +245,13 @@ CRM_BASE_DOMAIN = ""
 SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
-# Версия статики для cache-busting (бампать при изменении app.css/app.js)
-ASSET_VERSION = "2026060516"
+# Версия статики для cache-busting. Раньше здесь стояла константа, которую надо
+# было бампать руками, — а server.py наследует этот файл, поэтому на сервере
+# версия не менялась и браузеры держали старый app.js после деплоя.
+# Теперь считается от mtime бандлов; переопределяется env-переменной ASSET_VERSION.
+from ._assets import asset_version  # noqa: E402
+
+ASSET_VERSION = asset_version(BASE_DIR)
 
 # ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
 VAPID_PUBLIC_KEY = "BCa37d_93xAyPXKEsL6DNjLwTiUKYDvVTgHGcSMx8mHEMrQ6SqMcy8nHESIVSpo6atWAd_dGqUtWO7UnzFXZOjw"
