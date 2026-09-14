@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.views.decorators.http import require_POST
@@ -6,6 +7,31 @@ from .models import LandingLead
 
 def landing(request):
     return render(request, "marketing/landing.html")
+
+
+def robots(request):
+    """robots.txt апекса stom.asia — публичный маркетинговый сайт,
+    индексация разрешена целиком (в отличие от app.sadaf.kg, см.
+    config/urls_dev.py _app_robots — там Disallow: /, это приватный вход
+    персонала). Поддомены клиник (<slug>.stom.asia) — отдельный robots.txt
+    через apps.users.site_views.public_robots, сюда не относится."""
+    base = request.build_absolute_uri("/")
+    content = f"User-agent: *\nAllow: /\n\nSitemap: {base}sitemap.xml\n"
+    return HttpResponse(content, content_type="text/plain; charset=utf-8")
+
+
+def sitemap(request):
+    """sitemap.xml апекса stom.asia — главная и каталог клиник (/book/).
+    Публичные сайты отдельных клиник живут на своих поддоменах и в этот
+    sitemap не входят (у каждой клиники — свой, см. public_sitemap)."""
+    base = request.build_absolute_uri("/").rstrip("/")
+    urls = [base + "/", base + "/book/"]
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        parts.append(f"  <url><loc>{u}</loc></url>")
+    parts.append("</urlset>")
+    return HttpResponse("\n".join(parts), content_type="application/xml; charset=utf-8")
 
 
 def directory(request):

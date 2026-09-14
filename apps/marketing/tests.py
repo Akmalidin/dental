@@ -66,3 +66,24 @@ class MarketingDirectoryTestCase(TestCase):
         resp = _get(self.client)
         self.assertContains(resp, "ул. Живая")
         self.assertNotContains(resp, "ул. Мёртвая")
+
+
+class MarketingRobotsSitemapTestCase(TestCase):
+    """robots.txt / sitemap.xml на апексе stom.asia — индексация публичного
+    маркетингового сайта разрешена целиком (в отличие от app.sadaf.kg,
+    приватного входа персонала — см. config/urls_dev.py _app_robots)."""
+
+    def test_robots_allows_indexing_and_points_to_sitemap(self):
+        resp = _get(self.client, "/robots.txt")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/plain; charset=utf-8")
+        self.assertIn("Allow: /", resp.content.decode())
+        self.assertIn("Sitemap: http://stom.asia/sitemap.xml", resp.content.decode())
+
+    def test_sitemap_lists_landing_and_directory(self):
+        resp = _get(self.client, "/sitemap.xml")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/xml; charset=utf-8")
+        body = resp.content.decode()
+        self.assertIn("<loc>http://stom.asia/</loc>", body)
+        self.assertIn("<loc>http://stom.asia/book/</loc>", body)
