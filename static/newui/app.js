@@ -1387,6 +1387,10 @@ function selectClient(id){
   currentClientId=id;
   const c=chatClients.find(x=>x.id===id);
   if(c) c.unread=0;
+  // Канал отправки подставляем под открытый диалог — но оператор может его
+  // сменить: ответить в Telegram на переписку из WhatsApp теперь можно.
+  const sel=document.getElementById('chatSendChannel');
+  if(sel && c) sel.value = (c.channel==='telegram') ? 'tg' : 'wa';
   updateMsgNavBadge();
   renderClientList();
   renderChatHeader();
@@ -1412,14 +1416,37 @@ async function loadChatThread(patientId){
     el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--coral);">${t('w_chat_load_failed')}</div>`;
   }
 }
+// Подпись разделителя дня: сегодня/вчера словами, иначе дата с месяцем.
+// Год дописываем, только если он не текущий — иначе в ленте лишний шум.
+const CHAT_MONTHS=['января','февраля','марта','апреля','мая','июня',
+                   'июля','августа','сентября','октября','ноября','декабря'];
+function chatDayLabel(iso){
+  if(!iso) return '';
+  const d=new Date(iso+'T00:00:00');
+  if(isNaN(d)) return iso;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const diff=Math.round((today-d)/86400000);
+  if(diff===0) return t('w_today_f','Сегодня');
+  if(diff===1) return t('w_yesterday','Вчера');
+  const base=d.getDate()+' '+CHAT_MONTHS[d.getMonth()];
+  return d.getFullYear()===today.getFullYear() ? base : base+' '+d.getFullYear()+' г.';
+}
 function renderChatThread(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
   if(msgs.length===0){ el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">${t('w_no_messages_yet')}</div>`; return; }
+  let lastDay='';
   el.innerHTML=msgs.map(m=>{
+    // Разделитель перед первым сообщением каждого дня — как в WhatsApp и
+    // Telegram: без него подряд идущие дни сливаются в одну ленту.
+    let sep='';
+    const day=m.date||'';
+    if(day && day!==lastDay){ lastDay=day; sep=`<div class="chat-day">${chatDayLabel(day)}</div>`; }
     const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${m.media_type||t('w_file')}</div>` : '';
     const failed = (m.dir==='out' && !m.ok) ? ` <span style="color:var(--coral);">(${t('w_not_delivered')})</span>` : '';
-    return `<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${m.body||''}${failed}<span class="time">${m.time}</span></div>`;
+    // При наличии разделителя в пузыре достаточно часов: дата уже над ним.
+    const stamp = m.hm || m.time;
+    return `${sep}<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${m.body||''}${failed}<span class="time">${stamp}</span></div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
@@ -1441,7 +1468,12 @@ async function sendChatMessage(){
   const c=chatClients.find(x=>x.id===currentClientId);
   const fd=new FormData();
   fd.append('text', text);
-  fd.append('channel', (c && c.channel==='telegram') ? 'tg' : 'wa');
+  // Канал берём из явного выбора оператора. Раньше он определялся каналом
+  // самого диалога, поэтому в переписке из WhatsApp отправить в Telegram было
+  // невозможно, а кнопки вверху страницы только фильтруют список.
+  const sel=document.getElementById('chatSendChannel');
+  const fallback=(c && c.channel==='telegram') ? 'tg' : 'wa';
+  fd.append('channel', (sel && sel.value) ? sel.value : fallback);
   const res=await postForm('/patients/'+currentClientId+'/notify/', fd);
   if(res.redirected){
     input.value='';

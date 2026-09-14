@@ -561,6 +561,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .client-row-meta .time{font-size:10px;color:var(--ink-faint);display:block;}
 .unread-badge{background:var(--coral);color:#fff;font-size:10px;font-weight:700;border-radius:100px;padding:1px 6px;display:inline-block;margin-top:4px;}
 
+/* Разделитель дня в переписке — как в WhatsApp и Telegram. align-self:center,
+   потому что лента выложена flex-колонкой и пузыри жмутся к своим краям. */
+.chat-day{align-self:center;margin:10px 0 6px;padding:3px 12px;border-radius:999px;
+  background:var(--cloud);color:var(--ink-soft);font-size:11px;font-weight:600;white-space:nowrap;}
 .chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.4;}
 .chat-bubble.in{align-self:flex-start;background:var(--cloud);border-bottom-left-radius:3px;}
 .chat-bubble.out{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:3px;}

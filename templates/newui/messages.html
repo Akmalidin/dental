@@ -31,7 +31,15 @@
                   <option value="" data-i18n="w_insert_template">Вставить шаблон…</option>
                 </select>
               </div>
-              <div style="display:flex;gap:8px;">
+              <div style="display:flex;gap:8px;align-items:center;">
+                {% comment %}
+                  Канал отправки. Кнопки вверху страницы — только фильтр списка,
+                  а уходило всё в WhatsApp: канал брался из самого диалога.
+                {% endcomment %}
+                <select id="chatSendChannel" title="Куда отправить" style="max-width:130px;">
+                  <option value="wa">🟢 WhatsApp</option>
+                  <option value="tg">🔵 Telegram</option>
+                </select>
                 <input readonly onfocus="this.removeAttribute('readonly')" autocomplete="off" type="text" id="chatInput" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;" onkeydown="if(event.key==='Enter')sendChatMessage();">
                 <button class="btn btn-cobalt" onclick="sendChatMessage()"><span data-i18n="w_send">Отправить</span></button>
               </div>

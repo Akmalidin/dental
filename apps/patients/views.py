@@ -699,14 +699,32 @@ def patient_notify(request, pk):
         if not text:
             messages.error(request, _("Введите текст сообщения"))
         elif channel == "tg":
-            if not patient.telegram_chat_id:
-                messages.error(request, _("Пациент ещё не привязал Telegram (не нажимал Start у бота)"))
-            elif not tg_enabled():
-                messages.error(request, _("Telegram не настроен"))
+            # Два пути в Telegram, и порядок важен.
+            # 1) Бот — если пациент нажимал Start: только он умеет кнопки и меню
+            #    самообслуживания, поэтому при наличии привязки идём через него.
+            # 2) Аккаунт Green-API — запасной путь для тех, кто бота не запускал:
+            #    пишет на номер телефона, кнопок не поддерживает.
+            from apps.notifications.telegram_ga import tga_enabled, tga_send_text
+            via_bot = bool(patient.telegram_chat_id) and tg_enabled()
+            via_account = tga_enabled() and bool(patient.phone)
+            if not (via_bot or via_account):
+                if patient.telegram_chat_id and not tg_enabled():
+                    messages.error(request, _("Telegram-бот не настроен"))
+                elif not patient.phone:
+                    messages.error(request, _("Пациент не привязал Telegram и у него нет телефона"))
+                else:
+                    messages.error(request, _(
+                        "Пациент не привязывал Telegram (не нажимал Start у бота), "
+                        "а аккаунт Telegram не подключён — отправить нечем"))
             else:
-                ok = tg_send_text(patient.telegram_chat_id, text)
+                if via_bot:
+                    ok = tg_send_text(patient.telegram_chat_id, text)
+                    addr = str(patient.telegram_chat_id)
+                else:
+                    ok = tga_send_text(patient.phone, text)
+                    addr = patient.phone
                 WaMessage.objects.create(patient=patient, direction="out", channel="tg",
-                                         phone=str(patient.telegram_chat_id),
+                                         phone=addr,
                                          body=text, sent_by=request.user, ok=ok)
                 if ok:
                     messages.success(request, _("Сообщение отправлено в Telegram"))
@@ -805,10 +823,20 @@ def patient_wa_messages(request, pk):
         except (TypeError, ValueError):
             after = 0
         qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
-    msgs = [{"id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok, "channel": m.channel,
-             "media_url": (m.media_file.url if m.media_file else ""), "media_type": m.media_type,
-             "by": m.sent_by.name if m.sent_by else "",
-             "time": timezone.localtime(m.created_at).strftime("%d.%m %H:%M")} for m in qs]
+    # "time" остаётся как был — его читает старый интерфейс (patients/notify.html).
+    # Для новых чатов добавлены "date" (для разделителей по дням) и "hm": в
+    # ленте с разделителем дата в каждом пузыре уже лишняя.
+    msgs = []
+    for m in qs:
+        local = timezone.localtime(m.created_at)
+        msgs.append({
+            "id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok, "channel": m.channel,
+            "media_url": (m.media_file.url if m.media_file else ""), "media_type": m.media_type,
+            "by": m.sent_by.name if m.sent_by else "",
+            "time": local.strftime("%d.%m %H:%M"),
+            "date": local.strftime("%Y-%m-%d"),
+            "hm": local.strftime("%H:%M"),
+        })
     return JsonResponse({"messages": msgs})
 
 
