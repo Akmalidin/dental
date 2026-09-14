@@ -259,15 +259,11 @@ def _log_incoming_event(phone, text):
 
     Пациент ищется по последним 9 цифрам — так же, как для сообщений.
     """
-    import re
     from apps.notifications.models import WaMessage
-    from apps.patients.models import Patient
+    from apps.patients.models import find_patient_by_phone
     from apps.tenancy import unscoped
-    digits = re.sub(r"\D", "", phone or "")
-    tail = digits[-9:] if len(digits) >= 9 else digits
     with unscoped():
-        patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
-                   .order_by("-id").first() if tail else None)
+        patient = find_patient_by_phone(phone)
         m = WaMessage(patient=patient, direction="in", phone=phone, body=text, read=False)
         if patient is not None:
             m.clinic = patient.clinic
@@ -366,7 +362,10 @@ def wa_webhook(request):
                 tail = _re.sub(r"\D", "", sp)[-9:]
                 with unscoped():
                     if tail:
-                        p = Patient.all_objects.filter(phone__icontains=tail).order_by("-id").first()
+                        # Поиск по phone_norm, а не подстрокой: номера в
+                        # карточках записаны с пробелами и скобками.
+                        from apps.patients.models import find_patient_by_phone
+                        p = find_patient_by_phone(sp)
                         cl = p.clinic if p else None
                     if cl is None:
                         from apps.users.models import Clinic
@@ -384,15 +383,15 @@ def wa_webhook(request):
             return JsonResponse({"ok": True})
         phone = chat_id.split("@")[0]
         if (text or media_file) and phone:
-            import re
-            from apps.patients.models import Patient
+            from apps.patients.models import find_patient_by_phone
             from apps.notifications.models import WaMessage
             from apps.tenancy import unscoped
-            digits = re.sub(r"\D", "", phone)
-            tail = digits[-9:] if len(digits) >= 9 else digits
             with unscoped():
-                patient = (Patient.all_objects.filter(phone__icontains=tail, is_deleted=False)
-                           .order_by("-id").first() if tail else None)
+                # Поиск по phone_norm, а не подстрокой по сырому phone: номера
+                # в карточках записаны по-разному, и «+996 553 552 595» не
+                # содержит подстроки «553552595» — сообщение оставалось без
+                # карточки и не показывалось в чате вовсе.
+                patient = find_patient_by_phone(phone)
                 m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
                               media_type=media_type, read=False)
                 if patient is not None:

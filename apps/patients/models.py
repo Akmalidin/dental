@@ -75,6 +75,39 @@ def normalize_phone(phone):
     return d[-9:] if len(d) >= 9 else d
 
 
+def find_patient_by_phone(phone):
+    """Карточка пациента по номеру в ЛЮБОМ написании.
+
+    Ищем по phone_norm — индексированному полю с последними 9 цифрами, которое
+    заполняется в Patient.save(). Раньше входящие искали подстрокой по сырому
+    phone: «+996 553 552 595» не содержит подстроки «553552595», поэтому
+    сообщение оставалось без карточки. А чат строится по пациентам — такие
+    сообщения не показывались нигде, хотя в базе лежали.
+
+    Если карточек с одним номером несколько (дубли), берём ту, где уже есть
+    переписка, иначе диалог рвётся между дублями.
+    """
+    norm = normalize_phone(phone)
+    if not norm:
+        return None
+    cand = list(Patient.all_objects.filter(phone_norm=norm, is_deleted=False)
+                .order_by("-id")[:20])
+    if not cand:
+        return None
+    if len(cand) > 1:
+        try:
+            from apps.notifications.models import WaMessage
+            ids = [c.pk for c in cand]
+            with_msgs = set(WaMessage.all_clinics.filter(patient_id__in=ids)
+                            .values_list("patient_id", flat=True))
+            for c in cand:
+                if c.pk in with_msgs:
+                    return c
+        except Exception:  # noqa: BLE001
+            pass
+    return cand[0]
+
+
 def phone_for_sending(phone, country_code=None):
     """Полный номер для отправки сообщений: код страны + абонентский номер.
 
