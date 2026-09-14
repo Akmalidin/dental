@@ -579,15 +579,22 @@ def wa_status(request):
     """
     if not _wa_staff_ok(request.user):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
-    from .whatsapp import wa_state, wa_qr
+    from .whatsapp import wa_state, wa_qr, _wa_config
     from apps.settings_clinic.models import ClinicSettings
     cs = ClinicSettings.get()
-    has_keys = bool((cs.wa_id_instance or "").strip() and (cs.wa_token or "").strip())
+    own_keys = bool((cs.wa_id_instance or "").strip() and (cs.wa_token or "").strip())
+    # Ключи не обязательно свои: _wa_config() при пустых полях клиники берёт
+    # общие из .env, и WhatsApp при этом прекрасно работает. Считать «ключей
+    # нет» по одним только полям клиники неверно — экран говорил «заполните
+    # ID и токен» тем, у кого всё уже подключено на общем инстансе.
+    _enabled, eff_id, eff_token, _url = _wa_config()
+    has_keys = bool(eff_id and eff_token)
     # Значения полей отдаём как есть — ровно то же самое показывает старый
     # экран подключения; здесь доступ вдобавок ограничен ролью.
     payload = {
         "ok": True,
         "has_keys": has_keys,
+        "own_keys": own_keys,   # False = работает на общих ключах системы
         "enabled": bool(cs.wa_enabled),
         "id_instance": cs.wa_id_instance or "",
         "token": cs.wa_token or "",

@@ -97,9 +97,12 @@
             <div class="card-body" style="padding:4px 18px;">
               <div class="field-row">
                 <label><span data-i18n="w_wa_connected">WhatsApp подключён</span><div class="hint" id="setWaState">—</div></label>
-                {# Токен инстанса — учётные данные клиники, а «Настройки» видны и врачам.
-                   Проверка на сервере, а не по JS-флагам IS_ADMIN: те приходят
-                   асинхронно и на момент отрисовки ещё не определены. #}
+                {% comment %}
+                  Токен инстанса — учётные данные клиники, а «Настройки» видны и
+                  врачам. Проверка роли идёт на сервере, а не по JS-флагам
+                  IS_ADMIN: те приходят асинхронно и на момент отрисовки ещё не
+                  определены, из-за чего кнопка мигала бы.
+                {% endcomment %}
                 {% if request.user.is_superadmin or request.user.is_admin %}
                 <button class="btn btn-ghost btn-sm" type="button" id="setWaConnectBtn" onclick="waOpenConnect()"><span data-i18n="w_configure_connection">Настроить подключение</span></button>
                 {% endif %}
@@ -518,7 +521,11 @@
     if(d.state === 'authorized' || d.qr_type === 'alreadyLogged'){
       waStopPolling();
       waShow('wa-qr-box', false); waShow('wa-code-box', false);
-      waSetStatus('✅ ' + t('w_wa_connected_ok','Номер подключён. WhatsApp готов к работе.'), 'ok');
+      // Поля пустые, а всё работает — значит клиника сидит на общих ключах из
+      // .env. Без этой оговорки пустая форма выглядит как «ничего не настроено».
+      const shared = d.own_keys ? ''
+        : '<div class="hint" style="margin-top:6px;">' + t('w_wa_shared_keys','Используются общие ключи системы. Свой инстанс нужен, только если хотите отдельный номер для этой клиники.') + '</div>';
+      waSetStatus('✅ ' + t('w_wa_connected_ok','Номер подключён. WhatsApp готов к работе.') + shared, 'ok');
       const hint = document.getElementById('setWaState');
       if(hint) hint.textContent = t('w_wa_enabled','включён');
       return;
