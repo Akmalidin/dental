@@ -5062,16 +5062,43 @@ function updateVisibleDayLabelFromScroll(){
   }
 }
 
+// Прокрутка ленты к конкретному дню.
+//
+// Раньше в трёх местах стояло scrollLeft=0 с допущением «лента всегда
+// начинается с якорного дня слева». Это перестало быть правдой, когда
+// появился тумблер «Показывать прошедшие дни»: ribbonInitialDates()
+// добавляет перед якорем RIBBON_PAST_DAYS прошедших дней, поэтому позиция 0
+// — это сегодня−3, а не сегодня. Подпись даты при этом считается отдельно
+// (updateDayDateLabel: baseScheduleDate+currentDayOffset) и показывала
+// верное число — отсюда и расхождение «в заголовке вторник, в сетке суббота».
+//
+// Ищем день по data-date вместо арифметики индексов: тогда прокрутка
+// остаётся верной при любом значении RIBBON_PAST_DAYS и после дозагрузки
+// дней вправо (appendRibbonDays).
+function scrollRibbonToDate(dateIso){
+  const c=document.getElementById('scheduleContent');
+  if(!c) return;
+  const label=c.querySelector('.sched-day-group-label[data-date="'+dateIso+'"]');
+  if(!label){ c.scrollLeft=0; return; }
+  // Колонка времени липкая (position:sticky;left:0) и перекрывает контент —
+  // без этой поправки первый врач дня уезжает под неё.
+  const timeCol=c.querySelector('.sched-time');
+  const gutter=timeCol ? timeCol.offsetWidth : 0;
+  c.scrollLeft=Math.max(0, label.offsetLeft-gutter);
+}
+function scrollRibbonToAnchorDay(){
+  scrollRibbonToDate(isoDate(dateAtOffset(currentDayOffset)));
+}
+
 // Кнопка «Сегодня» — возвращает ленту на текущую дату (currentDayOffset=0),
 // откуда бы её ни увели кнопки ‹ › или переключение недели/месяца. Если
 // якорь и так уже сегодня (просто проскроллили ленту вправо) — не
-// перестраиваем всё заново, только мгновенно возвращаем скролл в начало.
+// перестраиваем всё заново, только мгновенно возвращаем скролл к якорю.
 function goToScheduleToday(){
   const delta=-currentDayOffset;
   if(delta===0){
     if(calView!=='day'){ calSetView('day'); return; }
-    const c=document.getElementById('scheduleContent');
-    if(c) c.scrollLeft=0;
+    scrollRibbonToAnchorDay();
     updateDayDateLabel();
     positionScheduleNowLine();
     syncFixedScheduleHeader();
@@ -5112,7 +5139,7 @@ function changeDay(delta){
   c.style.setProperty('--sched-slide', delta>0 ? '-100%' : '100%');
   setTimeout(()=>{
     renderSchedule();
-    c.scrollLeft = 0; // лента всегда начинается с якорного дня слева
+    scrollRibbonToAnchorDay(); // не 0: при showPastDays лента начинается раньше якоря
     c.classList.add('sched-day-notransition');
     c.style.setProperty('--sched-slide', delta>0 ? '100%' : '-100%');
     void c.offsetWidth; // reflow — зафиксировать стартовую позицию новой ленты без анимации
@@ -5222,8 +5249,7 @@ function schedJumpToDate(dateIso){
     currentDayOffset=daysBetween(baseScheduleDate, d);
     scheduleRibbonDates=[];
     renderSchedule();
-    const c=document.getElementById('scheduleContent');
-    if(c) c.scrollLeft=0;
+    scrollRibbonToAnchorDay();
   } else if(calView==='week'){
     calWeekAnchor=d;
     renderSchedule();
