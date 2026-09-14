@@ -5425,15 +5425,38 @@ function buildDayRibbonHTML(){
       const slotCovered=new Array(numSlots).fill(false);
       const placements=[];
       apptsFor(dateIso, d.id).forEach(appt=>{
-        const startSlot=Math.round((timeToMinutes(appt.time)-startMin)/interval);
+        // floor, а не round: слот — это интервал, СОДЕРЖАЩИЙ время начала.
+        // При round приём на 09:30 с часовой сеткой уезжал в строку 10:00
+        // (Math.round(0.5)===1) — показывался на полчаса позже реального
+        // времени и вдобавок сталкивался с записью, которая действительно
+        // начинается в 10:00.
+        const startSlot=Math.floor((timeToMinutes(appt.time)-startMin)/interval);
         if(startSlot<0 || startSlot>=numSlots) return; // приём вне видимого диапазона часов — не показываем (как и раньше)
         const span=Math.min(Math.max(Math.ceil((appt.durationMin||interval)/interval), 1), numSlots-startSlot);
         placements.push({appt, startSlot, span});
         for(let s=startSlot; s<startSlot+span; s++) slotCovered[s]=true;
       });
-      placements.forEach(({appt, startSlot, span})=>{
+      // Сетка может быть грубее приёмов: при интервале 60 минут две
+      // получасовые записи законно делят один слот. Раньше они получали
+      // одинаковые grid-row и grid-column и ложились друг на друга —
+      // раскладываем их по дорожкам рядом, как это делают календари.
+      // Сортировка по времени — чтобы дорожки шли слева направо по порядку.
+      placements.sort((a,b)=>timeToMinutes(a.appt.time)-timeToMinutes(b.appt.time));
+      const laneCount={};
+      placements.forEach(p=>{ laneCount[p.startSlot]=(laneCount[p.startSlot]||0)+1; });
+      const laneSeen={};
+      placements.forEach(p=>{
+        p.lanes=laneCount[p.startSlot];
+        p.lane=laneSeen[p.startSlot]||0;
+        laneSeen[p.startSlot]=p.lane+1;
+      });
+      placements.forEach(({appt, startSlot, span, lane, lanes})=>{
         const label=minutesToTime(startMin+startSlot*interval);
-        html+=`<div class="sched-cell" style="grid-column:${col};grid-row:${3+startSlot} / span ${span};--doc-tint:${docTint};" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
+        // Ширина и сдвиг дорожки — в процентах от колонки врача. Глобальный
+        // box-sizing:border-box учитывает padding/border ячейки, поэтому
+        // ширина+отступ ровно складываются в 100%.
+        const laneStyle = lanes>1 ? `width:${100/lanes}%;margin-left:${lane*100/lanes}%;` : '';
+        html+=`<div class="sched-cell" style="grid-column:${col};grid-row:${3+startSlot} / span ${span};--doc-tint:${docTint};${laneStyle}" data-time="${label}" data-doc="${d.id}" data-date="${dateIso}" ondragover="event.preventDefault();this.classList.add('drop-target')" ondragleave="this.classList.remove('drop-target')" ondrop="schedDrop(event,'${dateIso}','${label}',${d.id})">`;
         // Точка-бейдж — общий долг пациента (независимо от статуса/оплаты
         // именно ЭТОЙ записи, которую уже красит фон .sched-appt.coral/.teal
         // для завершённых приёмов — сознательно другой визуальный сигнал,
