@@ -20,6 +20,10 @@ urlpatterns = [
     # ~20 секунд, поэтому состояние опрашивается без перезагрузки страницы.
     path("wa-status/", views.wa_status, name="wa_status"),
     path("wa-auth-code/", views.wa_auth_code_view, name="wa_auth_code"),
+    # Telegram через Green-API — экран подключения в Супер-админе.
+    path("tga-status/", views.tga_status, name="tga_status"),
+    path("tga-password/", views.tga_password, name="tga_password"),
+    path("tga-logout/", views.tga_logout, name="tga_logout"),
     path("tg-webhook/<slug:clinic_slug>/", views.tg_webhook, name="tg_webhook"),
     path("tg-inbox/", views.tg_inbox, name="tg_inbox"),
     path("tg-link/<int:chat_id>/", views.tg_link_chat, name="tg_link_chat"),

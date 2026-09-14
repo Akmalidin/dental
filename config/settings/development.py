@@ -205,6 +205,17 @@ GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
 GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
 GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
 
+# ─── Telegram через Green-API (обычный аккаунт, привязка по QR) ───────────────
+# Это НЕ бот: бот живёт отдельно, на токене от @BotFather, и остаётся для
+# кнопок и меню самообслуживания. Инстанс здесь ОДИН на всю систему, поэтому
+# ключи в env, а не в ClinicSettings — подключение затрагивает все клиники.
+# apiUrl у телеграм-инстанса СВОЙ (вида https://4100.api.green-api.com), общий
+# api.greenapi.com не подходит — адрес обязателен.
+TELEGRAM_GA_ENABLED = os.environ.get("TELEGRAM_GA_ENABLED", "") == "1"
+TELEGRAM_GA_ID_INSTANCE = os.environ.get("TELEGRAM_GA_ID_INSTANCE", "")
+TELEGRAM_GA_TOKEN = os.environ.get("TELEGRAM_GA_TOKEN", "")
+TELEGRAM_GA_API_URL = os.environ.get("TELEGRAM_GA_API_URL", "")
+
 # ─── OpenAI (голосовой ввод для врачей) — ключ только из env, не в репозиторий ─
 # OPENAI_API_KEY больше не используется (OpenAI недоступен из РФ — сервер
 # клиники российский) — распознавание речи переведено на локальный Whisper

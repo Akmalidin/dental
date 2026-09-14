@@ -11,6 +11,7 @@
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-ipblocks" onclick="saShowTab('ipblocks')">Блокировки IP</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-deletions" onclick="saShowTab('deletions')">Удаления (&gt;30д)</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-backups" onclick="saShowTab('backups')">Резервные копии</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-messengers" onclick="saShowTab('messengers')">Мессенджеры</button>
           </div>
           <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ Новая клиника</button>
         </div>
@@ -87,6 +88,43 @@
         <div class="card" style="padding:16px;">
           <h3 style="margin-bottom:10px;">📬 Заявки на доступ</h3>
           <div id="saRequestsList"></div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Мессенджеры ════════════════════════════════════════
+           Telegram через Green-API — ОБЫЧНЫЙ аккаунт, привязка сканированием.
+           Инстанс один на всю систему, поэтому экран здесь, а не в настройках
+           клиники: сканирование и выход затрагивают все клиники сразу. -->
+      <div class="page hidden" id="saPanel-messengers">
+        <div class="card" style="padding:16px;max-width:640px;">
+          <h3 style="margin-bottom:4px;">✈️ Telegram — аккаунт Green-API</h3>
+          <div class="hint" style="margin-bottom:12px;">
+            Обычный аккаунт, а не бот. Бот остаётся отдельно и продолжает обслуживать кнопки и меню самообслуживания —
+            у аккаунта нет Bot API. Подключение общее для всех клиник.
+          </div>
+
+          <div id="tgaInfo" class="sa-detail-row" style="border-bottom:none;"></div>
+          <div id="tgaStatus" style="margin:10px 0;font-size:13px;"></div>
+
+          <div id="tgaQrBox" class="hidden" style="text-align:center;">
+            <img id="tgaQrImg" alt="QR" style="width:236px;height:236px;image-rendering:pixelated;border:1px solid var(--mist-line);border-radius:10px;background:#fff;">
+            <div class="hint" style="margin-top:10px;">
+              На телефоне: Telegram → Настройки → Устройства → Подключить устройство.
+            </div>
+          </div>
+
+          <div id="tgaPassBox" class="hidden" style="margin-top:12px;">
+            <div class="hint" style="margin-bottom:6px;">
+              На аккаунте включён облачный пароль — введите его, чтобы завершить вход.
+            </div>
+            <input type="password" id="tgaPassword" placeholder="Облачный пароль Telegram" style="border:1px solid var(--mist-line);border-radius:8px;padding:7px 10px;min-width:260px;">
+            <button class="btn btn-cobalt btn-sm" type="button" onclick="tgaSendPassword()">Отправить пароль</button>
+          </div>
+
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" type="button" onclick="tgaRefresh()">Обновить</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="tgaLogoutBtn" onclick="tgaLogout()" style="color:var(--coral);">Отвязать аккаунт</button>
+          </div>
         </div>
       </div>
 
@@ -376,7 +414,7 @@
   }
 
   // ── Вкладки ──────────────────────────────────────────────────────────
-  const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups'];
+  const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups','messengers'];
   let saUsersLoaded = false, saFeedLoaded = false, saDeletionsLoaded = false, saBackupsLoaded = false;
   window.saShowTab = function(tab){
     SA_TABS.forEach(t=>{
@@ -391,6 +429,96 @@
     if(tab==='feed' && !saFeedLoaded){ saFeedLoaded = true; saLoadFeed(); }
     if(tab==='deletions' && !saDeletionsLoaded){ saDeletionsLoaded = true; saLoadDeletions(); }
     if(tab==='backups' && !saBackupsLoaded){ saBackupsLoaded = true; saLoadBackups(); }
+    // Опрос состояния телеграм-инстанса идёт ТОЛЬКО пока открыта эта вкладка:
+    // QR живёт недолго, но дёргать Green-API с других вкладок незачем.
+    if(tab==='messengers') tgaStartPolling(); else tgaStopPolling();
+  };
+
+  // ── Telegram через Green-API ────────────────────────────────────────
+  let tgaPoll = null;
+
+  function tgaStopPolling(){ if(tgaPoll){ clearInterval(tgaPoll); tgaPoll = null; } }
+  function tgaStartPolling(){
+    tgaLoad();
+    tgaStopPolling();
+    // 5 секунд — интервал из документации Green-API для телеграм-инстанса.
+    tgaPoll = setInterval(tgaLoad, 5000);
+  }
+  window.tgaRefresh = tgaLoad;
+
+  function tgaSet(html, color){
+    document.getElementById('tgaStatus').innerHTML =
+      '<span style="color:' + (color || 'var(--ink-soft)') + ';">' + html + '</span>';
+  }
+
+  async function tgaLoad(){
+    let d;
+    try{
+      const res = await fetch('/notifications/tga-status/', {credentials:'same-origin'});
+      if(res.status === 403){ tgaStopPolling(); tgaSet('Доступно только суперадмину.', 'var(--coral)'); return; }
+      d = await res.json();
+    }catch(e){ tgaSet('Не удалось получить состояние.', 'var(--coral)'); return; }
+    if(!d || !d.ok) return;
+
+    document.getElementById('tgaInfo').innerHTML = d.configured
+      ? '<span>Инстанс</span><span>' + d.id_instance + ' · ' + d.api_url + '</span>'
+      : '';
+
+    const qrBox = document.getElementById('tgaQrBox');
+    const passBox = document.getElementById('tgaPassBox');
+
+    if(!d.configured){
+      tgaStopPolling();
+      qrBox.classList.add('hidden'); passBox.classList.add('hidden');
+      tgaSet('Ключи инстанса не заданы. Пропишите TELEGRAM_GA_ID_INSTANCE, TELEGRAM_GA_TOKEN и TELEGRAM_GA_API_URL в .env на сервере и перезапустите сервис.', 'var(--coral)');
+      return;
+    }
+    if(d.state === 'authorized'){
+      tgaStopPolling();
+      qrBox.classList.add('hidden'); passBox.classList.add('hidden');
+      tgaSet('✅ Аккаунт подключён.' + (d.enabled ? '' : ' Отправка выключена: TELEGRAM_GA_ENABLED не равен 1.'), 'var(--teal)');
+      return;
+    }
+    if(d.state === 'pendingPassword'){
+      qrBox.classList.add('hidden'); passBox.classList.remove('hidden');
+      tgaSet('Аккаунт принял вход и ждёт облачный пароль.');
+      return;
+    }
+    passBox.classList.add('hidden');
+    if(d.qr_type === 'qrCode' && d.qr){
+      document.getElementById('tgaQrImg').src = 'data:image/png;base64,' + d.qr;
+      qrBox.classList.remove('hidden');
+      tgaSet('Отсканируйте код. Он обновляется автоматически.');
+    } else if(d.qr_type === 'already_registered'){
+      qrBox.classList.add('hidden');
+      tgaSet('Инстанс уже привязан. Чтобы подключить другой аккаунт, сначала нажмите «Отвязать аккаунт».');
+    } else if(d.qr_type === 'error'){
+      const why = {
+        timeout: 'серверы Telegram недоступны',
+        not_ready: 'инстанс ещё не готов',
+        connection_closed: 'Telegram отклонил запрос'
+      }[d.qr_error] || d.qr_error || 'неизвестная причина';
+      tgaSet('Код не получен: ' + why + '. Повторяем автоматически.', 'var(--coral)');
+    } else if(!d.state){
+      tgaSet('Green-API не отвечает — проверьте ключи и адрес инстанса.', 'var(--coral)');
+    }
+  }
+
+  window.tgaSendPassword = async function(){
+    const fd = new FormData();
+    fd.append('password', document.getElementById('tgaPassword').value);
+    const res = await fetch('/notifications/tga-password/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    const d = await res.json().catch(()=>null);
+    if(d && d.ok){ document.getElementById('tgaPassword').value = ''; showToast('Пароль отправлен'); tgaLoad(); }
+    else showToast('Не удалось отправить пароль', 'error');
+  };
+
+  window.tgaLogout = async function(){
+    if(!confirm('Отвязать аккаунт Telegram? Это общий инстанс — Telegram перестанет работать у ВСЕХ клиник, пока не привяжете снова.')) return;
+    const res = await fetch('/notifications/tga-logout/', {method:'POST', credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    const d = await res.json().catch(()=>null);
+    if(d && d.ok){ showToast('Аккаунт отвязан'); tgaStartPolling(); }
+    else showToast('Не удалось отвязать', 'error');
   };
 
   // ── Клиники (без изменений от прежней единственной страницы) ────────

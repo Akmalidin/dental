@@ -640,6 +640,72 @@ def wa_auth_code_view(request):
     return JsonResponse({"ok": False, "error": result}, status=400)
 
 
+# ─── Telegram через Green-API (обычный аккаунт, подключение по QR) ───────
+# Инстанс один на всю систему, поэтому экран подключения живёт в Супер-админе:
+# сканирование QR и выход из аккаунта затрагивают сразу все клиники. Директору
+# клиники здесь делать нечего — ровно та же причина, по которой на общих ключах
+# скрыт QR у WhatsApp.
+
+def _tga_super_ok(user):
+    return bool(getattr(user, "is_superadmin", False))
+
+
+@login_required
+def tga_status(request):
+    """Состояние телеграм-инстанса и QR — JSON для экрана в Супер-админе."""
+    if not _tga_super_ok(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    from .telegram_ga import tga_configured, tga_state, tga_qr, _tga_config
+    enabled, idi, _token, url = _tga_config()
+    payload = {
+        "ok": True,
+        "configured": tga_configured(),
+        "enabled": enabled,
+        "id_instance": idi,
+        "api_url": url,
+        "state": "",     # notAuthorized | authorized | starting | pendingPassword | ""
+        "qr_type": "",   # qrCode | already_registered | error
+        "qr": "",
+        "qr_error": "",  # подвид ошибки: timeout | not_ready | connection_closed
+    }
+    if not payload["configured"]:
+        return JsonResponse(payload)
+    payload["state"] = tga_state()
+    if payload["state"] not in ("authorized", "pendingPassword"):
+        qr_type, msg = tga_qr()
+        payload["qr_type"] = qr_type
+        if qr_type == "qrCode":
+            payload["qr"] = msg
+        elif qr_type == "error":
+            payload["qr_error"] = str(msg or "")[:200]
+    return JsonResponse(payload)
+
+
+@login_required
+@require_POST
+def tga_password(request):
+    """Облачный пароль Telegram — когда инстанс ушёл в pendingPassword."""
+    if not _tga_super_ok(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    from .telegram_ga import tga_send_password
+    ok, data = tga_send_password(request.POST.get("password") or "")
+    return JsonResponse({"ok": bool(ok), "result": data if ok else str(data)},
+                        status=200 if ok else 400)
+
+
+@login_required
+@require_POST
+def tga_logout(request):
+    """Отвязать аккаунт. Нужен, чтобы получить новый QR: Green-API не выдаёт
+    его, пока инстанс авторизован. Действие системное — рвёт Telegram у всех."""
+    if not _tga_super_ok(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    from .telegram_ga import tga_logout as _logout
+    ok, data = _logout()
+    return JsonResponse({"ok": bool(ok), "result": data if ok else str(data)},
+                        status=200 if ok else 400)
+
+
 # ─── Telegram ────────────────────────────────────────────────────────────
 
 def _tg_staff_ok(user):
