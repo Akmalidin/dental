@@ -1807,6 +1807,8 @@ def _newui_settings_data(clinic):
         # нет своего элемента управления — передаём как есть, чтобы форма
         # сохранения (POST всех полей формы разом, как и старый /settings/)
         # их не затёрла пустыми/выключенными значениями.
+        "primaryMessenger": cs.primary_messenger,
+        "phoneCountryCode": cs.phone_country_code,
         "currency": cs.currency,
         "currencySecondary": cs.currency_secondary,
         "currencyChoices": [{"code": c, "label": lbl} for c, lbl in ClinicSettings.CURRENCY_CHOICES],

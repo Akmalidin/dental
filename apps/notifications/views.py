@@ -479,7 +479,19 @@ def wa_settings(request):
         cs.wa_remind_debt_days = max(0, int(request.POST.get("wa_remind_debt_days") or 0))
     except (TypeError, ValueError):
         cs.wa_remind_debt_days = 0
-    cs.save(update_fields=["wa_remind_day", "wa_remind_hour", "wa_remind_debt_days"])
+    fields = ["wa_remind_day", "wa_remind_hour", "wa_remind_debt_days"]
+    # Основной мессенджер — по нему идут автоуведомления и рассылки.
+    pm = (request.POST.get("primary_messenger") or "").strip()
+    if pm in ("wa", "tg"):
+        cs.primary_messenger = pm
+        fields.append("primary_messenger")
+    # Код страны для номеров: у клиники в Узбекистане он 998, и без него
+    # номера вида «500774307» не доставляются.
+    code = "".join(ch for ch in (request.POST.get("phone_country_code") or "") if ch.isdigit())
+    if code:
+        cs.phone_country_code = code[:5]
+        fields.append("phone_country_code")
+    cs.save(update_fields=fields)
     messages.success(request, "Настройки напоминаний сохранены")
     return redirect("wa_broadcast")
 

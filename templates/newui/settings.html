@@ -112,6 +112,17 @@
                 <a class="btn btn-ghost btn-sm" href="/notifications/tg-connect/"><span data-i18n="w_configure_bot">Настроить бота →</span></a>
               </div>
               <div class="field-row">
+                <label><span data-i18n="w_primary_messenger">Основной мессенджер</span><div class="hint" data-i18n="w_primary_messenger_hint">Куда уходят автоуведомления и рассылки. Если у пациента этот канал недоступен — система попробует второй.</div></label>
+                <select id="set-primary-messenger" style="max-width:160px;">
+                  <option value="wa">🟢 WhatsApp</option>
+                  <option value="tg">🔵 Telegram</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <label><span data-i18n="w_phone_country_code">Код страны для номеров</span><div class="hint" data-i18n="w_phone_country_code_hint">Подставляется к номерам, записанным без кода. Узбекистан — 998, Кыргызстан — 996.</div></label>
+                <input autocomplete="off" type="text" id="set-phone-country-code" style="max-width:100px;" placeholder="998">
+              </div>
+              <div class="field-row">
                 <label data-i18n="w_remind_day_before">Напоминать за день до приёма</label>
                 <div class="toggle"><input autocomplete="off" type="checkbox" id="set-remind-day"></div>
               </div>
@@ -238,6 +249,8 @@
   document.getElementById('set-remind-day').checked = s.waRemindDay;
   document.getElementById('set-remind-hour').checked = s.waRemindHour;
   document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
+  document.getElementById('set-primary-messenger').value = s.primaryMessenger || 'wa';
+  document.getElementById('set-phone-country-code').value = s.phoneCountryCode || '';
 
   window.setSettingsTab = function(tab){
     ['general','contacts','wa','cabinets','cancelreasons','insurance'].forEach(t=>{
@@ -629,6 +642,8 @@
     if(document.getElementById('set-remind-day').checked) fd.append('wa_remind_day', 'on');
     if(document.getElementById('set-remind-hour').checked) fd.append('wa_remind_hour', 'on');
     fd.append('wa_remind_debt_days', document.getElementById('set-remind-debt-days').value || '0');
+    fd.append('primary_messenger', document.getElementById('set-primary-messenger').value || 'wa');
+    fd.append('phone_country_code', document.getElementById('set-phone-country-code').value || '');
     const res = await postForm('/notifications/wa-settings/', fd);
     if(res.redirected){ flashAndReload(t('w_reminder_settings_saved')); }
     else { showToast(t('w_settings_save_failed'), 'error'); }

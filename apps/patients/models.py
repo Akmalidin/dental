@@ -75,6 +75,33 @@ def normalize_phone(phone):
     return d[-9:] if len(d) >= 9 else d
 
 
+def phone_for_sending(phone, country_code=None):
+    """Полный номер для отправки сообщений: код страны + абонентский номер.
+
+    Номера в карточках записывают как придётся: «500774307», «998944490382»,
+    «+998 91 881-34-15», «0700123456». Абонентская часть и в Узбекистане, и в
+    Кыргызстане девятизначная, поэтому берём последние 9 цифр (ровно как
+    normalize_phone) и подставляем код страны клиники.
+
+    Раньше код страны был зашит как 996 прямо в отправке, и узбекские номера
+    без кода уходили в никуда — сообщения просто не доставлялись.
+
+    country_code не задан — берём из настроек текущей клиники.
+    Возвращает строку цифр без «+» или None, если номер непригоден.
+    """
+    digits = normalize_phone(phone)
+    if len(digits) < 9:
+        return None
+    if country_code is None:
+        try:
+            from apps.settings_clinic.models import ClinicSettings
+            country_code = ClinicSettings.get().phone_country_code
+        except Exception:  # noqa: BLE001
+            country_code = "996"
+    code = "".join(ch for ch in str(country_code or "") if ch.isdigit()) or "996"
+    return code + digits
+
+
 class BlacklistEntry(models.Model):
     """Общий (на все клиники) чёрный список — по номеру телефона. Только предупреждение."""
     phone = models.CharField(max_length=30, verbose_name="Телефон")

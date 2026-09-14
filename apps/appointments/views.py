@@ -162,34 +162,54 @@ def notify_appointment_created(appt, created_by=None):
         from apps.notifications.whatsapp import wa_send_text, notify_groups, wa_enabled
         from apps.settings_clinic.models import ClinicSettings
         from django.utils import timezone as _tz
-        if not wa_enabled():
-            return
+        cs = ClinicSettings.get()
         st = _tz.localtime(appt.start_at)
-        clinic_name = ClinicSettings.get().name
+        clinic_name = cs.name
         doctor_name = appt.doctor.name if appt.doctor else "—"
         date_s, time_s = st.strftime("%d.%m.%Y"), st.strftime("%H:%M")
-        # пациенту
-        if appt.patient_id and appt.patient.phone:
+        # пациенту — по основному мессенджеру клиники, с откатом на второй
+        # канал. Раньше здесь стоял ранний выход при выключенном WhatsApp, и
+        # вместе с ним замолкал Telegram, хотя это независимый канал и бот
+        # работал: пациент терял и уведомление, и кнопки «Подтвердить/Отменить».
+        if appt.patient_id:
             pname = appt.patient.first_name or appt.patient.full_name
-            wa_send_text(appt.patient.phone,
-                         "✅ *%s*\n\nЗдравствуйте, *%s*!\n"
-                         "Вы записаны на приём.\n\n"
-                         "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
-                         "Ждём вас! Если планы изменятся — пожалуйста, сообщите нам."
-                         % (clinic_name, pname, date_s, time_s, doctor_name))
-            if appt.patient.telegram_chat_id:
-                from apps.notifications.telegram import tg_send_text
-                tg_send_text(
-                    appt.patient.telegram_chat_id,
-                    "✅ <b>%s</b>\n\nЗдравствуйте, <b>%s</b>!\n"
-                    "Вы записаны на приём.\n\n"
-                    "📅 Дата: <b>%s</b>\n🕐 Время: <b>%s</b>\n👨‍⚕️ Врач: %s"
-                    % (clinic_name, pname, date_s, time_s, doctor_name),
-                    buttons=[[("✅ Подтвердить", "appt_confirm:%s" % appt.pk),
-                              ("❌ Отменить", "appt_cancel:%s" % appt.pk)]],
-                )
+            wa_text = ("✅ *%s*\n\nЗдравствуйте, *%s*!\n"
+                       "Вы записаны на приём.\n\n"
+                       "📅 Дата: *%s*\n🕐 Время: *%s*\n👨‍⚕️ Врач: _%s_\n\n"
+                       "Ждём вас! Если планы изменятся — пожалуйста, сообщите нам."
+                       % (clinic_name, pname, date_s, time_s, doctor_name))
+            tg_text = ("✅ <b>%s</b>\n\nЗдравствуйте, <b>%s</b>!\n"
+                       "Вы записаны на приём.\n\n"
+                       "📅 Дата: <b>%s</b>\n🕐 Время: <b>%s</b>\n👨‍⚕️ Врач: %s"
+                       % (clinic_name, pname, date_s, time_s, doctor_name))
+
+            def _send_wa():
+                if not (wa_enabled() and appt.patient.phone):
+                    return False
+                return bool(wa_send_text(appt.patient.phone, wa_text))
+
+            def _send_tg():
+                # Бот — только он умеет кнопки подтверждения приёма.
+                if appt.patient.telegram_chat_id:
+                    from apps.notifications.telegram import tg_send_text, tg_enabled
+                    if tg_enabled():
+                        return bool(tg_send_text(
+                            appt.patient.telegram_chat_id, tg_text,
+                            buttons=[[("✅ Подтвердить", "appt_confirm:%s" % appt.pk),
+                                      ("❌ Отменить", "appt_cancel:%s" % appt.pk)]],
+                        ))
+                # Аккаунт Green-API — для тех, кто бота не запускал: кнопок нет.
+                from apps.notifications.telegram_ga import tga_enabled, tga_send_text
+                if tga_enabled() and appt.patient.phone:
+                    return bool(tga_send_text(appt.patient.phone, wa_text))
+                return False
+
+            primary, secondary = ((_send_tg, _send_wa) if cs.primary_messenger == "tg"
+                                  else (_send_wa, _send_tg))
+            if not primary():
+                secondary()
         # врачу (если запись создал не сам врач)
-        if (appt.doctor_id and getattr(appt.doctor, "phone", "")
+        if (wa_enabled() and appt.doctor_id and getattr(appt.doctor, "phone", "")
                 and getattr(created_by, "pk", None) != appt.doctor_id):
             wa_send_text(appt.doctor.phone,
                          "🆕 *Новая запись*\n\n"

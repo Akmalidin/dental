@@ -59,13 +59,15 @@ def wa_enabled():
 
 
 def _chat_id(phone):
-    """Телефон → chatId Green-API: '996XXXXXXXXX@c.us'. 0XXXXXXXXX (KG) → 996XXXXXXXXX."""
-    d = "".join(ch for ch in (phone or "") if ch.isdigit())
-    if d.startswith("0") and len(d) == 10:
-        d = "996" + d[1:]
-    if not d:
-        return None
-    return d + "@c.us"
+    """Телефон → chatId Green-API: '<код страны>XXXXXXXXX@c.us'.
+
+    Код страны берётся из настроек клиники (phone_for_sending), а не зашит:
+    раньше здесь было жёстко 996, и узбекские номера вида «500774307» уходили
+    как есть — без кода страны, то есть в никуда.
+    """
+    from apps.patients.models import phone_for_sending
+    d = phone_for_sending(phone)
+    return (d + "@c.us") if d else None
 
 
 def _api_url(method):

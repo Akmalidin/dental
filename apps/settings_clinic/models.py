@@ -44,6 +44,20 @@ class ClinicSettings(models.Model):
     wa_token = models.CharField(max_length=120, blank=True, verbose_name="Green-API токен")
     wa_api_url = models.CharField(max_length=200, blank=True, verbose_name="Green-API URL (необязательно)")
     wa_phone = models.CharField(max_length=30, blank=True, verbose_name="Номер WhatsApp клиники")
+    # Код страны для отправки сообщений. Номера пациентов пишут по-разному:
+    # «500774307», «998944490382», «+998918813415» — это один и тот же формат
+    # записи, отличается только полнота. normalize_phone() даёт последние 9
+    # цифр (абонентский номер и в KG, и в UZ девятизначный), а код страны
+    # берётся отсюда. Раньше он был зашит в код как 996, из-за чего узбекские
+    # номера без кода уходили в никуда.
+    phone_country_code = models.CharField(
+        max_length=5, default="996", verbose_name="Код страны для номеров")
+    # Основной мессенджер клиники: по нему идут автоуведомления и рассылки.
+    # Если у пациента основной канал недоступен — пробуем второй.
+    primary_messenger = models.CharField(
+        max_length=10, default="wa",
+        choices=[("wa", "WhatsApp"), ("tg", "Telegram")],
+        verbose_name="Основной мессенджер")
     # WhatsApp авто-напоминания
     wa_remind_day = models.BooleanField(default=True, verbose_name="Напоминать за день до приёма")
     wa_remind_hour = models.BooleanField(default=True, verbose_name="Напоминать за час до приёма")

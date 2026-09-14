@@ -111,19 +111,19 @@ def tga_logout():
 
 
 def _chat_id(phone):
-    """Номер телефона → chatId Green-API: '996XXXXXXXXX@c.us'.
+    """Номер телефона → chatId Green-API: '<код страны>XXXXXXXXX@c.us'.
 
     Только для НОМЕРОВ. Угадывать по цифрам, номер это или id пользователя
     Telegram, нельзя: локальный '0700123456' и id вида '10000000' — оба
     десятизначные. Поэтому id передаётся отдельной функцией tga_send_chat(),
     а здесь всё трактуется как телефон.
+
+    Код страны — из настроек клиники, общей функцией phone_for_sending: номера
+    пациентов записывают и с кодом, и без, а у узбекских клиник он не 996.
     """
-    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
-    if digits.startswith("0") and len(digits) == 10:
-        digits = "996" + digits[1:]
-    if not digits:
-        return None
-    return digits + "@c.us"
+    from apps.patients.models import phone_for_sending
+    d = phone_for_sending(phone)
+    return (d + "@c.us") if d else None
 
 
 def tga_send_chat(chat, text):
