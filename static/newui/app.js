@@ -285,10 +285,18 @@ function toothFieldHas(field, num){
   return String(field).split(/[^0-9]+/).filter(Boolean).includes(want);
 }
 
-// serviceCountFn — необязательный источник «сколько услуг по этому зубу».
-// Не задан (карточка пациента, где данных приёма нет) — ячейка рисуется
-// ровно как раньше, без метки.
+// Источник метки «сколько услуг по этому зубу» — по id контейнера одонтограммы.
+// Именно реестр, а не параметр: vcOdontogram перестраивается из пяти мест
+// внутри этого файла (vcTab, selectQuadrant, removeSelectedTooth, сохранение
+// состояния зуба и произвольного состояния), и каждое из них обязано было бы
+// помнить про счётчик. Один раз забыли — метки молча исчезают; так и вышло:
+// «Простой режим» прячет вкладку «Описание», из-за чего при загрузке
+// срабатывает vcTab('teeth') и перестраивает карту.
+// Контейнер без записи в реестре (карточка пациента) рисуется как раньше.
+const odontogramServiceCount = {};
+
 function buildOdontogram(id, upper, lower, prefix, selectable, serviceCountFn){
+  const countFn = serviceCountFn || odontogramServiceCount[id] || null;
   const el=document.getElementById(id);
   if(!el) return;
 
@@ -310,7 +318,7 @@ function buildOdontogram(id, upper, lower, prefix, selectable, serviceCountFn){
     // Метка «по зубу есть услуги в этом приёме». Намеренно на ЯЧЕЙКЕ, а не на
     // самом зубе: цвет зуба уже занят клиническим состоянием (кариес, имплант),
     // и два разных смысла в одном цвете слились бы.
-    const svcCount = serviceCountFn ? (serviceCountFn(n) || 0) : 0;
+    const svcCount = countFn ? (countFn(n) || 0) : 0;
     const svcCls = svcCount>0 ? ' has-services' : '';
     const svcBadge = svcCount>0 ? `<span class="tooth-svc-badge">${svcCount}</span>` : '';
     const svcTitle = svcCount>0 ? ` · услуг в приёме: ${svcCount}` : '';

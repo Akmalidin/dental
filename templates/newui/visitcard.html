@@ -333,12 +333,21 @@
   // Разбор поля «Зуб(ы)» живёт в app.js (toothFieldHas): там может быть
   // несколько номеров через запятую/пробел.
   function vwToothServiceCount(num){
-    return vwPlan.filter(p=>toothFieldHas(p.tooth, num)).length;
+    // try/catch не для красоты: vwPlan объявлен ниже через let, а карту может
+    // перестроить кто угодно и раньше — например vcTab('teeth'), который в
+    // «Простом режиме» срабатывает сам при загрузке. Без защиты это обращение
+    // во временную мёртвую зону уронило бы всю карточку приёма.
+    // Плана ещё нет — меток пока нет, это нормально: ниже будет перерисовка.
+    try { return vwPlan.filter(p=>toothFieldHas(p.tooth, num)).length; }
+    catch(e){ return 0; }
   }
-  // Карта строится один раз при загрузке, а план меняется — поэтому её надо
+  // Регистрируем источник меток за этой одонтограммой — тогда её подхватят и
+  // те перестроения, что живут внутри app.js и про счётчик не знают.
+  odontogramServiceCount['vcOdontogram'] = vwToothServiceCount;
+  // Карта строится не только здесь, а план ещё и меняется — поэтому её надо
   // перерисовывать вслед за планом, иначе метки устареют.
   function vwRefreshOdontogram(){
-    buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', !readOnlyClosed, vwToothServiceCount);
+    buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', !readOnlyClosed);
   }
   // Первая отрисовка карты — ниже, сразу за объявлением vwPlan: здесь его ещё
   // нет (let, временная мёртвая зона), и vwToothServiceCount упал бы с
