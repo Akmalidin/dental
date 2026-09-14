@@ -767,8 +767,17 @@ def patient_notify(request, pk):
                  .exclude(status__in=["cancelled", "no_show"]).order_by("start_at").first())
     tpls = [{"name": t.name, "body": render_message(t.body, patient=patient, appt=next_appt)}
             for t in MessageTemplate.objects.filter(is_active=True)]
-    WaMessage.all_clinics.filter(patient=patient, direction="in", read=False).update(read=True)
-    history = list(WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300])
+    # По номеру, а не только по карточке — см. пояснение в patient_wa_messages:
+    # у номера бывают карточки-дубли, и переписка рвётся между ними.
+    from django.db.models import Q as _Q
+    from apps.patients.models import normalize_phone as _norm
+    _n = _norm(patient.phone)
+    _scope = _Q(patient=patient)
+    if _n:
+        _scope |= (_Q(phone__contains=_n)
+                   & (_Q(clinic=patient.clinic) | _Q(clinic__isnull=True)))
+    WaMessage.all_clinics.filter(_scope).filter(direction="in", read=False).update(read=True)
+    history = list(WaMessage.all_clinics.filter(_scope).order_by("created_at")[:300])
     default_channel = request.GET.get("channel") or ("tg" if (patient.telegram_chat_id and not patient.phone) else "wa")
     return render(request, "patients/notify.html", {
         "patient": patient, "wa_templates": tpls, "wa_enabled": wa_enabled(),
@@ -822,18 +831,40 @@ def patient_wa_messages(request, pk):
     та же выборка, что и в patient_notify(), плюс отметка входящих прочитанными."""
     from django.http import JsonResponse
     from django.utils import timezone
+    from django.db.models import Q
     patient = get_object_or_404(Patient, pk=pk)
     from apps.notifications.models import WaMessage
+    from apps.patients.models import normalize_phone
+
+    # Диалог собираем по НОМЕРУ, а не только по карточке.
+    #
+    # У одного номера бывает несколько карточек-дублей: на проде у
+    # +996553565674 их четыре. Исходящие пишутся в ту карточку, что открыл
+    # оператор, а входящие — в ту, которую выбрал поиск по номеру. Переписка
+    # оказывалась разорвана: в чате были одни исходящие, хотя входящие лежали
+    # рядом, просто под другим дублем.
+    #
+    # Угадывать «правильную» карточку бесполезно — любой выбор рвёт половину
+    # переписки. Поэтому показываем всё, что связано с этим номером.
+    norm = normalize_phone(patient.phone)
+    scope = Q(patient=patient)
+    if norm:
+        # Чужие клиники не подмешиваем: тот же номер может быть пациентом и в
+        # другой клинике. Сообщения без клиники (не привязанные ни к кому)
+        # берём — они с этого же номера.
+        scope |= (Q(phone__contains=norm)
+                  & (Q(clinic=patient.clinic) | Q(clinic__isnull=True)))
+
     after_raw = request.GET.get("after")
     if after_raw is None:
-        WaMessage.all_clinics.filter(patient=patient, direction="in", read=False).update(read=True)
-        qs = WaMessage.all_clinics.filter(patient=patient).order_by("created_at")[:300]
+        WaMessage.all_clinics.filter(scope).filter(direction="in", read=False).update(read=True)
+        qs = WaMessage.all_clinics.filter(scope).order_by("created_at")[:300]
     else:
         try:
             after = int(after_raw)
         except (TypeError, ValueError):
             after = 0
-        qs = WaMessage.all_clinics.filter(patient=patient, id__gt=after).order_by("id")[:100]
+        qs = WaMessage.all_clinics.filter(scope).filter(id__gt=after).order_by("id")[:100]
     # "time" остаётся как был — его читает старый интерфейс (patients/notify.html).
     # Для новых чатов добавлены "date" (для разделителей по дням) и "hm": в
     # ленте с разделителем дата в каждом пузыре уже лишняя.
