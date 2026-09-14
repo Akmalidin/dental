@@ -253,7 +253,7 @@ def message_template_delete(request, pk):
     return redirect("message_templates")
 
 
-def _log_incoming_event(phone, text):
+def _log_incoming_event(phone, text, channel="wa"):
     """Записать входящее событие без содержимого (например, звонок).
 
     Пациент ищется по последним 9 цифрам — так же, как для сообщений.
@@ -263,7 +263,8 @@ def _log_incoming_event(phone, text):
     from apps.tenancy import unscoped
     with unscoped():
         patient = find_patient_by_phone(phone)
-        m = WaMessage(patient=patient, direction="in", phone=phone, body=text, read=False)
+        m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
+                      channel=channel, read=False)
         if patient is not None:
             m.clinic = patient.clinic
         m.save()
@@ -286,6 +287,11 @@ def wa_webhook(request):
         data = json.loads(request.body or b"{}")
     except Exception:
         return HttpResponse("bad", status=400)
+    # Тот же обработчик обслуживает и телеграм-инстанс Green-API: формат
+    # уведомлений у них одинаковый, отличается только канал. Он приходит
+    # пометкой в адресе вебхука (?ch=tg) — так не пришлось дублировать весь
+    # разбор сообщений и рисковать расхождением двух копий.
+    channel = "tg" if request.GET.get("ch") == "tg" else "wa"
     # Входящий звонок. Этот тип уведомления раньше молча игнорировался:
     # пациент звонил в WhatsApp клиники, и в его карточке не оставалось ничего.
     # Требует включённого incomingCallWebhook на инстансе (SetSettings).
@@ -302,9 +308,13 @@ def wa_webhook(request):
         if status in CALL_LABEL:
             try:
                 _log_incoming_event(str(data.get("from") or "").split("@")[0],
-                                    CALL_LABEL[status])
-            except Exception:  # noqa: BLE001
-                pass
+                                    CALL_LABEL[status], channel=channel)
+            except Exception as exc:  # noqa: BLE001
+                # Не роняем ответ вебхуку, но и не глотаем молча: без записи в
+                # лог сбой здесь выглядел бы как «звонки не приходят».
+                import logging
+                logging.getLogger("apps").warning(
+                    "Не удалось записать входящий звонок: %s", exc)
         return JsonResponse({"ok": True})
     if data.get("typeWebhook") == "incomingMessageReceived":
         md = data.get("messageData", {}) or {}
@@ -396,7 +406,7 @@ def wa_webhook(request):
                 # карточки и не показывалось в чате вовсе.
                 patient = find_patient_by_phone(phone)
                 m = WaMessage(patient=patient, direction="in", phone=phone, body=text,
-                              media_type=media_type, read=False)
+                              media_type=media_type, channel=channel, read=False)
                 if patient is not None:
                     m.clinic = patient.clinic
                 if media_file is not None:

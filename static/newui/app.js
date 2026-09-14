@@ -1404,18 +1404,64 @@ function renderChatHeader(){
   el.innerHTML=`<div><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
     <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>`;
 }
+// Лента открытого диалога. Держим её в памяти, чтобы автообновление могло
+// дозапрашивать ТОЛЬКО новые сообщения (?after=<id>) и не перерисовывать всё
+// подряд — иначе на каждом опросе лента моргает и прыгает прокрутка.
+let chatThreadMsgs=[];
+let chatPollTimer=null;
+
 async function loadChatThread(patientId){
   const el=document.getElementById('chatMessages');
   if(!el) return;
   el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--ink-soft);">${t('w_loading')}</div>`;
+  chatThreadMsgs=[];
   try{
     const res=await fetch('/patients/'+patientId+'/wa-messages/');
     const data=await res.json();
-    renderChatThread(data.messages||[]);
+    chatThreadMsgs=data.messages||[];
+    renderChatThread(chatThreadMsgs);
   }catch(e){
     el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--coral);">${t('w_chat_load_failed')}</div>`;
   }
+  startChatAutoRefresh();
 }
+
+// Автообновление: раньше новые сообщения появлялись только после клика по
+// карточке пациента — оператор не видел, что ему ответили.
+function stopChatAutoRefresh(){
+  if(chatPollTimer){ clearInterval(chatPollTimer); chatPollTimer=null; }
+}
+function startChatAutoRefresh(){
+  stopChatAutoRefresh();
+  if(!document.getElementById('chatMessages')) return; // не страница «Мессенджеры»
+  chatPollTimer=setInterval(pollChatThread, 10000);
+}
+async function pollChatThread(){
+  const el=document.getElementById('chatMessages');
+  // Вкладка в фоне — не дёргаем сервер: вернётся пользователь, опрос продолжится.
+  if(!el || !currentClientId || document.visibilityState==='hidden') return;
+  const lastId=chatThreadMsgs.length ? chatThreadMsgs[chatThreadMsgs.length-1].id : 0;
+  let fresh=[];
+  try{
+    const res=await fetch('/patients/'+currentClientId+'/wa-messages/?after='+lastId);
+    fresh=(await res.json()).messages||[];
+  }catch(e){ return; }
+  if(!fresh.length) return;
+  // Если оператор листает историю, не утаскиваем его вниз силой.
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  const keep = el.scrollTop;
+  chatThreadMsgs=chatThreadMsgs.concat(fresh);
+  renderChatThread(chatThreadMsgs);
+  if(!atBottom) el.scrollTop=keep;
+  // Превью в списке слева — чтобы диалог поднялся и стало видно новое.
+  const c=chatClients.find(x=>x.id===currentClientId);
+  const last=fresh[fresh.length-1];
+  if(c && last){ c.lastBody=last.body||''; c.lastTime=last.hm||last.time||''; renderClientList(); }
+}
+// Вернулись на вкладку — не ждём следующего тика, забираем сразу.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && chatPollTimer) pollChatThread();
+});
 // Подпись разделителя дня: сегодня/вчера словами, иначе дата с месяцем.
 // Год дописываем, только если он не текущий — иначе в ленте лишний шум.
 const CHAT_MONTHS=['января','февраля','марта','апреля','мая','июня',
