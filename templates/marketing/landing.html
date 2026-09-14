@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stom.asia — CRM для стоматологий</title>
-<meta name="description" content="CRM для стоматологий: расписание, карточки пациентов, финансы, склад, WhatsApp и Telegram — в одной системе.">
+<meta name="description" content="CRM для стоматологий: расписание, карточки пациентов, зубная формула, планы лечения, финансы и склад, WhatsApp и Telegram — в одной системе.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap&subset=cyrillic" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap&subset=cyrillic" rel="stylesheet">
 <link rel="stylesheet" href="{% static 'marketing/landing.css' %}">
 </head>
 <body>
@@ -15,10 +15,11 @@
 <nav class="nav">
   <a href="#" class="nav-brand"><span class="dot"></span>stom.asia</a>
   <div class="nav-links">
+    <a href="#modules">Возможности</a>
+    <a href="#how">Как работает</a>
+    <a href="#pricing">Тарифы</a>
+    <a href="#faq">Вопросы</a>
     <a href="{% url 'marketing_directory' %}">Найти клинику</a>
-    <a href="#modules">Продукт</a>
-    <a href="#why">Почему мы</a>
-    <a href="#contact">Контакты</a>
   </div>
   <div class="nav-right">
     <form class="clinic-login" data-clinic-login="stom.asia">
@@ -30,44 +31,125 @@
 </nav>
 
 <header class="hero">
-  <div class="hero-glow"></div>
-  <div class="hero-arch" aria-hidden="true">
-    <svg viewBox="0 -60 800 260" xmlns="http://www.w3.org/2000/svg">
-      <path class="arch-path" d="M40 180 Q400 -40 760 180"></path>
-      <g class="tooth-dots"></g>
-    </svg>
-  </div>
-  <div class="eyebrow">CRM для стоматологий</div>
-  <h1 class="headline">Помнит каждый приём.<br>И каждый зуб.</h1>
-  <p class="sub">Расписание, карточки пациентов, финансы и склад — в одной системе. WhatsApp и Telegram сами напоминают пациентам о визите и присылают кнопки подтверждения записи.</p>
-  <div class="hero-ctas">
-    <a href="#contact" class="btn btn-primary">Оставить заявку</a>
-    <a href="#modules" class="btn btn-ghost">Что внутри</a>
-  </div>
-  <div class="chips">
-    <span class="chip"><b>WhatsApp и Telegram</b> — напоминания и кнопки</span>
-    <span class="chip"><b>Офлайн-режим</b> — работает без интернета</span>
-    <span class="chip"><b>Аудит-центр</b> — история всех изменений</span>
-    <span class="chip"><b>Мультифилиальность</b> — одна база на все точки</span>
+  <span class="blob blob-purple"></span>
+  <span class="blob blob-green"></span>
+  <span class="blob blob-blue"></span>
+  <div class="hero-inner">
+    <div>
+      <span class="badge-pill"><span class="ping"></span>Работает в клиниках уже сегодня</span>
+      <h1 class="headline">Помнит каждый приём.<br>И каждый <span class="grad-text">зуб</span>.</h1>
+      <p class="hero-sub">Расписание, карточки пациентов, зубная формула, планы лечения, финансы и склад — в одной системе. WhatsApp и Telegram сами напоминают пациентам о визите и присылают кнопки подтверждения записи.</p>
+      <div class="hero-ctas">
+        <a href="#contact" class="btn btn-primary">Оставить заявку →</a>
+        <a href="{% url 'marketing_directory' %}" class="btn btn-ghost">Найти клинику</a>
+      </div>
+      <div class="hero-trust">
+        <span><b>Бесплатная</b> консультация</span>
+        <span><b>1 день</b> на подключение</span>
+        <span><b>Резервные копии</b> каждую ночь</span>
+      </div>
+    </div>
+    <div class="hero-mock">
+      <div class="mock-card">
+        <div class="mock-bar"><span class="mdot"></span><span class="mdot"></span><span class="mdot"></span><span class="mock-url">клиника.stom.asia</span></div>
+        <div class="mock-grid">
+          <div class="mock-pill g">Иванов И.</div>
+          <div class="mock-pill empty"></div>
+          <div class="mock-pill empty"></div>
+          <div class="mock-pill p">Петров А.</div>
+          <div class="mock-pill b">Смирнова Е.</div>
+          <div class="mock-pill empty"></div>
+          <div class="mock-pill g">Терапия</div>
+          <div class="mock-pill p">Хирургия</div>
+        </div>
+      </div>
+      <div class="mock-stat">
+        <div class="lbl">Сегодня</div>
+        <div class="num">24</div>
+        <div class="sub">приёма · 6 врачей</div>
+        <div class="bar"><i></i></div>
+      </div>
+    </div>
   </div>
 </header>
+
+<div class="stats-bar">
+  <div class="wrap stats-grid">
+    <div class="stat"><b class="c-green">8+</b><span>модулей в одной системе</span></div>
+    <div class="stat"><b class="c-purple">24/7</b><span>доступ из любой точки</span></div>
+    <div class="stat"><b class="c-blue">0</b><span>бумажных журналов</span></div>
+    <div class="stat"><b class="c-green">1</b><span>день на подключение</span></div>
+  </div>
+</div>
 
 <section id="modules">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow" style="justify-content:center">Состав системы</div>
-      <h2>Восемь модулей вместо восьми программ</h2>
-      <p>Каждый раздел пронумерован так же, как зуб в карте пациента — по международной системе FDI. Условность, но узнаваемая для любого в клинике.</p>
+      <span class="badge-pill" style="color:#6440e0;background:var(--purple-tint);">Возможности</span>
+      <h2>Всё, что нужно клинике —<br><span class="grad-text">в одном окне</span></h2>
+      <p>stom.asia закрывает повседневные задачи администратора, врача и руководителя. Без зоопарка таблиц, мессенджеров и бумаги.</p>
     </div>
-    <div class="modules-grid">
-      <article class="tooth-card"><div class="fdi">11</div><h3>Расписание и записи</h3><p>Календарь приёмов, статусы, напоминания — из одного экрана, без пересечений по кабинетам.</p></article>
-      <article class="tooth-card"><div class="fdi">21</div><h3>Карточки пациентов</h3><p>История лечений, баланс, документы, поиск по ИИН — без бумажных карт и потерь.</p></article>
-      <article class="tooth-card"><div class="fdi">31</div><h3>Финансы и склад</h3><p>Оплаты, расходы, остатки материалов — касса и склад сходятся сами по себе.</p></article>
-      <article class="tooth-card"><div class="fdi">41</div><h3>Аудит-центр</h3><p>Кто и что изменил в карточке пациента — видно в любой момент, с историей по полям.</p></article>
-      <article class="tooth-card"><div class="fdi">18</div><h3>WhatsApp и Telegram</h3><p>Напоминания о приёме и кнопки подтверждения/отмены прямо в чате пациента.</p></article>
-      <article class="tooth-card"><div class="fdi">28</div><h3>Офлайн-режим</h3><p>Компьютеры клиники работают без интернета, синхронизация — как только связь появится.</p></article>
-      <article class="tooth-card"><div class="fdi">38</div><h3>Сотрудники и зарплата</h3><p>Роли, права доступа, расчёт зарплаты по приёмам и загрузке врача.</p></article>
-      <article class="tooth-card"><div class="fdi">48</div><h3>Аналитика</h3><p>Выручка, загрузка врачей, должники — в реальном времени, без сведения таблиц вручную.</p></article>
+    <div class="features-grid">
+      <article class="feature-card">
+        <div class="feature-icon g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+        <h3>Расписание и записи</h3>
+        <p>Сетка по врачам и кабинетам, drag-and-drop, цвета статусов, напоминания пациентам в WhatsApp.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></div>
+        <h3>Карточки пациентов</h3>
+        <p>История приёмов, документы, аллергии, баланс и файлы — всё прикреплено к одной карте.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3-2.8-5-6.2-5-9.5A5 5 0 0 1 12 6a5 5 0 0 1 5 5.5c0 3.3-2 6.7-5 9.5Z"/><circle cx="12" cy="11" r="1.6"/></svg></div>
+        <h3>Зубная формула</h3>
+        <p>Интерактивная схема зубов: проблемы, поверхности, пломбы, удаления, имплант — и история по каждому зубу.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l1 3H8l1-3Z"/><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z"/><path d="M10 12h4M10 16h4"/></svg></div>
+        <h3>Планы лечения</h3>
+        <p>Многоэтапные планы с ценами, скидками, согласием пациента и печатью договора.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg></div>
+        <h3>Финансы и касса</h3>
+        <p>Оплаты, долги пациентов, расходы, зарплаты врачей, отчёты по выручке в реальном времени.</p>
+      </article>
+      <article class="feature-card hl">
+        <div class="feature-icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 8.6 8.6 0 0 1-4-1L3 20l1.2-4.9A8.4 8.4 0 0 1 21 11.5Z"/></svg></div>
+        <h3>WhatsApp и Telegram</h3>
+        <p>Напоминания о приёме, кнопки подтверждения/отмены, история переписки прямо в карточке пациента.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l4 2"/></svg></div>
+        <h3>Аудит-центр</h3>
+        <p>Кто и что изменил в карточке пациента — видно в любой момент, с историей по каждому полю.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="18" cy="8.5" r="2.4"/><path d="M15.7 13.2c2.7.3 4.8 2.2 4.8 5.3"/></svg></div>
+        <h3>Сотрудники и зарплата</h3>
+        <p>Роли, права доступа, расчёт зарплаты по приёмам и загрузке врача.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5Z"/><path d="M3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5"/></svg></div>
+        <h3>Мультифилиальность</h3>
+        <p>Несколько филиалов в одном аккаунте — свои врачи, услуги и отчёты у каждой точки.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="section-cloud">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="badge-pill" style="color:#0a8f63;background:var(--green-tint);">Подключение за 1 день</span>
+      <h2>Как это <span class="grad-text">работает</span></h2>
+    </div>
+    <div class="steps-grid">
+      <div class="step"><span class="step-num grad-text">01</span><h3>Регистрируем клинику</h3><p>Заводим клинику в системе, подключаем поддомен, настраиваем оформление.</p></div>
+      <div class="step"><span class="step-num grad-text">02</span><h3>Переносим данные</h3><p>Импортируем врачей, услуги, пациентов и расписание из старой системы или таблиц.</p></div>
+      <div class="step"><span class="step-num grad-text">03</span><h3>Подключаем WhatsApp/Telegram</h3><p>Настраиваем напоминания о приёме и кнопки подтверждения/отмены записи.</p></div>
+      <div class="step"><span class="step-num grad-text">04</span><h3>Работаете в CRM</h3><p>Расписание, касса, склад и аналитика — в одной системе, без бумаги.</p></div>
     </div>
   </div>
 </section>
@@ -75,12 +157,12 @@
 <section id="why">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow" style="justify-content:center">Что меняется</div>
+      <span class="badge-pill" style="color:#1f76ad;background:var(--blue-tint);">Что меняется</span>
       <h2>Первая неделя после подключения</h2>
     </div>
     <div class="compare">
       <div class="compare-col old">
-        <span class="tag mono">Было</span>
+        <span class="tag">Было</span>
         <ul>
           <li>Бумажный журнал записи, который теряется или дублируется</li>
           <li>Каждому пациенту звонят вручную, чтобы напомнить о приёме</li>
@@ -89,7 +171,7 @@
         </ul>
       </div>
       <div class="compare-col new">
-        <span class="tag mono">Стало</span>
+        <span class="tag">Стало</span>
         <ul>
           <li>Расписание в CRM видят все сотрудники, записи не пересекаются</li>
           <li>WhatsApp и Telegram сами напоминают о приёме и о задолженности</li>
@@ -101,33 +183,140 @@
   </div>
 </section>
 
+<section id="pricing" class="section-cloud">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="badge-pill" style="color:#6440e0;background:var(--purple-tint);">Тарифы</span>
+      <h2>Простые прозрачные <span class="grad-text">планы</span></h2>
+      <p>Без скрытых комиссий, без доплат за обновления.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <span class="price-name">Старт</span>
+        <div class="price-amount">Уточняется</div>
+        <ul>
+          <li>До 2 врачей</li>
+          <li>Расписание и пациенты</li>
+          <li>Зубная формула</li>
+          <li>Поддержка в чате</li>
+        </ul>
+        <a href="#contact" class="btn btn-ghost btn-wide">Оставить заявку</a>
+      </div>
+      <div class="price-card hl">
+        <span class="price-badge">Выбор клиник</span>
+        <span class="price-name">Клиника</span>
+        <div class="price-amount">Уточняется</div>
+        <ul>
+          <li>Все модули включены</li>
+          <li>Финансы и планы лечения</li>
+          <li>WhatsApp-напоминания</li>
+          <li>Отчёты и зарплата</li>
+          <li>Подключение и обучение</li>
+        </ul>
+        <a href="#contact" class="btn btn-green btn-wide">Запросить демо</a>
+      </div>
+      <div class="price-card">
+        <span class="price-name">Сеть</span>
+        <div class="price-amount">Индивидуально</div>
+        <ul>
+          <li>Несколько филиалов</li>
+          <li>Сводные отчёты</li>
+          <li>Приоритетная поддержка</li>
+          <li>Кастомные интеграции</li>
+        </ul>
+        <a href="#contact" class="btn btn-ghost btn-wide">Связаться</a>
+      </div>
+    </div>
+    <p class="pricing-note">Точные цифры зависят от числа врачей и филиалов — уточним при заявке.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="badge-pill" style="color:#0a8f63;background:var(--green-tint);">Вопросы и ответы</span>
+      <h2>Что часто <span class="grad-text">спрашивают</span></h2>
+    </div>
+    <div class="faq-list">
+      <details class="faq-item" open>
+        <summary class="faq-q">Сколько занимает подключение клиники?<span class="ic">+</span></summary>
+        <p class="faq-a">Обычно 1 рабочий день: создаём клинику в системе, заводим врачей и услуги, переносим пациентов и расписание, подключаем WhatsApp/Telegram.</p>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">Работает ли система без интернета?<span class="ic">+</span></summary>
+        <p class="faq-a">Да, есть офлайн-режим — компьютеры клиники продолжают работать, а данные синхронизируются, как только связь появится.</p>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">Можно ли подключить WhatsApp и Telegram?<span class="ic">+</span></summary>
+        <p class="faq-a">Да, оба канала настраиваются при подключении — напоминания о приёме и кнопки подтверждения/отмены записи уходят пациенту автоматически.</p>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">Подходит ли для клиники с несколькими филиалами?<span class="ic">+</span></summary>
+        <p class="faq-a">Да — мультифилиальность встроена: один аккаунт клиники, у каждого филиала свои врачи, услуги и отчёты, а руководитель видит сводную картину.</p>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">Где хранятся данные клиники?<span class="ic">+</span></summary>
+        <p class="faq-a">На серверах платформы, с ежедневным автоматическим резервным копированием — доступ к карточкам пациентов только у сотрудников клиники.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
 <section id="contact">
   <div class="wrap">
-    <div class="contact-box">
-      <div>
-        <h2>Подключим клинику за 1 день</h2>
-        <p class="sub">Перенесём базу пациентов, настроим расписание и WhatsApp/Telegram. Первая консультация — бесплатно.</p>
+    <div class="cta-dark">
+      <span class="blob blob-g"></span>
+      <span class="blob blob-p"></span>
+      <div class="cta-dark-inner">
+        <h2>Готовы подключить клинику?</h2>
+        <p class="sub">Оставьте контакты — свяжемся и покажем систему за 30 минут.</p>
+        <form class="cta-lead-form" method="post" action="{% url 'marketing_lead' %}">
+          {% csrf_token %}
+          {% if messages %}
+            {% for m in messages %}
+            <div class="form-msg {% if m.tags == 'error' %}error{% else %}success{% endif %}">{{ m }}</div>
+            {% endfor %}
+          {% endif %}
+          <input type="text" name="clinic_name" placeholder="Название клиники" required>
+          <input type="tel" name="phone" placeholder="Телефон / WhatsApp" required>
+          <input type="text" name="city" placeholder="Город (необязательно)">
+          <button type="submit" class="btn btn-green">Оставить заявку →</button>
+        </form>
+        <p class="cta-disclaimer">Нажимая кнопку, вы соглашаетесь на обработку контактных данных. Свяжемся в течение дня.</p>
       </div>
-      <form class="lead-form" method="post" action="{% url 'marketing_lead' %}">
-        {% csrf_token %}
-        {% if messages %}
-          {% for m in messages %}
-          <div class="form-msg {% if m.tags == 'error' %}error{% else %}success{% endif %}">{{ m }}</div>
-          {% endfor %}
-        {% endif %}
-        <input type="text" name="clinic_name" placeholder="Название клиники" required>
-        <input type="tel" name="phone" placeholder="Телефон / WhatsApp" required>
-        <input type="text" name="city" placeholder="Город (необязательно)">
-        <button type="submit" class="btn btn-primary">Оставить заявку</button>
-      </form>
     </div>
   </div>
 </section>
 
 <footer>
-  <div class="wrap footer-row">
-    <a href="#" class="nav-brand"><span class="dot"></span>stom.asia</a>
-    <span class="mono">CRM для стоматологий · {% now "Y" %}</span>
+  <div class="wrap">
+    <div class="footer-top">
+      <div>
+        <a href="#" class="nav-brand"><span class="dot"></span>stom.asia</a>
+        <p>CRM для стоматологических клиник. Расписание, зубная формула, финансы и WhatsApp — в одной системе.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Продукт</h4>
+        <ul>
+          <li><a href="#modules">Возможности</a></li>
+          <li><a href="#pricing">Тарифы</a></li>
+          <li><a href="#how">Как работает</a></li>
+          <li><a href="{% url 'marketing_directory' %}">Найти клинику</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Компания</h4>
+        <ul>
+          <li><a href="#why">О продукте</a></li>
+          <li><a href="#faq">Вопросы</a></li>
+          <li><a href="#contact">Контакты</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© {% now "Y" %} stom.asia. Все права защищены.</span>
+      <span class="mono">CRM для стоматологий</span>
+    </div>
   </div>
 </footer>
 
