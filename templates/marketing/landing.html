@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap&subset=cyrillic" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'marketing/landing.css' %}">
+<link rel="stylesheet" href="{% static 'marketing/landing.css' %}?v={{ asset_v }}">
 </head>
 <body>
 
@@ -320,6 +320,6 @@
   </div>
 </footer>
 
-<script src="{% static 'marketing/landing.js' %}"></script>
+<script src="{% static 'marketing/landing.js' %}?v={{ asset_v }}"></script>
 </body>
 </html>
