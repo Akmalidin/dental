@@ -534,6 +534,15 @@
       waSetStatus(t('w_wa_no_link','Green-API не отвечает — проверьте ID инстанса, токен и доступ в интернет.'), 'err');
       return;
     }
+    // Клиника на общих ключах, а номер не привязан. Показывать QR здесь нельзя:
+    // он принадлежит общему инстансу, и сканирование увело бы общий номер у всех
+    // остальных клиник. Сервер такой QR и не присылает — это лишь объяснение.
+    if(!d.own_keys){
+      waStopPolling();
+      waShow('wa-qr-box', false); waShow('wa-code-box', false);
+      waSetStatus(t('w_wa_shared_not_linked','Используются общие ключи системы, и номер сейчас не привязан. Подключение общего номера делает администратор системы — сканирование отсюда отключило бы WhatsApp у других клиник. Свой инстанс можно завести, заполнив ID и токен выше.'), 'err');
+      return;
+    }
     if(d.qr_type === 'qrCode' && d.qr){
       document.getElementById('wa-qr-img').src = 'data:image/png;base64,' + d.qr;
       if(document.getElementById('wa-code-box').classList.contains('hidden')) waShow('wa-qr-box', true);
@@ -592,6 +601,7 @@
         keys: t('w_wa_need_keys','Заполните ID инстанса и токен, затем нажмите «Сохранить и подключить».'),
         phone: t('w_wa_bad_phone','Укажите номер телефона.'),
         busy: t('w_wa_code_busy','Номер уже подключён либо Green-API не выдал код. Обновите окно.'),
+        shared: t('w_wa_shared_no_link','Клиника работает на общих ключах системы — привязать номер отсюда нельзя, это затронуло бы другие клиники.'),
         forbidden: t('w_wa_no_access','Доступно только директору клиники.')
       };
       out.innerHTML = '<div style="font-size:12px;color:var(--coral);">' + (reasons[d && d.error] || t('w_wa_code_failed','Не удалось получить код.')) + '</div>';

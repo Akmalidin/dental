@@ -608,7 +608,12 @@ def wa_status(request):
         # Без ключей инстанса спрашивать Green-API не о чем.
         return JsonResponse(payload)
     payload["state"] = wa_state()
-    if payload["state"] and payload["state"] != "authorized":
+    # QR отдаём ТОЛЬКО когда у клиники собственный инстанс.
+    # На общих ключах QR принадлежит общему инстансу: отсканировав его,
+    # директор одной клиники перепривязал бы общий номер к своему телефону и
+    # разом оставил без WhatsApp все остальные клиники. Поэтому код сюда даже
+    # не загружается — прятать его в вёрстке было бы недостаточно.
+    if own_keys and payload["state"] and payload["state"] != "authorized":
         qr_type, qr = wa_qr()
         payload["qr_type"] = qr_type
         payload["qr"] = qr if qr_type == "qrCode" else ""
@@ -621,6 +626,13 @@ def wa_auth_code_view(request):
     """Код привязки по номеру телефона — когда QR отсканировать нечем."""
     if not _wa_staff_ok(request.user):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    # Привязка по номеру перепривязывает инстанс ровно так же, как QR. На общих
+    # ключах это чужой, системный инстанс — запрещаем, иначе одна клиника уведёт
+    # общий номер у всех остальных.
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.get()
+    if not ((cs.wa_id_instance or "").strip() and (cs.wa_token or "").strip()):
+        return JsonResponse({"ok": False, "error": "shared"}, status=403)
     from .whatsapp import wa_auth_code
     ok, result = wa_auth_code(request.POST.get("phone") or "")
     if ok:
