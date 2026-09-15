@@ -51,3 +51,19 @@ jobs:
             echo
             echo ">>> dmesg — сетевые события/OOM за последние сутки (если ядро логирует)"
             dmesg -T 2>/dev/null | tail -30 || echo "dmesg недоступен без sudo"
+            echo
+            echo ">>> ufw (локальный файрвол ОС)"
+            ufw status verbose 2>/dev/null || echo "ufw не установлен/не запущен"
+            echo
+            echo ">>> iptables — правила с ограничением скорости на 22 порт (limit/recent/hashlimit)"
+            iptables -L -n --line-numbers 2>/dev/null | grep -iE "22|limit|recent|hashlimit|dpt:ssh" || echo "iptables пуст или недоступен без sudo"
+            echo
+            echo ">>> fail2ban — не забанен ли диапазон (или сам сервис не штормит)"
+            (systemctl is-active fail2ban 2>/dev/null && fail2ban-client status sshd 2>/dev/null) || echo "fail2ban не установлен/не активен"
+            echo
+            echo ">>> sshd: слушает ли, сколько сейчас соединений/попыток"
+            ss -tn state established '( dport = :22 or sport = :22 )' 2>/dev/null || echo "ss недоступен"
+            grep -E "^MaxStartups|^MaxSessions" /etc/ssh/sshd_config 2>/dev/null || echo "MaxStartups/MaxSessions не заданы явно (дефолт)"
+            echo
+            echo ">>> лог auth за последние ~5 минут — попытки/обрывы SSH-подключений"
+            journalctl -u ssh -u sshd --since "-10 min" --no-pager 2>/dev/null | tail -60 || echo "нет юнита ssh/sshd в journalctl"
