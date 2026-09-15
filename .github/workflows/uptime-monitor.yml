@@ -1,0 +1,88 @@
+name: Uptime monitor
+
+# Независимый от сервера мониторинг: раз в 10 минут дёргает оба публичных
+# домена снаружи (GitHub Actions — отдельная от сервера инфраструктура,
+# в отличие от любого скрипта, который жил бы на самом сервере и не увидел
+# бы, что сервер недоступен снаружи). При недоступности — заводит/обновляет
+# GitHub Issue с точным временем и HTTP-кодом (или "нет ответа"), плюс сразу
+# снимает диагностику по SSH (systemctl/journalctl/uptime/место/память),
+# чтобы в следующий раз причина была видна по факту, а не гадалась постфактум
+# по логам через полчаса. При восстановлении — issue закрывается сам.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверка сайтов (снаружи, не с самого сервера)
+        id: check
+        run: |
+          set +e
+          code_sadaf=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://app.sadaf.kg/)
+          code_stom=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://stom.asia/)
+          echo "code_sadaf=$code_sadaf" >> "$GITHUB_OUTPUT"
+          echo "code_stom=$code_stom" >> "$GITHUB_OUTPUT"
+          ok=true
+          [[ "$code_sadaf" =~ ^(2|3)[0-9][0-9]$ ]] || ok=false
+          [[ "$code_stom" =~ ^(2|3)[0-9][0-9]$ ]] || ok=false
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "app.sadaf.kg: HTTP $code_sadaf"
+          echo "stom.asia: HTTP $code_stom"
+
+      - name: Диагностика по SSH (только если сайт недоступен — снимок причины прямо сейчас)
+        if: steps.check.outputs.ok == 'false'
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> uptime / последний reboot"
+            uptime
+            who -b
+            echo ">>> systemctl sadaf.service / nginx"
+            systemctl is-active sadaf.service nginx || true
+            echo ">>> journalctl -u sadaf.service (последние 40 строк)"
+            journalctl -u sadaf.service -n 40 --no-pager || true
+            echo ">>> место на диске / память"
+            df -h / || true
+            free -h || true
+
+      - name: Открыть/дополнить issue об инциденте
+        if: steps.check.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODE_SADAF: ${{ steps.check.outputs.code_sadaf }}
+          CODE_STOM: ${{ steps.check.outputs.code_stom }}
+        run: |
+          ts=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          body=$(printf '**%s**\napp.sadaf.kg: HTTP %s\nstom.asia: HTTP %s\n\nДиагностика по SSH (если снялась) — в логе этого прогона: %s' \
+            "$ts" "$CODE_SADAF" "$CODE_STOM" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+          num=$(gh issue list --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "🔴 Сайт недоступен" --body "$body" --assignee "$GITHUB_REPOSITORY_OWNER" || true
+          fi
+
+      - name: Закрыть issue (сайт снова отвечает)
+        if: steps.check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          num=$(gh issue list --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "✅ Сайт снова доступен: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            gh issue close "$num"
+          fi
+
+      - name: Провалить прогон при недоступности (чтобы сработали стандартные уведомления Actions)
+        if: steps.check.outputs.ok == 'false'
+        run: exit 1
