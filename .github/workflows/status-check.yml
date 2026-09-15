@@ -1,0 +1,36 @@
+name: Server status check
+
+# Ручной диагностический прогон (workflow_dispatch) — read-only проверка,
+# ничего не деплоит и не перезапускает. Использует те же SSH-секреты, что и
+# deploy.yml, потому что доступа к серверу с этой стороны иначе нет.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH status check (systemctl + journalctl + локальный curl)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> systemctl status sadaf.service"
+            systemctl status sadaf.service --no-pager -l || true
+            echo
+            echo ">>> journalctl -u sadaf.service (последние 100 строк)"
+            journalctl -u sadaf.service -n 100 --no-pager || true
+            echo
+            echo ">>> nginx: активен ли"
+            systemctl is-active nginx || true
+            echo
+            echo ">>> локальный curl (мимо nginx, прямо в gunicorn/сокет, если слушает порт)"
+            curl -s -o /dev/null -w "localhost: HTTP %{http_code}\n" --max-time 5 http://127.0.0.1:8000/ || echo "curl 127.0.0.1:8000 не удался"
+            echo
+            echo ">>> место на диске"
+            df -h / || true
+            echo
+            echo ">>> память"
+            free -h || true
