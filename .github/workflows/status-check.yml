@@ -67,3 +67,18 @@ jobs:
             echo
             echo ">>> лог auth за последние ~5 минут — попытки/обрывы SSH-подключений"
             journalctl -u ssh -u sshd --since "-10 min" --no-pager 2>/dev/null | tail -60 || echo "нет юнита ssh/sshd в journalctl"
+            echo
+            echo ">>> что лежит на сервере: /var/www"
+            ls -la /var/www/ 2>/dev/null || echo "/var/www недоступен"
+            echo
+            echo ">>> размер каждого проекта в /var/www"
+            du -sh /var/www/*/ 2>/dev/null || true
+            echo
+            echo ">>> активные systemd-юниты приложений (свои сервисы, не системные)"
+            systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | grep -viE "systemd-|dbus|cron\.service|ssh\.service|networkd|resolved|udev|polkit|rsyslog|multipathd|snapd|unattended|apport|packagekit|accounts-daemon|logind" || true
+            echo
+            echo ">>> nginx: какие сайты включены (sites-enabled)"
+            ls -la /etc/nginx/sites-enabled/ 2>/dev/null || echo "sites-enabled не найден"
+            echo
+            echo ">>> nginx: server_name из каждого конфига в sites-enabled"
+            grep -RH "server_name" /etc/nginx/sites-enabled/ 2>/dev/null || true
