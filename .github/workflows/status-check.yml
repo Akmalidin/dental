@@ -26,11 +26,28 @@ jobs:
             echo ">>> nginx: активен ли"
             systemctl is-active nginx || true
             echo
-            echo ">>> локальный curl (мимо nginx, прямо в gunicorn/сокет, если слушает порт)"
-            curl -s -o /dev/null -w "localhost: HTTP %{http_code}\n" --max-time 5 http://127.0.0.1:8000/ || echo "curl 127.0.0.1:8000 не удался"
+            echo ">>> локальный curl (мимо nginx, прямо в gunicorn — порт из его же лога 'Listening at')"
+            GPORT=$(journalctl -u sadaf.service -n 300 --no-pager | grep -oP 'Listening at: http://127\.0\.0\.1:\K[0-9]+' | tail -1)
+            GPORT=${GPORT:-8000}
+            curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code}\n" --max-time 5 "http://127.0.0.1:$GPORT/" || echo "curl 127.0.0.1:$GPORT не удался"
+            echo
+            echo ">>> история перезагрузок (не было ли автоматического reboot — unattended-upgrades с Automatic-Reboot)"
+            who -b || true
+            uptime -s || true
+            last reboot -F | head -10 || true
+            echo
+            echo ">>> настройка автообновлений/автоперезагрузки"
+            cat /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null || echo "20auto-upgrades не найден"
+            grep -E "Automatic-Reboot|Unattended-Upgrade::Automatic-Reboot" /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null || echo "не найдено в 50unattended-upgrades"
+            echo
+            echo ">>> хвост лога unattended-upgrades (последние 40 строк — тут видно, было ли scheduled reboot)"
+            tail -n 40 /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null || echo "лога нет"
             echo
             echo ">>> место на диске"
             df -h / || true
             echo
             echo ">>> память"
             free -h || true
+            echo
+            echo ">>> dmesg — сетевые события/OOM за последние сутки (если ядро логирует)"
+            dmesg -T 2>/dev/null | tail -30 || echo "dmesg недоступен без sudo"
