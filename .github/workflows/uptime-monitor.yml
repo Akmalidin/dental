@@ -65,11 +65,11 @@ jobs:
           ts=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           body=$(printf '**%s**\napp.sadaf.kg: HTTP %s\nstom.asia: HTTP %s\n\nДиагностика по SSH (если снялась) — в логе этого прогона: %s' \
             "$ts" "$CODE_SADAF" "$CODE_STOM" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
-          num=$(gh issue list --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body "$body"
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "$body"
           else
-            gh issue create --title "🔴 Сайт недоступен" --body "$body" --assignee "$GITHUB_REPOSITORY_OWNER" || true
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "🔴 Сайт недоступен" --body "$body" --assignee "$GITHUB_REPOSITORY_OWNER" || true
           fi
 
       - name: Закрыть issue (сайт снова отвечает)
@@ -77,10 +77,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          num=$(gh issue list --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --search '"Сайт недоступен" in:title' --state open --json number --jq '.[0].number' || true)
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body "✅ Сайт снова доступен: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            gh issue close "$num"
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "✅ Сайт снова доступен: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            gh issue close "$num" --repo "$GITHUB_REPOSITORY"
           fi
 
       - name: Провалить прогон при недоступности (чтобы сработали стандартные уведомления Actions)
