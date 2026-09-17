@@ -1,0 +1,74 @@
+name: Remove CRM and ClinicNet (one-off, destructive, explicitly requested)
+
+# Пользователь подтвердил владение обоими проектами и явно попросил удалить
+# их насовсем, чтобы освободить место на диске (инцидент с переполнением
+# 2026-09-17). Останавливает и отключает их systemd-сервисы, убирает их из
+# nginx, дропает их базы данных в PostgreSQL, удаляет папки в /var/www.
+# НЕ трогает sadaf/stom.asia — проверяет их в конце, что всё ещё живо.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — остановить, отключить, удалить
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> ДО: df -h /"
+            df -h /
+
+            echo ">>> Определяем БД CRM (/var/www/crm/.env)"
+            CRM_DB=$(grep -iE '^(DB_NAME|DATABASE_NAME|POSTGRES_DB|PGDATABASE)=' /var/www/crm/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'\r'"'"')
+            echo "CRM_DB=${CRM_DB:-<не найдено>}"
+
+            echo ">>> Определяем БД ClinicNet (/var/www/clinicnet/.env)"
+            CLINICNET_DB=$(grep -iE '^(DB_NAME|DATABASE_NAME|POSTGRES_DB|PGDATABASE)=' /var/www/clinicnet/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'\r'"'"')
+            echo "CLINICNET_DB=${CLINICNET_DB:-<не найдено>}"
+
+            echo ">>> Список БД PostgreSQL (для сверки)"
+            sudo -u postgres psql -lqt 2>/dev/null | cut -d '|' -f1 | sed 's/ *$//' || true
+
+            echo "=== ОСТАНОВКА И ОТКЛЮЧЕНИЕ СЕРВИСОВ ==="
+            systemctl stop gunicorn.service crm-bot.service clinicnet.service 2>&1 || true
+            systemctl disable gunicorn.service crm-bot.service clinicnet.service 2>&1 || true
+
+            echo "=== УДАЛЕНИЕ ИЗ NGINX ==="
+            rm -f /etc/nginx/sites-enabled/crm /etc/nginx/sites-enabled/clinicnet-stom-asia
+            rm -f /etc/nginx/sites-available/crm /etc/nginx/sites-available/clinicnet-stom-asia
+            if nginx -t 2>&1; then
+              systemctl reload nginx
+              echo "nginx перезагружен"
+            else
+              echo "!!! nginx -t упал — смотреть руками, дальше не трогаем nginx"
+            fi
+
+            echo "=== УДАЛЕНИЕ БАЗ ДАННЫХ ==="
+            if [ -n "$CRM_DB" ]; then
+              sudo -u postgres dropdb --if-exists "$CRM_DB" 2>&1 && echo "БД $CRM_DB удалена" || echo "!!! не удалось удалить $CRM_DB"
+            else
+              echo "!!! имя БД CRM не определено — БД НЕ трогаем, удалите руками при необходимости"
+            fi
+            if [ -n "$CLINICNET_DB" ]; then
+              sudo -u postgres dropdb --if-exists "$CLINICNET_DB" 2>&1 && echo "БД $CLINICNET_DB удалена" || echo "!!! не удалось удалить $CLINICNET_DB"
+            else
+              echo "!!! имя БД ClinicNet не определено — БД НЕ трогаем, удалите руками при необходимости"
+            fi
+
+            echo "=== УДАЛЕНИЕ ФАЙЛОВ ==="
+            du -sh /var/www/crm /var/www/clinicnet 2>/dev/null || true
+            rm -rf /var/www/crm /var/www/clinicnet
+            echo "папки удалены"
+
+            echo ">>> ПОСЛЕ: df -h /"
+            df -h /
+
+            echo "=== ПРОВЕРКА: НАШ САЙТ НЕ ЗАДЕТ ==="
+            systemctl is-active sadaf.service nginx || true
+            GPORT=$(journalctl -u sadaf.service -n 300 --no-pager 2>/dev/null | grep -oP 'Listening at: http://127\.0\.0\.1:\K[0-9]+' | tail -1)
+            GPORT=${GPORT:-8021}
+            curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$GPORT/" || echo "curl не удался"
