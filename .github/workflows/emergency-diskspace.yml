@@ -1,0 +1,67 @@
+name: Emergency disk space check
+
+# Разовый инструмент на случай "диск переполнен, сайт лежит" (см. /var/log
+# systemd-journald "No space left on device", PostgreSQL "in recovery mode"
+# после заполнения диска — инцидент 2026-09-17). Сначала снимает картину
+# (что где весит), затем освобождает только заведомо безопасное: системный
+# журнал (journalctl --vacuum) и БЭКАПЫ СТАРШЕ 3 ПОСЛЕДНИХ (backup_database
+# создаёт их каждую ночь без ротации — см. deploy/update.sh, cron 00:00
+# Бишкек — nightly-бэкапы без ограничения числа неизбежно копятся). Ничего
+# из media/venv/staticfiles/БД не трогает.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — снять картину и освободить безопасное
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> ДО: df -h /"
+            df -h /
+            echo
+            echo ">>> размер верхнего уровня /var/www/sadaf"
+            du -sh /var/www/sadaf/* 2>/dev/null | sort -rh
+            echo
+            echo ">>> размер /var/www/sadaf/backups (если есть)"
+            du -sh /var/www/sadaf/backups 2>/dev/null || echo "backups нет"
+            ls -la /var/www/sadaf/backups 2>/dev/null | tail -30 || true
+            echo
+            echo ">>> journalctl --disk-usage"
+            journalctl --disk-usage 2>/dev/null || true
+            echo
+            echo ">>> docker system df (containerd/docker крутится на этом же сервере под ДРУГИЕ проекты)"
+            docker system df 2>/dev/null || echo "docker df недоступен без sudo/прав"
+            echo
+            echo "=== ОСВОБОЖДАЕМ БЕЗОПАСНОЕ ==="
+            echo ">>> journalctl --vacuum-size=200M"
+            journalctl --vacuum-size=200M 2>/dev/null || echo "vacuum не удался (нужен root — sudo?)"
+            echo
+            echo ">>> ротация backups: оставляем 3 последних файла, остальные удаляем"
+            if [ -d /var/www/sadaf/backups ]; then
+              cd /var/www/sadaf/backups
+              ls -1t | grep -v '^cron\.log$' | tail -n +4 | while read -r f; do
+                echo "удаляю старый бэкап: $f"
+                rm -f -- "$f"
+              done
+            else
+              echo "backups нет — нечего ротировать"
+            fi
+            echo
+            echo ">>> ПОСЛЕ: df -h /"
+            df -h /
+            echo
+            echo ">>> PostgreSQL: статус и попытка убедиться, что вышел из recovery"
+            systemctl is-active postgresql@16-main || true
+            sleep 3
+            sudo -u postgres psql -tAc "SELECT pg_is_in_recovery();" 2>/dev/null || echo "psql-проверка недоступна без sudo — смотрим иначе"
+            echo
+            echo ">>> локальный curl после очистки"
+            GPORT=$(journalctl -u sadaf.service -n 300 --no-pager 2>/dev/null | grep -oP 'Listening at: http://127\.0\.0\.1:\K[0-9]+' | tail -1)
+            GPORT=${GPORT:-8021}
+            curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$GPORT/" || echo "curl не удался"
