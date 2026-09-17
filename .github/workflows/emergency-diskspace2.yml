@@ -1,0 +1,65 @@
+name: Emergency disk space check v2 (docker + whisper_cache)
+
+# Повторный инцидент 2026-09-17: первая экстренная чистка (journalctl
+# vacuum + ротация backups) в этот раз почти ничего не дала — журнал и
+# бэкапы уже были минимальными с прошлой чистки, свободно осталось 48M,
+# сайт всё ещё 500 (Postgres не может завершить recovery на почти нулевом
+# месте). Нужна более агрессивная и БЫСТРАЯ мера прямо сейчас:
+# - docker builder prune / image prune — чужой (других проектов на этом
+#   сервере) build cache и неиспользуемые images, ~3.7GB reclaimable по
+#   `docker system df`, ACTIVE=0 у всего — ничего запущенного не заденет
+# - whisper_cache — кэш модели распознавания речи (наш), безопасно удалить,
+#   пересоздастся сам при следующем использовании голосовых сообщений
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — docker prune + whisper_cache + проверка
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> ДО: df -h /"
+            df -h /
+            echo
+
+            echo "=== DOCKER: чистим build cache и неиспользуемые images (чужие проекты, ACTIVE=0) ==="
+            docker system df 2>&1 || true
+            docker builder prune -af 2>&1 || echo "docker builder prune не удался"
+            docker image prune -af 2>&1 || echo "docker image prune не удался"
+            echo
+
+            echo "=== whisper_cache: удаляем (наш кэш модели речи, пересоздастся сам) ==="
+            du -sh /var/www/sadaf/whisper_cache 2>/dev/null || true
+            rm -rf /var/www/sadaf/whisper_cache
+            echo "whisper_cache удалён"
+            echo
+
+            echo ">>> ПОСЛЕ: df -h /"
+            df -h /
+            echo
+
+            echo ">>> PostgreSQL: статус"
+            systemctl is-active postgresql@16-main || true
+            sleep 5
+            sudo -u postgres psql -tAc "SELECT pg_is_in_recovery();" 2>&1 || echo "psql-проверка не удалась"
+            echo
+
+            echo ">>> локальный curl"
+            GPORT=$(journalctl -u sadaf.service -n 300 --no-pager 2>/dev/null | grep -oP 'Listening at: http://127\.0\.0\.1:\K[0-9]+' | tail -1)
+            GPORT=${GPORT:-8021}
+            curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code}\n" --max-time 10 "http://127.0.0.1:$GPORT/" || echo "curl не удался"
+            echo
+
+            echo ">>> если curl всё ещё не 200/300-х — пробуем restart sadaf.service (иногда Postgres уже готов, а gunicorn держит старые оборванные соединения)"
+            curl -s -o /dev/null -w "код: %{http_code}\n" --max-time 10 "http://127.0.0.1:$GPORT/" | grep -qE ' (2|3)[0-9][0-9]$' || {
+              echo "перезапускаю sadaf.service"
+              systemctl restart sadaf.service
+              sleep 3
+              curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code} (после restart)\n" --max-time 10 "http://127.0.0.1:$GPORT/" || echo "curl всё ещё не удался"
+            }
