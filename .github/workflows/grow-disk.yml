@@ -1,0 +1,61 @@
+name: Grow root disk (reclaim unallocated space)
+
+# Панель провайдера (Timeweb) показывает диск VPS 50GB, но df -h / видел
+# только 29G — значит раздел/ФС никогда не расширяли до реального размера
+# диска (типичная ситуация после апгрейда диска у провайдера без ручного
+# growpart/resize2fs). Если так — можно вернуть ~21GB без удаления чего-
+# либо и без докупки места. Сначала только диагностика (lsblk/parted/df),
+# расширение — только если видно неиспользуемое место в конце диска.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  grow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — диагностика и расширение раздела/ФС
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> ДО: df -hT /"
+            df -hT /
+            echo
+            echo ">>> lsblk"
+            lsblk
+            echo
+            echo ">>> parted /dev/sda print (размер диска vs раздела)"
+            parted -s /dev/sda print 2>&1 || echo "parted недоступен"
+            echo
+            echo ">>> growpart установлен?"
+            command -v growpart || echo "growpart не найден — ставим cloud-guest-utils"
+            if ! command -v growpart >/dev/null 2>&1; then
+              apt-get install -y cloud-guest-utils 2>&1 | tail -5
+            fi
+            echo
+            echo "=== РАСШИРЯЕМ РАЗДЕЛ /dev/sda1 ==="
+            growpart /dev/sda 1 2>&1 || echo "growpart: нечего расширять или уже максимум"
+            echo
+            echo ">>> тип ФС на /"
+            FSTYPE=$(findmnt -no FSTYPE /)
+            echo "FSTYPE=$FSTYPE"
+            echo
+            echo "=== РАСШИРЯЕМ ФАЙЛОВУЮ СИСТЕМУ ==="
+            if [ "$FSTYPE" = "ext4" ] || [ "$FSTYPE" = "ext3" ] || [ "$FSTYPE" = "ext2" ]; then
+              resize2fs /dev/sda1 2>&1
+            elif [ "$FSTYPE" = "xfs" ]; then
+              xfs_growfs / 2>&1
+            else
+              echo "неизвестная ФС ($FSTYPE) — не трогаем автоматически"
+            fi
+            echo
+            echo ">>> ПОСЛЕ: df -hT /"
+            df -hT /
+            echo
+            echo "=== ПРОВЕРКА: НАШ САЙТ НЕ ЗАДЕТ ==="
+            systemctl is-active sadaf.service nginx || true
+            GPORT=$(journalctl -u sadaf.service -n 300 --no-pager 2>/dev/null | grep -oP 'Listening at: http://127\.0\.0\.1:\K[0-9]+' | tail -1)
+            GPORT=${GPORT:-8021}
+            curl -s -o /dev/null -w "localhost:$GPORT HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$GPORT/" || echo "curl не удался"
