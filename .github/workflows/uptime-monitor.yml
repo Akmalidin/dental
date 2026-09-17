@@ -8,6 +8,12 @@ name: Uptime monitor
 # снимает диагностику по SSH (systemctl/journalctl/uptime/место/память),
 # чтобы в следующий раз причина была видна по факту, а не гадалась постфактум
 # по логам через полчаса. При восстановлении — issue закрывается сам.
+#
+# Плюс отдельный, независимый от доступности сайта алерт по месту на диске
+# (инцидент 2026-09-17: диск дошёл до 100% → PostgreSQL ушёл в recovery →
+# 500 у всех пользователей — к моменту, когда сайт уже лежит, предупреждать
+# поздно). Порог 85% — заводит/закрывает свой issue "🟡 Диск почти заполнен",
+# отдельно от "🔴 Сайт недоступен".
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -34,6 +40,49 @@ jobs:
           echo "ok=$ok" >> "$GITHUB_OUTPUT"
           echo "app.sadaf.kg: HTTP $code_sadaf"
           echo "stom.asia: HTTP $code_stom"
+
+      - name: Проверка места на диске (алерт заранее, до отказа)
+        id: disk
+        run: |
+          set +e
+          sudo apt-get install -y sshpass >/dev/null 2>&1
+          pct=$(sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "df / | awk 'NR==2{gsub(/%/,\"\",\$5); print \$5}'" 2>/dev/null)
+          pct=${pct:-}
+          echo "disk_pct=$pct" >> "$GITHUB_OUTPUT"
+          if [ -n "$pct" ] && [ "$pct" -ge 85 ] 2>/dev/null; then
+            echo "disk_high=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "disk_high=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Диск: ${pct:-неизвестно}% занято"
+
+      - name: Открыть/дополнить issue про диск
+        if: steps.disk.outputs.disk_high == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISK_PCT: ${{ steps.disk.outputs.disk_pct }}
+        run: |
+          ts=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          body="**$ts** — диск занят на ${DISK_PCT}% (порог 85%). Если дойдёт до 100% — PostgreSQL уйдёт в recovery mode и сайт ляжет с 500 (см. инцидент 2026-09-17)."
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --search '"Диск почти заполнен" in:title' --state open --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "🟡 Диск почти заполнен" --body "$body" --assignee "$GITHUB_REPOSITORY_OWNER" || true
+          fi
+
+      - name: Закрыть issue про диск (место снова есть)
+        if: steps.disk.outputs.disk_high == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --search '"Диск почти заполнен" in:title' --state open --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "✅ Места снова достаточно: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            gh issue close "$num" --repo "$GITHUB_REPOSITORY"
+          fi
 
       - name: Диагностика по SSH (только если сайт недоступен — снимок причины прямо сейчас)
         if: steps.check.outputs.ok == 'false'
@@ -83,6 +132,6 @@ jobs:
             gh issue close "$num" --repo "$GITHUB_REPOSITORY"
           fi
 
-      - name: Провалить прогон при недоступности (чтобы сработали стандартные уведомления Actions)
-        if: steps.check.outputs.ok == 'false'
+      - name: Провалить прогон при недоступности сайта или почти заполненном диске (стандартные уведомления Actions)
+        if: steps.check.outputs.ok == 'false' || steps.disk.outputs.disk_high == 'true'
         run: exit 1
