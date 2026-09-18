@@ -1,0 +1,43 @@
+name: Media breakdown (read-only, no changes)
+
+# Разовый read-only разбор /var/www/sadaf/media по подпапкам и самым
+# крупным файлам — нужно понять, что растёт быстрее всего (~4GB/сутки,
+# три падения диска за <24ч, 2026-09-17/18), прежде чем решать, что можно
+# безопасно почистить/заархивировать. Ничего не удаляет.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  breakdown:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — разбор media
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> размер media по подпапкам верхнего уровня"
+            du -sh /var/www/sadaf/media/*/ 2>/dev/null | sort -rh
+            echo
+            echo ">>> chat_media по годам/месяцам (если есть — обычно самый быстрорастущий: вложения WhatsApp/Telegram)"
+            du -sh /var/www/sadaf/media/chat_media/*/*/ 2>/dev/null | sort -rh | head -20
+            echo
+            echo ">>> treatments по годам/месяцам"
+            du -sh /var/www/sadaf/media/treatments/*/*/ 2>/dev/null | sort -rh | head -20
+            echo
+            echo ">>> tech_orders по годам/месяцам"
+            du -sh /var/www/sadaf/media/tech_orders/*/*/ 2>/dev/null | sort -rh | head -20
+            echo
+            echo ">>> сколько всего файлов в media (по типу)"
+            find /var/www/sadaf/media -type f | sed -E 's/.*\.([a-zA-Z0-9]+)$/\1/' | tr 'A-Z' 'a-z' | sort | uniq -c | sort -rn | head -20
+            echo
+            echo ">>> 20 самых крупных отдельных файлов во всей media"
+            find /var/www/sadaf/media -type f -printf '%s\t%p\n' 2>/dev/null | sort -rn | head -20 | awk '{printf "%.1fM\t%s\n", $1/1048576, substr($0, index($0,$2))}'
+            echo
+            echo ">>> сколько файлов создано за последние 24 часа и их суммарный размер (кто реально дал вчерашние +4G)"
+            find /var/www/sadaf/media -type f -mtime -1 -printf '%s\n' 2>/dev/null | awk '{sum+=$1; n++} END {printf "%d файлов, %.1fM\n", n, sum/1048576}'
+            echo
+            echo ">>> из них — по подпапке верхнего уровня"
+            find /var/www/sadaf/media -type f -mtime -1 2>/dev/null | awk -F/ '{print $6}' | sort | uniq -c | sort -rn
