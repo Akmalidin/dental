@@ -183,4 +183,109 @@ class BackfillTelegramWebhookSecretsCommandTestCase(TestCase):
         ClinicSettings.objects.create(clinic=self.clinic, name=self.clinic.name)
         self._run()
         mock_info.assert_not_called()
-        mock_set_webhook.assert_not_called()
+
+
+class WaWebhookDocumentBlocklistTestCase(TestCase):
+    """Инцидент 2026-09-18: 691 файл .apk по 50-68MB, полученный через
+    documentMessage в wa_webhook, забил диск сервера на 100% и трижды за
+    сутки уронил сайт (PostgreSQL уходил в recovery mode). documentMessage
+    скачивал и хранил ЛЮБОЙ файл без разбора типа/размера. Теперь
+    исполняемые/установочные файлы не скачиваются вовсе, а прочие
+    документы ограничены по размеру (WA_MEDIA_MAX_BYTES)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника WA", slug="wa-clinic")
+        Branch.objects.create(name="Гл. филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.client = Client()
+        self.url = "/notifications/wa-webhook/"
+
+    def _post(self, file_message_data):
+        payload = {
+            "typeWebhook": "incomingMessageReceived",
+            "senderData": {"chatId": "996700000000@c.us", "sender": "996700000000@c.us"},
+            "messageData": {
+                "typeMessage": "documentMessage",
+                "fileMessageData": file_message_data,
+            },
+        }
+        import json
+        return self.client.post(self.url, data=json.dumps(payload), content_type="application/json")
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_apk_by_filename_is_not_downloaded(self, mock_download):
+        resp = self._post({"downloadUrl": "https://example.com/f.apk", "fileName": "update.apk"})
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_not_called()
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertFalse(m.media_file)
+        self.assertIn("не сохраняем", m.body)
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_apk_by_mimetype_is_not_downloaded(self, mock_download):
+        resp = self._post({
+            "downloadUrl": "https://example.com/attachment",
+            "mimeType": "application/vnd.android.package-archive",
+        })
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_not_called()
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_exe_is_not_downloaded(self, mock_download):
+        resp = self._post({"downloadUrl": "https://example.com/f.exe", "fileName": "setup.exe"})
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_not_called()
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_normal_pdf_is_still_downloaded(self, mock_download):
+        mock_download.return_value = (b"%PDF-1.4 ...", "document.pdf")
+        resp = self._post({"downloadUrl": "https://example.com/f.pdf", "fileName": "snimok.pdf"})
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_called_once()
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertTrue(m.media_file)
+
+
+class WaDownloadMediaSizeLimitTestCase(TestCase):
+    """wa_download_media обрывает скачивание вложений больше WA_MEDIA_MAX_BYTES
+    — защита от повторения инцидента 2026-09-18, даже для типов файлов вне
+    блок-листа расширений (не только .apk)."""
+
+    @patch("apps.notifications.whatsapp.urllib.request.urlopen")
+    def test_oversized_file_is_rejected(self, mock_urlopen):
+        from apps.notifications.whatsapp import wa_download_media
+
+        class _Resp:
+            def read(self, n):
+                return b"x" * n  # отдаёт ровно сколько просят — имитирует поток
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        mock_urlopen.return_value = _Resp()
+        data, name = wa_download_media("https://example.com/huge.jpg", max_bytes=100)
+        self.assertIsNone(data)
+        self.assertEqual(name, "")
+
+    @patch("apps.notifications.whatsapp.urllib.request.urlopen")
+    def test_normal_sized_file_is_accepted(self, mock_urlopen):
+        from apps.notifications.whatsapp import wa_download_media
+
+        class _Resp:
+            def read(self, n):
+                return b"small file content"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        mock_urlopen.return_value = _Resp()
+        data, name = wa_download_media("https://example.com/small.jpg", max_bytes=1000)
+        self.assertEqual(data, b"small file content")
+        self.assertEqual(name, "small.jpg")

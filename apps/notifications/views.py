@@ -352,8 +352,27 @@ def wa_webhook(request):
             is_voice = tm == "audioMessage" and "ogg" in (fmd.get("mimeType") or "").lower()
             media_type = "voice" if is_voice else MEDIA_TYPE_MAP[tm]
             snippet_media = MEDIA_LABEL[media_type]
-            from .whatsapp import wa_download_media
-            data_bytes, fname = wa_download_media(fmd.get("downloadUrl"))
+            # Исполняемые/установочные файлы — не переписка с пациентом, а спам
+            # (или пересланное кем-то не туда): инцидент 2026-09-18, 691 файл
+            # .apk по 50-68MB забили диск на 100% и трижды за сутки уронили
+            # сайт. Смотрим и имя файла, и mimeType — Green-API не всегда даёт
+            # оба поля сразу.
+            _fname_hint = (fmd.get("fileName") or fmd.get("caption") or
+                          fmd.get("downloadUrl") or "").lower()
+            _mime_hint = (fmd.get("mimeType") or "").lower()
+            _blocked_ext = (".apk", ".exe", ".msi", ".bat", ".cmd", ".sh",
+                            ".jar", ".dmg", ".deb", ".rpm", ".appimage", ".apks")
+            is_blocked_type = (
+                any(_fname_hint.endswith(ext) for ext in _blocked_ext)
+                or "android.package-archive" in _mime_hint
+                or "x-msdownload" in _mime_hint
+            )
+            if is_blocked_type:
+                data_bytes, fname = None, ""
+                text = text or (snippet_media + " — установочный файл, не сохраняем")
+            else:
+                from .whatsapp import wa_download_media
+                data_bytes, fname = wa_download_media(fmd.get("downloadUrl"))
             if data_bytes:
                 from django.core.files.base import ContentFile
                 media_file = ContentFile(data_bytes, name=fname or "file")
