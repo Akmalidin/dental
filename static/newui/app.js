@@ -1492,6 +1492,24 @@ function chatChannelIcon(ch){
   if(ch==='wa') return `<span class="chat-ch" title="WhatsApp">🟢</span>`;
   return '';
 }
+// Вложение чата — до этого показывался только текстовый лейбл ("📎 voice"),
+// не сам файл: голосовые нельзя было прослушать, фото посмотреть, не выходя
+// из чата. Теперь по media_type — реальный плеер/картинка/ссылка.
+function chatMediaHtml(m){
+  if(!m.media_url) return '';
+  const url=chatEscape(m.media_url);
+  if(m.media_type==='voice' || m.media_type==='audio'){
+    return `<audio controls preload="none" style="max-width:240px;height:36px;display:block;margin-bottom:4px;" src="${url}"></audio>`;
+  }
+  if(m.media_type==='image'){
+    return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="" style="max-width:220px;max-height:220px;border-radius:8px;display:block;margin-bottom:4px;object-fit:cover;"></a>`;
+  }
+  if(m.media_type==='video'){
+    return `<video controls preload="metadata" style="max-width:240px;border-radius:8px;display:block;margin-bottom:4px;" src="${url}"></video>`;
+  }
+  // document и прочее — просто ссылка на скачивание/просмотр
+  return `<div style="margin-bottom:4px;"><a href="${url}" target="_blank" rel="noopener">📎 ${chatEscape(m.media_type||t('w_file'))}</a></div>`;
+}
 function renderChatThread(msgs){
   const el=document.getElementById('chatMessages');
   if(!el) return;
@@ -1503,7 +1521,7 @@ function renderChatThread(msgs){
     let sep='';
     const day=m.date||'';
     if(day && day!==lastDay){ lastDay=day; sep=`<div class="chat-day">${chatDayLabel(day)}</div>`; }
-    const media = m.media_url ? `<div style="margin-bottom:4px;font-size:11px;opacity:.8;">📎 ${chatEscape(m.media_type||t('w_file'))}</div>` : '';
+    const media = chatMediaHtml(m);
     const failed = (m.dir==='out' && !m.ok) ? ` <span style="color:var(--coral);">(${t('w_not_delivered')})</span>` : '';
     // При наличии разделителя в пузыре достаточно часов: дата уже над ним.
     const stamp = m.hm || m.time;
