@@ -203,15 +203,29 @@ def wa_notify(phone, text, template_setting=None, params=None):
     return wa_send_text(phone, text)
 
 
-def wa_download_media(url):
+# Максимальный размер входящего вложения, которое мы вообще скачиваем и
+# храним у себя (диск сервера — не бездонный, см. инцидент 2026-09-18:
+# спам/дубли .apk по 50-68MB забили диск на 100% и уронили сайт три раза
+# за сутки). 20MB с запасом хватает на любое реальное фото/голосовое/
+# документ от пациента; readline() ниже обрывает скачивание, как только
+# лимит превышен, не дожидаясь целого файла.
+WA_MEDIA_MAX_BYTES = 20 * 1024 * 1024
+
+
+def wa_download_media(url, max_bytes=WA_MEDIA_MAX_BYTES):
     """Скачать входящее медиа (голосовое и т.п.) по downloadUrl из вебхука Green-API.
-    Возвращает (bytes, file_name) или (None, "")."""
+    Возвращает (bytes, file_name) или (None, ""). Обрывает скачивание, если файл
+    больше max_bytes — так не тратим время/трафик на заведомо огромные вложения."""
     if not url:
         return None, ""
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=20) as r:
-            data = r.read()
+            data = r.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                log.warning("WhatsApp(Green-API) вложение больше %sMB — не скачиваем: %s",
+                            max_bytes // (1024 * 1024), url)
+                return None, ""
         name = url.split("?")[0].rsplit("/", 1)[-1] or "file"
         return data, name
     except Exception as e:  # noqa: BLE001
