@@ -1,0 +1,90 @@
+name: Daily media audit (auto-delete dangerous files, report the rest)
+
+# Ежедневная проверка /var/www/sadaf/media по просьбе пользователя после
+# инцидента 2026-09-17/18 (691 файл .apk в chat_media забил диск на 100%,
+# сайт падал трижды за сутки). Код уже не даёт таким файлам попадать в
+# media (apps/notifications/whatsapp.py — блок-лист по имени/mimeType +
+# лимит размера), но это второй, независимый рубеж на случай других
+# путей появления мусора (ручная заливка, старый файл до фикса и т.п.).
+#
+# Что делает автоматически, без подтверждения:
+# - удаляет файлы с расширениями .apk/.exe/.msi/.bat/.cmd/.sh/.jar/.dmg/
+#   .deb/.rpm/.appimage/.apks в media — тот же список, что уже блокирует
+#   их при приёме. Это ЯВНО не данные пациентов, чем бы они ни были.
+# - если системный журнал раздулся — journalctl --vacuum-size=200M
+# - ротация backups/ — оставляет 3 последних файла
+#
+# Обычные вложения (фото/голосовые/видео/документы пациентов) НЕ удаляет
+# никогда — это чужие данные, для них только отчёт, решение остаётся за
+# человеком.
+on:
+  schedule:
+    - cron: '0 21 * * *'  # ~03:00 Бишкек — минимум трафика (фактическое время старта у GitHub может плавать)
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — проверка и безопасная очистка
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            echo ">>> ДО: df -h /"
+            df -h /
+            echo
+
+            echo ">>> размер media по подпапкам"
+            du -sh /var/www/sadaf/media/*/ 2>/dev/null | sort -rh
+            echo
+
+            echo "=== УДАЛЯЕМ ЯВНО ОПАСНЫЕ ФАЙЛЫ (не данные пациентов) ==="
+            DANGEROUS='-iname *.apk -o -iname *.exe -o -iname *.msi -o -iname *.bat -o -iname *.cmd -o -iname *.sh -o -iname *.jar -o -iname *.dmg -o -iname *.deb -o -iname *.rpm -o -iname *.appimage -o -iname *.apks'
+            FOUND=$(eval "find /var/www/sadaf/media -type f \\( $DANGEROUS \\)" 2>/dev/null)
+            if [ -n "$FOUND" ]; then
+              COUNT=$(echo "$FOUND" | wc -l)
+              echo "найдено $COUNT опасных файлов — удаляю:"
+              echo "$FOUND" | xargs -d '\n' du -ch 2>/dev/null | tail -1
+              echo "$FOUND"
+              eval "find /var/www/sadaf/media -type f \\( $DANGEROUS \\) -delete"
+            else
+              echo "опасных файлов не найдено"
+            fi
+            echo
+
+            echo ">>> journalctl --vacuum-size=200M"
+            journalctl --vacuum-size=200M 2>/dev/null || true
+            echo
+
+            echo ">>> ротация backups: оставляем 3 последних файла"
+            if [ -d /var/www/sadaf/backups ]; then
+              cd /var/www/sadaf/backups
+              ls -1t | grep -v -E '^(cron\.log|auto)$' | tail -n +4 | while read -r f; do
+                echo "удаляю старый бэкап: $f"
+                rm -f -- "$f"
+              done
+            fi
+            echo
+
+            echo ">>> ПОСЛЕ: df -h /"
+            df -h /
+
+      - name: Отметка в issue (лог прогона всегда доступен по ссылке)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ts=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="**$ts** — ежедневный аудит media прошёл. Подробности (что найдено/удалено, df до и после): $link"
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --search '"Ежедневный аудит media" in:title' --state open --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "🧹 Ежедневный аудит media" --body "$body" || true
+          fi
