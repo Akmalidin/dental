@@ -231,6 +231,19 @@ class WaWebhookDocumentBlocklistTestCase(TestCase):
         mock_download.assert_not_called()
 
     @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_apk_visible_only_in_downloadurl_is_not_downloaded(self, mock_download):
+        """Регрессия 2026-09-19: старая проверка брала ПЕРВОЕ непустое поле
+        (fileName ИЛИ caption ИЛИ downloadUrl), поэтому непустой, но
+        "чистый" fileName маскировал .apk, видимый только в downloadUrl —
+        346 файлов (7.1GB) прошли блок-лист за сутки этим путём."""
+        resp = self._post({
+            "downloadUrl": "https://media.greenapi.com/waInstance/abc123.apk",
+            "fileName": "IMG-20260919-WA0007",
+        })
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_not_called()
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
     def test_exe_is_not_downloaded(self, mock_download):
         resp = self._post({"downloadUrl": "https://example.com/f.exe", "fileName": "setup.exe"})
         self.assertEqual(resp.status_code, 200)

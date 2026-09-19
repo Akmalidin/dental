@@ -357,13 +357,21 @@ def wa_webhook(request):
             # .apk по 50-68MB забили диск на 100% и трижды за сутки уронили
             # сайт. Смотрим и имя файла, и mimeType — Green-API не всегда даёт
             # оба поля сразу.
-            _fname_hint = (fmd.get("fileName") or fmd.get("caption") or
-                          fmd.get("downloadUrl") or "").lower()
+            # ВАЖНО: проверяем КАЖДОЕ поле по отдельности, а не первое
+            # непустое — иначе присутствующий, но "чистый" fileName (без
+            # расширения/generic-имя) маскирует .apk-расширение, которое
+            # видно только в downloadUrl. Именно так 346 файлов (7.1GB)
+            # прошли блок-лист за сутки 2026-09-18/19 после первого фикса.
+            _hints = (
+                (fmd.get("fileName") or "").lower(),
+                (fmd.get("caption") or "").lower(),
+                (fmd.get("downloadUrl") or "").lower(),
+            )
             _mime_hint = (fmd.get("mimeType") or "").lower()
             _blocked_ext = (".apk", ".exe", ".msi", ".bat", ".cmd", ".sh",
                             ".jar", ".dmg", ".deb", ".rpm", ".appimage", ".apks")
             is_blocked_type = (
-                any(_fname_hint.endswith(ext) for ext in _blocked_ext)
+                any(h.endswith(ext) for h in _hints for ext in _blocked_ext)
                 or "android.package-archive" in _mime_hint
                 or "x-msdownload" in _mime_hint
             )
