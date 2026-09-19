@@ -260,6 +260,60 @@ class WaWebhookDocumentBlocklistTestCase(TestCase):
         self.assertTrue(m.media_file)
 
 
+class TgGroupIgnoredTestCase(TestCase):
+    """Расследование 2026-09-19: .apk-спам в chat_media шёл не из WhatsApp, а
+    из Telegram-каналов (гэмблинг-реклама 1xBet/MelBet/Dbbet), в которых
+    состоит номер, подключённый через telegram_ga.py (личный аккаунт
+    Green-API). wa_webhook различал только WhatsApp-группы (chatId вида
+    "...@g.us") — Telegram-группы/каналы (chatId вида "-100xxxxxxxxxx", без
+    "@") под эту проверку не попадали и обрабатывались как обычная переписка
+    с пациентом. Теперь для channel=tg отрицательный chatId полностью
+    игнорируется — ни скачивания, ни записи в WaMessage."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника TG", slug="tg-clinic")
+        Branch.objects.create(name="Гл. филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.client = Client()
+        self.url = "/notifications/wa-webhook/?ch=tg"
+
+    @patch("apps.notifications.whatsapp.wa_download_media")
+    def test_tg_group_message_with_document_is_ignored(self, mock_download):
+        import json
+        payload = {
+            "typeWebhook": "incomingMessageReceived",
+            "senderData": {"chatId": "-1003036908438", "sender": "-1003036908438", "chatName": "Spam channel"},
+            "messageData": {
+                "typeMessage": "documentMessage",
+                "fileMessageData": {
+                    "downloadUrl": "https://example.com/1xbet.apk",
+                    "fileName": "1xBet.apk",
+                },
+            },
+        }
+        resp = self.client.post(self.url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        mock_download.assert_not_called()
+        from apps.notifications.models import WaMessage
+        self.assertEqual(WaMessage.objects.count(), 0)
+
+    def test_tg_private_chat_is_still_processed(self):
+        import json
+        payload = {
+            "typeWebhook": "incomingMessageReceived",
+            "senderData": {"chatId": "10000000", "sender": "10000000"},
+            "messageData": {
+                "typeMessage": "textMessage",
+                "textMessageData": {"textMessage": "Здравствуйте, можно записаться?"},
+            },
+        }
+        resp = self.client.post(self.url, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertEqual(m.channel, "tg")
+        self.assertEqual(m.body, "Здравствуйте, можно записаться?")
+
+
 class WaDownloadMediaSizeLimitTestCase(TestCase):
     """wa_download_media обрывает скачивание вложений больше WA_MEDIA_MAX_BYTES
     — защита от повторения инцидента 2026-09-18, даже для типов файлов вне
