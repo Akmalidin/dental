@@ -41,6 +41,52 @@ def get_active_branch_id(request):
     return bid if isinstance(bid, int) else None
 
 
+def resolve_branch_for_write(request, prefer=None):
+    """Филиал для НОВОЙ записи (платёж, кассовая смена) — в отличие от
+    get_active_branch_id, который фильтрует показываемые данные и может
+    вернуть None («Все филиалы»), здесь всегда нужен конкретный филиал.
+
+    Порядок именно такой:
+      1. prefer — филиал сущности, к которой привязано действие (например,
+         филиал лечения, за которое принимают оплату). Самый надёжный
+         источник: не зависит ни от сессии, ни от того, где числится
+         сотрудник.
+      2. филиал, выбранный в переключателе сайдбара.
+      3. СОБСТВЕННЫЙ филиал сотрудника — раньше главного. Прежние цепочки
+         (payment_create и _cashier_branch в apps.finance.views) ставили
+         главный филиал вторым, и у кассира, приписанного только к
+         неглавному филиалу, при выбранном «Все филиалы» деньги уходили в
+         главный. На проде так 98 платежей на 37.5 млн попали не в тот
+         филиал, а касса неглавного филиала не могла открыться вовсе:
+         constraint one_open_cash_shift_per_branch срабатывал на чужую,
+         уже открытую смену главного филиала.
+      4. главный филиал клиники, затем любой активный.
+
+    Везде только is_active=True: заблокированный супер-админом филиал не
+    должен получать ни новых записей, ни платежей (в записях на приём такая
+    защита уже была — см. _default_active_branch, в финансах её не было).
+    """
+    from apps.users.models import Branch
+
+    if prefer is not None and getattr(prefer, "is_active", False):
+        return prefer
+
+    bid = get_active_branch_id(request)
+    if bid:
+        branch = Branch.objects.filter(pk=bid, is_active=True).first()
+        if branch:
+            return branch
+
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        own = user.branches.filter(is_active=True).order_by("-is_main", "name").first()
+        if own:
+            return own
+
+    return (Branch.objects.filter(is_main=True, is_active=True).first()
+            or Branch.objects.filter(is_active=True).first())
+
+
 def set_current_clinic(clinic):
     _state.clinic = clinic
 

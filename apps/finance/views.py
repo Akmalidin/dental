@@ -297,12 +297,16 @@ def payment_public(request, token):
 
 
 def _cashier_branch(request):
-    from apps.tenancy import get_current_clinic
-    from apps.users.models import Branch
-    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
-    if not clinic:
-        return None
-    return Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
+    """Филиал кассовой смены — тот, в котором реально работает кассир.
+
+    Раньше здесь ВСЕГДА возвращался главный филиал клиники, без оглядки на
+    переключатель филиала и на филиалы самого сотрудника. Из-за этого кассир
+    неглавного филиала открывал смену чужого филиала, а если та уже была
+    открыта — упирался в constraint one_open_cash_shift_per_branch и не мог
+    открыть смену вообще (на проде у клиники с двумя филиалами за всё время
+    существовала ровно одна смена, и только в главном)."""
+    from apps.tenancy import resolve_branch_for_write
+    return resolve_branch_for_write(request)
 
 
 @login_required
@@ -542,12 +546,14 @@ def payment_create(request):
             payment.via_cashier = False
         else:
             payment.via_cashier = not getattr(request.user, "is_doctor", False)
-        if not payment.branch_id:   # по умолчанию — активный/основной филиал
-            from apps.users.models import Branch
-            payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
-                              or Branch.objects.filter(is_main=True).first()
-                              or request.user.branches.first()
-                              or Branch.objects.first())
+        if not payment.branch_id:
+            # Филиал платежа — в первую очередь филиал лечения, за которое
+            # платят: ни сессия, ни «домашний» филиал кассира не обязаны
+            # совпадать с тем, где реально шёл приём. Остальная цепочка — в
+            # apps.tenancy.resolve_branch_for_write.
+            from apps.tenancy import resolve_branch_for_write
+            prefer = payment.treatment.branch if payment.treatment_id else None
+            payment.branch = resolve_branch_for_write(request, prefer=prefer)
         payment.save()
         # Скидка на приём (если указана) — на явно выбранный, либо (авто) на тот,
         # что первым получит распределение платежа в _allocate_income ниже
