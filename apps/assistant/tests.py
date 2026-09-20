@@ -1,10 +1,13 @@
 import datetime
+import datetime as dt
+from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.assistant.models import Conversation
 from apps.tenancy import set_current_clinic, clear_current_clinic
+from apps.appointments.models import Appointment
 from apps.assistant.tools import openai_schemas, run_tool
 from apps.patients.models import Patient
 from apps.users.models import Branch, Clinic, User
@@ -156,3 +159,117 @@ class ToolClinicIsolationTestCase(TestCase):
             self.assertEqual(s["type"], "function")
             self.assertIn("name", s["function"])
             self.assertIn("parameters", s["function"])
+
+
+class AssistantToolsTestCase(TestCase):
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника И", slug="tools-clinic")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(
+            name="Главный", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.doctor = User.objects.create(login="doc-tools", name="Доктор", clinic=self.clinic)
+        self.user = User.objects.create(login="adm-tools", name="Админ", clinic=self.clinic)
+        self.patient = Patient.objects.create(
+            first_name="Пётр", last_name="Должников", phone="777",
+            branch=self.branch, clinic=self.clinic)
+        self.today = timezone.localdate()
+        start = timezone.make_aware(dt.datetime.combine(self.today, dt.time(10, 0)))
+        Appointment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch,
+            start_at=start, end_at=start + dt.timedelta(minutes=30),
+            status=Appointment.STATUS_SCHEDULED, clinic=self.clinic)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def test_appointments_on_date(self):
+        rows, error = run_tool("appointments_on_date", self.user,
+                               {"date": self.today.isoformat()})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["patient"], self.patient.full_name)
+        self.assertEqual(rows[0]["time"], "10:00")
+
+    def test_appointments_on_bad_date_returns_error(self):
+        rows, error = run_tool("appointments_on_date", self.user, {"date": "31.02.2026"})
+        self.assertEqual(rows, [])
+        self.assertIsNotNone(error)
+
+    def test_patients_with_debt(self):
+        Patient.all_objects.filter(pk=self.patient.pk).update(balance=Decimal("-500"))
+        rows, error = run_tool("patients_with_debt", self.user, {})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["debt"], 500.0)
+
+    def test_doctor_workload_counts_appointments(self):
+        rows, error = run_tool("doctor_workload", self.user,
+                               {"date_from": self.today.isoformat(),
+                                "date_to": self.today.isoformat()})
+        self.assertIsNone(error)
+        by_doctor = {r["doctor"]: r["appointments"] for r in rows}
+        self.assertEqual(by_doctor.get("Доктор"), 1)
+
+    def test_revenue_for_period_empty(self):
+        rows, error = run_tool("revenue_for_period", self.user,
+                               {"date_from": self.today.isoformat(),
+                                "date_to": self.today.isoformat()})
+        self.assertIsNone(error)
+        self.assertEqual(rows[0]["total"], 0.0)
+
+
+class AllToolsClinicIsolationTestCase(TestCase):
+    """Изоляция для ОСТАЛЬНЫХ инструментов, не только find_patient.
+
+    В брифе тест на изоляцию был один, на поиск пациента. Но утечь может
+    любой инструмент: достаточно где-то написать .all_objects вместо
+    .objects. Здесь в двух клиниках заведены одинаковые данные, и каждый
+    инструмент обязан вернуть только своё.
+    """
+
+    def setUp(self):
+        self.a = Clinic.objects.create(name="А", slug="iso-all-a")
+        self.b = Clinic.objects.create(name="Б", slug="iso-all-b")
+        self.today = timezone.localdate()
+        self.user_a = User.objects.create(login="iso-a", name="А", clinic=self.a)
+        for clinic, tag, debt in ((self.a, "A", "-100"), (self.b, "B", "-900")):
+            set_current_clinic(clinic)
+            branch = Branch.objects.create(
+                name="Ф" + tag, address="-", phone="0", is_main=True, clinic=clinic)
+            doctor = User.objects.create(
+                login="doc-iso-" + tag, name="Врач" + tag, clinic=clinic)
+            patient = Patient.objects.create(
+                first_name="Имя", last_name="Фам" + tag, phone="55" + tag,
+                branch=branch, clinic=clinic)
+            Patient.all_objects.filter(pk=patient.pk).update(balance=Decimal(debt))
+            start = timezone.make_aware(dt.datetime.combine(self.today, dt.time(9, 0)))
+            Appointment.objects.create(
+                patient=patient, doctor=doctor, branch=branch,
+                start_at=start, end_at=start + dt.timedelta(minutes=30),
+                status=Appointment.STATUS_SCHEDULED, clinic=clinic)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def test_appointments_on_date_scoped(self):
+        set_current_clinic(self.a)
+        rows, error = run_tool("appointments_on_date", self.user_a,
+                               {"date": self.today.isoformat()})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["doctor"], "ВрачA")
+
+    def test_patients_with_debt_scoped(self):
+        set_current_clinic(self.a)
+        rows, error = run_tool("patients_with_debt", self.user_a, {})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["debt"], 100.0)
+
+    def test_doctor_workload_scoped(self):
+        set_current_clinic(self.a)
+        rows, error = run_tool("doctor_workload", self.user_a,
+                               {"date_from": self.today.isoformat(),
+                                "date_to": self.today.isoformat()})
+        self.assertIsNone(error)
+        self.assertEqual([r["doctor"] for r in rows], ["ВрачA"])
