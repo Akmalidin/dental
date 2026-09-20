@@ -48,16 +48,57 @@ class ConversationMemoryTestCase(TestCase):
         self.assertEqual(msg.tool_args["query"], "Иван")
         self.assertEqual(msg.rows_count, 3)
 
-    def test_add_advances_updated_at(self):
+    def test_add_advances_updated_at_with_mismatched_current_clinic(self):
+        """Регрессия: updated_at должен продвигаться, даже если thread-local
+        текущая клиника не совпадает с клиникой беседы (например, фоновый
+        воркер обработал одну клинику и не сбросил контекст перед тем, как
+        тронуть данные другой).
+
+        ВАЖНО: сценарий "текущей клиники вообще нет" (clear_current_clinic())
+        здесь не воспроизводит баг — проверено эмпирически. В
+        apps.tenancy._apply_clinic() фильтр по клинике применяется, только
+        когда get_current_clinic() возвращает не-None; при None фильтр не
+        накладывается вовсе (что логично: не о чем фильтровать), так что даже
+        старая реализация через
+        Conversation.objects.filter(pk=...).update(...) находила строку без
+        текущей клиники. Баг проявляется именно при НЕСОВПАДЕНИИ текущей
+        клиники с клиникой записи (ClinicManager фильтрует по чужой clinic и
+        update() бьёт мимо pk).
+
+        Прежняя реализация обновляла updated_at через
+        Conversation.objects.filter(...).update(), то есть через
+        ClinicManager с фильтром по текущей клинике — в описанном сценарии
+        update() не находил строку и молча не делал ничего, беседа
+        «протухала» раньше срока.
+        """
         conv = Conversation.active_for(self.user)
         old_time = timezone.now() - datetime.timedelta(minutes=5)
         Conversation.objects.filter(pk=conv.pk).update(updated_at=old_time)
         conv.refresh_from_db(fields=["updated_at"])
-        conv.add("user", "привет")
+
+        other_clinic = Clinic.objects.create(name="Другая клиника", slug="clinic-other")
+        set_current_clinic(other_clinic)   # имитируем «чужой» контекст потока
+        try:
+            conv.add("user", "привет")
+        finally:
+            set_current_clinic(self.clinic)
+
         conv.refresh_from_db(fields=["updated_at"])
         self.assertGreater(conv.updated_at, old_time)
 
     def test_active_for_does_not_duplicate_existing_active_conversation(self):
+        """Базовая проверка: повторные вызовы не плодят лишних бесед.
+
+        ВНИМАНИЕ: гонку (два параллельных запроса одновременно проходят
+        active_for() и оба не видят чужую ещё не закоммиченную запись) этот
+        тест НЕ покрывает — три последовательных вызова в одном потоке
+        пройдут при любой реализации, даже без select_for_update(). Честно
+        воспроизвести гонку юнит-тестом на SQLite нельзя: select_for_update()
+        здесь не блокирует, а тест на реальных потоках был бы флаки.
+        Защита от гонки — select_for_update() в active_for() — работает и
+        проверяема только на бэкенде с реальными блокировками (в проде —
+        PostgreSQL, см. config/settings/server.py).
+        """
         Conversation.active_for(self.user)
         Conversation.active_for(self.user)
         Conversation.active_for(self.user)
