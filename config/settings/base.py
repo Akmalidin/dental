@@ -48,6 +48,7 @@ TENANT_APPS = [
     "apps.technicians",
     "apps.notifications",
     "apps.reports",
+    "apps.assistant",
     "apps.settings_clinic",
     "inertia",
 ]

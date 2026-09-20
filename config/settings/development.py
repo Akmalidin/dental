@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "apps.technicians",
     "apps.notifications",
     "apps.reports",
+    "apps.assistant",
     "apps.settings_clinic",
     "apps.sync",
     "apps.marketing",
