@@ -5,7 +5,9 @@ from django.utils import timezone
 
 from apps.assistant.models import Conversation
 from apps.tenancy import set_current_clinic, clear_current_clinic
-from apps.users.models import Clinic, User
+from apps.assistant.tools import openai_schemas, run_tool
+from apps.patients.models import Patient
+from apps.users.models import Branch, Clinic, User
 
 
 class ConversationMemoryTestCase(TestCase):
@@ -103,3 +105,54 @@ class ConversationMemoryTestCase(TestCase):
         Conversation.active_for(self.user)
         Conversation.active_for(self.user)
         self.assertEqual(Conversation.objects.filter(user=self.user).count(), 1)
+
+
+class ToolClinicIsolationTestCase(TestCase):
+    """Главный тест безопасности: инструмент, вызванный сотрудником одной
+    клиники, не должен возвращать ничего из другой — даже если пациенты
+    названы одинаково."""
+
+    def setUp(self):
+        self.clinic_a = Clinic.objects.create(name="Клиника А", slug="tool-clinic-a")
+        self.clinic_b = Clinic.objects.create(name="Клиника Б", slug="tool-clinic-b")
+        self.branch_a = Branch.objects.create(
+            name="А", address="-", phone="0", is_main=True, clinic=self.clinic_a)
+        self.branch_b = Branch.objects.create(
+            name="Б", address="-", phone="0", is_main=True, clinic=self.clinic_b)
+        self.user_a = User.objects.create(login="tool-a", name="А", clinic=self.clinic_a)
+        set_current_clinic(self.clinic_a)
+        Patient.objects.create(first_name="Иван", last_name="Тестов", phone="111",
+                               branch=self.branch_a, clinic=self.clinic_a)
+        set_current_clinic(self.clinic_b)
+        Patient.objects.create(first_name="Иван", last_name="Тестов", phone="222",
+                               branch=self.branch_b, clinic=self.clinic_b)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def test_find_patient_returns_only_own_clinic(self):
+        set_current_clinic(self.clinic_a)
+        rows, error = run_tool("find_patient", self.user_a, {"query": "Иван"})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["phone"], "111")
+
+    def test_find_patient_by_phone(self):
+        set_current_clinic(self.clinic_a)
+        rows, error = run_tool("find_patient", self.user_a, {"query": "111"})
+        self.assertIsNone(error)
+        self.assertEqual(len(rows), 1)
+
+    def test_unknown_tool_returns_error(self):
+        set_current_clinic(self.clinic_a)
+        rows, error = run_tool("drop_everything", self.user_a, {})
+        self.assertEqual(rows, [])
+        self.assertIsNotNone(error)
+
+    def test_schemas_are_wellformed(self):
+        schemas = openai_schemas()
+        self.assertTrue(schemas)
+        for s in schemas:
+            self.assertEqual(s["type"], "function")
+            self.assertIn("name", s["function"])
+            self.assertIn("parameters", s["function"])
