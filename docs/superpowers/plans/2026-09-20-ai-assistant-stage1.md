@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Приложение регистрируется в `TENANT_APPS` в `config/settings/base.py`, не в `SHARED_APPS`.
+- Приложение регистрируется в `INSTALLED_APPS` в `config/settings/development.py` — именно эти настройки используют и `manage.py test`, и прод (`server.py` делает `from .development import *`; `base.py` с django_tenants там сознательно не используется, см. докстринг `server.py`). Для единообразия с остальными приложениями добавить и в `TENANT_APPS` в `config/settings/base.py`.
 - Модели с данными клиники наследуют `ClinicScopedModel` из `apps/tenancy.py`.
 - Инструменты читают только через менеджеры `.objects`, которые скоупятся `ClinicManager`. Использование `.all_objects` и `.all_clinics` в инструментах запрещено.
 - Модель никогда не получает и не передаёт идентификатор клиники — он берётся из запроса через `get_current_clinic()`.
@@ -711,7 +711,7 @@ git commit -m "Ассистент: записи на дату, должники,
   - `complete(messages, tools=None)` -> `(result, error)`, где `result` это `{"kind": "text", "text": str}` либо `{"kind": "tool", "name": str, "args": dict}`
   - `fallback_answer(question, history)` -> `(text, error)` — ответ через YandexGPT, когда OpenAI недоступен
 
-Настройки наследуются по цепочке `base` -> `development` -> `server`, поэтому `OPENAI_MODEL` добавляется в `development.py` и доезжает до прода сам.
+`OPENAI_MODEL` добавляется в `development.py`: прод (`server.py`) делает `from .development import *`, поэтому настройка доезжает до него сама. `base.py` в этой цепочке не участвует — `development.py` его не наследует.
 
 - [ ] **Step 1: Добавить настройку модели**
 
