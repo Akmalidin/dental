@@ -2,7 +2,10 @@ import datetime
 import datetime as dt
 from decimal import Decimal
 
-from django.test import TestCase
+import json
+from unittest import mock
+
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.assistant.models import Conversation
@@ -273,3 +276,110 @@ class AllToolsClinicIsolationTestCase(TestCase):
                                 "date_to": self.today.isoformat()})
         self.assertIsNone(error)
         self.assertEqual([r["doctor"] for r in rows], ["ВрачA"])
+
+
+class ProviderTestCase(TestCase):
+    """HTTP наружу не ходим: подменяем _post_openai — единственное место,
+    где провайдер обращается в сеть."""
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_not_available_without_key(self):
+        from apps.assistant import provider
+        self.assertFalse(provider.openai_available())
+
+    @override_settings(OPENAI_API_KEY="k", OPENAI_MODEL="gpt-4o-mini")
+    def test_text_answer_parsed(self):
+        from apps.assistant import provider
+        payload = {"choices": [{"message": {"content": "Готово"}}]}
+        with mock.patch.object(provider, "_post_openai", return_value=(payload, None)):
+            result, error = provider.complete([{"role": "user", "content": "привет"}])
+        self.assertIsNone(error)
+        self.assertEqual(result["kind"], "text")
+        self.assertEqual(result["text"], "Готово")
+
+    @override_settings(OPENAI_API_KEY="k", OPENAI_MODEL="gpt-4o-mini")
+    def test_tool_call_parsed(self):
+        from apps.assistant import provider
+        payload = {"choices": [{"message": {"tool_calls": [
+            {"function": {"name": "find_patient",
+                          "arguments": json.dumps({"query": "Иван"})}}
+        ]}}]}
+        with mock.patch.object(provider, "_post_openai", return_value=(payload, None)):
+            result, error = provider.complete([{"role": "user", "content": "найди Ивана"}])
+        self.assertIsNone(error)
+        self.assertEqual(result["kind"], "tool")
+        self.assertEqual(result["name"], "find_patient")
+        self.assertEqual(result["args"]["query"], "Иван")
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_broken_tool_arguments_reported(self):
+        from apps.assistant import provider
+        payload = {"choices": [{"message": {"tool_calls": [
+            {"function": {"name": "find_patient", "arguments": "{не json"}}
+        ]}}]}
+        with mock.patch.object(provider, "_post_openai", return_value=(payload, None)):
+            result, error = provider.complete([{"role": "user", "content": "x"}])
+        self.assertIsNone(result)
+        self.assertIsNotNone(error)
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_http_error_propagated(self):
+        from apps.assistant import provider
+        with mock.patch.object(provider, "_post_openai", return_value=(None, "таймаут")):
+            result, error = provider.complete([{"role": "user", "content": "x"}])
+        self.assertIsNone(result)
+        self.assertEqual(error, "таймаут")
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_unexpected_payload_reported(self):
+        """Ответ без choices не должен ронять ассистента исключением."""
+        from apps.assistant import provider
+        with mock.patch.object(provider, "_post_openai", return_value=({}, None)):
+            result, error = provider.complete([{"role": "user", "content": "x"}])
+        self.assertIsNone(result)
+        self.assertIsNotNone(error)
+
+    @override_settings(OPENAI_API_KEY="k", OPENAI_MODEL="gpt-4o-mini")
+    def test_tools_are_sent_in_request(self):
+        """Инструменты должны реально уходить в тело запроса.
+
+        Без этого модель никогда не попросит инструмент, и ассистент молча
+        выродится в обычный чат без доступа к данным — снаружи это выглядит
+        не как поломка, а как «ИИ почему-то не знает наших пациентов».
+        """
+        from apps.assistant import provider
+        from apps.assistant.tools import openai_schemas
+
+        captured = {}
+
+        def fake_post(body):
+            captured.update(body)
+            return {"choices": [{"message": {"content": "ок"}}]}, None
+
+        with mock.patch.object(provider, "_post_openai", side_effect=fake_post):
+            provider.complete([{"role": "user", "content": "x"}], tools=openai_schemas())
+
+        self.assertIn("tools", captured)
+        self.assertEqual(captured["tool_choice"], "auto")
+        names = {t["function"]["name"] for t in captured["tools"]}
+        self.assertIn("find_patient", names)
+        self.assertIn("appointments_on_date", names)
+        self.assertEqual(captured["model"], "gpt-4o-mini")
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_tools_omitted_when_not_given(self):
+        """Без инструментов поля tools в запросе быть не должно — иначе
+        OpenAI отвергнет запрос с пустым списком."""
+        from apps.assistant import provider
+
+        captured = {}
+
+        def fake_post(body):
+            captured.update(body)
+            return {"choices": [{"message": {"content": "ок"}}]}, None
+
+        with mock.patch.object(provider, "_post_openai", side_effect=fake_post):
+            provider.complete([{"role": "user", "content": "x"}])
+
+        self.assertNotIn("tools", captured)
+        self.assertNotIn("tool_choice", captured)
