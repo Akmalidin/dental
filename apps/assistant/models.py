@@ -1,6 +1,6 @@
 import datetime
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.tenancy import ClinicScopedModel
@@ -36,21 +36,24 @@ class Conversation(ClinicScopedModel):
     def active_for(cls, user):
         """Текущая беседа сотрудника. Создаёт новую, если прошлая устарела
         или была закрыта кнопкой «Очистить»."""
-        conv = (cls.objects.filter(user=user, closed_at__isnull=True)
-                .order_by("-updated_at").first())
-        if conv is not None and timezone.now() - conv.updated_at < STALE_AFTER:
-            return conv
-        return cls.objects.create(user=user)
+        with transaction.atomic():
+            conv = (cls.objects.select_for_update()
+                    .filter(user=user, closed_at__isnull=True)
+                    .order_by("-updated_at").first())
+            if conv is not None and timezone.now() - conv.updated_at < STALE_AFTER:
+                return conv
+            return cls.objects.create(user=user)
 
     def add(self, role, text, tool_name="", tool_args=None, rows_count=None):
         msg = Message.objects.create(
             conversation=self, role=role, text=text,
             tool_name=tool_name, tool_args=tool_args or {}, rows_count=rows_count,
         )
-        # updated_at двигаем явно: auto_now срабатывает на save() самой
-        # беседы, а пишем мы в дочернюю таблицу.
-        Conversation.objects.filter(pk=self.pk).update(updated_at=timezone.now())
-        self.refresh_from_db(fields=["updated_at"])
+        # save() идёт через _base_manager (all_clinics), без фильтра по клинике,
+        # и auto_now сам проставит updated_at — в отличие от
+        # Conversation.objects.filter(...).update(), который ушёл бы через
+        # ClinicManager и вне контекста запроса не нашёл бы строку.
+        self.save(update_fields=["updated_at"])
         return msg
 
     def recent(self, limit=12):

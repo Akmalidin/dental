@@ -47,3 +47,18 @@ class ConversationMemoryTestCase(TestCase):
         self.assertEqual(msg.tool_name, "find_patient")
         self.assertEqual(msg.tool_args["query"], "Иван")
         self.assertEqual(msg.rows_count, 3)
+
+    def test_add_advances_updated_at(self):
+        conv = Conversation.active_for(self.user)
+        old_time = timezone.now() - datetime.timedelta(minutes=5)
+        Conversation.objects.filter(pk=conv.pk).update(updated_at=old_time)
+        conv.refresh_from_db(fields=["updated_at"])
+        conv.add("user", "привет")
+        conv.refresh_from_db(fields=["updated_at"])
+        self.assertGreater(conv.updated_at, old_time)
+
+    def test_active_for_does_not_duplicate_existing_active_conversation(self):
+        Conversation.active_for(self.user)
+        Conversation.active_for(self.user)
+        Conversation.active_for(self.user)
+        self.assertEqual(Conversation.objects.filter(user=self.user).count(), 1)
