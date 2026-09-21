@@ -247,11 +247,19 @@ class Patient(ClinicSoftDeleteModel):
         verbose_name="Источник",
     )
     tags = models.ManyToManyField(Tag, blank=True, verbose_name="Теги")
+    # Необязательное поле — филиал, где пациента завели (для справки/дефолтов
+    # в формах). НЕ используется для ограничения видимости: пациент общий для
+    # всей клиники, к филиалу привязывается конкретный приём/лечение/платёж,
+    # а не сама карточка. Фильтр "по филиалу" в списках/отчётах ищет пациентов
+    # с приёмом/лечением в этом филиале — см. apps/patients/views.py patient_list
+    # и apps/users/views.py _newui_patients_page_data.
     branch = models.ForeignKey(
         Branch,
         on_delete=models.PROTECT,
         related_name="patients",
-        verbose_name="Филиал",
+        verbose_name="Филиал регистрации",
+        null=True,
+        blank=True,
     )
     # Insurance / DMS
     insurance = models.ForeignKey(

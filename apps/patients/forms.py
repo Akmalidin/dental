@@ -26,6 +26,9 @@ class PatientForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Пациент общий для всей клиники — «Филиал регистрации» необязателен
+        # (справочное поле, не ограничивает видимость пациента).
+        self.fields["branch"].required = False
         # Изоляция клиник: «Лечащий врач» и «Филиал» — только текущей клиники.
         # User не привязан к менеджеру клиники, поэтому фильтруем явно.
         from apps.tenancy import get_current_clinic

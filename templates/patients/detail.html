@@ -693,8 +693,8 @@ const PATIENT_TREATMENTS = [{% for t in treatments %}{% if t.status != 'cancelle
             <p class="text-sm text-slate-800">{{ patient.get_gender_display|default:"—" }}</p>
           </div>
           <div>
-            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Филиал</p>
-            <p class="text-sm text-slate-800">{{ patient.branch.name }}</p>
+            <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Филиал регистрации</p>
+            <p class="text-sm text-slate-800">{{ patient.branch.name|default:"—" }}</p>
           </div>
           <div>
             <p class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-1">Добавил</p>
