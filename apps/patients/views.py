@@ -63,7 +63,9 @@ def patient_list(request):
                 | Q(phone2__icontains=word)
             )
     if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+        # Пациент общий для клиники — фильтр "по филиалу" ищет тех, у кого
+        # был приём/лечение в этом филиале, а не тех, кто там зарегистрирован.
+        qs = qs.filter(Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)).distinct()
     if doctor_id:
         qs = qs.filter(primary_doctor_id=doctor_id)
     if gender:

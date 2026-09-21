@@ -97,10 +97,10 @@
 
     <!-- 3. Клиника -->
     <div class="card card-pad space-y-4" x-show="tab === 3" x-cloak>
-      <h3 class="text-sm font-bold" style="color:var(--text)">Клиника <span class="text-xs font-normal muted">обязательно</span></h3>
+      <h3 class="text-sm font-bold" style="color:var(--text)">Клиника <span class="text-xs font-normal muted">необязательно</span></h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Филиал *</label>
+          <label class="block text-xs font-semibold muted mb-1.5 uppercase">Филиал регистрации</label>
           {{ form.branch }}
           {% if form.branch.errors %}<p class="text-red-500 text-xs mt-1">{{ form.branch.errors|join:", " }}</p>{% endif %}
         </div>

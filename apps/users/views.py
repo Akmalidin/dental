@@ -407,6 +407,13 @@ def _newui_patients_page_data(request):
     from apps.tenancy import get_active_branch_id
     branch_id = get_active_branch_id(request)
 
+    def _seen_at_branch(qs, bid):
+        # Пациент общий для всей клиники — фильтр "по филиалу" означает "был
+        # приём/лечение в этом филиале", а не "тут заведена карточка"
+        # (Patient.branch больше не используется для видимости, только как
+        # справочное поле "филиал регистрации").
+        return qs.filter(Q(appointments__branch_id=bid) | Q(treatments__branch_id=bid)).distinct()
+
     active_treatment_qs = Treatment.objects.filter(
         status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
     ).values_list("patient_id", flat=True)
@@ -429,7 +436,7 @@ def _newui_patients_page_data(request):
     # результатов: выбор филиала — явное намерение «покажи мне этот
     # филиал», а не второстепенный чип, поэтому в отличие от поиска/чипов
     # затрагивает и сводку сверху.
-    base_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
+    base_qs = _seen_at_branch(Patient.objects.all(), branch_id) if branch_id else Patient.objects.all()
     if q:
         base_qs = _search(base_qs)
     # Счётчики для чипов «Все/В лечении/Должники» — по queryset с учётом
@@ -449,7 +456,7 @@ def _newui_patients_page_data(request):
     today = timezone.localdate()
     week_ago = today - timedelta(days=7)
     week_ahead = today + timedelta(days=7)
-    all_patients_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
+    all_patients_qs = _seen_at_branch(Patient.objects.all(), branch_id) if branch_id else Patient.objects.all()
     new_count = all_patients_qs.filter(created_at__date__gte=week_ago).count()
     birthday_count = 0
     for bd in all_patients_qs.exclude(birth_date=None).values_list("birth_date", flat=True):
@@ -556,10 +563,12 @@ def _newui_finance_data(clinic, branch_id=None):
     неподключённый (см. v-cashdesk), а не подделан.
 
     branch_id — активный филиал переключателя сайдбара (None = «Все
-    филиалы»): Payment/Expense/Patient(долг) имеют собственное поле branch —
-    фильтруем ими напрямую."""
+    филиалы»): Payment/Expense имеют собственное поле branch — фильтруем ими
+    напрямую. У Patient branch — справочное поле "где зарегистрирован", не
+    используется для видимости (пациент общий для клиники): долг по филиалу
+    считаем по пациентам, у которых есть приём/лечение в этом филиале."""
     from datetime import timedelta
-    from django.db.models import Sum
+    from django.db.models import Q, Sum
     from django.utils import timezone
     from apps.finance.models import Payment, Expense, PatientAdvance, ExpenseCategory
     from apps.patients.models import Patient
@@ -570,7 +579,10 @@ def _newui_finance_data(clinic, branch_id=None):
 
     payments_qs = Payment.objects.filter(branch_id=branch_id) if branch_id else Payment.objects.all()
     expenses_qs = Expense.objects.filter(branch_id=branch_id) if branch_id else Expense.objects.all()
-    patients_qs = Patient.objects.filter(branch_id=branch_id) if branch_id else Patient.objects.all()
+    patients_qs = (
+        Patient.objects.filter(Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)).distinct()
+        if branch_id else Patient.objects.all()
+    )
 
     income = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0
     refund = payments_qs.filter(created_at__date__gte=month_start, type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0
@@ -581,7 +593,9 @@ def _newui_finance_data(clinic, branch_id=None):
     # У самого депозита нет поля branch — фильтруем по филиалу ПАЦИЕНТА.
     advances_qs = PatientAdvance.objects.filter(patient__clinic=clinic) if clinic else PatientAdvance.objects.none()
     if branch_id:
-        advances_qs = advances_qs.filter(patient__branch_id=branch_id)
+        advances_qs = advances_qs.filter(
+            Q(patient__appointments__branch_id=branch_id) | Q(patient__treatments__branch_id=branch_id)
+        ).distinct()
     deposits_total = float(advances_qs.aggregate(s=Sum("amount"))["s"] or 0)
     debtors = patients_qs.filter(balance__lt=0)
     debt_total = float(-(debtors.aggregate(s=Sum("balance"))["s"] or 0))
@@ -814,7 +828,9 @@ def _newui_reports_data(branch_id=None):
 
     branch_id — активный филиал переключателя сайдбара (None = «Все
     филиалы»). Фильтруются метрики, у которых есть прямая или однохоповая
-    связь с филиалом: выручка/расходы/должники (Payment/Expense/Patient.branch),
+    связь с филиалом: выручка/расходы (Payment/Expense), должники (пациенты
+    с приёмом/лечением в этом филиале — Patient.branch справочное, для
+    видимости не используется, пациент общий для клиники),
     приёмы и всё, что от них считается (завершено/отменено/неявка,
     отменённые визиты, статистика по врачам через Treatment.appointment,
     повторные визиты, загрузка кабинетов, выручка по неделям). «Источники
@@ -827,7 +843,7 @@ def _newui_reports_data(branch_id=None):
     клиники независимо от выбора в переключателе."""
     from datetime import timedelta
     from collections import defaultdict
-    from django.db.models import Sum, Count, Max
+    from django.db.models import Q, Sum, Count, Max
     from django.utils import timezone
     from apps.finance.models import Payment, Expense
     from apps.appointments.models import Appointment
@@ -860,10 +876,14 @@ def _newui_reports_data(branch_id=None):
         "amount": float(e.amount), "description": e.description,
     } for e in expenses_qs.order_by("-date")[:100]]
 
-    # ── Должники — тот же запрос, что и старый /finance/payments/debtors/ ──
+    # ── Должники — тот же запрос, что и старый /finance/payments/debtors/,
+    # но по филиалу фильтруем через приёмы/лечения пациента (пациент общий
+    # для клиники, Patient.branch — справочное поле, не для видимости) ──
     debtors_qs = Patient.objects.filter(balance__lt=0).order_by("balance")
     if branch_id:
-        debtors_qs = debtors_qs.filter(branch_id=branch_id)
+        debtors_qs = debtors_qs.filter(
+            Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)
+        ).distinct()
     debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
     debtors_total = float(sum(p["balance"] for p in debtors_list))
 
@@ -1035,7 +1055,9 @@ def _newui_reports_data(branch_id=None):
         b_completed = b_appts.filter(status=Appointment.STATUS_COMPLETED).count()
         b_cancelled = b_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).count()
         b_expenses = float(Expense.objects.filter(branch_id=b.pk, date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
-        b_debt = float(-(Patient.objects.filter(branch_id=b.pk, balance__lt=0).aggregate(s=Sum("balance"))["s"] or 0))
+        b_debt = float(-(Patient.objects.filter(balance__lt=0)
+                         .filter(Q(appointments__branch_id=b.pk) | Q(treatments__branch_id=b.pk)).distinct()
+                         .aggregate(s=Sum("balance"))["s"] or 0))
         b_revenue = float(b_income - b_refund)
         branch_stats.append({
             "id": b.pk, "branch": b.name,
