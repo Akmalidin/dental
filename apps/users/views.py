@@ -408,11 +408,14 @@ def _newui_patients_page_data(request):
     branch_id = get_active_branch_id(request)
 
     def _seen_at_branch(qs, bid):
-        # Пациент общий для всей клиники — фильтр "по филиалу" означает "был
-        # приём/лечение в этом филиале", а не "тут заведена карточка"
-        # (Patient.branch больше не используется для видимости, только как
-        # справочное поле "филиал регистрации").
-        return qs.filter(Q(appointments__branch_id=bid) | Q(treatments__branch_id=bid)).distinct()
+        # Пациент общий для всей клиники — фильтр "по филиалу" означает
+        # "зарегистрирован здесь ИЛИ был приём/лечение здесь". Только
+        # "был приём/лечение" (без Patient.branch) прятал 87% пациентов
+        # реальной клиники (2793 из 3209 — карточка есть, а
+        # Appointment/Treatment в системе не заведены вовсе).
+        return qs.filter(
+            Q(branch_id=bid) | Q(appointments__branch_id=bid) | Q(treatments__branch_id=bid)
+        ).distinct()
 
     active_treatment_qs = Treatment.objects.filter(
         status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
@@ -580,7 +583,9 @@ def _newui_finance_data(clinic, branch_id=None):
     payments_qs = Payment.objects.filter(branch_id=branch_id) if branch_id else Payment.objects.all()
     expenses_qs = Expense.objects.filter(branch_id=branch_id) if branch_id else Expense.objects.all()
     patients_qs = (
-        Patient.objects.filter(Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)).distinct()
+        Patient.objects.filter(
+            Q(branch_id=branch_id) | Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)
+        ).distinct()
         if branch_id else Patient.objects.all()
     )
 
@@ -594,7 +599,8 @@ def _newui_finance_data(clinic, branch_id=None):
     advances_qs = PatientAdvance.objects.filter(patient__clinic=clinic) if clinic else PatientAdvance.objects.none()
     if branch_id:
         advances_qs = advances_qs.filter(
-            Q(patient__appointments__branch_id=branch_id) | Q(patient__treatments__branch_id=branch_id)
+            Q(patient__branch_id=branch_id) | Q(patient__appointments__branch_id=branch_id)
+            | Q(patient__treatments__branch_id=branch_id)
         ).distinct()
     deposits_total = float(advances_qs.aggregate(s=Sum("amount"))["s"] or 0)
     debtors = patients_qs.filter(balance__lt=0)
@@ -828,9 +834,11 @@ def _newui_reports_data(branch_id=None):
 
     branch_id — активный филиал переключателя сайдбара (None = «Все
     филиалы»). Фильтруются метрики, у которых есть прямая или однохоповая
-    связь с филиалом: выручка/расходы (Payment/Expense), должники (пациенты
-    с приёмом/лечением в этом филиале — Patient.branch справочное, для
-    видимости не используется, пациент общий для клиники),
+    связь с филиалом: выручка/расходы (Payment/Expense), должники (пациенты,
+    у которых branch=филиал ИЛИ есть приём/лечение в этом филиале —
+    Patient.branch сам по себе для видимости не используется, но участвует в
+    ИЛИ: у 87% пациентов реальной клиники нет ни одного Appointment/
+    Treatment в системе вовсе, только "ИЛИ был приём" прятал бы их всех),
     приёмы и всё, что от них считается (завершено/отменено/неявка,
     отменённые визиты, статистика по врачам через Treatment.appointment,
     повторные визиты, загрузка кабинетов, выручка по неделям). «Источники
@@ -882,7 +890,7 @@ def _newui_reports_data(branch_id=None):
     debtors_qs = Patient.objects.filter(balance__lt=0).order_by("balance")
     if branch_id:
         debtors_qs = debtors_qs.filter(
-            Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)
+            Q(branch_id=branch_id) | Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)
         ).distinct()
     debtors_list = [{"id": p.pk, "name": p.full_name, "phone": p.phone, "balance": float(p.balance)} for p in debtors_qs[:200]]
     debtors_total = float(sum(p["balance"] for p in debtors_list))
@@ -1056,7 +1064,8 @@ def _newui_reports_data(branch_id=None):
         b_cancelled = b_appts.filter(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).count()
         b_expenses = float(Expense.objects.filter(branch_id=b.pk, date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0)
         b_debt = float(-(Patient.objects.filter(balance__lt=0)
-                         .filter(Q(appointments__branch_id=b.pk) | Q(treatments__branch_id=b.pk)).distinct()
+                         .filter(Q(branch_id=b.pk) | Q(appointments__branch_id=b.pk) | Q(treatments__branch_id=b.pk))
+                         .distinct()
                          .aggregate(s=Sum("balance"))["s"] or 0))
         b_revenue = float(b_income - b_refund)
         branch_stats.append({

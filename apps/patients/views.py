@@ -63,9 +63,14 @@ def patient_list(request):
                 | Q(phone2__icontains=word)
             )
     if branch_id:
-        # Пациент общий для клиники — фильтр "по филиалу" ищет тех, у кого
-        # был приём/лечение в этом филиале, а не тех, кто там зарегистрирован.
-        qs = qs.filter(Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)).distinct()
+        # Пациент общий для клиники — фильтр "по филиалу" ищет тех, кто там
+        # зарегистрирован, ИЛИ был там на приёме/лечении. Только "был
+        # приём/лечение" (без ИЛИ по branch) прятал 87% пациентов реальной
+        # клиники (2793 из 3209), у которых в системе вообще нет ни одного
+        # Appointment/Treatment — только карточка.
+        qs = qs.filter(
+            Q(branch_id=branch_id) | Q(appointments__branch_id=branch_id) | Q(treatments__branch_id=branch_id)
+        ).distinct()
     if doctor_id:
         qs = qs.filter(primary_doctor_id=doctor_id)
     if gender:
