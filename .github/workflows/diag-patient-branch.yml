@@ -1,0 +1,25 @@
+name: Diag — patients vs appointments/treatments by branch (read-only)
+
+# Расследование по скриншотам пользователя (21/22.09.2026, клиника khalilov):
+# после перехода на "пациент общий для клиники" (PR #139, фильтр "по
+# филиалу" теперь смотрит на Appointment.branch/Treatment.branch, а не
+# Patient.branch) числа по филиалам перестали быть аддитивными
+# (167+346 != 3209) — подозрение, что у большинства пациентов в базе вообще
+# нет ни одного приёма/лечения. Read-only, ничего не меняет.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — сравнение Patient/Appointment/Treatment по филиалам (Django shell, read-only)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            echo 'ZnJvbSBhcHBzLnVzZXJzLm1vZGVscyBpbXBvcnQgQ2xpbmljLCBCcmFuY2gKZnJvbSBhcHBzLnBhdGllbnRzLm1vZGVscyBpbXBvcnQgUGF0aWVudApmcm9tIGFwcHMuYXBwb2ludG1lbnRzLm1vZGVscyBpbXBvcnQgQXBwb2ludG1lbnQKZnJvbSBhcHBzLnRyZWF0bWVudHMubW9kZWxzIGltcG9ydCBUcmVhdG1lbnQKZnJvbSBkamFuZ28uZGIubW9kZWxzIGltcG9ydCBRCgpjbGluaWMgPSBDbGluaWMub2JqZWN0cy5maWx0ZXIoc2x1Z19faWNvbnRhaW5zPSdraGFsaWxvdicpLmZpcnN0KCkKaWYgbm90IGNsaW5pYzoKICAgIGZvciBjIGluIENsaW5pYy5vYmplY3RzLmFsbCgpOgogICAgICAgIHByaW50KGMucGssIGMuc2x1ZywgYy5uYW1lKQplbHNlOgogICAgcHJpbnQoJz4+PiDQutC70LjQvdC40LrQsDonLCBjbGluaWMucGssIGNsaW5pYy5uYW1lKQogICAgcGF0aWVudHMgPSBQYXRpZW50Lm9iamVjdHMuZmlsdGVyKGNsaW5pYz1jbGluaWMpCiAgICBwcmludCgnPj4+INCy0YHQtdCz0L4g0L/QsNGG0LjQtdC90YLQvtCyOicsIHBhdGllbnRzLmNvdW50KCkpCiAgICBwcmludCgnPj4+INCy0YHQtdCz0L4g0L/RgNC40ZHQvNC+0LIgKEFwcG9pbnRtZW50KSDRgyDQutC70LjQvdC40LrQuDonLCBBcHBvaW50bWVudC5vYmplY3RzLmZpbHRlcihjbGluaWM9Y2xpbmljKS5jb3VudCgpKQogICAgcHJpbnQoJz4+PiDQstGB0LXQs9C+INC70LXRh9C10L3QuNC5IChUcmVhdG1lbnQpINGDINC60LvQuNC90LjQutC4OicsIFRyZWF0bWVudC5vYmplY3RzLmZpbHRlcihjbGluaWM9Y2xpbmljKS5jb3VudCgpKQogICAgcHJpbnQoKQogICAgZm9yIGIgaW4gQnJhbmNoLm9iamVjdHMuZmlsdGVyKGNsaW5pYz1jbGluaWMpOgogICAgICAgIHBiID0gcGF0aWVudHMuZmlsdGVyKGJyYW5jaD1iKS5jb3VudCgpCiAgICAgICAgc2VlbiA9IHBhdGllbnRzLmZpbHRlcihRKGFwcG9pbnRtZW50c19fYnJhbmNoPWIpIHwgUSh0cmVhdG1lbnRzX19icmFuY2g9YikpLmRpc3RpbmN0KCkuY291bnQoKQogICAgICAgIGFwcHRzID0gQXBwb2ludG1lbnQub2JqZWN0cy5maWx0ZXIoY2xpbmljPWNsaW5pYywgYnJhbmNoPWIpLmNvdW50KCkKICAgICAgICB0cmVhdHMgPSBUcmVhdG1lbnQub2JqZWN0cy5maWx0ZXIoY2xpbmljPWNsaW5pYywgYnJhbmNoPWIpLmNvdW50KCkKICAgICAgICBwcmludChmJ9Ck0LjQu9C40LDQuyB7Yi5wa30gIntiLm5hbWV9IjogUGF0aWVudC5icmFuY2g9e3BifSwgItCy0LjQtNC10LvQuCDQt9C00LXRgdGMIj17c2Vlbn0sIEFwcG9pbnRtZW50LmJyYW5jaD17YXBwdHN9LCBUcmVhdG1lbnQuYnJhbmNoPXt0cmVhdHN9JykKICAgIHByaW50KCkKICAgIG5vX3Zpc2l0cyA9IHBhdGllbnRzLmZpbHRlcihhcHBvaW50bWVudHNfX2lzbnVsbD1UcnVlLCB0cmVhdG1lbnRzX19pc251bGw9VHJ1ZSkuY291bnQoKQogICAgcHJpbnQoJz4+PiDQv9Cw0YbQuNC10L3RgtC+0LIg0LLQvtC+0LHRidC1IEJFWiDQtdC00LjQvdC+0LPQviDQv9GA0LjRkdC80LAv0LvQtdGH0LXQvdC40Y8g0LIg0LHQsNC30LU6Jywgbm9fdmlzaXRzKQogICAgaGFzX2FwcHRfbm9fYnJhbmNoID0gQXBwb2ludG1lbnQub2JqZWN0cy5maWx0ZXIoY2xpbmljPWNsaW5pYywgYnJhbmNoX19pc251bGw9VHJ1ZSkuY291bnQoKQogICAgaGFzX3RyZWF0X25vX2JyYW5jaCA9IFRyZWF0bWVudC5vYmplY3RzLmZpbHRlcihjbGluaWM9Y2xpbmljLCBicmFuY2hfX2lzbnVsbD1UcnVlKS5jb3VudCgpCiAgICBwcmludCgnPj4+INC/0YDQuNGR0LzQvtCyINCx0LXQtyDRhNC40LvQuNCw0LvQsCAoYnJhbmNoIGlzIG51bGwpOicsIGhhc19hcHB0X25vX2JyYW5jaCkKICAgIHByaW50KCc+Pj4g0LvQtdGH0LXQvdC40Lkg0LHQtdC3INGE0LjQu9C40LDQu9CwIChicmFuY2ggaXMgbnVsbCk6JywgaGFzX3RyZWF0X25vX2JyYW5jaCkK' | base64 -d | ./venv/bin/python manage.py shell
