@@ -1,0 +1,33 @@
+name: Diag — broadcast banner reappearing after keepalive fix (read-only)
+
+# Пользователь сообщил, что баннер-объявление появляется снова даже если
+# подождать 5-10 секунд перед переходом на другую страницу — значит дело
+# НЕ в оборванном keepalive-запросе (PR #152 это не исправило до конца).
+# Смотрим: (1) реальное состояние is_read у последних Broadcast-уведомлений
+# в БД — совпадает ли Notification.clinic с clinic получателя (подозрение
+# на фильтр по клинике в apps.notifications.views.mark_read через
+# _user_notifications), (2) логи gunicorn/nginx на ошибки по
+# /notifications/*/read/ (403 CSRF, 500 и т.п.). Read-only.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — состояние is_read по последним рассылкам (Django shell, read-only)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            echo 'ZnJvbSBhcHBzLm5vdGlmaWNhdGlvbnMubW9kZWxzIGltcG9ydCBCcm9hZGNhc3QsIE5vdGlmaWNhdGlvbgpmcm9tIGRqYW5nby51dGlscyBpbXBvcnQgdGltZXpvbmUKCmZvciBiIGluIEJyb2FkY2FzdC5vYmplY3RzLm9yZGVyX2J5KCctY3JlYXRlZF9hdCcpWzo1XToKICAgIHByaW50KGYiPj4+IEJyb2FkY2FzdCAje2IucGt9IHwge2IudGV4dCFyfSB8IGF1ZGllbmNlPXtiLmF1ZGllbmNlfSB8IGNyZWF0ZWRfYXQ9e2IuY3JlYXRlZF9hdH0iKQogICAgcXMgPSBiLm5vdGlmaWNhdGlvbnMuYWxsKCkKICAgIHByaW50KGYiICAgINCy0YHQtdCz0L49e3FzLmNvdW50KCl9INC/0YDQvtGH0LjRgtCw0L3Qvj17cXMuZmlsdGVyKGlzX3JlYWQ9VHJ1ZSkuY291bnQoKX0g0L3QtdC/0YDQvtGH0LjRgtCw0L3Qvj17cXMuZmlsdGVyKGlzX3JlYWQ9RmFsc2UpLmNvdW50KCl9IikKICAgIGZvciBuIGluIHFzLnNlbGVjdF9yZWxhdGVkKCd1c2VyJywgJ2NsaW5pYycpLm9yZGVyX2J5KCctY3JlYXRlZF9hdCcpWzoxNV06CiAgICAgICAgY2xpbmljX25hbWUgPSBuLmNsaW5pYy5uYW1lIGlmIG4uY2xpbmljIGVsc2UgTm9uZQogICAgICAgIHByaW50KGYiICAgIG4je24ucGt9IHVzZXI9e24udXNlcl9pZH0oe24udXNlci5sb2dpbn0pIHVzZXJfY2xpbmljX2lkPXtuLnVzZXIuY2xpbmljX2lkfSBub3RpZl9jbGluaWNfaWQ9e24uY2xpbmljX2lkfSh7Y2xpbmljX25hbWV9KSBpc19yZWFkPXtuLmlzX3JlYWR9IGNyZWF0ZWRfYXQ9e24uY3JlYXRlZF9hdH0iKQogICAgcHJpbnQoKQo=' | base64 -d | ./venv/bin/python manage.py shell
+            echo
+            echo ">>> journalctl sadaf.service — ошибки по /notifications/ за последний час"
+            sudo journalctl -u sadaf.service --since "1 hour ago" --no-pager | grep -i "notifications" | tail -80 || echo "(ничего не найдено)"
+            echo
+            echo ">>> nginx access.log — POST /notifications/*/read/ за сегодня"
+            (sudo grep -h "read/" /var/log/nginx/access.log 2>/dev/null | grep "POST" | tail -50) || echo "(лог не найден или пуст)"
