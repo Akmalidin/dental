@@ -4617,12 +4617,17 @@ class StomAsiaLoginTemplateTestCase(TestCase):
 
 class BranchFilterTestCase(TestCase):
     """Переключатель филиала (session["active_branch"], /users/set-branch/)
-    теперь реально ФИЛЬТРУЕТ отображаемые данные нового интерфейса —
-    расписание/пациенты/склад(операции)/финансы/отчёты — а не только
-    подставляет филиал по умолчанию для новых записей, см.
-    apps.tenancy.get_active_branch_id и _newui_schedule_data/
-    _newui_patients_page_data/_newui_finance_data/_newui_warehouse_ops_data/
-    _newui_reports_data (apps/users/views.py)."""
+    реально ФИЛЬТРУЕТ отображаемые данные нового интерфейса — расписание/
+    склад(операции)/финансы/отчёты — а не только подставляет филиал по
+    умолчанию для новых записей, см. apps.tenancy.get_active_branch_id и
+    _newui_schedule_data/_newui_finance_data/_newui_warehouse_ops_data/
+    _newui_reports_data (apps/users/views.py). Страница «Пациенты»
+    (_newui_patients_page_data) — ИСКЛЮЧЕНИЕ: пациент общий для всей
+    клиники, переключатель филиала её НЕ фильтрует (см.
+    test_patients_list_not_filtered_by_active_branch ниже) — до
+    2026-09-22 фильтровала, но любая попытка (по Patient.branch, по
+    визитам, по тем и другим через ИЛИ) регулярно прятала часть пациентов
+    на реальных клиниках и выглядела как "разделение базы"."""
 
     def setUp(self):
         import datetime as dt
@@ -4723,14 +4728,16 @@ class BranchFilterTestCase(TestCase):
         self.assertIn("Врач Филиал1", doctor_names)
         self.assertIn("Врач Филиал2", doctor_names)
 
-    def test_patients_list_filtered_by_active_branch(self):
+    def test_patients_list_not_filtered_by_active_branch(self):
+        """Пациент общий для всей клиники — переключатель филиала в
+        сайдбаре список пациентов не фильтрует, показываются оба."""
         self._set_branch(self.branch2)
         resp = self.client.get("/new/patients/data/")
         data = resp.json()
         names = [r["fullName"] for r in data["results"]]
+        self.assertIn(self.patient1.full_name, names)
         self.assertIn(self.patient2.full_name, names)
-        self.assertNotIn(self.patient1.full_name, names)
-        self.assertEqual(data["stats"]["allCount"], 1)
+        self.assertEqual(data["stats"]["allCount"], 2)
 
     def test_finance_filtered_by_active_branch(self):
         self._set_branch(self.branch1)
