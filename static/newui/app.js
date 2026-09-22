@@ -7273,6 +7273,7 @@ function voiceFabClick(btnEl){
    /new/* страницу история не сохраняется (полноценная серверная память
    разговора — отдельная, более крупная задача). */
 let voiceChatHistory=[];
+let voiceChatLoaded=false;
 let voiceChatPanelOpen=false;
 function openVoiceChatPanel(){
   const panel=document.getElementById('voiceChatPanel');
@@ -7280,8 +7281,33 @@ function openVoiceChatPanel(){
   voiceChatPanelOpen=true;
   panel.classList.remove('hidden');
   renderVoiceChatPanel();
+  if(!voiceChatLoaded){
+    // История живёт на сервере (apps/assistant), поэтому переход на другую
+    // /new/* страницу её не теряет — в отличие от прежней переменной в
+    // памяти вкладки, которая обнулялась при каждой перезагрузке.
+    fetch('/assistant/conversation/', {credentials:'same-origin'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(d && Array.isArray(d.messages)){
+          voiceChatHistory = d.messages.map(m=>({role:m.role, text:m.text}));
+          voiceChatLoaded = true;
+          renderVoiceChatPanel();
+        }
+      })
+      .catch(()=>{ /* сеть недоступна — панель просто откроется пустой */ });
+  }
   const input=document.getElementById('voiceChatTextInput');
   if(input) input.focus();
+}
+async function clearVoiceChat(){
+  // Закрываем беседу на сервере: реплики не удаляются, они остаются
+  // журналом — просто следующий вопрос начнёт новую беседу.
+  try{
+    await postForm('/assistant/conversation/clear/', new FormData());
+  }catch(e){ /* сеть недоступна — чистим хотя бы на экране */ }
+  voiceChatHistory=[];
+  voiceChatLoaded=true;
+  renderVoiceChatPanel();
 }
 function closeVoiceChatPanel(){
   voiceChatPanelOpen=false;
@@ -7363,12 +7389,12 @@ function voiceChatMicToggle(btnEl){
 // вместо аудиофайла передаём уже готовый текст (транскрипт из голосового
 // сообщения или напечатанное сообщение), эндпоинт это поддерживает без
 // распознавания речи (см. apps/notifications/views.py::voice_command).
-async function callAssistantBackend(text, mode, withHistory){
+async function callAssistantBackend(text, mode){
   const fd=new FormData();
   fd.append('mode', mode);
   fd.append('question', text);
   if(mode==='chat') fd.append('assistant_name', getAssistantName());
-  if(withHistory) fd.append('history', JSON.stringify(voiceChatHistory.slice(-12)));
+  // history не отправляем: беседу ведёт сервер (apps/assistant).
   try{
     const res=await postForm('/notifications/voice/', fd);
     const data=await res.json().catch(()=>({}));
@@ -7404,7 +7430,7 @@ async function processAssistantMessage(text){
     if(!AI_ENABLED){
       answer=t('w_voice_not_understood');
     } else {
-      const chatData=await callAssistantBackend(text, 'chat', true);
+      const chatData=await callAssistantBackend(text, 'chat');
       answer=(chatData && chatData.answer) ? chatData.answer : ((chatData && chatData.error) || t('w_voice_failed'));
     }
   }
