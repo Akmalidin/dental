@@ -493,6 +493,14 @@
   // Компактная иконка-карточка зуба (номер+рисунок+«Убрать») — переиспользуется
   // и в групповом блоке (несколько штук в ряд), и как левая часть отдельного
   // по-зубного блока.
+  // По прямому запросу пользователя: маленькие карточки зуба в панели
+  // «Выбранные зубы» (и в группе, и у отдельного зуба — обе используют эту
+  // функцию) раньше были чисто статичной картинкой без интерактива. Теперь
+  // здесь можно то же самое, что и на большой карте сверху (buildOdontogram
+  // в app.js) — клик по зубу/поверхностям (chartIconSVG) открывает модалку
+  // состояния зуба/поверхности, точка снизу — модалку статуса дёсен
+  // (openGumModal). saveToothState() уже сам перерисовывает эту панель
+  // после сохранения (renderSelectedTeethPanel()), новых хуков не нужно.
   function vwToothSideCard(key){
     const [pfx,numStr]=key.split('-');
     const num=Number(numStr);
@@ -500,9 +508,16 @@
     const cond=getCondition(code);
     const style=toothStyle(cond);
     const iconHtml=toothIconSVG(style, null, pfx==='adult'?num:null);
+    const gumCode=gumStates[key] || 'norma';
+    const gumCond=getCondition(gumCode);
+    const gumColor=gumCond.outline ? '#E85D2D' : gumCond.color;
     return `<div class="selected-tooth-side">
-      <div class="tooth-num-cell">${num}</div>
-      ${iconHtml}
+      <div class="tooth-cell-outline" style="padding:2px;" onclick="openToothModal('${key}')" title="Зуб ${num} — ${cond.label}">
+        <div class="tooth-num-cell">${num}</div>
+        ${iconHtml}
+        ${chartIconSVG(key)}
+        <div class="tooth-gum-dot" style="background:${gumColor};${gumCode==='norma'?'opacity:.35;':''}" onclick="event.stopPropagation();openGumModal('${key}')" title="Дёсны — ${gumCond.label}"></div>
+      </div>
       <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>${t('w_remove','Убрать')}</button>
     </div>`;
   }
