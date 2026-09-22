@@ -15,7 +15,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: SSH — состояние is_read по последним рассылкам (Django shell, read-only)
+      - name: SSH — прямое состояние notification #6133 и всех непрочитанных broadcast (Django shell, read-only)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -24,10 +24,4 @@ jobs:
           script: |
             cd /var/www/sadaf
             set -a; . ./.env; set +a
-            echo 'ZnJvbSBhcHBzLm5vdGlmaWNhdGlvbnMubW9kZWxzIGltcG9ydCBCcm9hZGNhc3QsIE5vdGlmaWNhdGlvbgpmcm9tIGRqYW5nby51dGlscyBpbXBvcnQgdGltZXpvbmUKCmZvciBiIGluIEJyb2FkY2FzdC5vYmplY3RzLm9yZGVyX2J5KCctY3JlYXRlZF9hdCcpWzo1XToKICAgIHByaW50KGYiPj4+IEJyb2FkY2FzdCAje2IucGt9IHwge2IudGV4dCFyfSB8IGF1ZGllbmNlPXtiLmF1ZGllbmNlfSB8IGNyZWF0ZWRfYXQ9e2IuY3JlYXRlZF9hdH0iKQogICAgcXMgPSBiLm5vdGlmaWNhdGlvbnMuYWxsKCkKICAgIHByaW50KGYiICAgINCy0YHQtdCz0L49e3FzLmNvdW50KCl9INC/0YDQvtGH0LjRgtCw0L3Qvj17cXMuZmlsdGVyKGlzX3JlYWQ9VHJ1ZSkuY291bnQoKX0g0L3QtdC/0YDQvtGH0LjRgtCw0L3Qvj17cXMuZmlsdGVyKGlzX3JlYWQ9RmFsc2UpLmNvdW50KCl9IikKICAgIGZvciBuIGluIHFzLnNlbGVjdF9yZWxhdGVkKCd1c2VyJywgJ2NsaW5pYycpLm9yZGVyX2J5KCctY3JlYXRlZF9hdCcpWzoxNV06CiAgICAgICAgY2xpbmljX25hbWUgPSBuLmNsaW5pYy5uYW1lIGlmIG4uY2xpbmljIGVsc2UgTm9uZQogICAgICAgIHByaW50KGYiICAgIG4je24ucGt9IHVzZXI9e24udXNlcl9pZH0oe24udXNlci5sb2dpbn0pIHVzZXJfY2xpbmljX2lkPXtuLnVzZXIuY2xpbmljX2lkfSBub3RpZl9jbGluaWNfaWQ9e24uY2xpbmljX2lkfSh7Y2xpbmljX25hbWV9KSBpc19yZWFkPXtuLmlzX3JlYWR9IGNyZWF0ZWRfYXQ9e24uY3JlYXRlZF9hdH0iKQogICAgcHJpbnQoKQo=' | base64 -d | ./venv/bin/python manage.py shell
-            echo
-            echo ">>> journalctl sadaf.service — ошибки по /notifications/ за последний час"
-            sudo journalctl -u sadaf.service --since "1 hour ago" --no-pager | grep -i "notifications" | tail -80 || echo "(ничего не найдено)"
-            echo
-            echo ">>> nginx access.log — POST /notifications/*/read/ за сегодня"
-            (sudo grep -h "read/" /var/log/nginx/access.log 2>/dev/null | grep "POST" | tail -50) || echo "(лог не найден или пуст)"
+            echo 'ZnJvbSBhcHBzLm5vdGlmaWNhdGlvbnMubW9kZWxzIGltcG9ydCBOb3RpZmljYXRpb24KZnJvbSBhcHBzLnVzZXJzLm1vZGVscyBpbXBvcnQgVXNlcgoKbiA9IE5vdGlmaWNhdGlvbi5vYmplY3RzLmZpbHRlcihwaz02MTMzKS5zZWxlY3RfcmVsYXRlZCgndXNlcicsICdjbGluaWMnLCAndXNlcl9fcm9sZScpLmZpcnN0KCkKaWYgbm90IG46CiAgICBwcmludCgiPj4+IE5vdGlmaWNhdGlvbiAjNjEzMyDQvdC1INC90LDQudC00LXQvdCwINCy0L7QstGB0LUiKQplbHNlOgogICAgcHJpbnQoZiI+Pj4gTm90aWZpY2F0aW9uICM2MTMzOiB0eXBlPXtuLnR5cGUhcn0gdGl0bGU9e24udGl0bGUhcn0gaXNfcmVhZD17bi5pc19yZWFkfSBjcmVhdGVkX2F0PXtuLmNyZWF0ZWRfYXR9IikKICAgIHByaW50KGYiICAgIHVzZXJfaWQ9e24udXNlcl9pZH0gbG9naW49e24udXNlci5sb2dpbn0gcm9sZT17bi51c2VyLnJvbGUubmFtZSBpZiBuLnVzZXIucm9sZV9pZCBlbHNlIE5vbmV9IHVzZXIuY2xpbmljX2lkPXtuLnVzZXIuY2xpbmljX2lkfSIpCiAgICBwcmludChmIiAgICBub3RpZmljYXRpb24uY2xpbmljX2lkPXtuLmNsaW5pY19pZH0gKHtuLmNsaW5pYy5uYW1lIGlmIG4uY2xpbmljIGVsc2UgTm9uZX0pIikKICAgIHByaW50KGYiICAgIGJyb2FkY2FzdF9pZD17bi5icm9hZGNhc3RfaWR9IikKCnByaW50KCkKcHJpbnQoIj4+PiDQktGB0LUg0L3QtdC/0YDQvtGH0LjRgtCw0L3QvdGL0LUgdHlwZT1icm9hZGNhc3Qg0YHQtdC50YfQsNGBOiIpCnFzID0gTm90aWZpY2F0aW9uLm9iamVjdHMuZmlsdGVyKHR5cGU9ImJyb2FkY2FzdCIsIGlzX3JlYWQ9RmFsc2UpLnNlbGVjdF9yZWxhdGVkKCJ1c2VyIiwgImNsaW5pYyIpCnByaW50KGYiICAgINCy0YHQtdCz0L4g0L3QtdC/0YDQvtGH0LjRgtCw0L3QvdGL0YUgYnJvYWRjYXN0OiB7cXMuY291bnQoKX0iKQpmb3IgeCBpbiBxcy5vcmRlcl9ieSgiLWNyZWF0ZWRfYXQiKVs6MjBdOgogICAgcHJpbnQoZiIgICAgbiN7eC5wa30gdXNlcj17eC51c2VyX2lkfSh7eC51c2VyLmxvZ2lufSkgdXNlci5jbGluaWNfaWQ9e3gudXNlci5jbGluaWNfaWR9IG5vdGlmLmNsaW5pY19pZD17eC5jbGluaWNfaWR9IGJyb2FkY2FzdF9pZD17eC5icm9hZGNhc3RfaWR9IGNyZWF0ZWRfYXQ9e3guY3JlYXRlZF9hdH0iKQo=' | base64 -d | ./venv/bin/python manage.py shell
