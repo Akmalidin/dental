@@ -196,7 +196,24 @@ def _shared_options(request, clinic):
         # это никак не учитывал — все пункты были видны независимо от
         # ограничения, кликабельны, но вели в никуда.
         "navSections": sorted(request.user.nav_sections),
+        # Баннер-объявление супер-админа (директорам/врачам/всем) — см.
+        # newui_superadmin_broadcast_send. Последнее непрочитанное уведомление
+        # типа "broadcast" для этого пользователя; закрытие (крестик) шлёт
+        # /notifications/<id>/read/ (уже существующий mark_read) — после
+        # этого is_read=True и баннер больше не попадёт в эту выборку, в том
+        # числе с других устройств пользователя.
+        "broadcastBanner": _broadcast_banner_data(request),
     }
+
+
+def _broadcast_banner_data(request):
+    from apps.notifications.models import Notification
+    n = Notification.objects.filter(
+        user=request.user, type="broadcast", is_read=False,
+    ).order_by("-created_at").first()
+    if not n:
+        return None
+    return {"id": n.pk, "text": n.title}
 
 
 def _render(request, page, template, extra_data=None):
@@ -492,6 +509,46 @@ def newui_superadmin(request):
         "superadminData": _newui_superadmin_data(),
         "auditMetrics": superadmin_audit_metrics(),
     })
+
+
+@login_required
+def newui_superadmin_broadcast_send(request):
+    """Супер-админ → вкладка «Push-рассылка»: разослать объявление
+    директорам/врачам/всем сотрудникам ПЛАТФОРМЫ (все клиники, не только
+    текущая — тот же unscoped(), что и у _newui_superadmin_data). Уходит и
+    как обычное уведомление (Notification.send уже делает реальный web push
+    на все подписанные устройства получателя — apps.notifications.push.
+    send_web_push), и как закрываемый баннер сверху (templates/newui/
+    base.html, _broadcast_banner_data) — баннером становится только тип
+    "broadcast", остальные уведомления в колокольчике баннер не трогают."""
+    from django.http import JsonResponse
+    if request.method != "POST":
+        return JsonResponse({"error": "method"}, status=405)
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    text = (request.POST.get("text") or "").strip()
+    audience = request.POST.get("audience") or "all"
+    if not text:
+        return JsonResponse({"error": "Пустой текст объявления"}, status=400)
+    if audience not in ("directors", "doctors", "all"):
+        return JsonResponse({"error": "Неизвестная аудитория"}, status=400)
+
+    from apps.tenancy import unscoped
+    from .models import User
+    with unscoped():
+        # "Всем" = всем сотрудникам клиник, не другим супер-админам платформы —
+        # это объявление для персонала, не внутренняя переписка супер-админов.
+        qs = User.objects.filter(is_active=True).exclude(role__name=Role.SUPERADMIN)
+        if audience == "directors":
+            qs = qs.filter(role__name=Role.ADMIN_MAIN)
+        elif audience == "doctors":
+            qs = qs.filter(role__name=Role.DOCTOR)
+        recipients = list(qs)
+
+    from apps.notifications.models import Notification
+    for u in recipients:
+        Notification.send(u, text, type="broadcast", actor=request.user)
+    return JsonResponse({"ok": True, "sent": len(recipients)})
 
 
 @login_required

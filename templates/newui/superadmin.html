@@ -12,6 +12,7 @@
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-deletions" onclick="saShowTab('deletions')">Удаления (&gt;30д)</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-backups" onclick="saShowTab('backups')">Резервные копии</button>
             <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-messengers" onclick="saShowTab('messengers')">Мессенджеры</button>
+            <button type="button" class="btn btn-sm sa-tabbtn" id="saTabBtn-broadcast" onclick="saShowTab('broadcast')">Push-рассылка</button>
           </div>
           <button class="btn btn-cobalt" onclick="openNewClinicModal()">+ Новая клиника</button>
         </div>
@@ -124,6 +125,31 @@
           <div style="margin-top:14px;display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" type="button" onclick="tgaRefresh()">Обновить</button>
             <button class="btn btn-ghost btn-sm" type="button" id="tgaLogoutBtn" onclick="tgaLogout()" style="color:var(--coral);">Отвязать аккаунт</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Вкладка: Push-рассылка ═══════════════════════════════════════
+           Объявление директорам/врачам/всем сотрудникам ПЛАТФОРМЫ (все
+           клиники) — уходит реальным web push на подписанные устройства и
+           закрываемым баннером сверху экрана (templates/newui/base.html,
+           стиль — топ-баннер с крестиком, как в примере пользователя). -->
+      <div class="page hidden" id="saPanel-broadcast">
+        <div class="card" style="padding:16px;max-width:640px;">
+          <h3 style="margin-bottom:4px;">📣 Push-рассылка</h3>
+          <div class="hint" style="margin-bottom:14px;">
+            Сообщение придёт push-уведомлением на все подключённые устройства получателей и покажется баннером сверху экрана — баннер закрывается крестиком и больше не появляется.
+          </div>
+          <label class="hint" style="display:block;margin-bottom:4px;">Кому</label>
+          <select id="saBroadcastAudience" style="border:1px solid var(--mist-line);border-radius:8px;padding:7px 10px;margin-bottom:12px;width:100%;">
+            <option value="all">Всем сотрудникам</option>
+            <option value="directors">Директорам</option>
+            <option value="doctors">Врачам</option>
+          </select>
+          <label class="hint" style="display:block;margin-bottom:4px;">Текст объявления</label>
+          <textarea id="saBroadcastText" rows="3" maxlength="300" placeholder="Например: Новый сайт →" style="width:100%;border:1px solid var(--mist-line);border-radius:8px;padding:8px 10px;resize:vertical;font:inherit;"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+            <button class="btn btn-cobalt" id="saBroadcastSendBtn" type="button" onclick="saSendBroadcast()">Отправить</button>
           </div>
         </div>
       </div>
@@ -414,7 +440,7 @@
   }
 
   // ── Вкладки ──────────────────────────────────────────────────────────
-  const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups','messengers'];
+  const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups','messengers','broadcast'];
   let saUsersLoaded = false, saFeedLoaded = false, saDeletionsLoaded = false, saBackupsLoaded = false;
   window.saShowTab = function(tab){
     SA_TABS.forEach(t=>{
@@ -1155,6 +1181,34 @@
     clearTimeout(saUsersSearchTimer);
     saUsersSearchTimer = setTimeout(()=>{ saUsersState.search=e.target.value; saUsersState.page=1; saLoadUsers(); }, 350);
   });
+
+  // ── Push-рассылка ────────────────────────────────────────────────────
+  window.saSendBroadcast = async function(){
+    const textEl = document.getElementById('saBroadcastText');
+    const text = textEl.value.trim();
+    if(!text){ alert('Введите текст объявления'); return; }
+    const audience = document.getElementById('saBroadcastAudience').value;
+    const btn = document.getElementById('saBroadcastSendBtn');
+    const prevLabel = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Отправка…';
+    try{
+      const fd = new FormData();
+      fd.append('text', text);
+      fd.append('audience', audience);
+      const res = await fetch('/new/superadmin/broadcast/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+      const data = await res.json();
+      if(res.ok && data.ok){
+        alert(`Отправлено: ${data.sent}`);
+        textEl.value = '';
+      } else {
+        alert(data.error || 'Не удалось отправить');
+      }
+    } catch(e){
+      alert('Ошибка сети');
+    } finally {
+      btn.disabled = false; btn.textContent = prevLabel;
+    }
+  };
 
   renderSaTable();
   renderSaRequests();
