@@ -5,7 +5,7 @@ from decimal import Decimal
 import json
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from apps.assistant.models import Conversation
@@ -500,3 +500,50 @@ class ServiceAnswerTestCase(TestCase):
         self.assertEqual(calls["n"], service.MAX_ROUNDS)
         self.assertIsNone(error)
         self.assertEqual(text, "Запасной")
+
+
+class ConversationEndpointsTestCase(TestCase):
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника Э", slug="ep-clinic")
+        set_current_clinic(self.clinic)
+        self.user = User.objects.create(login="ep", name="Сотрудник", clinic=self.clinic)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def test_conversation_returns_saved_messages(self):
+        conv = Conversation.active_for(self.user)
+        conv.add("user", "первый вопрос")
+        conv.add("assistant", "первый ответ")
+        resp = self.client.get("/assistant/conversation/")
+        self.assertEqual(resp.status_code, 200)
+        messages = resp.json()["messages"]
+        self.assertEqual([m["text"] for m in messages],
+                         ["первый вопрос", "первый ответ"])
+
+    def test_clear_starts_new_conversation(self):
+        conv = Conversation.active_for(self.user)
+        conv.add("user", "старое")
+        resp = self.client.post("/assistant/conversation/clear/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        messages = self.client.get("/assistant/conversation/").json()["messages"]
+        self.assertEqual(messages, [])
+
+    def test_anonymous_is_redirected(self):
+        self.client.logout()
+        resp = self.client.get("/assistant/conversation/")
+        self.assertIn(resp.status_code, (302, 403))
+
+    def test_conversation_does_not_leak_between_users(self):
+        """Беседа привязана к сотруднику: чужих реплик видеть нельзя."""
+        other = User.objects.create(login="ep-other", name="Другой", clinic=self.clinic)
+        Conversation.active_for(other).add("user", "чужая реплика")
+        conv = Conversation.active_for(self.user)
+        conv.add("user", "своя реплика")
+        messages = self.client.get("/assistant/conversation/").json()["messages"]
+        texts = [m["text"] for m in messages]
+        self.assertIn("своя реплика", texts)
+        self.assertNotIn("чужая реплика", texts)

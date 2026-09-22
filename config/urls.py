@@ -35,6 +35,7 @@ urlpatterns = [
     path("reports/", include("apps.reports.urls")),
     path("settings/", include("apps.settings_clinic.urls")),
     path("notifications/", include("apps.notifications.urls")),
+    path("assistant/", include("apps.assistant.urls")),
 
     # REST API v1
     path("api/v1/", include("config.api_urls")),

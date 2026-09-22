@@ -1254,7 +1254,7 @@ urlpatterns = [
 ]
 ```
 
-В `config/urls.py`, рядом с остальными include-ами приложений (после строки с `apps.notifications.urls`), добавить:
+Подключить в `config/urls_dev.py` — именно он указан в `ROOT_URLCONF` в `development.py`, то есть используется и тестами, и продом. Для единообразия добавить и в `config/urls.py`. В обоих файлах — после строки с `apps.notifications.urls`:
 
 ```python
     path("assistant/", include("apps.assistant.urls")),

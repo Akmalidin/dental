@@ -45,6 +45,7 @@ urlpatterns = [
     path("reports/", include("apps.reports.urls")),
     path("settings/", include("apps.settings_clinic.urls")),
     path("notifications/", include("apps.notifications.urls")),
+    path("assistant/", include("apps.assistant.urls")),
     path("sw.js", service_worker, name="service_worker"),
     path("manifest.json", web_manifest, name="web_manifest"),
     path("sync/", include("apps.sync.urls")),
