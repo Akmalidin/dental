@@ -1,0 +1,31 @@
+name: Fix — correct clinic_id on already-sent broadcast notifications
+
+# Одноразовая правка данных, следствие бага (см. PR #155): рассылки,
+# отправленные ДО фикса, получали notification.clinic_id = клиника, на
+# которой суперадмин "сидел" в момент отправки (session["active_clinic"]
+# или поддомен), а не собственную клинику получателя — из-за этого крестик
+# на баннере слал POST .../read/ с кодом 200, но is_read не проставлялся
+# (mark_read фильтрует по клинике получателя, строка не находилась), и
+# баннер появлялся снова на следующей странице.
+#
+# Правит clinic_id на уже отправленных Notification(type="broadcast") так,
+# чтобы совпадала с user.clinic_id получателя — is_read НЕ трогает, только
+# делает поле внутренне согласованным, чтобы обычный mark_read наконец
+# сработал. Печатает состояние ДО и ПОСЛЕ для аудита.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — скорректировать clinic_id у несовпадающих broadcast-уведомлений
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            echo 'ZnJvbSBhcHBzLm5vdGlmaWNhdGlvbnMubW9kZWxzIGltcG9ydCBOb3RpZmljYXRpb24KZnJvbSBkamFuZ28uZGIubW9kZWxzIGltcG9ydCBGCgpxcyA9IE5vdGlmaWNhdGlvbi5vYmplY3RzLmZpbHRlcih0eXBlPSJicm9hZGNhc3QiKS5leGNsdWRlKGNsaW5pY19pZD1GKCJ1c2VyX19jbGluaWNfaWQiKSkKcHJpbnQoZiI+Pj4g0KPQstC10LTQvtC80LvQtdC90LjQuSDRgSDQvdC10YHQvtCy0L/QsNC00LDRjtGJ0LXQuSBjbGluaWNfaWQ6IHtxcy5jb3VudCgpfSIpCmZvciBuIGluIHFzLnNlbGVjdF9yZWxhdGVkKCJ1c2VyIiwgImNsaW5pYyIpOgogICAgcHJpbnQoZiIgICAg0JTQnjogIG4je24ucGt9IHVzZXI9e24udXNlcl9pZH0oe24udXNlci5sb2dpbn0pIHVzZXIuY2xpbmljX2lkPXtuLnVzZXIuY2xpbmljX2lkfSBub3RpZi5jbGluaWNfaWQ9e24uY2xpbmljX2lkfSBpc19yZWFkPXtuLmlzX3JlYWR9IikKCnVwZGF0ZWQgPSAwCmZvciBuIGluIHFzOgogICAgbi5jbGluaWNfaWQgPSBuLnVzZXIuY2xpbmljX2lkCiAgICBuLnNhdmUodXBkYXRlX2ZpZWxkcz1bImNsaW5pYyJdKQogICAgdXBkYXRlZCArPSAxCnByaW50KGYiPj4+INCe0LHQvdC+0LLQu9C10L3Qvjoge3VwZGF0ZWR9IikKCnN0aWxsID0gTm90aWZpY2F0aW9uLm9iamVjdHMuZmlsdGVyKHR5cGU9ImJyb2FkY2FzdCIpLmV4Y2x1ZGUoY2xpbmljX2lkPUYoInVzZXJfX2NsaW5pY19pZCIpKS5jb3VudCgpCnByaW50KGYiPj4+INCe0YHRgtCw0LvQvtGB0Ywg0L3QtdGB0L7QstC/0LDQtNC10L3QuNC5INC/0L7RgdC70LUg0YTQuNC60YHQsDoge3N0aWxsfSIpCmZvciBuIGluIE5vdGlmaWNhdGlvbi5vYmplY3RzLmZpbHRlcihwa19faW49WzYxMzMsIDYxMzRdKToKICAgIHByaW50KGYiICAgINCf0J7QodCb0JU6IG4je24ucGt9IGNsaW5pY19pZD17bi5jbGluaWNfaWR9IGlzX3JlYWQ9e24uaXNfcmVhZH0iKQo=' | base64 -d | ./venv/bin/python manage.py shell
