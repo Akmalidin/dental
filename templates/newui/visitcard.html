@@ -108,7 +108,7 @@
               </div>
               <div class="odontogram-lg" id="vcOdontogram"></div>
               <div class="legend" style="margin-top:16px;" id="vcLegend"></div>
-              <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;"><span data-i18n="w_mark_tooth_hint">Отметьте зуб галочкой, чтобы добавить его в план ниже. Клик по самому зубу — быстрая смена состояния.</span></div>
+              <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;"><span data-i18n="w_mark_tooth_hint">Отметьте зуб галочкой, чтобы добавить его в план ниже. Клик по самому зубу — быстрая смена состояния. Shift+клик по галочке — выбрать сразу диапазон зубов.</span></div>
             </div>
           </div>
 
@@ -497,7 +497,26 @@
       el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_no_teeth_selected">Зубы не выбраны — отметьте зуб галочкой выше</span></div>';
       return;
     }
-    el.innerHTML=[...selectedTeethSet].map(key=>{
+    // Группа: от двух выбранных зубов — один общий поиск услуги, которая
+    // применяется сразу ко ВСЕМ выбранным зубам (vwGroupServicePick), вместо
+    // повторения поиска+клика на каждый зуб отдельно (было раньше — только
+    // блок на зуб ниже, каждый со своим поиском). Сами по-зубные блоки
+    // остаются — там видно/убирается, что именно назначено на каждый зуб.
+    const groupHtml = selectedTeethSet.size < 2 ? '' : `
+      <div class="card" style="padding:14px 16px;margin-bottom:14px;border:1.5px dashed var(--cobalt);background:var(--cobalt-tint);">
+        <b style="font-size:13px;"><span data-i18n="w_group_selected_teeth">${t('w_group_selected_teeth')}</span> (${selectedTeethSet.size})</b>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px;">
+          ${[...selectedTeethSet].map(k=>`<span class="pill cobalt">${k.split('-')[1]}</span>`).join('')}
+        </div>
+        <div class="form-group" style="position:relative;margin-bottom:0;">
+          <label><span data-i18n="w_assign_service_to_group">${t('w_assign_service_to_group')}</span></label>
+          <input type="text" id="vwGroupSvcInput" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
+                 oninput="vwGroupServiceSearch(this.value)" onfocus="vwGroupServiceSearch(this.value)"
+                 onblur="setTimeout(()=>{const b=document.getElementById('vwGroupSvcSuggest'); if(b) b.classList.add('hidden');},200)">
+          <div id="vwGroupSvcSuggest" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+        </div>
+      </div>`;
+    el.innerHTML = groupHtml + [...selectedTeethSet].map(key=>{
       const [pfx,numStr]=key.split('-');
       const num=Number(numStr);
       const code=toothStates[key] || 'norma';
@@ -558,6 +577,44 @@
     vwRenderPlan();
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
+  };
+  // Групповое назначение (карточка «Группа выбранных зубов», две и более
+  // отметки галочкой на карте) — та же логика поиска, что и у одиночного
+  // зуба (vwToothServiceSearch), но применяет выбранную услугу СРАЗУ КО
+  // ВСЕМ отмеченным зубам одним действием — по строке плана на каждый зуб
+  // (не одна общая строка: qty/цена/скидка остаются редактируемыми per-зуб,
+  // как и раньше). Зубы, где эта услуга уже назначена, пропускаются.
+  window.vwGroupServiceSearch = function(q){
+    const box=document.getElementById('vwGroupSvcSuggest');
+    if(!box) return;
+    const query=(q||'').trim().toLowerCase();
+    const matches=(query ? vw.services.filter(s=>s.name.toLowerCase().includes(query)) : vw.services).slice(0,30);
+    box.innerHTML = matches.length
+      ? matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="vwGroupServicePick(${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('')
+      : `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
+    box.classList.remove('hidden');
+  };
+  window.vwGroupServicePick = function(serviceId){
+    if(readOnlyClosed) return;
+    const svc=vw.services.find(s=>String(s.id)===String(serviceId));
+    if(!svc) return;
+    let added=0;
+    selectedTeeth.forEach(key=>{
+      const num=key.split('-')[1];
+      const already=vwPlan.some(it=>String(it.tooth)===String(num) && String(it.service_id)===String(serviceId));
+      if(!already){
+        vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, discountMode:'%', done:true});
+        added++;
+      }
+    });
+    const input=document.getElementById('vwGroupSvcInput');
+    if(input) input.value='';
+    const box=document.getElementById('vwGroupSvcSuggest');
+    if(box) box.classList.add('hidden');
+    vwRenderPlan();
+    window.vwRenderSelectedTeeth(selectedTeeth);
+    vwAutosave();
+    if(added>0) showToast(`${svc.name} — ${t('w_teeth')}: ${added}`, 'success');
   };
   window.vwToothServiceRemove = function(num, serviceId){
     if(readOnlyClosed) return;

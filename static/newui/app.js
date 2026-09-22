@@ -273,6 +273,10 @@ function toothIconSVG(style, extraClass, toothNum){
 }
 
 let selectedTeeth=new Set();
+// Последний зуб, отмеченный галочкой (не через Shift) — опорная точка для
+// диапазона: Shift+клик по чекбоксу другого зуба выбирает всё МЕЖДУ ними
+// (см. toggleToothSelect), как в проводнике файлов/таблицах.
+let toothSelectAnchor=null;
 
 // Поле «Зуб(ы)» у услуги — CharField до 120 символов: там бывает один номер
 // ("18") или несколько через запятую/пробел/точку с запятой ("18, 17").
@@ -311,7 +315,7 @@ function buildOdontogram(id, upper, lower, prefix, selectable, serviceCountFn){
     const realPathKey = prefix==='adult' ? n : (n-40);
     const hasReal = !!REAL_TOOTH_PATHS[realPathKey];
     const iconClass = (isUpper || hasReal) ? '' : 'flip';
-    const checkboxHtml = selectable ? `<div class="tooth-select-abs"><input autocomplete="off" type="checkbox" ${selectedTeeth.has(key)?'checked':''} onclick="event.stopPropagation();toggleToothSelect('${key}', this.checked)"></div>` : '';
+    const checkboxHtml = selectable ? `<div class="tooth-select-abs"><input autocomplete="off" type="checkbox" ${selectedTeeth.has(key)?'checked':''} onclick="event.stopPropagation();toggleToothSelect('${key}', this.checked, event)"></div>` : '';
     const gumCode = gumStates[key] || 'norma';
     const gumCond = getCondition(gumCode);
     const gumColor = gumCond.outline ? '#E85D2D' : gumCond.color;
@@ -347,8 +351,37 @@ function renderAllOdontograms(){
 
 
 /* ---- tooth selection for visit card treatment plan ---- */
-function toggleToothSelect(key, checked){
-  if(checked) selectedTeeth.add(key); else selectedTeeth.delete(key);
+function toggleToothSelect(key, checked, evt){
+  // Shift+клик по чекбоксу (после того как уже отмечен хотя бы один зуб) —
+  // выбрать весь диапазон между опорным зубом (toothSelectAnchor) и этим,
+  // в пределах ОДНОЙ челюсти (верхняя/нижняя, взрослая/молочная) — порядок
+  // берём из тех же adultUpper/adultLower/babyUpper/babyLower, которыми
+  // строится сама карта, так что диапазон совпадает с тем, что видно на
+  // экране слева направо. Кросс-челюстной диапазон не поддержан (двух
+  // соседних по экрану зубов из разных челюстей не бывает) — в этом случае
+  // просто обычный тоггл одного зуба.
+  if(evt && evt.shiftKey && toothSelectAnchor){
+    const [prefix] = key.split('-');
+    const [anchorPrefix] = toothSelectAnchor.split('-');
+    if(prefix===anchorPrefix){
+      const rows = prefix==='adult' ? [adultUpper, adultLower] : [babyUpper, babyLower];
+      for(const row of rows){
+        const keys = row.map(n=>prefix+'-'+n);
+        const i1 = keys.indexOf(toothSelectAnchor);
+        const i2 = keys.indexOf(key);
+        if(i1>-1 && i2>-1){
+          const [from,to] = i1<i2 ? [i1,i2] : [i2,i1];
+          keys.slice(from, to+1).forEach(k=>selectedTeeth.add(k));
+          toothSelectAnchor = key;
+          buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', true);
+          renderSelectedTeethPanel();
+          return;
+        }
+      }
+    }
+  }
+  if(checked){ selectedTeeth.add(key); toothSelectAnchor=key; }
+  else selectedTeeth.delete(key);
   renderSelectedTeethPanel();
 }
 function selectQuadrant(which, checked){
@@ -2915,9 +2948,11 @@ const translations={
   w_upper_jaw: {ru:'Верхняя челюсть', ky:'Жогорку жаак', en:'Upper jaw', uz:'Yuqori jag\''},
   w_lower_jaw: {ru:'Нижняя челюсть', ky:'Төмөнкү жаак', en:'Lower jaw', uz:'Pastki jag\''},
   w_oral_cavity: {ru:'Ротовая полость', ky:'Ооз köңдөйү', en:'Oral cavity', uz:'Og\'iz bo\'shlig\'i'},
-  w_mark_tooth_hint: {ru:'Отметьте зуб галочкой, чтобы добавить его в план ниже. Клик по самому зубу — быстрая смена состояния.', ky:'Тишти төмөндөгү планга кошуу үчүн белги коюңуз. Тиштин өзүн басуу — абалын тез өзгөртөт.', en:'Check a tooth to add it to the plan below. Clicking the tooth itself quickly changes its condition.', uz:'Tishni pastdagi rejaga qo\'shish uchun belgilang. Tishning o\'zini bosish holatini tezda o\'zgartiradi.'},
+  w_mark_tooth_hint: {ru:'Отметьте зуб галочкой, чтобы добавить его в план ниже. Клик по самому зубу — быстрая смена состояния. Shift+клик по галочке — выбрать сразу диапазон зубов.', ky:'Тишти төмөндөгү планга кошуу үчүн белги коюңуз. Тиштин өзүн басуу — абалын тез өзгөртөт. Shift+белги коюу — тиштердин диапазонун тандайт.', en:'Check a tooth to add it to the plan below. Clicking the tooth itself quickly changes its condition. Shift+click a checkbox to select a range of teeth at once.', uz:'Tishni pastdagi rejaga qo\'shish uchun belgilang. Tishning o\'zini bosish holatini tezda o\'zgartiradi. Shift+belgilash — bir vaqtning o\'zida tishlar diapazonini tanlaydi.'},
   w_selected_teeth: {ru:'Выбранные зубы', ky:'Тандалган тиштер', en:'Selected teeth', uz:'Tanlangan tishlar'},
   w_no_teeth_selected: {ru:'Зубы не выбраны — отметьте зуб галочкой выше', ky:'Тиштер тандалган жок — жогорудан белги коюңуз', en:'No teeth selected — check a tooth above', uz:'Tishlar tanlanmagan — yuqorida belgilang'},
+  w_group_selected_teeth: {ru:'Группа выбранных зубов', ky:'Тандалган тиштер тобу', en:'Group of selected teeth', uz:'Tanlangan tishlar guruhi'},
+  w_assign_service_to_group: {ru:'Назначить услугу всей группе', ky:'Бүт топко кызмат дайындоо', en:'Assign a service to the whole group', uz:'Butun guruhga xizmat tayinlash'},
   w_images_attachments: {ru:'Снимки и вложения', ky:'Сүрөттөр жана тиркемелер', en:'Images & attachments', uz:'Rasmlar va ilovalar'},
   w_upload_image: {ru:'Загрузить снимок', ky:'Сүрөт жүктөө', en:'Upload image', uz:'Rasm yuklash'},
   w_no_images_yet: {ru:'Пока нет загруженных снимков', ky:'Азырынча жүктөлгөн сүрөт жок', en:'No images uploaded yet', uz:'Hozircha yuklangan rasm yo\'q'},
