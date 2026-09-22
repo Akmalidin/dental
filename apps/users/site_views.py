@@ -129,48 +129,43 @@ def public_service(request, pk):
 WORK_START, WORK_END, SLOT_HOURS = 9, 18, 1  # рабочие часы и шаг слота
 
 
-def public_book(request):
-    """Страница онлайн-записи. ?branch=<id> — переход из центрального
-    каталога клиник stom.asia (templates/marketing/directory.html): если
-    филиал указан и реально принадлежит этой клинике/активен — список
-    врачей сужается до закреплённых за ним (тот же приём, что и в
-    _newui_schedule_data для фильтра расписания по филиалу), иначе — все
-    врачи клиники, как раньше."""
-    clinic, site = _ctx(request)
-    if not site.show_booking:
-        raise Http404("Запись недоступна")
+def book_context_for(clinic, branch_id=None):
+    """Данные для формы онлайн-записи (public/booking.html): врачи/услуги
+    клиники, список филиалов и выбранный (если branch_id передан и реально
+    принадлежит этой клинике/активен). Общая логика и для сайта клиники
+    (public_book, ?branch=<id> — переход из каталога клиник stom.asia,
+    templates/marketing/directory.html), и для общей страницы записи без
+    сайта (apps.marketing.views.book_clinic) — тот же приём, что и в
+    _newui_schedule_data для фильтра расписания по филиалу: если филиал
+    выбран, список врачей сужается до закреплённых за ним."""
     from apps.users.models import clinic_doctors, Branch
     from apps.services.models import Service
     try:
-        branch_id = int(request.GET.get("branch") or 0)
+        branch_id = int(branch_id or 0)
     except (TypeError, ValueError):
         branch_id = 0
-    selected_branch = Branch.objects.filter(pk=branch_id, clinic=clinic, is_active=True).first() if branch_id else None
+    branches = list(Branch.objects.filter(clinic=clinic, is_active=True).order_by("-is_main", "name"))
+    selected_branch = next((b for b in branches if b.pk == branch_id), None) if branch_id else None
     doctors_qs = clinic_doctors(clinic)
     if selected_branch:
         doctors_qs = doctors_qs.filter(branches=selected_branch).distinct()
     doctors = list(doctors_qs)
     services = list(Service.objects.filter(clinic=clinic, is_active=True).order_by("name"))
-    return render(request, "public/booking.html", {
-        "clinic": clinic, "site": site, "doctors": doctors, "services": services,
-        "selected_branch": selected_branch,
-    })
+    return {"doctors": doctors, "services": services, "branches": branches, "selected_branch": selected_branch}
 
 
-def public_slots(request):
-    """Свободные часовые слоты врача на дату (JSON)."""
-    from django.http import JsonResponse
+def slots_for_doctor(clinic, doctor_id, date_str):
+    """Свободные часовые слоты врача на дату — общая логика для public_slots
+    (сайт клиники) и apps.marketing.views.book_clinic_slots (общая страница
+    записи без сайта)."""
     from django.utils import timezone
     from datetime import datetime
-    clinic, site = _ctx(request)
-    doctor_id = request.GET.get("doctor")
-    date_str = request.GET.get("date")
     if not doctor_id or not date_str:
-        return JsonResponse({"slots": []})
+        return []
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        return JsonResponse({"slots": []})
+        return []
     from apps.appointments.models import Appointment
     taken = set()
     for a in (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id, start_at__date=d)
@@ -184,18 +179,48 @@ def public_slots(request):
         if d == now.date() and h <= now.hour:
             continue
         slots.append("%02d:00" % h)
+    return slots
+
+
+def public_book(request):
+    """Страница онлайн-записи на сайте клиники (поддомен)."""
+    clinic, site = _ctx(request)
+    if not site.show_booking:
+        raise Http404("Запись недоступна")
+    ctx = book_context_for(clinic, request.GET.get("branch"))
+    return render(request, "public/booking.html", {
+        "clinic": clinic, "site": site, **ctx,
+        "book_slots_url": "/book/slots/", "book_submit_url": "/book/submit/",
+        "back_url": "/", "back_label": "← На сайт",
+    })
+
+
+def public_slots(request):
+    """Свободные часовые слоты врача на дату (JSON)."""
+    from django.http import JsonResponse
+    clinic, site = _ctx(request)
+    slots = slots_for_doctor(clinic, request.GET.get("doctor"), request.GET.get("date"))
     return JsonResponse({"slots": slots})
 
 
 def public_book_submit(request):
     """Создать заявку с сайта → серая запись в расписании + уведомление администраторам."""
     from django.http import JsonResponse
-    from django.utils import timezone
-    from django.db.models import Q
-    from datetime import datetime, timedelta, time as dtime
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "POST"}, status=405)
     clinic, site = _ctx(request)
+    return submit_booking(request, clinic)
+
+
+def submit_booking(request, clinic):
+    """Создать заявку на приём → серая запись в расписании + уведомления.
+    Общая логика для public_book_submit (сайт клиники, поддомен) и
+    apps.marketing.views.book_clinic_submit (общая страница записи без
+    сайта — apps.marketing.views.directory, для клиник без ClinicSite)."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from django.db.models import Q
+    from datetime import datetime, timedelta, time as dtime
     name = (request.POST.get("name") or "").strip()
     phone = (request.POST.get("phone") or "").strip()
     doctor_id = request.POST.get("doctor")
@@ -236,7 +261,8 @@ def public_book_submit(request):
     if branch_id:
         branch = Branch.objects.filter(pk=branch_id, clinic=clinic, is_active=True).first()
     if branch is None:
-        branch = Branch.objects.filter(is_main=True).first() or Branch.objects.first()
+        branch = (Branch.objects.filter(clinic=clinic, is_main=True).first()
+                  or Branch.objects.filter(clinic=clinic).first())
     if branch is None:
         return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
 

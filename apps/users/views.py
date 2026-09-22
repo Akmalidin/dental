@@ -2830,6 +2830,18 @@ def clinic_overview(request, clinic_id):
     site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
     public_url = _clinic_public_url(clinic)
 
+    # Общая страница записи (без отдельного сайта клиники, apps.marketing.
+    # views.book_clinic, /book/<slug>/ на апексе stom.asia) + QR на неё —
+    # работает для ЛЮБОЙ активной клиники, даже если публичный сайт (выше)
+    # выключен: можно распечатать и повесить в клинике уже сейчас, не дожидаясь
+    # включения сайта. QR — тем же приёмом, что и на чеке оплаты
+    # (apps.finance.views._qr_svg — inline SVG, без Pillow).
+    from django.conf import settings as dj_settings
+    from apps.finance.views import _qr_svg
+    domain = getattr(dj_settings, "CRM_BASE_DOMAIN", "") or getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru")
+    generic_book_url = f"https://{domain}/book/{clinic.slug}/"
+    generic_book_qr = _qr_svg(generic_book_url)
+
     return render(request, "users/clinic_overview.html", {
         "clinic": clinic,
         "stats": stats,
@@ -2838,6 +2850,8 @@ def clinic_overview(request, clinic_id):
         "sections": SECTIONS,
         "site": site,
         "public_url": public_url,
+        "generic_book_url": generic_book_url,
+        "generic_book_qr": generic_book_qr,
         "timezone_choices": TIMEZONE_CHOICES,
         "tariff_choices": ClinicSettings.TARIFF_CHOICES,
         "all_modules": ClinicSettings.ALL_MODULES,

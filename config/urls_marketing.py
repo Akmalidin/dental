@@ -11,4 +11,7 @@ urlpatterns = [
     path("sitemap.xml", views.sitemap, name="marketing_sitemap"),
     path("lead/", views.landing_lead, name="marketing_lead"),
     path("book/", views.directory, name="marketing_directory"),
+    path("book/<slug:slug>/", views.book_clinic, name="marketing_book_clinic"),
+    path("book/<slug:slug>/slots/", views.book_clinic_slots, name="marketing_book_clinic_slots"),
+    path("book/<slug:slug>/submit/", views.book_clinic_submit, name="marketing_book_clinic_submit"),
 ]

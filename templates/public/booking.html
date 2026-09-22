@@ -70,8 +70,8 @@
   <div class="aura"></div>
   <div class="wrap">
     <div class="top">
-      <a href="/" class="brand">{{ clinic.name }}</a>
-      <a href="/" class="btn btn-ghost" style="padding:10px 20px">← На сайт</a>
+      <a href="{{ back_url|default:'/' }}" class="brand">{{ clinic.name }}</a>
+      <a href="{{ back_url|default:'/' }}" class="btn btn-ghost" style="padding:10px 20px">{{ back_label|default:"← На сайт" }}</a>
     </div>
 
     {% csrf_token %}
@@ -82,6 +82,22 @@
         <p class="muted" style="margin-bottom:24px">
           {% if selected_branch %}Филиал: <b>{{ selected_branch.name }}</b>{% if selected_branch.address %} · {{ selected_branch.address }}{% endif %} — {% endif %}Выберите врача, дату и удобное время — мы перезвоним для подтверждения.
         </p>
+
+        {% if branches|length > 1 and not selected_branch %}
+        <!-- Филиал (несколько филиалов и ни один не выбран через ?branch=) -->
+        <div class="glass card">
+          <div class="step">Филиал</div>
+          <div class="docs">
+            {% for b in branches %}
+            <a class="doc" href="?branch={{ b.pk }}" style="text-decoration:none;color:inherit">
+              <div class="ava">🏥</div>
+              <div class="nm">{{ b.name }}</div>
+              <div class="rl">{{ b.address }}</div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
 
         <!-- Врач -->
         <div class="glass card">
@@ -187,7 +203,7 @@
           if(!this.doctor||!this.date) return;
           this.loading=true;
           try{
-            const r=await fetch('/book/slots/?doctor='+this.doctor+'&date='+this.date);
+            const r=await fetch('{{ book_slots_url|default:"/book/slots/" }}?doctor='+this.doctor+'&date='+this.date);
             const j=await r.json(); this.slots=j.slots||[];
           }catch(e){ this.slots=[]; }
           this.loading=false;
@@ -198,7 +214,7 @@
           const token=document.querySelector('[name=csrfmiddlewaretoken]').value;
           const body=new URLSearchParams({doctor:this.doctor,service:this.service,date:this.date,slot:this.slot,name:this.name,phone:this.fullPhone,branch:this.branch});
           try{
-            const r=await fetch('/book/submit/',{method:'POST',headers:{'X-CSRFToken':token},body});
+            const r=await fetch('{{ book_submit_url|default:"/book/submit/" }}',{method:'POST',headers:{'X-CSRFToken':token},body});
             const j=await r.json();
             if(j.ok){ this.done=true; }
             else{ this.error=j.error||'Ошибка'; if(r.status===409) this.loadSlots(); }

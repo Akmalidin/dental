@@ -23,7 +23,6 @@
   .dir-branch{border-top:1px solid var(--border);padding-top:10px;margin-top:2px;display:flex;flex-direction:column;gap:6px;}
   .dir-branch:first-of-type{border-top:none;padding-top:0;margin-top:0;}
   .dir-addr{font-size:13.5px;color:var(--muted);line-height:1.5;}
-  .dir-soon{font-size:13px;color:var(--accent-2);font-family:"JetBrains Mono",monospace;}
   .dir-book{align-self:flex-start;padding:9px 18px;font-size:13.5px;}
   .dir-book-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
   .leaflet-popup-content{font-family:"Inter",sans-serif;font-size:13px;color:#0b0f14;}
@@ -78,17 +77,13 @@
                 {% if c.branches|length > 1 %}<b style="color:var(--film);font-size:13.5px;">{{ b.name }}</b><br>{% endif %}
                 <span class="dir-addr">{{ b.address }}{% if b.phone %} · {{ b.phone }}{% endif %}</span>
               </div>
-              {% if c.bookable %}
-                <a class="btn btn-primary dir-book" href="{{ c.book_url }}?branch={{ b.id }}">Записаться</a>
-              {% endif %}
+              <a class="btn btn-primary dir-book" href="{{ c.book_url }}?branch={{ b.id }}">Записаться</a>
             </div>
           </div>
           {% endfor %}
         {% else %}
           <span class="dir-addr">Адрес: скоро добавим</span>
-        {% endif %}
-        {% if not c.bookable %}
-          <span class="dir-soon">Запись скоро будет доступна</span>
+          <a class="btn btn-primary dir-book" href="{{ c.book_url }}">Записаться</a>
         {% endif %}
       </div>
       {% empty %}

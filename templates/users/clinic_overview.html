@@ -49,6 +49,22 @@
     </div>
   </div>
 
+  <!-- Общая страница записи + QR (работает и без публичного сайта выше) -->
+  <div class="card card-pad flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <h3 class="font-bold" style="color:var(--text)">🔗 Онлайн-запись по QR</h3>
+      <p class="muted text-sm mt-0.5 max-w-md">
+        Работает всегда, даже если публичный сайт выше выключён — пациент
+        сканирует код или переходит по ссылке, выбирает филиал (если их
+        несколько), врача, день и время.
+      </p>
+      <a href="{{ generic_book_url }}" target="_blank" style="color:var(--primary)" class="text-sm break-all">{{ generic_book_url }}</a>
+    </div>
+    {% if generic_book_qr %}
+    <div style="width:120px;height:120px;background:#fff;border-radius:12px;padding:8px;flex-shrink:0">{{ generic_book_qr|safe }}</div>
+    {% endif %}
+  </div>
+
   <!-- Каналы связи (мастер-переключатели суперадмина, по тарифу) -->
   {% if user.is_superadmin %}
   <div class="card card-pad">

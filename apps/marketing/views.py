@@ -1,8 +1,13 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 from .models import LandingLead
+
+
+def _domain():
+    from django.conf import settings as dj_settings
+    return getattr(dj_settings, "CRM_BASE_DOMAIN", "") or getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru")
 
 
 def landing(request):
@@ -36,19 +41,20 @@ def sitemap(request):
 
 def directory(request):
     """Каталог всех клиник на платформе (апекс stom.asia, «Найти клинику и
-    записаться») — карта + список «блоками». Клиника кликабельна для записи,
-    только если у неё включён и опубликован публичный сайт (ClinicSite.
-    enabled+published — тот же переключатель, что супер-админ уже включает
-    в /users/clinic/<id>/overview/, apps.users.views.toggle_clinic_site) —
-    иначе показываем «Запись скоро будет доступна» вместо битой ссылки на
-    <slug>.CRM_BASE_DOMAIN/book/, которого без сайта не существует (см.
-    apps.tenancy.StomAsiaRoutingMiddleware). Без активного филиала с
-    указанным адресом — «Адрес: скоро добавим» вместо карточки/пина."""
-    from django.conf import settings as dj_settings
+    записаться») — карта + список «блоками». Если у клиники включён и
+    опубликован публичный сайт (ClinicSite.enabled+published — тот же
+    переключатель, что супер-админ уже включает в
+    /users/clinic/<id>/overview/, apps.users.views.toggle_clinic_site) —
+    запись идёт на её сайт (<slug>.CRM_BASE_DOMAIN/book/). Без сайта —
+    запись всё равно доступна через общую страницу на самом апексе
+    (book_clinic, /book/<slug>/, без DNS/поддомена — см. book_clinic ниже),
+    поэтому каждая активная клиника теперь кликабельна для записи. Без
+    активного филиала с указанным адресом — «Адрес: скоро добавим» вместо
+    карточки/пина."""
     from apps.users.models import Clinic, Branch, ClinicSite
 
-    domain = getattr(dj_settings, "CRM_BASE_DOMAIN", "") or getattr(dj_settings, "PUBLIC_BASE_DOMAIN", "denta.tw1.ru")
-    bookable_ids = set(
+    domain = _domain()
+    site_ids = set(
         ClinicSite.objects.filter(enabled=True, published=True).values_list("clinic_id", flat=True)
     )
 
@@ -61,25 +67,76 @@ def directory(request):
             for b in Branch.objects.filter(clinic=c, is_active=True).order_by("-is_main", "name")
             if b.address.strip()
         ]
-        bookable = c.pk in bookable_ids
+        has_site = c.pk in site_ids
+        book_url = f"https://{c.slug}.{domain}/book/" if has_site else f"/book/{c.slug}/"
         clinics.append({
-            "clinic": c, "slug": c.slug, "bookable": bookable,
-            "book_url": f"https://{c.slug}.{domain}/book/" if bookable else "",
-            "branches": branches,
+            "clinic": c, "slug": c.slug, "bookable": True, "has_site": has_site,
+            "book_url": book_url, "branches": branches,
         })
-        if bookable:
-            for b in branches:
-                if b["lat"] is not None and b["lng"] is not None:
-                    map_points.append({
-                        "clinicName": c.name, "branchId": b["id"], "branchName": b["name"],
-                        "address": b["address"], "phone": b["phone"],
-                        "lat": b["lat"], "lng": b["lng"],
-                        "bookUrl": f"https://{c.slug}.{domain}/book/?branch={b['id']}",
-                    })
+        for b in branches:
+            if b["lat"] is not None and b["lng"] is not None:
+                map_points.append({
+                    "clinicName": c.name, "branchId": b["id"], "branchName": b["name"],
+                    "address": b["address"], "phone": b["phone"],
+                    "lat": b["lat"], "lng": b["lng"],
+                    "bookUrl": f"{book_url}?branch={b['id']}",
+                })
 
     return render(request, "marketing/directory.html", {
         "clinics": clinics, "map_points": map_points,
     })
+
+
+def book_clinic(request, slug):
+    """Общая страница записи БЕЗ отдельного сайта клиники (апекс
+    stom.asia/book/<slug>/) — для клиник без включённого/опубликованного
+    ClinicSite (см. directory() выше): та же форма (public/booking.html),
+    что и на поддомене клиники, но по прямой ссылке апекса — без
+    DNS/поддомена, которых у такой клиники ещё нет."""
+    from apps.users.models import Clinic
+    from apps.users.site_views import book_context_for
+    from apps.tenancy import set_current_clinic
+
+    clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
+    if clinic is None:
+        raise Http404("Клиника не найдена")
+    set_current_clinic(clinic)
+    ctx = book_context_for(clinic, request.GET.get("branch"))
+    return render(request, "public/booking.html", {
+        "clinic": clinic, "site": None, **ctx,
+        "book_slots_url": f"/book/{slug}/slots/", "book_submit_url": f"/book/{slug}/submit/",
+        "back_url": "/book/", "back_label": "← К клиникам",
+    })
+
+
+def book_clinic_slots(request, slug):
+    """Свободные часовые слоты врача на дату (JSON) — для book_clinic."""
+    from apps.users.models import Clinic
+    from apps.users.site_views import slots_for_doctor
+    from apps.tenancy import set_current_clinic
+
+    clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
+    if clinic is None:
+        return JsonResponse({"slots": []}, status=404)
+    set_current_clinic(clinic)
+    slots = slots_for_doctor(clinic, request.GET.get("doctor"), request.GET.get("date"))
+    return JsonResponse({"slots": slots})
+
+
+def book_clinic_submit(request, slug):
+    """Создать заявку с общей страницы записи (book_clinic) — та же логика,
+    что и с сайта клиники (apps.users.site_views.submit_booking)."""
+    from apps.users.models import Clinic
+    from apps.users.site_views import submit_booking
+    from apps.tenancy import set_current_clinic
+
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "POST"}, status=405)
+    clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
+    if clinic is None:
+        return JsonResponse({"ok": False, "error": "Клиника не найдена"}, status=404)
+    set_current_clinic(clinic)
+    return submit_booking(request, clinic)
 
 
 @require_POST
