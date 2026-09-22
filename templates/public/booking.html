@@ -176,7 +176,11 @@
         <div class="ic">✓</div>
         <h2 style="font-size:26px;margin-bottom:8px">Заявка отправлена!</h2>
         <p class="muted" style="max-width:420px;margin:0 auto 24px">Мы записали вас и скоро перезвоним для подтверждения. Спасибо, что выбрали «{{ clinic.name }}».</p>
-        <a href="/" class="btn">На главную</a>
+        {% if tg_bot_link %}
+        <p class="muted" style="max-width:420px;margin:0 auto 14px">Хотите получать уведомления — то запустите бота и всё.</p>
+        <a href="{{ tg_bot_link }}" target="_blank" class="btn" style="margin-bottom:14px">Подключить Telegram-бота</a><br>
+        {% endif %}
+        <a href="{{ back_url|default:'/' }}" class="btn {% if tg_bot_link %}btn-ghost{% endif %}">На главную</a>
       </div>
     </template>
   </div>

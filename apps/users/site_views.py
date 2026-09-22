@@ -182,6 +182,22 @@ def slots_for_doctor(clinic, doctor_id, date_str):
     return slots
 
 
+def tg_bot_link_for(clinic):
+    """Ссылка t.me/<бот клиники>, если бот подключён (ClinicSettings.
+    telegram_bot_username) — иначе ''. Показываем на экране «Заявка
+    отправлена» на странице записи: Telegram-бот НЕ может написать
+    пациенту первым (см. apps/notifications/telegram.py) — только
+    WhatsApp (Green-API) шлёт подтверждение сразу, на любой номер, любая
+    страна. Чтобы пациент получал уведомления и в Telegram, ему нужно
+    один раз самому нажать /start у бота клиники — тогда бот подтянет
+    его карточку по номеру телефона (см. apps/notifications/views.py,
+    _tg_link_by_phone)."""
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.objects.filter(clinic=clinic).first()
+    username = (cs.telegram_bot_username or "").strip() if cs else ""
+    return f"https://t.me/{username}" if username else ""
+
+
 def public_book(request):
     """Страница онлайн-записи на сайте клиники (поддомен)."""
     clinic, site = _ctx(request)
@@ -192,6 +208,7 @@ def public_book(request):
         "clinic": clinic, "site": site, **ctx,
         "book_slots_url": "/book/slots/", "book_submit_url": "/book/submit/",
         "back_url": "/", "back_label": "← На сайт",
+        "tg_bot_link": tg_bot_link_for(clinic),
     })
 
 
