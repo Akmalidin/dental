@@ -1517,17 +1517,25 @@ def voice_command(request):
             return JsonResponse({"error": "Речь не распознана"}, status=422)
 
     if mode == "chat":
-        if not ai_enabled():
-            return JsonResponse({"error": "ИИ-помощник не настроен", "transcript": transcript}, status=503)
+        # Ответ собирает apps.assistant: он держит память разговора в БД и
+        # умеет читать данные клиники через инструменты. Прежний прямой вызов
+        # ask_ai остался, но уже как запасной путь — см.
+        # apps.assistant.provider.fallback_answer.
+        #
+        # Поле history из запроса здесь больше не используется: историю ведёт
+        # сервер. Разбор history выше оставлен — им пользуются другие режимы.
+        from apps.assistant.service import answer as assistant_answer
+
         # assistant_name — клиентская настройка (localStorage, base.html::
         # getAssistantName), сервер её не хранит, только пробрасывает в
         # системный промпт, чтобы «как тебя зовут» отвечался тем именем,
-        # которое пользователь сам задал (см. apps.notifications.voice.ask_ai).
+        # которое пользователь сам задал.
         assistant_name = (request.POST.get("assistant_name") or "").strip()
-        answer, err = ask_ai(transcript, history=history, assistant_name=assistant_name)
+        text, err = assistant_answer(request.user, transcript,
+                                     assistant_name=assistant_name)
         if err:
             return JsonResponse({"error": err, "transcript": transcript}, status=502)
-        return JsonResponse({"transcript": transcript, "answer": answer})
+        return JsonResponse({"transcript": transcript, "answer": text})
 
     result = {"transcript": transcript}
     if mode == "schedule":

@@ -547,3 +547,58 @@ class ConversationEndpointsTestCase(TestCase):
         texts = [m["text"] for m in messages]
         self.assertIn("своя реплика", texts)
         self.assertNotIn("чужая реплика", texts)
+
+
+class VoiceCommandChatIntegrationTestCase(TestCase):
+    """Боевая точка входа /notifications/voice/ в режиме chat должна идти
+    через apps.assistant, а не через прежний прямой вызов ask_ai."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника В", slug="vc-clinic")
+        set_current_clinic(self.clinic)
+        self.user = User.objects.create(login="vc", name="Сотрудник", clinic=self.clinic)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_chat_goes_through_assistant_service(self):
+        from apps.assistant import service
+        with mock.patch.object(service.provider, "complete",
+                               return_value=({"kind": "text", "text": "Ответ"}, None)):
+            resp = self.client.post("/notifications/voice/",
+                                    {"mode": "chat", "question": "привет"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["answer"], "Ответ")
+        # Реплики осели в БД — значит ответ шёл через новый сервис,
+        # а не через прежний ask_ai, который ничего не сохранял.
+        conv = Conversation.active_for(self.user)
+        self.assertEqual([m.role for m in conv.recent()], ["user", "assistant"])
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_assistant_name_is_passed_through(self):
+        """Имя ассистента из клиентских настроек должно доезжать до сервиса —
+        иначе сломается ответ на «как тебя зовут»."""
+        from apps.assistant import service
+        captured = {}
+
+        def fake_complete(messages, tools=None):
+            captured["system"] = messages[0]["content"]
+            return {"kind": "text", "text": "ок"}, None
+
+        with mock.patch.object(service.provider, "complete", side_effect=fake_complete):
+            self.client.post("/notifications/voice/",
+                             {"mode": "chat", "question": "как тебя зовут",
+                              "assistant_name": "Айгуль"})
+        self.assertIn("Айгуль", captured["system"])
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_service_error_returns_502(self):
+        from apps.assistant import service
+        with mock.patch.object(service, "answer", return_value=(None, "всё плохо")):
+            resp = self.client.post("/notifications/voice/",
+                                    {"mode": "chat", "question": "привет"})
+        self.assertEqual(resp.status_code, 502)
+        self.assertEqual(resp.json()["error"], "всё плохо")
