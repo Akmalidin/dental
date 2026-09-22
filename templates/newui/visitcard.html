@@ -490,6 +490,98 @@
   window.vwPlanRemove = function(i){ vwPlan.splice(i,1); vwRenderPlan(); vwAutosave(); };
   vwRenderPlan();
 
+  // Компактная иконка-карточка зуба (номер+рисунок+«Убрать») — переиспользуется
+  // и в групповом блоке (несколько штук в ряд), и как левая часть отдельного
+  // по-зубного блока.
+  function vwToothSideCard(key){
+    const [pfx,numStr]=key.split('-');
+    const num=Number(numStr);
+    const code=toothStates[key] || 'norma';
+    const cond=getCondition(code);
+    const style=toothStyle(cond);
+    const iconHtml=toothIconSVG(style, null, pfx==='adult'?num:null);
+    return `<div class="selected-tooth-side">
+      <div class="tooth-num-cell">${num}</div>
+      ${iconHtml}
+      <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>${t('w_remove','Убрать')}</button>
+    </div>`;
+  }
+  // Отдельный зуб (выбран по одному, БЕЗ Shift — в группу не входит): свой
+  // блок с полной формой, как и раньше.
+  function vwRenderToothBlock(key){
+    const num=Number(key.split('-')[1]);
+    const code=toothStates[key] || 'norma';
+    const cond=getCondition(code);
+    const toothItems=vwPlan.filter(it=>String(it.tooth)===String(num));
+    const chipsHtml = toothItems.length
+      ? toothItems.map(it=>{
+          const svc=vw.services.find(s=>String(s.id)===String(it.service_id));
+          const label=svc ? svc.name : '—';
+          const sum=Math.round(vwPlanRowTotal(it));
+          return `<span class="pill cobalt" style="display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;">${label} · ${sum} <span data-i18n="w_som">сом</span>
+            <button type="button" title="${t('w_remove','Убрать')}" onclick="vwToothServiceRemove(${num}, ${it.service_id})" ${readOnlyClosed?'disabled':''} style="border:none;background:none;color:inherit;opacity:.75;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button></span>`;
+        }).join('')
+      : `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:2px;" data-i18n="w_no_services_selected">${t('w_no_services_selected')}</div>`;
+    return `<div class="selected-tooth-block">
+      ${vwToothSideCard(key)}
+      <div>
+        <div class="form-group"><label>${t('w_diagnosis')}</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
+        <div class="form-group" style="position:relative;">
+          <label><span data-i18n="w_services">Услуги</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">${t('w_multi_service_hint','можно выбрать несколько — добавятся в «Процедуры и план»')}</div></label>
+          <div style="margin-bottom:6px;">${chipsHtml}</div>
+          <input type="text" id="toothSvcInput-${num}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
+                 oninput="vwToothServiceSearch(${num}, this.value)" onfocus="vwToothServiceSearch(${num}, this.value)"
+                 onblur="setTimeout(()=>{const b=document.getElementById('toothSvcSuggest-${num}'); if(b) b.classList.add('hidden');},200)">
+          <div id="toothSvcSuggest-${num}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <div class="form-group"><label>${t('w_exam_plan')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+        <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+        <div class="form-group"><label>${t('w_recommendations')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+      </div>
+    </div>`;
+  }
+  // Группа (собрана ТОЛЬКО через Shift-диапазон, см. toothGroups в app.js) —
+  // один общий блок: ряд компактных иконок зубов + ОДНА форма на всю
+  // группу. Услуга, выбранная в общем поиске (vwGroupServicePick), уходит
+  // строкой плана на каждый зуб группы разом — по прямому запросу
+  // пользователя (со скриншотом-примером из стороннего продукта): зубы,
+  // отмеченные по одному без Shift, в такую группу НЕ объединяются и
+  // рендерятся как раньше, каждый своим отдельным блоком (vwRenderToothBlock).
+  function vwRenderGroupBlock(group){
+    const nums = group.map(k=>Number(k.split('-')[1]));
+    const groupKey = nums.join('_');
+    // Услуги, назначенные СРАЗУ ВСЕМ зубам группы — общие чипы над полем поиска.
+    const commonServiceIds = vw.services
+      .filter(s => nums.every(num => vwPlan.some(it=>String(it.tooth)===String(num) && String(it.service_id)===String(s.id))))
+      .map(s=>s.id);
+    const chipsHtml = commonServiceIds.length
+      ? commonServiceIds.map(sid=>{
+          const svc=vw.services.find(s=>String(s.id)===String(sid));
+          return `<span class="pill cobalt" style="display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;">${svc?svc.name:'—'}
+            <button type="button" title="${t('w_remove','Убрать')}" onclick="vwGroupServiceRemove([${nums.join(',')}], ${sid})" ${readOnlyClosed?'disabled':''} style="border:none;background:none;color:inherit;opacity:.75;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button></span>`;
+        }).join('')
+      : `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:2px;" data-i18n="w_no_services_selected">${t('w_no_services_selected')}</div>`;
+    return `<div class="selected-tooth-block" style="grid-template-columns:1fr;border:1.5px dashed var(--cobalt);background:var(--cobalt-tint);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <b style="font-size:13px;"><span data-i18n="w_group_selected_teeth">${t('w_group_selected_teeth')}</span> (${nums.length})</b>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;">${group.map(vwToothSideCard).join('')}</div>
+      <div>
+        <div class="form-group"><label>${t('w_diagnosis')}</label><select ${readOnlyClosed?'disabled':''}><option>—</option></select></div>
+        <div class="form-group" style="position:relative;">
+          <label><span data-i18n="w_assign_service_to_group">${t('w_assign_service_to_group')}</span></label>
+          <div style="margin-bottom:6px;">${chipsHtml}</div>
+          <input type="text" id="vwGroupSvcInput-${groupKey}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
+                 oninput="vwGroupServiceSearch(this.value, [${nums.join(',')}])" onfocus="vwGroupServiceSearch(this.value, [${nums.join(',')}])"
+                 onblur="setTimeout(()=>{const b=document.getElementById('vwGroupSvcSuggest-${groupKey}'); if(b) b.classList.add('hidden');},200)">
+          <div id="vwGroupSvcSuggest-${groupKey}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <div class="form-group"><label>${t('w_exam_plan')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+        <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+        <div class="form-group"><label>${t('w_recommendations')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
+      </div>
+    </div>`;
+  }
   window.vwRenderSelectedTeeth = function(selectedTeethSet){
     const el=document.getElementById('vcSelectedTeeth');
     if(!el) return;
@@ -497,65 +589,13 @@
       el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);"><span data-i18n="w_no_teeth_selected">Зубы не выбраны — отметьте зуб галочкой выше</span></div>';
       return;
     }
-    // Группа: от двух выбранных зубов — один общий поиск услуги, которая
-    // применяется сразу ко ВСЕМ выбранным зубам (vwGroupServicePick), вместо
-    // повторения поиска+клика на каждый зуб отдельно (было раньше — только
-    // блок на зуб ниже, каждый со своим поиском). Сами по-зубные блоки
-    // остаются — там видно/убирается, что именно назначено на каждый зуб.
-    const groupHtml = selectedTeethSet.size < 2 ? '' : `
-      <div class="card" style="padding:14px 16px;margin-bottom:14px;border:1.5px dashed var(--cobalt);background:var(--cobalt-tint);">
-        <b style="font-size:13px;"><span data-i18n="w_group_selected_teeth">${t('w_group_selected_teeth')}</span> (${selectedTeethSet.size})</b>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px;">
-          ${[...selectedTeethSet].map(k=>`<span class="pill cobalt">${k.split('-')[1]}</span>`).join('')}
-        </div>
-        <div class="form-group" style="position:relative;margin-bottom:0;">
-          <label><span data-i18n="w_assign_service_to_group">${t('w_assign_service_to_group')}</span></label>
-          <input type="text" id="vwGroupSvcInput" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
-                 oninput="vwGroupServiceSearch(this.value)" onfocus="vwGroupServiceSearch(this.value)"
-                 onblur="setTimeout(()=>{const b=document.getElementById('vwGroupSvcSuggest'); if(b) b.classList.add('hidden');},200)">
-          <div id="vwGroupSvcSuggest" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
-        </div>
-      </div>`;
-    el.innerHTML = groupHtml + [...selectedTeethSet].map(key=>{
-      const [pfx,numStr]=key.split('-');
-      const num=Number(numStr);
-      const code=toothStates[key] || 'norma';
-      const cond=getCondition(code);
-      const style=toothStyle(cond);
-      const iconHtml=toothIconSVG(style, null, pfx==='adult'?num:null);
-      // Зубу можно назначить несколько услуг — все строки плана с этим зубом.
-      const toothItems=vwPlan.filter(it=>String(it.tooth)===String(num));
-      const chipsHtml = toothItems.length
-        ? toothItems.map(it=>{
-            const svc=vw.services.find(s=>String(s.id)===String(it.service_id));
-            const label=svc ? svc.name : '—';
-            const sum=Math.round(vwPlanRowTotal(it));
-            return `<span class="pill cobalt" style="display:inline-flex;align-items:center;gap:6px;margin:0 6px 6px 0;">${label} · ${sum} <span data-i18n="w_som">сом</span>
-              <button type="button" title="${t('w_remove','Убрать')}" onclick="vwToothServiceRemove(${num}, ${it.service_id})" ${readOnlyClosed?'disabled':''} style="border:none;background:none;color:inherit;opacity:.75;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button></span>`;
-          }).join('')
-        : `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:2px;" data-i18n="w_no_services_selected">${t('w_no_services_selected')}</div>`;
-      return `<div class="selected-tooth-block">
-        <div class="selected-tooth-side">
-          <div class="tooth-num-cell">${num}</div>
-          ${iconHtml}
-          <button class="remove-tooth-btn" onclick="removeSelectedTooth('${key}')" ${readOnlyClosed?'disabled':''}>${t('w_remove','Убрать')}</button>
-        </div>
-        <div>
-          <div class="form-group"><label>${t('w_diagnosis')}</label><select ${readOnlyClosed?'disabled':''}><option>${cond.label}</option></select></div>
-          <div class="form-group" style="position:relative;">
-            <label><span data-i18n="w_services">Услуги</span><div class="hint" style="font-size:11px;color:var(--ink-soft);font-weight:400;">${t('w_multi_service_hint','можно выбрать несколько — добавятся в «Процедуры и план»')}</div></label>
-            <div style="margin-bottom:6px;">${chipsHtml}</div>
-            <input type="text" id="toothSvcInput-${num}" placeholder="${t('w_search_service_dots')||'Поиск услуги…'}" autocomplete="off" ${readOnlyClosed?'disabled':''}
-                   oninput="vwToothServiceSearch(${num}, this.value)" onfocus="vwToothServiceSearch(${num}, this.value)"
-                   onblur="setTimeout(()=>{const b=document.getElementById('toothSvcSuggest-${num}'); if(b) b.classList.add('hidden');},200)">
-            <div id="toothSvcSuggest-${num}" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--paper);border:1px solid var(--mist-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
-          </div>
-          <div class="form-group"><label>${t('w_exam_plan')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_exam_plan')}" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>${t('w_treatment_consult')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_treatment_consult')}" ${readOnlyClosed?'disabled':''}></textarea></div>
-          <div class="form-group"><label>${t('w_recommendations')}</label><textarea autocomplete="off" rows="1" placeholder="${t('w_recommendations')}" ${readOnlyClosed?'disabled':''}></textarea></div>
-        </div>
-      </div>`;
-    }).join('');
+    const groupedKeys=new Set();
+    const groupsHtml = toothGroups
+      .filter(g=>g.length>=2 && g.every(k=>selectedTeethSet.has(k)))
+      .map(group=>{ group.forEach(k=>groupedKeys.add(k)); return vwRenderGroupBlock(group); })
+      .join('');
+    const individualHtml = [...selectedTeethSet].filter(k=>!groupedKeys.has(k)).map(vwRenderToothBlock).join('');
+    el.innerHTML = groupsHtml + individualHtml;
   };
   window.vwToothServiceSearch = function(num, q){
     const box=document.getElementById('toothSvcSuggest-'+num);
@@ -578,43 +618,51 @@
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
   };
-  // Групповое назначение (карточка «Группа выбранных зубов», две и более
-  // отметки галочкой на карте) — та же логика поиска, что и у одиночного
-  // зуба (vwToothServiceSearch), но применяет выбранную услугу СРАЗУ КО
-  // ВСЕМ отмеченным зубам одним действием — по строке плана на каждый зуб
+  // Групповое назначение (блок «Группа выбранных зубов» — зубы, собранные
+  // ТОЛЬКО через Shift-диапазон, см. toothGroups в app.js) — та же логика
+  // поиска, что и у одиночного зуба (vwToothServiceSearch), но применяет
+  // выбранную услугу СРАЗУ КО ВСЕМ зубам ИМЕННО ЭТОЙ группы (teethNums —
+  // явный список, а не глобальный selectedTeeth: групп на странице может
+  // быть несколько, плюс отдельно выбранные без Shift зубы вообще не
+  // должны задеваться) одним действием — по строке плана на каждый зуб
   // (не одна общая строка: qty/цена/скидка остаются редактируемыми per-зуб,
   // как и раньше). Зубы, где эта услуга уже назначена, пропускаются.
-  window.vwGroupServiceSearch = function(q){
-    const box=document.getElementById('vwGroupSvcSuggest');
+  window.vwGroupServiceSearch = function(q, teethNums){
+    const box=document.getElementById('vwGroupSvcSuggest-'+teethNums.join('_'));
     if(!box) return;
     const query=(q||'').trim().toLowerCase();
     const matches=(query ? vw.services.filter(s=>s.name.toLowerCase().includes(query)) : vw.services).slice(0,30);
     box.innerHTML = matches.length
-      ? matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="vwGroupServicePick(${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('')
+      ? matches.map(s=>`<div class="clickable" style="padding:8px 12px;font-size:13px;" onmousedown="vwGroupServicePick([${teethNums.join(',')}], ${s.id})"><b>${s.name}</b><span style="float:right;color:var(--ink-soft);">${Math.round(s.price)} сом</span></div>`).join('')
       : `<div style="padding:10px 12px;font-size:12.5px;color:var(--ink-soft);">${t('w_nothing_found')}</div>`;
     box.classList.remove('hidden');
   };
-  window.vwGroupServicePick = function(serviceId){
+  window.vwGroupServicePick = function(teethNums, serviceId){
     if(readOnlyClosed) return;
     const svc=vw.services.find(s=>String(s.id)===String(serviceId));
     if(!svc) return;
     let added=0;
-    selectedTeeth.forEach(key=>{
-      const num=key.split('-')[1];
+    teethNums.forEach(num=>{
       const already=vwPlan.some(it=>String(it.tooth)===String(num) && String(it.service_id)===String(serviceId));
       if(!already){
         vwPlan.push({service_id:serviceId, tooth:String(num), qty:1, price:svc.price, discount:0, discountMode:'%', done:true});
         added++;
       }
     });
-    const input=document.getElementById('vwGroupSvcInput');
-    if(input) input.value='';
-    const box=document.getElementById('vwGroupSvcSuggest');
-    if(box) box.classList.add('hidden');
     vwRenderPlan();
     window.vwRenderSelectedTeeth(selectedTeeth);
     vwAutosave();
     if(added>0) showToast(`${svc.name} — ${t('w_teeth')}: ${added}`, 'success');
+  };
+  window.vwGroupServiceRemove = function(teethNums, serviceId){
+    if(readOnlyClosed) return;
+    teethNums.forEach(num=>{
+      const idx=vwPlan.findIndex(it=>String(it.tooth)===String(num) && String(it.service_id)===String(serviceId));
+      if(idx>-1) vwPlan.splice(idx,1);
+    });
+    vwRenderPlan();
+    window.vwRenderSelectedTeeth(selectedTeeth);
+    vwAutosave();
   };
   window.vwToothServiceRemove = function(num, serviceId){
     if(readOnlyClosed) return;

@@ -277,6 +277,20 @@ let selectedTeeth=new Set();
 // диапазона: Shift+клик по чекбоксу другого зуба выбирает всё МЕЖДУ ними
 // (см. toggleToothSelect), как в проводнике файлов/таблицах.
 let toothSelectAnchor=null;
+// Группы, собранные ТОЛЬКО через Shift-диапазон — массив массивов ключей
+// зуба. По прямому запросу пользователя: объединение в группу с общей
+// формой (карточка приёма, templates/newui/visitcard.html::
+// vwRenderSelectedTeeth) работает лишь для зубов, выбранных через Shift —
+// если отмечать зубы по одному БЕЗ Shift, каждый остаётся сам по себе
+// (обычный отдельный блок), в группу не попадает.
+let toothGroups=[];
+function toothGroupOf(key){
+  return toothGroups.find(g=>g.includes(key)) || null;
+}
+function toothGroupsRemoveKey(key){
+  toothGroups.forEach(g=>{ const i=g.indexOf(key); if(i>-1) g.splice(i,1); });
+  toothGroups = toothGroups.filter(g=>g.length>=2);
+}
 
 // Поле «Зуб(ы)» у услуги — CharField до 120 символов: там бывает один номер
 // ("18") или несколько через запятую/пробел/точку с запятой ("18, 17").
@@ -371,8 +385,14 @@ function toggleToothSelect(key, checked, evt){
         const i2 = keys.indexOf(key);
         if(i1>-1 && i2>-1){
           const [from,to] = i1<i2 ? [i1,i2] : [i2,i1];
-          keys.slice(from, to+1).forEach(k=>selectedTeeth.add(k));
-          toothSelectAnchor = key;
+          const rangeKeys = keys.slice(from, to+1);
+          rangeKeys.forEach(k=>selectedTeeth.add(k));
+          // Диапазон входит в ГРУППУ — если у опорного зуба уже есть группа
+          // (несколько Shift-кликов подряд от одного якоря), расширяем её,
+          // иначе создаём новую (сам якорь тоже становится частью группы).
+          let group = toothGroupOf(toothSelectAnchor);
+          if(group){ rangeKeys.forEach(k=>{ if(!group.includes(k)) group.push(k); }); }
+          else { toothGroups.push([...new Set(rangeKeys)]); }
           buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', true);
           renderSelectedTeethPanel();
           return;
@@ -381,19 +401,20 @@ function toggleToothSelect(key, checked, evt){
     }
   }
   if(checked){ selectedTeeth.add(key); toothSelectAnchor=key; }
-  else selectedTeeth.delete(key);
+  else { selectedTeeth.delete(key); toothGroupsRemoveKey(key); }
   renderSelectedTeethPanel();
 }
 function selectQuadrant(which, checked){
   const keys = which==='upper' ? adultUpper.map(n=>'adult-'+n)
     : which==='lower' ? adultLower.map(n=>'adult-'+n)
     : [...adultUpper,...adultLower].map(n=>'adult-'+n);
-  keys.forEach(k=>{ if(checked) selectedTeeth.add(k); else selectedTeeth.delete(k); });
+  keys.forEach(k=>{ if(checked) selectedTeeth.add(k); else { selectedTeeth.delete(k); toothGroupsRemoveKey(k); } });
   buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', true);
   renderSelectedTeethPanel();
 }
 function removeSelectedTooth(key){
   selectedTeeth.delete(key);
+  toothGroupsRemoveKey(key);
   buildOdontogram('vcOdontogram', adultUpper, adultLower, 'adult', true);
   renderSelectedTeethPanel();
 }
