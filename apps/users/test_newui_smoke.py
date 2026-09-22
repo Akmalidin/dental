@@ -56,3 +56,16 @@ class NewUISmokeTestCase(TestCase):
         resp = self.client.get("/new/patients/")
         self.assertContains(resp, "navigator.serviceWorker.register('/sw.js')")
         self.assertContains(resp, "/notifications/push/subscribe/")
+
+    def test_broadcast_banner_close_uses_keepalive_fetch(self):
+        """Регрессия: крестик баннера-объявления (closeBroadcastBanner,
+        templates/newui/base.html) слал обычный fetch() без keepalive —
+        переход по ссылке в сайдбаре сразу после закрытия (полная
+        перезагрузка страницы) мог оборвать ещё не завершённый запрос
+        /notifications/<id>/read/, is_read так и не проставлялся, и баннер
+        появлялся снова на следующей странице. keepalive:true гарантирует,
+        что запрос долетит, даже если страница уже начала выгружаться."""
+        self.client.force_login(self.user)
+        resp = self.client.get("/new/patients/")
+        self.assertContains(resp, "function closeBroadcastBanner")
+        self.assertContains(resp, "keepalive: true")
