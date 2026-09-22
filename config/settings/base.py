@@ -254,6 +254,19 @@ TELEGRAM_WEBHOOK_SECRET = config("TELEGRAM_WEBHOOK_SECRET", default="")
 # ─── Superadmin ──────────────────────────────────────────────────────────────
 SUPERADMIN_EMAIL = config("SUPERADMIN_EMAIL", default="akmalmadakimov6@gmail.com")
 
+# ─── Web Push (VAPID) ──────────────────────────────────────────────────────────
+# Раньше эти настройки были только в config/settings/development.py — в проде
+# (config.settings.server, наследует этот файл) VAPID_PUBLIC_KEY не был задан
+# вообще, поэтому шаблоны отдавали пустой ключ и подписка на push молча
+# выходила (см. newuiSetupWebPush в templates/newui/base.html). VAPID_PRIVATE_B64
+# на сервере уже был задан в .env (независимо от этого фикса) — публичный ключ
+# ниже вычислен именно из него (см. .github/workflows/diag-vapid-pubkey.yml),
+# он не секрет, поэтому хардкод, как и в development.py, а не переменная
+# окружения — важен только приватный ключ.
+VAPID_PUBLIC_KEY = "BCa37d_93xAyPXKEsL6DNjLwTiUKYDvVTgHGcSMx8mHEMrQ6SqMcy8nHESIVSpo6atWAd_dGqUtWO7UnzFXZOjw"
+VAPID_PRIVATE_B64 = config("VAPID_PRIVATE_B64", default="")
+VAPID_CLAIM_EMAIL = config("VAPID_CLAIM_EMAIL", default="mailto:akmalmadakimov6@gmail.com")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ─── Security headers ────────────────────────────────────────────────────────
