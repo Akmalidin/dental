@@ -514,13 +514,15 @@ def newui_superadmin(request):
 @login_required
 def newui_superadmin_broadcast_send(request):
     """Супер-админ → вкладка «Push-рассылка»: разослать объявление
-    директорам/врачам/всем сотрудникам ПЛАТФОРМЫ (все клиники, не только
-    текущая — тот же unscoped(), что и у _newui_superadmin_data). Уходит и
-    как обычное уведомление (Notification.send уже делает реальный web push
-    на все подписанные устройства получателя — apps.notifications.push.
-    send_web_push), и как закрываемый баннер сверху (templates/newui/
-    base.html, _broadcast_banner_data) — баннером становится только тип
-    "broadcast", остальные уведомления в колокольчике баннер не трогают."""
+    директорам/врачам/всем сотрудникам — по умолчанию ПЛАТФОРМЫ целиком (все
+    клиники, тот же unscoped(), что и у _newui_superadmin_data), либо только
+    выбранным клиникам (clinic_ids — одна или несколько, см. select
+    multiple на вкладке). Уходит и как обычное уведомление (Notification.send
+    уже делает реальный web push на все подписанные устройства получателя —
+    apps.notifications.push.send_web_push), и как закрываемый баннер сверху
+    (templates/newui/base.html, _broadcast_banner_data) — баннером
+    становится только тип "broadcast", остальные уведомления в колокольчике
+    баннер не трогают."""
     from django.http import JsonResponse
     if request.method != "POST":
         return JsonResponse({"error": "method"}, status=405)
@@ -528,6 +530,7 @@ def newui_superadmin_broadcast_send(request):
         return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
     text = (request.POST.get("text") or "").strip()
     audience = request.POST.get("audience") or "all"
+    clinic_ids = [c for c in request.POST.getlist("clinic_ids") if c]
     if not text:
         return JsonResponse({"error": "Пустой текст объявления"}, status=400)
     if audience not in ("directors", "doctors", "all"):
@@ -543,6 +546,8 @@ def newui_superadmin_broadcast_send(request):
             qs = qs.filter(role__name=Role.ADMIN_MAIN)
         elif audience == "doctors":
             qs = qs.filter(role__name=Role.DOCTOR)
+        if clinic_ids:
+            qs = qs.filter(clinic_id__in=clinic_ids)
         recipients = list(qs)
 
     from apps.notifications.models import Notification
