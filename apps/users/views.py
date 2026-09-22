@@ -404,19 +404,16 @@ def _newui_patients_page_data(request):
             )
         return qs
 
-    from apps.tenancy import get_active_branch_id
-    branch_id = get_active_branch_id(request)
-
-    def _seen_at_branch(qs, bid):
-        # Пациент общий для всей клиники — фильтр "по филиалу" означает
-        # "зарегистрирован здесь ИЛИ был приём/лечение здесь". Только
-        # "был приём/лечение" (без Patient.branch) прятал 87% пациентов
-        # реальной клиники (2793 из 3209 — карточка есть, а
-        # Appointment/Treatment в системе не заведены вовсе).
-        return qs.filter(
-            Q(branch_id=bid) | Q(appointments__branch_id=bid) | Q(treatments__branch_id=bid)
-        ).distinct()
-
+    # Переключатель филиала в сайдбаре НЕ влияет на эту страницу — пациент
+    # общий для всей клиники, а не для одного филиала. Расследование по
+    # реальной клинике (2026-09-21/22): любая попытка фильтровать список
+    # пациентов по активному филиалу (по Patient.branch, по визитам, или
+    # тем и другим через ИЛИ) регулярно прятала часть пациентов и
+    # выглядела как "разделение базы" — пользователь явно подтвердил, что
+    # хочет здесь всегда видеть ВСЕХ пациентов клиники независимо от
+    # выбора в сайдбаре. Переключатель остаётся значимым для
+    # расписания/кассы/финансов/отчётов (там речь о конкретных приёмах и
+    # деньгах, не о том, кто вообще является пациентом).
     active_treatment_qs = Treatment.objects.filter(
         status__in=[Treatment.STATUS_PLANNED, Treatment.STATUS_IN_PROGRESS]
     ).values_list("patient_id", flat=True)
@@ -434,12 +431,7 @@ def _newui_patients_page_data(request):
         .values_list("phone_norm", flat=True)
     )
 
-    # Активный филиал переключателя сайдбара — фильтруем ВЕСЬ список (и
-    # KPI-блоки ниже, через all_patients_qs), а не только сам queryset
-    # результатов: выбор филиала — явное намерение «покажи мне этот
-    # филиал», а не второстепенный чип, поэтому в отличие от поиска/чипов
-    # затрагивает и сводку сверху.
-    base_qs = _seen_at_branch(Patient.objects.all(), branch_id) if branch_id else Patient.objects.all()
+    base_qs = Patient.objects.all()
     if q:
         base_qs = _search(base_qs)
     # Счётчики для чипов «Все/В лечении/Должники» — по queryset с учётом
@@ -459,7 +451,7 @@ def _newui_patients_page_data(request):
     today = timezone.localdate()
     week_ago = today - timedelta(days=7)
     week_ahead = today + timedelta(days=7)
-    all_patients_qs = _seen_at_branch(Patient.objects.all(), branch_id) if branch_id else Patient.objects.all()
+    all_patients_qs = Patient.objects.all()
     new_count = all_patients_qs.filter(created_at__date__gte=week_ago).count()
     birthday_count = 0
     for bd in all_patients_qs.exclude(birth_date=None).values_list("birth_date", flat=True):
