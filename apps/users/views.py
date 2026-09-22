@@ -2248,6 +2248,20 @@ def _newui_patientcard_detail_data(patient):
     } for f in (TreatmentFile.objects.filter(Q(treatment__patient=patient) | Q(patient=patient))
                 .select_related("treatment").order_by("-uploaded_at")[:100])]
 
+    # Шаблоны документов (Договор/Согласие/Рецепт и т.п., apps.settings_clinic.
+    # models_documents.DocumentTemplate) — «Сформировать документ» во вкладке
+    # «Документы»: apps.settings_clinic.views.document_render заполняет
+    # {{patient_name}}/{{services}}/... данными ИМЕННО этого пациента и
+    # отдаёт готовый HTML для печати. Раньше эта вьюха нигде не была видна
+    # в интерфейсе (только по прямому URL) — доступна любому залогиненному
+    # сотруднику (@login_required, без ограничения по роли), поэтому просто
+    # даём на неё ссылку отсюда.
+    from apps.settings_clinic.models_documents import DocumentTemplate
+    document_templates = [
+        {"id": dt.pk, "name": dt.name, "typeLabel": dt.get_doc_type_display()}
+        for dt in DocumentTemplate.objects.filter(is_active=True)
+    ]
+
     return {
         "history": history,
         "plans": plans,
@@ -2258,6 +2272,7 @@ def _newui_patientcard_detail_data(patient):
         "toothGumConditions": tooth_gum_conditions,
         "documents": documents,
         "fileKinds": [{"code": k, "label": lbl} for k, lbl in TreatmentFile.KIND_CHOICES],
+        "documentTemplates": document_templates,
     }
 
 
