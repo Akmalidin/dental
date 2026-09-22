@@ -379,8 +379,23 @@ def send_to_cashier(request, patient_id):
     }
     admins = (clinic_staff(get_current_clinic())
               .filter(role__name__in=["superadmin", "admin_main", "admin"]))
+    # Пациент физически сейчас там, где врач, а не там, где когда-то
+    # зарегистрирован (Patient.branch — справочное поле, см. изменения
+    # 2026-09-21/22) — заявку шлём кассирам ТЕКУЩЕГО филиала врача, а не
+    # всей клинике сразу. Тот же fallback-порядок, что и для филиала по
+    # умолчанию у платежей/приёмов (активный → основной → свой → любой).
+    # Если в этом филиале нет ни одного кассира — откат на всю клинику,
+    # чтобы заявка не терялась молча из-за пробела в штате.
+    from apps.users.models import Branch as _Branch
+    doctor_branch = (_Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                      or _Branch.objects.filter(is_main=True, clinic=get_current_clinic()).first()
+                      or u.branches.first()
+                      or _Branch.objects.first())
+    recipients = admins.filter(branches=doctor_branch) if doctor_branch else admins.none()
+    if not recipients.exists():
+        recipients = admins
     sent = 0
-    for admin in admins:
+    for admin in recipients:
         Notification.send(user=admin, title=title, body=body, type="payment",
                           link=link, actor=u)
         sent += 1

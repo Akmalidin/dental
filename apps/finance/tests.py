@@ -33,6 +33,68 @@ class PaymentFormClinicIsolationTestCase(TestCase):
         self.assertNotIn(self.patient_b.pk, patient_ids)
 
 
+class SendToCashierBranchRoutingTestCase(TestCase):
+    """«Отправить в кассу» (apps.finance.views.send_to_cashier) раньше слало
+    заявку ВСЕМ администраторам клиники сразу, независимо от филиала —
+    пациент физически сейчас там, где врач, а не там, где когда-то
+    зарегистрирован (Patient.branch — справочное поле, см. изменения
+    2026-09-21/22 про общих для клиники пациентов), поэтому заявка должна
+    идти кассирам ТЕКУЩЕГО филиала врача (session["active_branch"]), а не
+    филиала пациента. Откат на всю клинику — если в филиале врача нет ни
+    одного кассира (заявка не должна теряться молча)."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника SC", slug="clinic-send-cashier")
+        self.branch1 = Branch.objects.create(name="Филиал 1", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.branch2 = Branch.objects.create(name="Филиал 2", address="-", phone="0", clinic=self.clinic)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor = User.objects.create(
+            login="sc_doctor", name="Врач SC", email="scdoc@test.local", role=self.doctor_role, clinic=self.clinic,
+        )
+        self.cashier1 = User.objects.create(
+            login="sc_cashier1", name="Кассир Ф1", email="sccash1@test.local", role=self.admin_role, clinic=self.clinic,
+        )
+        self.cashier1.branches.set([self.branch1])
+        self.cashier2 = User.objects.create(
+            login="sc_cashier2", name="Кассир Ф2", email="sccash2@test.local", role=self.admin_role, clinic=self.clinic,
+        )
+        self.cashier2.branches.set([self.branch2])
+        self.patient = Patient.objects.create(
+            first_name="Пациент", last_name="SC", phone="+996700111222", branch=self.branch1, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.doctor)
+
+    def _set_branch(self, branch):
+        session = self.client.session
+        session["active_branch"] = branch.pk
+        session.save()
+
+    def test_notifies_only_cashiers_of_doctor_active_branch(self):
+        """Пациент зарегистрирован в филиале 1, врач сейчас работает в
+        филиале 2 — заявка должна дойти до кассира филиала 2, а не 1."""
+        from apps.notifications.models import Notification
+
+        self._set_branch(self.branch2)
+        resp = self.client.post(f"/finance/payments/send-to-cashier/{self.patient.pk}/", {"amount": "3000"})
+        self.assertEqual(resp.status_code, 302)
+        notified = set(Notification.objects.filter(type="payment").values_list("user_id", flat=True))
+        self.assertEqual(notified, {self.cashier2.pk})
+
+    def test_falls_back_to_whole_clinic_when_no_cashier_in_branch(self):
+        """В филиале врача нет ни одного кассира — заявка не теряется,
+        уходит всем администраторам клиники (старое поведение как откат)."""
+        from apps.notifications.models import Notification
+
+        self.cashier2.branches.clear()
+        self._set_branch(self.branch2)
+        resp = self.client.post(f"/finance/payments/send-to-cashier/{self.patient.pk}/", {"amount": "3000"})
+        self.assertEqual(resp.status_code, 302)
+        notified = set(Notification.objects.filter(type="payment").values_list("user_id", flat=True))
+        self.assertEqual(notified, {self.cashier1.pk, self.cashier2.pk})
+
+
 class PaymentPermissionTestCase(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name="PermBranch2", address="-", phone="0", is_main=True)
