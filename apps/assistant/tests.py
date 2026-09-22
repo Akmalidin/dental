@@ -383,3 +383,120 @@ class ProviderTestCase(TestCase):
 
         self.assertNotIn("tools", captured)
         self.assertNotIn("tool_choice", captured)
+
+
+class ServiceAnswerTestCase(TestCase):
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника С", slug="svc-clinic")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(
+            name="Главный", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.user = User.objects.create(login="svc", name="Сотрудник", clinic=self.clinic)
+        Patient.objects.create(first_name="Анна", last_name="Петрова", phone="555",
+                               branch=self.branch, clinic=self.clinic)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_plain_answer_is_saved(self):
+        from apps.assistant import service
+        with mock.patch.object(service.provider, "complete",
+                               return_value=({"kind": "text", "text": "Привет"}, None)):
+            text, error = service.answer(self.user, "здравствуй")
+        self.assertIsNone(error)
+        self.assertEqual(text, "Привет")
+        conv = Conversation.active_for(self.user)
+        self.assertEqual([m.role for m in conv.recent()], ["user", "assistant"])
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_tool_call_then_answer(self):
+        from apps.assistant import service
+        replies = [
+            ({"kind": "tool", "name": "find_patient", "args": {"query": "Анна"}}, None),
+            ({"kind": "text", "text": "Нашёл: Петрова Анна"}, None),
+        ]
+        with mock.patch.object(service.provider, "complete", side_effect=replies):
+            text, error = service.answer(self.user, "найди Анну")
+        self.assertIsNone(error)
+        self.assertIn("Анна", text)
+        last = Conversation.active_for(self.user).recent()[-1]
+        self.assertEqual(last.tool_name, "find_patient")
+        self.assertEqual(last.rows_count, 1)
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_falls_back_when_no_key(self):
+        from apps.assistant import service
+        with mock.patch.object(service.provider, "fallback_answer",
+                               return_value=("Общий ответ", None)) as fb:
+            text, error = service.answer(self.user, "что такое кариес")
+        self.assertIsNone(error)
+        self.assertEqual(text, "Общий ответ")
+        self.assertTrue(fb.called)
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_openai_error_falls_back(self):
+        from apps.assistant import service
+        with mock.patch.object(service.provider, "complete", return_value=(None, "недоступен")):
+            with mock.patch.object(service.provider, "fallback_answer",
+                                   return_value=("Запасной", None)):
+                text, error = service.answer(self.user, "вопрос")
+        self.assertIsNone(error)
+        self.assertEqual(text, "Запасной")
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_empty_question_rejected(self):
+        from apps.assistant import service
+        text, error = service.answer(self.user, "   ")
+        self.assertIsNone(text)
+        self.assertIsNotNone(error)
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_model_never_receives_clinic_id(self):
+        """Ключевое: идентификатор клиники не должен уходить в модель.
+
+        Клиника берётся из контекста запроса, а не из параметров модели.
+        Если она просочится в промпт, модель сможет её подменить.
+        """
+        from apps.assistant import service
+        captured = {}
+
+        def fake_complete(messages, tools=None):
+            captured["messages"] = messages
+            return {"kind": "text", "text": "ок"}, None
+
+        with mock.patch.object(service.provider, "complete", side_effect=fake_complete):
+            service.answer(self.user, "сколько записей")
+
+        blob = json.dumps(captured["messages"], ensure_ascii=False)
+        # Проверять вхождение str(clinic.pk) бессмысленно: короткое число
+        # находится внутри даты в системном промпте. Смотрим на то, что
+        # действительно опознаёт клинику.
+        self.assertNotIn(self.clinic.name, blob)
+        self.assertNotIn(self.clinic.slug, blob)
+        self.assertNotIn("clinic", blob.lower())
+
+    @override_settings(OPENAI_API_KEY="k")
+    def test_tool_loop_is_bounded(self):
+        """Потолок обращений к модели: зациклившаяся модель не должна
+        перебирать инструменты бесконечно и жечь бюджет.
+
+        Модель здесь всегда просит инструмент и ни разу не даёт текст —
+        сервис обязан после MAX_ROUNDS уйти на запасной путь.
+        """
+        from apps.assistant import service
+
+        calls = {"n": 0}
+
+        def always_tool(messages, tools=None):
+            calls["n"] += 1
+            return {"kind": "tool", "name": "find_patient", "args": {"query": "Анна"}}, None
+
+        with mock.patch.object(service.provider, "complete", side_effect=always_tool):
+            with mock.patch.object(service.provider, "fallback_answer",
+                                   return_value=("Запасной", None)):
+                text, error = service.answer(self.user, "зациклись")
+
+        self.assertEqual(calls["n"], service.MAX_ROUNDS)
+        self.assertIsNone(error)
+        self.assertEqual(text, "Запасной")
