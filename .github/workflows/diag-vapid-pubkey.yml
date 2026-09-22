@@ -1,0 +1,43 @@
+name: Diag — derive VAPID public key from existing server private key (read-only)
+
+# Продолжение diag-vapid-env.yml: VAPID_PRIVATE_B64 на сервере уже задан
+# (324 символа), но VAPID_PUBLIC_KEY нигде в config/settings/base.py или
+# server.py не определён — поэтому шаблоны отдают пустой публичный ключ и
+# JS-подписка на push сразу выходит. Вместо того чтобы генерировать НОВУЮ
+# пару ключей (что потребовало бы менять .env на сервере), считаем публичный
+# ключ, соответствующий уже существующему приватному — публичный ключ не
+# секрет, его можно спокойно печатать в лог и просто вставить в settings.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  derive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — вычислить публичный ключ из уже существующего приватного
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            ./venv/bin/python - <<'PYEOF'
+            import base64, os
+            from dotenv import dotenv_values
+            env = dotenv_values(".env")
+            b64 = env.get("VAPID_PRIVATE_B64", "")
+            if not b64:
+                print("VAPID_PRIVATE_B64 пуст — нечего вычислять")
+                raise SystemExit(0)
+            pem = base64.b64decode(b64).decode()
+            from cryptography.hazmat.primitives.asymmetric import ec
+            from cryptography.hazmat.primitives import serialization
+            key = serialization.load_pem_private_key(pem.encode(), password=None)
+            pub = key.public_key()
+            pub_bytes = pub.public_bytes(
+                serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+            )
+            pub_b64 = base64.urlsafe_b64encode(pub_bytes).rstrip(b"=").decode()
+            print("VAPID_PUBLIC_KEY =", pub_b64)
+            PYEOF
