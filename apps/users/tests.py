@@ -2826,6 +2826,37 @@ class NewUISuperadminBroadcastTestCase(TestCase):
         for u in (self.director1, self.doctor1, self.director2, self.doctor2):
             self.assertTrue(Notification.objects.filter(user=u, type="broadcast").exists())
 
+    def test_single_clinic_scopes_recipients(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {
+            "text": "Только клиника 1", "audience": "all", "clinic_ids": [self.clinic1.pk],
+        })
+        self.assertEqual(resp.json()["sent"], 2)
+        self.assertTrue(Notification.objects.filter(user=self.director1, type="broadcast").exists())
+        self.assertTrue(Notification.objects.filter(user=self.doctor1, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.director2, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.doctor2, type="broadcast").exists())
+
+    def test_multiple_clinics_scopes_recipients(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {
+            "text": "Две клиники, только директора", "audience": "directors",
+            "clinic_ids": [self.clinic1.pk, self.clinic2.pk],
+        })
+        self.assertEqual(resp.json()["sent"], 2)
+        self.assertTrue(Notification.objects.filter(user=self.director1, type="broadcast").exists())
+        self.assertTrue(Notification.objects.filter(user=self.director2, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.doctor1, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.doctor2, type="broadcast").exists())
+
+    def test_no_clinic_selected_means_all_clinics(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Без выбора клиник", "audience": "all"})
+        self.assertEqual(resp.json()["sent"], 4)
+
     def test_banner_shown_on_newui_page_and_dismissible(self):
         self.client.force_login(self.superadmin)
         self.client.post("/new/superadmin/broadcast/", {"text": "Смотрите баннер", "audience": "directors"})

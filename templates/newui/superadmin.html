@@ -146,6 +146,15 @@
             <option value="directors">Директорам</option>
             <option value="doctors">Врачам</option>
           </select>
+          <label class="hint" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <span>Клиники</span>
+            <span style="display:flex;gap:8px;">
+              <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11.5px;" onclick="saBroadcastClinicsSetAll(true)">Все</button>
+              <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11.5px;" onclick="saBroadcastClinicsSetAll(false)">Снять все</button>
+            </span>
+          </label>
+          <div id="saBroadcastClinics" style="max-height:150px;overflow-y:auto;border:1px solid var(--mist-line);border-radius:8px;padding:8px 10px;margin-bottom:6px;"></div>
+          <div class="hint" style="margin-bottom:12px;">Если не выбрать ни одной — уйдёт по всем клиникам платформы.</div>
           <label class="hint" style="display:block;margin-bottom:4px;">Текст объявления</label>
           <textarea id="saBroadcastText" rows="3" maxlength="300" placeholder="Например: Новый сайт →" style="width:100%;border:1px solid var(--mist-line);border-radius:8px;padding:8px 10px;resize:vertical;font:inherit;"></textarea>
           <div style="display:flex;justify-content:flex-end;margin-top:12px;">
@@ -1183,11 +1192,25 @@
   });
 
   // ── Push-рассылка ────────────────────────────────────────────────────
+  function renderSaBroadcastClinics(){
+    const box = document.getElementById('saBroadcastClinics');
+    box.innerHTML = (SA.clinics||[]).map(c => `
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer;">
+        <input type="checkbox" class="sa-bc-clinic" value="${c.id}">
+        <span>${c.name}</span>
+      </label>`).join('') || '<span class="hint">Нет клиник</span>';
+  }
+
+  window.saBroadcastClinicsSetAll = function(checked){
+    document.querySelectorAll('.sa-bc-clinic').forEach(cb => { cb.checked = checked; });
+  };
+
   window.saSendBroadcast = async function(){
     const textEl = document.getElementById('saBroadcastText');
     const text = textEl.value.trim();
     if(!text){ alert('Введите текст объявления'); return; }
     const audience = document.getElementById('saBroadcastAudience').value;
+    const clinicIds = Array.from(document.querySelectorAll('.sa-bc-clinic:checked')).map(cb => cb.value);
     const btn = document.getElementById('saBroadcastSendBtn');
     const prevLabel = btn.textContent;
     btn.disabled = true; btn.textContent = 'Отправка…';
@@ -1195,6 +1218,7 @@
       const fd = new FormData();
       fd.append('text', text);
       fd.append('audience', audience);
+      clinicIds.forEach(id => fd.append('clinic_ids', id));
       const res = await fetch('/new/superadmin/broadcast/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
       const data = await res.json();
       if(res.ok && data.ok){
@@ -1209,6 +1233,7 @@
       btn.disabled = false; btn.textContent = prevLabel;
     }
   };
+  renderSaBroadcastClinics();
 
   renderSaTable();
   renderSaRequests();
