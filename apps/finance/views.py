@@ -297,11 +297,27 @@ def payment_public(request, token):
 
 
 def _cashier_branch(request):
-    from apps.tenancy import get_current_clinic
+    """Филиал кассы — сначала переключатель сайдбара (тот же
+    get_active_branch_id, что использует сама страница кассы,
+    apps.users.views._newui_cashdesk_data, для отображения смены), и
+    только если выбрано «Все филиалы» — главный/первый филиал клиники.
+
+    До этой проверки функция ИГНОРИРОВАЛА активный филиал и всегда
+    возвращала главный — на странице кассы Филиала #2 показывало «смена
+    не открыта» (там правда нет смены), а «Открыть смену» пыталась
+    открыть смену ГЛАВНОГО филиала и падала с «уже открыта», если там
+    смена и правда уже шла — расхождение между тем, что видно на
+    экране, и тем, с чем реально работает кнопка."""
+    from apps.tenancy import get_current_clinic, get_active_branch_id
     from apps.users.models import Branch
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     if not clinic:
         return None
+    active_bid = get_active_branch_id(request)
+    if active_bid:
+        branch = Branch.objects.filter(pk=active_bid, clinic=clinic).first()
+        if branch:
+            return branch
     return Branch.objects.filter(clinic=clinic, is_main=True).first() or Branch.objects.filter(clinic=clinic).first()
 
 

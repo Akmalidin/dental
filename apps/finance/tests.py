@@ -33,6 +33,50 @@ class PaymentFormClinicIsolationTestCase(TestCase):
         self.assertNotIn(self.patient_b.pk, patient_ids)
 
 
+class CashShiftOpenActiveBranchTestCase(TestCase):
+    """Регрессия: _cashier_branch() игнорировала переключатель филиала в
+    сайдбаре и всегда резолвила ГЛАВНЫЙ филиал — на странице кассы
+    Филиала #2 показывало "смена не открыта" (там смены правда нет), а
+    кнопка "Открыть смену" пыталась открыть смену главного филиала и
+    падала с "уже открыта", если там смена уже шла. Теперь
+    _cashier_branch читает session["active_branch"], как и сама страница
+    кассы (_newui_cashdesk_data)."""
+
+    def setUp(self):
+        from apps.finance.models import CashShift
+
+        self.clinic = Clinic.objects.create(name="Клиника CS", slug="clinic-cashshift")
+        self.branch1 = Branch.objects.create(name="Филиал 1", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.branch2 = Branch.objects.create(name="Филиал 2", address="-", phone="0", clinic=self.clinic)
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(
+            login="cs_director", name="Директор CS", email="csd@test.local", role=self.admin_role, clinic=self.clinic,
+        )
+        self.client = Client()
+        self.client.force_login(self.director)
+        # Смена главного филиала уже открыта — именно она раньше "перехватывала" открытие.
+        CashShift.objects.create(branch=self.branch1, opened_by=self.director, opening_cash=0, clinic=self.clinic)
+        self.CashShift = CashShift
+
+    def _set_branch(self, branch):
+        session = self.client.session
+        session["active_branch"] = branch.pk
+        session.save()
+
+    def test_open_shift_for_active_non_main_branch_succeeds(self):
+        self._set_branch(self.branch2)
+        resp = self.client.post("/finance/cashshift/open/", {"opening_cash": "1000"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        self.assertTrue(self.CashShift.objects.filter(branch=self.branch2, status=self.CashShift.STATUS_OPEN).exists())
+
+    def test_open_shift_for_main_branch_still_reports_already_open(self):
+        self._set_branch(self.branch1)
+        resp = self.client.post("/finance/cashshift/open/", {"opening_cash": "1000"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+
 class SendToCashierBranchRoutingTestCase(TestCase):
     """«Отправить в кассу» (apps.finance.views.send_to_cashier) раньше слало
     заявку ВСЕМ администраторам клиники сразу, независимо от филиала —
