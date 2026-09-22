@@ -95,6 +95,7 @@ class Notification(models.Model):
         ("wa", "WhatsApp"),
         ("system", "Система"),
         ("reminder", "Напоминание"),
+        ("broadcast", "Объявление супер-админа"),
     ]
 
     user = models.ForeignKey(

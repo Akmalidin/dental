@@ -22,14 +22,14 @@ jobs:
           password: ${{ secrets.DEPLOY_PASSWORD }}
           script: |
             cd /var/www/sadaf
-            ./venv/bin/python - <<'PYEOF'
+            val=$(grep "^VAPID_PRIVATE_B64=" .env | cut -d= -f2-)
+            if [ -z "$val" ]; then
+              echo "VAPID_PRIVATE_B64 пуст — нечего вычислять"
+              exit 0
+            fi
+            VAPID_PRIVATE_B64="$val" ./venv/bin/python - <<'PYEOF'
             import base64, os
-            from dotenv import dotenv_values
-            env = dotenv_values(".env")
-            b64 = env.get("VAPID_PRIVATE_B64", "")
-            if not b64:
-                print("VAPID_PRIVATE_B64 пуст — нечего вычислять")
-                raise SystemExit(0)
+            b64 = os.environ["VAPID_PRIVATE_B64"]
             pem = base64.b64decode(b64).decode()
             from cryptography.hazmat.primitives.asymmetric import ec
             from cryptography.hazmat.primitives import serialization

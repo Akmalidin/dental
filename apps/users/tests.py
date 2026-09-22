@@ -2748,6 +2748,114 @@ class NewUISuperadminTestCase(TestCase):
         self.assertTrue(Clinic.objects.filter(name="Клиника из старого интерфейса").exists())
 
 
+class NewUISuperadminBroadcastTestCase(TestCase):
+    """Супер-админ → вкладка «Push-рассылка» (/new/superadmin/broadcast/):
+    объявление директорам/врачам/всем СОТРУДНИКАМ ВСЕХ КЛИНИК платформы
+    (unscoped(), как и остальные данные супер-админ-панели) — уходит и
+    обычным Notification(type="broadcast") (реальный web push пытается
+    отправиться на подписанные устройства получателя, apps.notifications.
+    push.send_web_push — но подписок в тестах нет, поэтому HTTP не летит),
+    и закрываемым баннером сверху (apps.users.newui_views.
+    _broadcast_banner_data, показывается на любой странице нового
+    интерфейса через _shared_options)."""
+
+    def setUp(self):
+        self.admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.doctor_role = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.superadmin_role = Role.objects.get(name="superadmin", clinic__isnull=True)
+
+        self.clinic1 = Clinic.objects.create(name="Клиника Broadcast 1", slug="clinic-bc-1")
+        self.clinic2 = Clinic.objects.create(name="Клиника Broadcast 2", slug="clinic-bc-2")
+        self.director1 = User.objects.create(
+            login="bc_dir1", name="Директор 1", email="bcd1@test.local", role=self.admin_role, clinic=self.clinic1,
+        )
+        self.doctor1 = User.objects.create(
+            login="bc_doc1", name="Врач 1", email="bcdo1@test.local", role=self.doctor_role, clinic=self.clinic1,
+        )
+        self.director2 = User.objects.create(
+            login="bc_dir2", name="Директор 2", email="bcd2@test.local", role=self.admin_role, clinic=self.clinic2,
+        )
+        self.doctor2 = User.objects.create(
+            login="bc_doc2", name="Врач 2", email="bcdo2@test.local", role=self.doctor_role, clinic=self.clinic2,
+        )
+        self.superadmin = User.objects.create(
+            login="bc_super", name="Супер BC", email="bcs@test.local", role=self.superadmin_role,
+        )
+        self.client = Client()
+
+    def test_blocked_for_non_superadmin(self):
+        self.client.force_login(self.director1)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Привет", "audience": "all"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_requires_post(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/broadcast/")
+        self.assertEqual(resp.status_code, 405)
+
+    def test_empty_text_rejected(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "   ", "audience": "all"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_directors_only_across_all_clinics(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Новый сайт", "audience": "directors"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["sent"], 2)
+        self.assertTrue(Notification.objects.filter(user=self.director1, type="broadcast", title="Новый сайт").exists())
+        self.assertTrue(Notification.objects.filter(user=self.director2, type="broadcast", title="Новый сайт").exists())
+        self.assertFalse(Notification.objects.filter(user=self.doctor1, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.doctor2, type="broadcast").exists())
+
+    def test_doctors_only(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Для врачей", "audience": "doctors"})
+        self.assertEqual(resp.json()["sent"], 2)
+        self.assertTrue(Notification.objects.filter(user=self.doctor1, type="broadcast").exists())
+        self.assertTrue(Notification.objects.filter(user=self.doctor2, type="broadcast").exists())
+        self.assertFalse(Notification.objects.filter(user=self.director1, type="broadcast").exists())
+
+    def test_all_reaches_directors_and_doctors(self):
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Для всех", "audience": "all"})
+        self.assertEqual(resp.json()["sent"], 4)
+        for u in (self.director1, self.doctor1, self.director2, self.doctor2):
+            self.assertTrue(Notification.objects.filter(user=u, type="broadcast").exists())
+
+    def test_banner_shown_on_newui_page_and_dismissible(self):
+        self.client.force_login(self.superadmin)
+        self.client.post("/new/superadmin/broadcast/", {"text": "Смотрите баннер", "audience": "directors"})
+
+        self.client.force_login(self.director1)
+        resp = self.client.get("/new/patients/")
+        self.assertContains(resp, "Смотрите баннер")
+        self.assertContains(resp, "has-broadcast")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["broadcastBanner"]["text"], "Смотрите баннер")
+
+        from apps.notifications.models import Notification
+        n = Notification.objects.get(user=self.director1, type="broadcast")
+        resp = self.client.post(f"/notifications/{n.pk}/read/", HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.get("/new/patients/")
+        self.assertNotContains(resp, "Смотрите баннер")
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertIsNone(data["broadcastBanner"])
+
+    def test_banner_not_shown_to_untargeted_user(self):
+        self.client.force_login(self.superadmin)
+        self.client.post("/new/superadmin/broadcast/", {"text": "Только докторам", "audience": "doctors"})
+
+        self.client.force_login(self.director1)
+        resp = self.client.get("/new/patients/")
+        self.assertNotContains(resp, "Только докторам")
+
+
 class AuditEventLoggingTestCase(TestCase):
     """Мутации супер-админа и мягкое удаление (apps.tenancy.
     ClinicSoftDeleteModel.soft_delete) пишут AuditEvent — единый источник

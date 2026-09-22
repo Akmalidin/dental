@@ -11,7 +11,18 @@
 <link rel="stylesheet" href="{% static 'newui/app.css' %}?v={{ asset_v }}">
 {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body{% if real_data.broadcastBanner %} class="has-broadcast"{% endif %}>
+
+{% if real_data.broadcastBanner %}
+<!-- Объявление супер-админа — см. apps.users.newui_views._broadcast_banner_data.
+     Крестик шлёт /notifications/<id>/read/ (уже существующий mark_read) —
+     после этого баннер больше не попадёт в выборку непрочитанных ни на
+     одном устройстве пользователя. -->
+<div class="top-banner" id="broadcastBanner" data-id="{{ real_data.broadcastBanner.id }}">
+  <span>{{ real_data.broadcastBanner.text }}</span>
+  <button type="button" class="tb-close" onclick="closeBroadcastBanner()" aria-label="Закрыть">✕</button>
+</div>
+{% endif %}
 
 <!-- Голосовой ввод — один плавающий виджет на ВСЕХ страницах /new/* (общий
      base.html), перетаскиваемый, скрыт целиком (класс hidden), пока
@@ -1250,6 +1261,22 @@
 <script src="{% static 'newui/app.js' %}?v={{ asset_v }}"></script>
 {% if user.is_authenticated %}
 <script>
+/* Баннер-объявление супер-админа (см. apps.users.newui_views.
+   _broadcast_banner_data) — крестик помечает уведомление прочитанным на
+   сервере (уже существующий mark_read), поэтому после закрытия баннер не
+   вернётся ни при перезагрузке, ни на других устройствах пользователя. */
+function closeBroadcastBanner() {
+  const el = document.getElementById('broadcastBanner');
+  if (!el) return;
+  const id = el.dataset.id;
+  document.body.classList.remove('has-broadcast');
+  el.remove();
+  fetch(`/notifications/${id}/read/`, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+  }).catch(function () {});
+}
+
 /* Web Push: фоновые уведомления (телефон/закрытая вкладка) через Service
    Worker — тот же механизм, что и в старом интерфейсе (templates/base.html),
    до сих пор существовавший только там. Просили запрос разрешения на

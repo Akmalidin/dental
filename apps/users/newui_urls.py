@@ -24,6 +24,7 @@ urlpatterns = [
     path("superadmin/deletions/purge/", v.newui_superadmin_bulk_purge, name="newui_superadmin_bulk_purge"),
     path("superadmin/backups/", v.newui_superadmin_backups, name="newui_superadmin_backups"),
     path("superadmin/backups/download/<str:filename>/", v.newui_superadmin_backup_download, name="newui_superadmin_backup_download"),
+    path("superadmin/broadcast/", v.newui_superadmin_broadcast_send, name="newui_superadmin_broadcast_send"),
     path("visits/", v.newui_visits, name="newui_visits"),
     path("schedule/", v.newui_schedule, name="newui_schedule"),
     path("schedule/data/", v.newui_schedule_data_json, name="newui_schedule_data"),
