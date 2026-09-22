@@ -1248,6 +1248,51 @@
 {{ real_data|json_script:"newui-real-data" }}
 
 <script src="{% static 'newui/app.js' %}?v={{ asset_v }}"></script>
+{% if user.is_authenticated %}
+<script>
+/* Web Push: фоновые уведомления (телефон/закрытая вкладка) через Service
+   Worker — тот же механизм, что и в старом интерфейсе (templates/base.html),
+   до сих пор существовавший только там. Просили запрос разрешения на
+   действие пользователя (клик), а не сразу при загрузке — часть браузеров
+   такой пермишен-промпт без жеста игнорирует/блокирует. */
+const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
+function newuiUrlB64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function newuiSetupWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !VAPID_PUBLIC_KEY) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    if (Notification.permission !== 'granted') return;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: newuiUrlB64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    await fetch('/notifications/push/subscribe/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON ? sub.toJSON() : sub }),
+    });
+  } catch (e) { /* нет поддержки/связи */ }
+}
+if ('Notification' in window) {
+  if (Notification.permission === 'granted') {
+    newuiSetupWebPush();
+  } else if (Notification.permission === 'default') {
+    document.addEventListener('click', function ask() {
+      Notification.requestPermission().then(function (p) { if (p === 'granted') newuiSetupWebPush(); });
+      document.removeEventListener('click', ask);
+    }, { once: true });
+  }
+}
+</script>
+{% endif %}
 {% block extra_js %}{% endblock %}
 </body>
 </html>

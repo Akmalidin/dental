@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from apps.finance.views import payment_public
 from apps.treatments.views import treatment_public
+from apps.notifications.views import service_worker, web_manifest
 
 urlpatterns = [
     # Django admin (per-tenant)
@@ -35,6 +36,19 @@ urlpatterns = [
     path("reports/", include("apps.reports.urls")),
     path("settings/", include("apps.settings_clinic.urls")),
     path("notifications/", include("apps.notifications.urls")),
+    # Service Worker и манифест ОБЯЗАНЫ отдаваться из корня сайта (не из
+    # /notifications/) — иначе scope регистрации ('/sw.js' по умолчанию
+    # покрывает весь сайт, из подпути — только этот подпуть) не накроет
+    # приложение целиком, и push вообще не заработает. Раньше эти два
+    # маршрута существовали только в config/urls_dev.py (локальная
+    # разработка) — в проде (config.urls, см. ROOT_URLCONF в
+    # config/settings/base.py) их не было вовсе, поэтому
+    # navigator.serviceWorker.register('/sw.js') на проде всегда получал
+    # 404 и Web Push (фоновые пуши на телефон/закрытую вкладку) не
+    # работал никогда, только фолбэк — desktop-уведомления, пока вкладка
+    # реально открыта и её кто-то поллит.
+    path("sw.js", service_worker, name="service_worker"),
+    path("manifest.json", web_manifest, name="web_manifest"),
 
     # REST API v1
     path("api/v1/", include("config.api_urls")),

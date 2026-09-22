@@ -12,3 +12,10 @@ python-decouple==3.8
 qrcode==8.0
 waitress==3.0.2
 faster-whisper==1.2.1
+# Используется в config/urls.py (продакшн-urlconf, path("rosetta/", ...)) —
+# без неё ROOT_URLCONF=config.urls вообще не импортируется. Нужна и здесь,
+# не только в requirements_prod.txt: тест apps.notifications.tests.
+# ServiceWorkerProductionRoutingTestCase явно переключается на этот
+# urlconf (override_settings), чтобы проверять именно тот файл, где был
+# баг с отсутствующими /sw.js и /manifest.json (см. коммит).
+django-rosetta==0.10.1
