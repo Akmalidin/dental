@@ -2834,6 +2834,7 @@ const translations={
   w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
   w_docs_upload_old_ui_hint: {ru:'Договор, согласие на лечение, снимки — нажмите «Загрузить» выше', ky:'Келишим, дарылоого макулдук, сүрөттөр — жогорудагы «Жүктөө» баскычын басыңыз', en:'Contract, treatment consent, images — click «Upload» above', uz:'Shartnoma, davolashga rozilik, rasmlar — yuqoridagi «Yuklash» tugmasini bosing'},
   w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
+  w_generate_document: {ru:'Сформировать', ky:'Түзүү', en:'Generate', uz:'Yaratish'},
   w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
   w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
   w_access_restriction_hint: {ru:'Персональные ограничения по сотруднику — в карточке сотрудника на странице «Персонал»', ky:'Кызматкер боюнча жеке чектөөлөр — «Персонал» бетиндеги кызматкер картасында', en:'Per-employee access restrictions — on the employee card in "Staff"', uz:'Xodim bo‘yicha shaxsiy cheklovlar — «Xodimlar» sahifasidagi xodim kartasida'},
@@ -8276,12 +8277,29 @@ function pcDocsUploadControlsHtml(kinds){
     <label class="btn btn-cobalt btn-sm" style="cursor:pointer;">+ <span data-i18n="w_upload">Загрузить</span><input autocomplete="off" type="file" id="pcFileInput" multiple accept="image/*,.pdf" style="display:none;" onchange="pcUploadFiles(this.files)"></label>
   </div>`;
 }
+// «Сформировать документ» — заполнить шаблон (Договор/Согласие/Рецепт и
+// т.п., Настройки → Документы) данными ИМЕННО этого пациента (имя, услуги,
+// зубы последнего приёма — см. apps.settings_clinic.views.document_render)
+// и открыть готовый текст для печати. Раньше эта вьюха нигде не была видна
+// в интерфейсе, хотя работала — доступна любому залогиненному сотруднику.
+function pcDocGenerateControlsHtml(templates){
+  if(!templates || !templates.length) return '';
+  return `<div style="display:flex;gap:8px;align-items:center;">
+    <select id="pcDocTemplateSelect" style="width:auto;max-width:220px;">${templates.map(tp=>`<option value="${tp.id}">${tp.typeLabel} — ${tp.name}</option>`).join('')}</select>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="pcGenerateDocument()">📄 <span data-i18n="w_generate_document">Сформировать</span></button>
+  </div>`;
+}
+function pcGenerateDocument(){
+  const sel=document.getElementById('pcDocTemplateSelect');
+  if(!sel || !sel.value || !currentPatientCardId) return;
+  window.open(`/settings/documents/${sel.value}/render/${currentPatientCardId}/`, '_blank');
+}
 function renderPatientCardDocs(d){
   const el=document.getElementById('pcPanelDocs');
   const docs=d.documents || [];
-  const uploadControls=pcDocsUploadControlsHtml(d.fileKinds);
+  const controlsHtml=`<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">${pcDocGenerateControlsHtml(d.documentTemplates)}${pcDocsUploadControlsHtml(d.fileKinds)}</div>`;
   if(docs.length===0){
-    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${uploadControls}</div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
+    el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${controlsHtml}</div><div class="card-body" style="text-align:center;padding:44px 18px;color:var(--ink-soft);"><div style="font-size:13px;">${t('w_no_docs_uploaded')}</div><div style="font-size:11.5px;margin-top:4px;">${t('w_docs_upload_old_ui_hint')}</div></div>`;
     return;
   }
   const media=docs.map(f=>{
@@ -8291,7 +8309,7 @@ function renderPatientCardDocs(d){
   // Индексы для лайтбокса считаются ТОЛЬКО по фото/видео (файлы вроде PDF в
   // слайдер не входят — у них своя логика открытия в новой вкладке).
   const lbList=media.filter(f=>f.isImage||f.isVideo);
-  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${uploadControls}</div>
+  el.innerHTML=`<div class="card-head"><h3 data-i18n="w_documents">Документы</h3>${controlsHtml}</div>
     <div class="card-body"><div class="docs-grid">${media.map(f=>{
       const lbIdx=lbList.indexOf(f);
       const onclick = lbIdx>=0 ? `openDocLightbox(${lbIdx})` : `window.open('${f.url}','_blank')`;

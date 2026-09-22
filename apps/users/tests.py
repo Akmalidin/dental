@@ -2048,6 +2048,30 @@ class NewUIPatientCardDetailTestCase(TestCase):
         self.assertEqual(len(docs), 1)
         self.assertEqual(docs[0]["name"], "Снимок 26")
 
+    def test_patientcard_documents_lists_active_templates_for_generation(self):
+        """«Сформировать документ» во вкладке «Документы» (кнопка рядом с
+        «Загрузить») — раньше apps.settings_clinic.views.document_render
+        существовала, но нигде не была видна в интерфейсе (доступна только
+        по прямому URL). Список активных шаблонов теперь приходит в
+        patientCardDetail.documentTemplates; неактивные — не попадают."""
+        from apps.settings_clinic.models_documents import DocumentTemplate
+        active = DocumentTemplate.objects.create(
+            name="Договор на оказание услуг", doc_type=DocumentTemplate.TYPE_CONTRACT,
+            content="{{patient_name}}", is_active=True, clinic=self.clinic,
+        )
+        DocumentTemplate.objects.create(
+            name="Старый бланк", doc_type=DocumentTemplate.TYPE_OTHER,
+            content="—", is_active=False, clinic=self.clinic,
+        )
+        resp = self.client.get(f"/new/patients/{self.patient.pk}/")
+        data = _extract_newui_real_data(resp.content.decode())
+        templates = data["patientCardDetail"]["documentTemplates"]
+        names = [t["name"] for t in templates]
+        self.assertIn("Договор на оказание услуг", names)
+        self.assertNotIn("Старый бланк", names)
+        entry = next(t for t in templates if t["id"] == active.pk)
+        self.assertEqual(entry["typeLabel"], "Договор")
+
 
 def timezone_today():
     from django.utils import timezone
