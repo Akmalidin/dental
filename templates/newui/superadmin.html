@@ -161,6 +161,21 @@
             <button class="btn btn-cobalt" id="saBroadcastSendBtn" type="button" onclick="saSendBroadcast()">Отправить</button>
           </div>
         </div>
+
+        <div class="card" style="padding:16px;margin-top:16px;max-width:900px;">
+          <h3 style="margin-bottom:10px;">🕘 История рассылок</h3>
+          <div id="saBroadcastHistory"><div class="hint">Загрузка…</div></div>
+        </div>
+      </div>
+
+      <!-- Кто получил конкретную рассылку (клик по клинике в истории) -->
+      <div class="modal-backdrop" id="m-sa-broadcast-recipients">
+        <div class="modal">
+          <div class="modal-head"><h3 id="saBroadcastRecipientsTitle">Получатели</h3><button class="modal-close" onclick="closeModal('m-sa-broadcast-recipients')">✕</button></div>
+          <div class="modal-body">
+            <div id="saBroadcastRecipientsList"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ Вкладка: Пользователи ═══════════════════════════════════════ -->
@@ -450,7 +465,7 @@
 
   // ── Вкладки ──────────────────────────────────────────────────────────
   const SA_TABS = ['feed','clinics','users','ipblocks','deletions','backups','messengers','broadcast'];
-  let saUsersLoaded = false, saFeedLoaded = false, saDeletionsLoaded = false, saBackupsLoaded = false;
+  let saUsersLoaded = false, saFeedLoaded = false, saDeletionsLoaded = false, saBackupsLoaded = false, saBroadcastHistoryLoaded = false;
   window.saShowTab = function(tab){
     SA_TABS.forEach(t=>{
       const panel = document.getElementById('saPanel-'+t);
@@ -464,6 +479,7 @@
     if(tab==='feed' && !saFeedLoaded){ saFeedLoaded = true; saLoadFeed(); }
     if(tab==='deletions' && !saDeletionsLoaded){ saDeletionsLoaded = true; saLoadDeletions(); }
     if(tab==='backups' && !saBackupsLoaded){ saBackupsLoaded = true; saLoadBackups(); }
+    if(tab==='broadcast' && !saBroadcastHistoryLoaded){ saBroadcastHistoryLoaded = true; saLoadBroadcastHistory(); }
     // Опрос состояния телеграм-инстанса идёт ТОЛЬКО пока открыта эта вкладка:
     // QR живёт недолго, но дёргать Green-API с других вкладок незачем.
     if(tab==='messengers') tgaStartPolling(); else tgaStopPolling();
@@ -1205,6 +1221,15 @@
     document.querySelectorAll('.sa-bc-clinic').forEach(cb => { cb.checked = checked; });
   };
 
+  async function saPostBroadcast(text, audience, clinicIds){
+    const fd = new FormData();
+    fd.append('text', text);
+    fd.append('audience', audience);
+    (clinicIds||[]).forEach(id => fd.append('clinic_ids', id));
+    const res = await fetch('/new/superadmin/broadcast/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    return {res, data: await res.json()};
+  }
+
   window.saSendBroadcast = async function(){
     const textEl = document.getElementById('saBroadcastText');
     const text = textEl.value.trim();
@@ -1215,15 +1240,11 @@
     const prevLabel = btn.textContent;
     btn.disabled = true; btn.textContent = 'Отправка…';
     try{
-      const fd = new FormData();
-      fd.append('text', text);
-      fd.append('audience', audience);
-      clinicIds.forEach(id => fd.append('clinic_ids', id));
-      const res = await fetch('/new/superadmin/broadcast/', {method:'POST', body:fd, credentials:'same-origin', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-      const data = await res.json();
+      const {res, data} = await saPostBroadcast(text, audience, clinicIds);
       if(res.ok && data.ok){
         alert(`Отправлено: ${data.sent}`);
         textEl.value = '';
+        saLoadBroadcastHistory();
       } else {
         alert(data.error || 'Не удалось отправить');
       }
@@ -1233,6 +1254,88 @@
       btn.disabled = false; btn.textContent = prevLabel;
     }
   };
+
+  window.saResendBroadcast = async function(broadcastId){
+    const item = saBroadcastHistoryData.find(b => b.id === broadcastId);
+    if(!item) return;
+    if(!confirm(`Отправить это объявление ещё раз?\n\n«${item.text}»\n\nКому: ${item.audienceLabel}`)) return;
+    try{
+      const {res, data} = await saPostBroadcast(item.text, item.audience, (item.clinicIds||[]).map(String));
+      if(res.ok && data.ok){
+        alert(`Отправлено: ${data.sent}`);
+        saLoadBroadcastHistory();
+      } else {
+        alert(data.error || 'Не удалось отправить');
+      }
+    } catch(e){
+      alert('Ошибка сети');
+    }
+  };
+
+  let saBroadcastHistoryData = [];
+  window.saLoadBroadcastHistory = async function(){
+    const box = document.getElementById('saBroadcastHistory');
+    try{
+      const res = await fetch('/new/superadmin/broadcast/history/', {credentials:'same-origin'});
+      const data = await res.json();
+      saBroadcastHistoryData = data.items || [];
+      renderSaBroadcastHistory();
+    } catch(e){
+      box.innerHTML = '<div class="hint">Не удалось загрузить историю</div>';
+    }
+  };
+
+  function renderSaBroadcastHistory(){
+    const box = document.getElementById('saBroadcastHistory');
+    if(!saBroadcastHistoryData.length){ box.innerHTML = '<div class="hint">Рассылок ещё не было</div>'; return; }
+    box.innerHTML = saBroadcastHistoryData.map(b => {
+      const clinicsHtml = b.recipientClinics.length
+        ? b.recipientClinics.map(c => `<button type="button" class="pill cobalt sa-bc-recip-btn" style="cursor:pointer;border:none;" data-broadcast-id="${b.id}" data-clinic-id="${c.id}" data-clinic-name="${c.name}">${c.name}</button>`).join(' ')
+        : '<span class="hint">получателей нет</span>';
+      return `
+        <div style="padding:12px 0;border-bottom:1px solid var(--mist-line);">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;">
+            <b style="font-size:13.5px;">${b.text}</b>
+            <span class="hint" style="white-space:nowrap;">${b.createdAt} · ${b.createdBy}</span>
+          </div>
+          <div style="margin-top:6px;font-size:12.5px;color:var(--ink-soft);">
+            ${b.audienceLabel} · отправлено: <button type="button" class="link-btn sa-bc-recip-btn" style="font-weight:600;" data-broadcast-id="${b.id}" data-clinic-id="" data-clinic-name="">${b.sentCount}</button>
+          </div>
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            ${clinicsHtml}
+          </div>
+          <div style="margin-top:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="saResendBroadcast(${b.id})">↻ Повторить</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  window.saShowBroadcastRecipients = async function(broadcastId, clinicId, clinicName){
+    document.getElementById('saBroadcastRecipientsTitle').textContent = clinicName ? `Получатели — ${clinicName}` : 'Все получатели';
+    const list = document.getElementById('saBroadcastRecipientsList');
+    list.innerHTML = '<div class="hint">Загрузка…</div>';
+    openModal('m-sa-broadcast-recipients');
+    try{
+      let url = `/new/superadmin/broadcast/${broadcastId}/recipients/`;
+      if(clinicId) url += `?clinic_id=${encodeURIComponent(clinicId)}`;
+      const res = await fetch(url, {credentials:'same-origin'});
+      const data = await res.json();
+      const items = data.items || [];
+      list.innerHTML = items.length ? `<table><thead><tr><th>Сотрудник</th><th>Роль</th><th>Клиника</th><th>Прочитано</th></tr></thead><tbody>${
+        items.map(u => `<tr><td>${u.name}</td><td>${u.role}</td><td>${u.clinicName}</td><td>${u.isRead ? '✓' : '—'}</td></tr>`).join('')
+      }</tbody></table>` : '<div class="hint">Получателей нет</div>';
+    } catch(e){
+      list.innerHTML = '<div class="hint">Не удалось загрузить</div>';
+    }
+  };
+
+  document.getElementById('saBroadcastHistory').addEventListener('click', e => {
+    const btn = e.target.closest('.sa-bc-recip-btn');
+    if(!btn) return;
+    saShowBroadcastRecipients(Number(btn.dataset.broadcastId), btn.dataset.clinicId || null, btn.dataset.clinicName || null);
+  });
+
   renderSaBroadcastClinics();
 
   renderSaTable();

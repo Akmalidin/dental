@@ -87,6 +87,41 @@ class WaGroup(ClinicScopedModel):
         return self.name or self.chat_id
 
 
+class Broadcast(models.Model):
+    """Одна рассылка объявления из супер-админ-панели (/new/superadmin/,
+    вкладка «Push-рассылка», apps.users.newui_views.
+    newui_superadmin_broadcast_send) — история отправок + данные для
+    «Повторить». Сами уведомления получателям — обычные Notification(type=
+    "broadcast"), у каждой FK сюда (Notification.broadcast), поэтому список
+    получателей конкретной рассылки — просто notifications.all()."""
+    AUDIENCE_CHOICES = [
+        ("all", "Всем сотрудникам"),
+        ("directors", "Директорам"),
+        ("doctors", "Врачам"),
+    ]
+
+    text = models.CharField(max_length=300, verbose_name="Текст")
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default="all", verbose_name="Кому")
+    # Пусто = по всем клиникам платформы (как и в newui_superadmin_broadcast_send) —
+    # само поле хранит именно ВЫБОР супер-админа при отправке (для «Повторить»
+    # той же рассылки), а не производный список клиник получателей (тот
+    # виден через notifications__clinic).
+    clinics = models.ManyToManyField("users.Clinic", blank=True, related_name="+", verbose_name="Клиники")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Отправитель",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Рассылка"
+        verbose_name_plural = "Рассылки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.text[:60]
+
+
 class Notification(models.Model):
     TYPE_CHOICES = [
         ("appointment", "Запись"),
@@ -112,6 +147,12 @@ class Notification(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="+", verbose_name="Отправитель",
     )
+    # Заполнено только для type="broadcast" — какая именно рассылка (история
+    # + список получателей в модалке супер-админ-панели).
+    broadcast = models.ForeignKey(
+        Broadcast, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="notifications", verbose_name="Рассылка",
+    )
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Тип")
     title = models.CharField(max_length=300, verbose_name="Заголовок")
     body = models.TextField(blank=True, verbose_name="Сообщение")
@@ -128,11 +169,11 @@ class Notification(models.Model):
         return f"{self.user} — {self.title}"
 
     @classmethod
-    def send(cls, user, title, body="", type="system", link="", actor=None):
+    def send(cls, user, title, body="", type="system", link="", actor=None, broadcast=None):
         from apps.tenancy import get_current_clinic
         clinic = get_current_clinic() or getattr(user, "clinic", None)
         n = cls.objects.create(user=user, clinic=clinic, actor=actor,
-                               title=title, body=body, type=type, link=link)
+                               title=title, body=body, type=type, link=link, broadcast=broadcast)
         # дополнительно — web push (телефон/фон, даже если вкладка закрыта)
         try:
             from .push import send_web_push

@@ -2886,6 +2886,78 @@ class NewUISuperadminBroadcastTestCase(TestCase):
         resp = self.client.get("/new/patients/")
         self.assertNotContains(resp, "Только докторам")
 
+    def test_send_creates_broadcast_record_linked_to_notifications(self):
+        from apps.notifications.models import Broadcast, Notification
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {
+            "text": "С историей", "audience": "directors", "clinic_ids": [self.clinic1.pk],
+        })
+        broadcast_id = resp.json()["broadcastId"]
+        b = Broadcast.objects.get(pk=broadcast_id)
+        self.assertEqual(b.text, "С историей")
+        self.assertEqual(b.audience, "directors")
+        self.assertEqual(list(b.clinics.values_list("pk", flat=True)), [self.clinic1.pk])
+        self.assertEqual(Notification.objects.filter(broadcast=b).count(), 1)
+        self.assertEqual(Notification.objects.get(broadcast=b).user, self.director1)
+
+    def test_history_lists_past_broadcasts_blocked_for_non_superadmin(self):
+        self.client.force_login(self.superadmin)
+        self.client.post("/new/superadmin/broadcast/", {"text": "Первая", "audience": "all"})
+        self.client.post("/new/superadmin/broadcast/", {"text": "Вторая", "audience": "directors", "clinic_ids": [self.clinic2.pk]})
+
+        self.client.force_login(self.director1)
+        resp = self.client.get("/new/superadmin/broadcast/history/")
+        self.assertEqual(resp.status_code, 403)
+
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/broadcast/history/")
+        self.assertEqual(resp.status_code, 200)
+        items = resp.json()["items"]
+        self.assertEqual(len(items), 2)
+        # Свежие сверху.
+        self.assertEqual(items[0]["text"], "Вторая")
+        self.assertEqual(items[0]["audienceLabel"], "Директорам")
+        self.assertEqual(items[0]["sentCount"], 1)
+        self.assertEqual(items[0]["clinicIds"], [self.clinic2.pk])
+        self.assertEqual([c["id"] for c in items[0]["recipientClinics"]], [self.clinic2.pk])
+        self.assertEqual(items[1]["text"], "Первая")
+        self.assertEqual(items[1]["sentCount"], 4)
+
+    def test_recipients_endpoint_lists_and_filters_by_clinic(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Кому дошло", "audience": "all"})
+        broadcast_id = resp.json()["broadcastId"]
+
+        self.client.force_login(self.director1)
+        resp = self.client.get(f"/new/superadmin/broadcast/{broadcast_id}/recipients/")
+        self.assertEqual(resp.status_code, 403)
+
+        self.client.force_login(self.superadmin)
+        resp = self.client.get(f"/new/superadmin/broadcast/{broadcast_id}/recipients/")
+        self.assertEqual(resp.status_code, 200)
+        names = {u["name"] for u in resp.json()["items"]}
+        self.assertEqual(names, {"Директор 1", "Врач 1", "Директор 2", "Врач 2"})
+
+        resp = self.client.get(f"/new/superadmin/broadcast/{broadcast_id}/recipients/?clinic_id={self.clinic1.pk}")
+        names = {u["name"] for u in resp.json()["items"]}
+        self.assertEqual(names, {"Директор 1", "Врач 1"})
+
+    def test_recipients_endpoint_404_for_unknown_broadcast(self):
+        self.client.force_login(self.superadmin)
+        resp = self.client.get("/new/superadmin/broadcast/999999/recipients/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_resend_creates_a_second_broadcast_entry(self):
+        """Повторная отправка (кнопка «Повторить») — фронт просто ещё раз
+        зовёт тот же /new/superadmin/broadcast/ с теми же параметрами,
+        отдельного бэкенд-эндпоинта нет — проверяем, что это создаёт ВТОРУЮ
+        запись в истории, а не переиспользует первую."""
+        from apps.notifications.models import Broadcast
+        self.client.force_login(self.superadmin)
+        self.client.post("/new/superadmin/broadcast/", {"text": "Повтор", "audience": "doctors", "clinic_ids": [self.clinic1.pk]})
+        self.client.post("/new/superadmin/broadcast/", {"text": "Повтор", "audience": "doctors", "clinic_ids": [self.clinic1.pk]})
+        self.assertEqual(Broadcast.objects.filter(text="Повтор").count(), 2)
+
 
 class AuditEventLoggingTestCase(TestCase):
     """Мутации супер-админа и мягкое удаление (apps.tenancy.

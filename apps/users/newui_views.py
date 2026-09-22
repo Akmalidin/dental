@@ -550,10 +550,78 @@ def newui_superadmin_broadcast_send(request):
             qs = qs.filter(clinic_id__in=clinic_ids)
         recipients = list(qs)
 
-    from apps.notifications.models import Notification
+    from apps.notifications.models import Broadcast, Notification
+    broadcast = Broadcast.objects.create(text=text, audience=audience, created_by=request.user)
+    if clinic_ids:
+        broadcast.clinics.set(clinic_ids)
     for u in recipients:
-        Notification.send(u, text, type="broadcast", actor=request.user)
-    return JsonResponse({"ok": True, "sent": len(recipients)})
+        Notification.send(u, text, type="broadcast", actor=request.user, broadcast=broadcast)
+    return JsonResponse({"ok": True, "sent": len(recipients), "broadcastId": broadcast.pk})
+
+
+@login_required
+def newui_superadmin_broadcast_history(request):
+    """AJAX: вкладка «Push-рассылка» → история отправок (кнопка «Повторить»
+    на фронте берёт text/audience/clinicIds отсюда и просто вызывает
+    /new/superadmin/broadcast/ ещё раз — отдельного бэкенд-эндпоинта для
+    resend не нужно, это просто новая Broadcast с теми же параметрами).
+    recipientClinics — клиники, которые РЕАЛЬНО получили (через notifications
+    получателей), не то же самое, что broadcast.clinics (выбор супер-админа
+    при отправке — при "по всем клиникам" clinics пуст, но получатели есть)."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from apps.tenancy import unscoped
+    from apps.notifications.models import Broadcast
+    with unscoped():
+        items = []
+        qs = Broadcast.objects.select_related("created_by").prefetch_related("clinics").order_by("-created_at")[:100]
+        for b in qs:
+            recipient_clinics = list(
+                b.notifications.exclude(clinic__isnull=True)
+                .values_list("clinic_id", "clinic__name").distinct().order_by("clinic__name")
+            )
+            items.append({
+                "id": b.pk,
+                "text": b.text,
+                "audience": b.audience,
+                "audienceLabel": dict(Broadcast.AUDIENCE_CHOICES).get(b.audience, b.audience),
+                "clinicIds": list(b.clinics.values_list("id", flat=True)),
+                "createdBy": b.created_by.name if b.created_by else "—",
+                "createdAt": timezone.localtime(b.created_at).strftime("%d.%m.%Y %H:%M"),
+                "sentCount": b.notifications.count(),
+                "recipientClinics": [{"id": cid, "name": cname} for cid, cname in recipient_clinics],
+            })
+    return JsonResponse({"items": items})
+
+
+@login_required
+def newui_superadmin_broadcast_recipients(request, pk):
+    """AJAX: клик по клинике в истории рассылки → модалка со списком, кто
+    именно получил (в рамках этой рассылки и, если передан clinic_id, только
+    этой клиники)."""
+    from django.http import JsonResponse
+    if not request.user.is_superadmin:
+        return JsonResponse({"error": "Доступно только суперадмину"}, status=403)
+    from apps.tenancy import unscoped
+    from apps.notifications.models import Broadcast
+    with unscoped():
+        b = Broadcast.objects.filter(pk=pk).first()
+        if not b:
+            return JsonResponse({"error": "Рассылка не найдена"}, status=404)
+        qs = b.notifications.select_related("user", "user__role", "clinic").order_by("clinic__name", "user__name")
+        clinic_id = request.GET.get("clinic_id")
+        if clinic_id:
+            qs = qs.filter(clinic_id=clinic_id)
+        items = [{
+            "userId": n.user_id,
+            "name": n.user.name,
+            "clinicName": n.clinic.name if n.clinic else "—",
+            "role": n.user.role.display_name if n.user.role_id else "—",
+            "isRead": n.is_read,
+        } for n in qs]
+    return JsonResponse({"items": items})
 
 
 @login_required
