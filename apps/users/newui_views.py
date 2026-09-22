@@ -555,7 +555,12 @@ def newui_superadmin_broadcast_send(request):
     if clinic_ids:
         broadcast.clinics.set(clinic_ids)
     for u in recipients:
-        Notification.send(u, text, type="broadcast", actor=request.user, broadcast=broadcast)
+        # clinic=u.clinic — ЯВНО клиника получателя, не текущего запроса (см.
+        # комментарий в Notification.send): без этого всем получателям
+        # проставлялась бы клиника поддомена, на котором сейчас сидит
+        # супер-админ, а не их собственная — крестик на баннере переставал
+        # работать для сотрудников из ДРУГИХ клиник (баг с прода).
+        Notification.send(u, text, type="broadcast", actor=request.user, broadcast=broadcast, clinic=u.clinic)
     return JsonResponse({"ok": True, "sent": len(recipients), "broadcastId": broadcast.pk})
 
 
