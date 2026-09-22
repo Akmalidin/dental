@@ -141,6 +141,17 @@ class MarketingBookClinicTestCase(TestCase):
         resp = self._post("/book/does-not-exist/submit/", {})
         self.assertEqual(resp.status_code, 404)
 
+    def test_telegram_opt_in_link_shown_only_when_clinic_bot_connected(self):
+        resp = self._get(f"/book/{self.clinic_a.slug}/")
+        self.assertNotContains(resp, "t.me/")
+
+        from apps.settings_clinic.models import ClinicSettings
+        ClinicSettings.objects.update_or_create(
+            clinic=self.clinic_a, defaults={"name": "Клиника А", "telegram_bot_username": "clinic_a_bot"})
+        resp = self._get(f"/book/{self.clinic_a.slug}/")
+        self.assertContains(resp, "https://t.me/clinic_a_bot")
+        self.assertContains(resp, "Хотите получать уведомления — то запустите бота и всё.")
+
     def test_submit_creates_appointment_and_patient_scoped_to_correct_clinic(self):
         resp = self._post(f"/book/{self.clinic_b.slug}/submit/", {
             "name": "Тест Пациентов", "phone": "+996700111222",

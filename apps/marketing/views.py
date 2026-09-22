@@ -94,7 +94,7 @@ def book_clinic(request, slug):
     что и на поддомене клиники, но по прямой ссылке апекса — без
     DNS/поддомена, которых у такой клиники ещё нет."""
     from apps.users.models import Clinic
-    from apps.users.site_views import book_context_for
+    from apps.users.site_views import book_context_for, tg_bot_link_for
     from apps.tenancy import set_current_clinic
 
     clinic = Clinic.objects.filter(slug=slug, is_active=True).first()
@@ -106,6 +106,7 @@ def book_clinic(request, slug):
         "clinic": clinic, "site": None, **ctx,
         "book_slots_url": f"/book/{slug}/slots/", "book_submit_url": f"/book/{slug}/submit/",
         "back_url": "/book/", "back_label": "← К клиникам",
+        "tg_bot_link": tg_bot_link_for(clinic),
     })
 
 

@@ -154,10 +154,11 @@
                 <select x-model="country" @change="phone=''" style="max-width:130px">
                   <option value="kg">🇰🇬 +996</option>
                   <option value="ru">🇷🇺 +7</option>
+                  <option value="uz">🇺🇿 +998</option>
                 </select>
                 <input type="tel" inputmode="numeric" x-model="phone" style="flex:1"
                        @input="phone=phone.replace(/\D/g,'').slice(0,maxLen)"
-                       :placeholder="country==='ru' ? '900 000 00 00' : '700 000 000'">
+                       :placeholder="countries[country].placeholder">
               </div>
             </div>
           </div>
@@ -175,7 +176,11 @@
         <div class="ic">✓</div>
         <h2 style="font-size:26px;margin-bottom:8px">Заявка отправлена!</h2>
         <p class="muted" style="max-width:420px;margin:0 auto 24px">Мы записали вас и скоро перезвоним для подтверждения. Спасибо, что выбрали «{{ clinic.name }}».</p>
-        <a href="/" class="btn">На главную</a>
+        {% if tg_bot_link %}
+        <p class="muted" style="max-width:420px;margin:0 auto 14px">Хотите получать уведомления — то запустите бота и всё.</p>
+        <a href="{{ tg_bot_link }}" target="_blank" class="btn" style="margin-bottom:14px">Подключить Telegram-бота</a><br>
+        {% endif %}
+        <a href="{{ back_url|default:'/' }}" class="btn {% if tg_bot_link %}btn-ghost{% endif %}">На главную</a>
       </div>
     </template>
   </div>
@@ -195,8 +200,13 @@
           const b = params.get('branch');
           if(b) this.branch = parseInt(b, 10) || '';
         },
-        get maxLen(){ return this.country==='ru' ? 10 : 9; },
-        get fullPhone(){ return (this.country==='ru' ? '+7' : '+996') + this.phone; },
+        countries:{
+          kg:{code:'+996', len:9, placeholder:'700 000 000'},
+          ru:{code:'+7', len:10, placeholder:'900 000 00 00'},
+          uz:{code:'+998', len:9, placeholder:'90 000 00 00'},
+        },
+        get maxLen(){ return this.countries[this.country].len; },
+        get fullPhone(){ return this.countries[this.country].code + this.phone; },
         get canSubmit(){ return this.doctor&&this.date&&this.slot&&this.name.trim()&&this.phone.length===this.maxLen; },
         async loadSlots(){
           this.slot=''; this.slots=[];
