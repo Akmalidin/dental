@@ -1264,7 +1264,14 @@
 /* Баннер-объявление супер-админа (см. apps.users.newui_views.
    _broadcast_banner_data) — крестик помечает уведомление прочитанным на
    сервере (уже существующий mark_read), поэтому после закрытия баннер не
-   вернётся ни при перезагрузке, ни на других устройствах пользователя. */
+   вернётся ни при перезагрузке, ни на других устройствах пользователя.
+   Регрессия: обычный fetch() здесь и не ждался, и не был keepalive —
+   переход по ссылке в сайдбаре сразу после клика по крестику (обычная
+   ссылка, полная перезагрузка страницы) мог оборвать ещё не завершённый
+   запрос браузером при выгрузке документа, поэтому is_read так и не
+   проставлялся на сервере, и баннер появлялся снова на следующей
+   странице. keepalive:true — запрос гарантированно долетает, даже если
+   страница уже начала выгружаться. */
 function closeBroadcastBanner() {
   const el = document.getElementById('broadcastBanner');
   if (!el) return;
@@ -1272,7 +1279,7 @@ function closeBroadcastBanner() {
   document.body.classList.remove('has-broadcast');
   el.remove();
   fetch(`/notifications/${id}/read/`, {
-    method: 'POST', credentials: 'same-origin',
+    method: 'POST', credentials: 'same-origin', keepalive: true,
     headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
   }).catch(function () {});
 }
