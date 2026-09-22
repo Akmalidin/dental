@@ -44,3 +44,15 @@ class NewUISmokeTestCase(TestCase):
             if resp.status_code != 200:
                 failures[u] = resp.status_code
         self.assertEqual(failures, {})
+
+    def test_web_push_setup_script_present_for_logged_in_user(self):
+        """Регрессия: templates/newui/base.html раньше вообще не содержал
+        код подписки на Web Push (только старый интерфейс, templates/
+        base.html) — пуш-уведомления в новом интерфейсе не работали
+        никак, даже при открытой вкладке через реальный push (только
+        поллинг бейджа). Теперь подключён тот же механизм, что в старом
+        интерфейсе — регистрация service worker + подписка."""
+        self.client.force_login(self.user)
+        resp = self.client.get("/new/patients/")
+        self.assertContains(resp, "navigator.serviceWorker.register('/sw.js')")
+        self.assertContains(resp, "/notifications/push/subscribe/")

@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 
 from apps.users.models import User, Role, Clinic, Branch
 from apps.settings_clinic.models import ClinicSettings
@@ -356,3 +356,29 @@ class WaDownloadMediaSizeLimitTestCase(TestCase):
         data, name = wa_download_media("https://example.com/small.jpg", max_bytes=1000)
         self.assertEqual(data, b"small file content")
         self.assertEqual(name, "small.jpg")
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+class ServiceWorkerProductionRoutingTestCase(TestCase):
+    """Регрессия: /sw.js и /manifest.json существовали только в
+    config/urls_dev.py (локальная разработка) — manage.py test по
+    умолчанию тоже грузит config.settings.development (ROOT_URLCONF =
+    config.urls_dev), поэтому ни один тест их не проверял. В проде
+    (config.settings.server) ROOT_URLCONF наследуется от base.py =
+    config.urls, где этих маршрутов не было вовсе —
+    navigator.serviceWorker.register('/sw.js') получал 404, и Web Push
+    (фоновые уведомления вне открытой вкладки) не работал никогда.
+    Здесь ЯВНО переключаемся на ПРОДАКШН urlconf (config.urls), чтобы
+    тест бил именно по тому файлу, где баг реально был."""
+
+    def test_service_worker_served_from_root(self):
+        resp = self.client.get("/sw.js")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("javascript", resp["Content-Type"])
+        self.assertIn(b"self.addEventListener('push'", resp.content)
+
+    def test_manifest_served_from_root(self):
+        resp = self.client.get("/manifest.json")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["start_url"], "/")
