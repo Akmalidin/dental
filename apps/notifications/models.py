@@ -169,9 +169,22 @@ class Notification(models.Model):
         return f"{self.user} — {self.title}"
 
     @classmethod
-    def send(cls, user, title, body="", type="system", link="", actor=None, broadcast=None):
-        from apps.tenancy import get_current_clinic
-        clinic = get_current_clinic() or getattr(user, "clinic", None)
+    def send(cls, user, title, body="", type="system", link="", actor=None, broadcast=None, clinic=None):
+        # clinic=None (по умолчанию) — старое поведение: клиника текущего
+        # запроса, а если её нет — клиника получателя. ЯВНО передать clinic
+        # нужно там, где отправитель и получатель могут быть в РАЗНЫХ
+        # клиниках (супер-админ-рассылка, newui_superadmin_broadcast_send) —
+        # иначе всем получателям проставлялась бы клиника ТЕКУЩЕГО запроса
+        # (клиника поддомена, на котором сидит супер-админ в момент отправки),
+        # а не собственная клиника каждого получателя. Из-за этого
+        # get_current_clinic()-фильтр в apps.notifications.views.
+        # _user_notifications (использует его и mark_read, и notification_poll)
+        # переставал видеть уведомление получателя — крестик на баннере слал
+        # /notifications/<id>/read/ с кодом 200, но update() не находил ни
+        # одной строки (clinic не совпадала) и баннер появлялся снова.
+        if clinic is None:
+            from apps.tenancy import get_current_clinic
+            clinic = get_current_clinic() or getattr(user, "clinic", None)
         n = cls.objects.create(user=user, clinic=clinic, actor=actor,
                                title=title, body=body, type=type, link=link, broadcast=broadcast)
         # дополнительно — web push (телефон/фон, даже если вкладка закрыта)

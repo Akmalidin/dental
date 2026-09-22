@@ -2826,6 +2826,29 @@ class NewUISuperadminBroadcastTestCase(TestCase):
         for u in (self.director1, self.doctor1, self.director2, self.doctor2):
             self.assertTrue(Notification.objects.filter(user=u, type="broadcast").exists())
 
+    def test_notification_clinic_matches_recipient_not_senders_active_clinic(self):
+        """Баг с прода: суперадмин отправлял рассылку, «сидя» в сессии на
+        клинике 2 (старый переключатель клиник, session["active_clinic"] —
+        именно так работает get_current_clinic() для супер-админа, см.
+        apps.tenancy.ClinicMiddleware). Notification.send без явного clinic=
+        проставлял ВСЕМ получателям клинику ИЗ ЭТОГО КОНТЕКСТА (клинику 2),
+        а не собственную клинику каждого получателя. mark_read фильтрует
+        уведомления по get_current_clinic() получателя (apps.notifications.
+        views._user_notifications) — при несовпадении update() не находил
+        строку, POST возвращал 200, но is_read не проставлялся, и баннер
+        появлялся снова на следующей странице."""
+        from apps.notifications.models import Notification
+        self.client.force_login(self.superadmin)
+        session = self.client.session
+        session["active_clinic"] = self.clinic2.pk
+        session.save()
+        resp = self.client.post("/new/superadmin/broadcast/", {"text": "Кросс-клиника", "audience": "directors"})
+        self.assertEqual(resp.status_code, 200)
+        n1 = Notification.objects.get(user=self.director1, type="broadcast", title="Кросс-клиника")
+        self.assertEqual(n1.clinic_id, self.clinic1.pk)
+        n2 = Notification.objects.get(user=self.director2, type="broadcast", title="Кросс-клиника")
+        self.assertEqual(n2.clinic_id, self.clinic2.pk)
+
     def test_single_clinic_scopes_recipients(self):
         from apps.notifications.models import Notification
         self.client.force_login(self.superadmin)
