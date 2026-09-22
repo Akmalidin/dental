@@ -1,0 +1,38 @@
+name: Diag — VAPID env presence on server (read-only, no secrets shown)
+
+# По вопросу пользователя "пуш-уведомления не работают в фоне" —
+# обнаружено, что VAPID_PUBLIC_KEY определён только в
+# config/settings/development.py, не в base.py/server.py — в проде эта
+# настройка вообще отсутствует, поэтому шаблоны отдают пустой ключ и
+# скрипт подписки сразу выходит (if (!VAPID_PUBLIC_KEY) return). Прежде
+# чем чинить — проверяем, задан ли уже VAPID_PRIVATE_B64 в .env сервера
+# (чтобы решить, использовать существующую пару ключей или сгенерировать
+# новую). Смотрим ТОЛЬКО факт наличия переменной, не её значение.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — проверка наличия VAPID_PRIVATE_B64 в .env (без вывода значения)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            if grep -q "^VAPID_PRIVATE_B64=" .env 2>/dev/null; then
+              val=$(grep "^VAPID_PRIVATE_B64=" .env | cut -d= -f2-)
+              if [ -n "$val" ]; then
+                echo "VAPID_PRIVATE_B64: задан, непустой (длина: ${#val} символов)"
+              else
+                echo "VAPID_PRIVATE_B64: строка есть в .env, но значение ПУСТОЕ"
+              fi
+            else
+              echo "VAPID_PRIVATE_B64: НЕ задан в .env вовсе"
+            fi
+            echo
+            echo ">>> пакет pywebpush установлен?"
+            ./venv/bin/pip show pywebpush 2>&1 | head -3 || echo "не установлен"
