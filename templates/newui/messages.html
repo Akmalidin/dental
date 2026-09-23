@@ -25,7 +25,7 @@
           <div class="card msg-chat" style="display:flex;flex-direction:column;overflow:hidden;">
             <div style="padding:14px 18px;border-bottom:1px solid var(--mist-line);display:flex;justify-content:space-between;align-items:center;gap:8px;" id="chatHeader"></div>
             <div style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px;" id="chatMessages"></div>
-            <div style="padding:12px 14px;border-top:1px solid var(--mist-line);">
+            <div class="msg-composer-wrap" style="padding:12px 14px;border-top:1px solid var(--mist-line);">
               <div style="display:flex;gap:8px;margin-bottom:8px;">
                 <select id="chatTemplateSelect" onchange="chatApplyTemplate()" style="flex:1;">
                   <option value="" data-i18n="w_insert_template">Вставить шаблон…</option>
@@ -45,7 +45,7 @@
                   однострочное поле их молча съедало — сообщение уходило одним
                   слипшимся абзацем. Enter отправляет, Shift+Enter переносит.
                 {% endcomment %}
-                <textarea autocomplete="off" id="chatInput" rows="1" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;resize:vertical;min-height:38px;max-height:160px;font:inherit;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}"></textarea>
+                <textarea autocomplete="off" id="chatInput" rows="3" placeholder="Написать сообщение…" data-i18n-placeholder="w_write_message_dots" style="flex:1;resize:vertical;min-height:72px;max-height:260px;font:inherit;font-size:14px;line-height:1.45;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}"></textarea>
                 <button class="btn btn-cobalt" onclick="sendChatMessage()"><span data-i18n="w_send">Отправить</span></button>
               </div>
             </div>
