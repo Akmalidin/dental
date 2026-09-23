@@ -76,7 +76,7 @@ body.has-broadcast .hamburger-btn{top:calc(14px + 42px);}
 .msg-fab svg{width:19px;height:19px;}
 .msg-fab-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E85D2D;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-sizing:border-box;}
 body.has-broadcast .msg-fab{top:calc(14px + 42px);}
-.nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E85D2D;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-sizing:border-box;}
+.btn.msg-back{display:none;}
 /* Панель «Мессенджеры» (компьютер): выезжает справа поверх текущей страницы,
    внутри — /new/messages/?embed=1 (без сайдбара, см. body.embed ниже). */
 .msg-panel-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.35);z-index:400;}
@@ -694,6 +694,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   .qs-field-discount{flex:1 1 84px;}
   .qs-field-total{flex:1 1 76px;text-align:right;}
   .qs-field-remove{flex:0 0 auto;margin-left:auto;}
+  /* «Мессенджеры» на телефоне: вместо двух колонок (где чату оставалась
+     узкая полоска) — сначала список бесед, по нажатию — чат на весь экран
+     с кнопкой «←» (selectClient/msgBackToList). */
+  .msg-grid{grid-template-columns:1fr !important;height:calc(100dvh - 240px) !important;min-height:380px;}
+  .msg-grid.chat-open .msg-list{display:none !important;}
+  .msg-grid:not(.chat-open) .msg-chat{display:none !important;}
+  .btn.msg-back{display:inline-flex;}
+  .msg-composer{flex-wrap:wrap;}
+  .msg-composer textarea{order:-1;flex:1 1 100% !important;min-height:70px !important;}
+  .msg-composer select{flex:1;max-width:none !important;}
 }
 
 @media print{
