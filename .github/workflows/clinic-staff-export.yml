@@ -1,0 +1,44 @@
+name: Clinic staff — export logins (optionally reset passwords to 1111)
+
+# Разовая задача по запросу владельца: выгрузить логины сотрудников одной
+# клиники в CSV (для передачи руководству клиники). По умолчанию только
+# список, ничего не меняет. apply=yes — ещё и ставит пароль 1111 всем
+# АКТИВНЫМ сотрудникам клиники (кроме суперадминов). CSV кладётся
+# артефактом прогона (хранится 1 день), в лог попадает только сводка.
+on:
+  workflow_dispatch:
+    inputs:
+      clinic_slug:
+        description: "Slug клиники (поддомен), например khalilov"
+        required: true
+        default: "khalilov"
+      apply:
+        description: "yes — поставить пароль 1111 активным сотрудникам; no — только список"
+        required: true
+        default: "no"
+        type: choice
+        options: ["no", "yes"]
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Выгрузить сотрудников (и при apply=yes — сбросить пароли)
+        env:
+          SLUG: ${{ inputs.clinic_slug }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          set -o pipefail
+          sudo apt-get install -y sshpass >/dev/null 2>&1
+          case "$SLUG" in (*[!a-z0-9-]*|'') echo "bad slug"; exit 1;; esac
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd /var/www/sadaf && set -a && . ./.env && set +a && echo 'aW1wb3J0IGNzdiwgb3MsIHN5cwpmcm9tIGFwcHMudXNlcnMubW9kZWxzIGltcG9ydCBDbGluaWMsIFVzZXIKCnNsdWcgPSBvcy5lbnZpcm9uLmdldCgiQ0xJTklDX1NMVUciLCAiIikKYXBwbHkgPSBvcy5lbnZpcm9uLmdldCgiQVBQTFkiKSA9PSAieWVzIgpjbGluaWMgPSBDbGluaWMub2JqZWN0cy5maWx0ZXIoc2x1Zz1zbHVnKS5maXJzdCgpCmlmIGNsaW5pYyBpcyBOb25lOgogICAgc3lzLnN0ZGVyci53cml0ZSgiQ2xpbmljICVyIG5vdCBmb3VuZC4gU2ltaWxhcjogJXNcbiIgJSAoc2x1ZywgbGlzdCgKICAgICAgICBDbGluaWMub2JqZWN0cy5maWx0ZXIoc2x1Z19faWNvbnRhaW5zPXNsdWdbOjVdKS52YWx1ZXNfbGlzdCgic2x1ZyIsICJuYW1lIikpKSkKICAgIHN5cy5leGl0KDEpCgpyb3dzID0gW10KZm9yIHUgaW4gVXNlci5vYmplY3RzLmZpbHRlcihjbGluaWM9Y2xpbmljKS5zZWxlY3RfcmVsYXRlZCgicm9sZSIpLm9yZGVyX2J5KCItaXNfYWN0aXZlIiwgIm5hbWUiKToKICAgIGNoYW5nZWQgPSBGYWxzZQogICAgaWYgYXBwbHkgYW5kIHUuaXNfYWN0aXZlIGFuZCBub3QgdS5pc19zdXBlcmFkbWluOgogICAgICAgIHUuc2V0X3Bhc3N3b3JkKCIxMTExIikKICAgICAgICB1LnNhdmUodXBkYXRlX2ZpZWxkcz1bInBhc3N3b3JkIl0pCiAgICAgICAgY2hhbmdlZCA9IFRydWUKICAgIHJvd3MuYXBwZW5kKFt1Lm5hbWUsIHUubG9naW4sIHUucm9sZS5kaXNwbGF5X25hbWUgaWYgdS5yb2xlIGVsc2UgIiIsCiAgICAgICAgICAgICAgICAgItC00LAiIGlmIHUuaXNfYWN0aXZlIGVsc2UgItC90LXRgiIsICIxMTExIiBpZiBjaGFuZ2VkIGVsc2UgIiJdKQoKdyA9IGNzdi53cml0ZXIoc3lzLnN0ZG91dCkKdy53cml0ZXJvdyhbItCa0LvQuNC90LjQutCwOiAlcyIgJSBjbGluaWMubmFtZV0pCncud3JpdGVyb3coWyLQpNCY0J4iLCAi0JvQvtCz0LjQvSIsICLQoNC+0LvRjCIsICLQkNC60YLQuNCy0LXQvSIsICLQndC+0LLRi9C5INC/0LDRgNC+0LvRjCJdKQp3LndyaXRlcm93cyhyb3dzKQpzeXMuc3RkZXJyLndyaXRlKCJjbGluaWM9JXMgdXNlcnM9JWQgY2hhbmdlZD0lZCBhcHBseT0lc1xuIiAlICgKICAgIGNsaW5pYy5zbHVnLCBsZW4ocm93cyksIHN1bSgxIGZvciByIGluIHJvd3MgaWYgcls0XSksIGFwcGx5KSkK' | base64 -d | CLINIC_SLUG=$SLUG APPLY=$APPLY ./venv/bin/python manage.py shell" \
+            > staff.csv
+          echo "Строк в файле: $(wc -l < staff.csv)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clinic-staff-${{ inputs.clinic_slug }}
+          path: staff.csv
+          retention-days: 1
