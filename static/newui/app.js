@@ -1449,13 +1449,19 @@ function selectClient(id){
   renderClientList();
   renderChatHeader();
   loadChatThread(id);
+  // Телефон (см. .msg-grid в app.css): список и чат — отдельные экраны.
+  document.querySelector('.msg-grid')?.classList.add('chat-open');
+}
+function msgBackToList(){
+  document.querySelector('.msg-grid')?.classList.remove('chat-open');
 }
 function renderChatHeader(){
   const el=document.getElementById('chatHeader');
   const c=chatClients.find(x=>x.id===currentClientId);
   if(!el || !c){ if(el) el.innerHTML=''; return; }
   const chLabel = c.channel==='whatsapp' ? '🟢 WhatsApp' : '🔵 Telegram';
-  el.innerHTML=`<div><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
+  el.innerHTML=`<button type="button" class="btn btn-ghost btn-sm msg-back" onclick="msgBackToList()" aria-label="Назад">←</button>
+    <div style="flex:1;min-width:0;"><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
     <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>`;
 }
 // Лента открытого диалога. Держим её в памяти, чтобы автообновление могло
