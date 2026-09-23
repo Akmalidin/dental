@@ -76,6 +76,23 @@ body.has-broadcast .hamburger-btn{top:calc(14px + 42px);}
 .msg-fab svg{width:19px;height:19px;}
 .msg-fab-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E85D2D;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-sizing:border-box;}
 body.has-broadcast .msg-fab{top:calc(14px + 42px);}
+.nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E85D2D;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-sizing:border-box;}
+/* Панель «Мессенджеры» (компьютер): выезжает справа поверх текущей страницы,
+   внутри — /new/messages/?embed=1 (без сайдбара, см. body.embed ниже). */
+.msg-panel-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.35);z-index:400;}
+.msg-panel-backdrop.open{display:block;}
+.msg-panel{position:fixed;top:0;right:0;bottom:0;width:min(860px,calc(100vw - 260px));background:var(--cloud);z-index:401;display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(0,0,0,.2);transform:translateX(100%);transition:transform .22s ease;visibility:hidden;}
+.msg-panel.open{transform:translateX(0);visibility:visible;}
+.msg-panel-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--mist);font-size:15px;}
+.msg-panel iframe{flex:1;width:100%;border:0;}
+/* Встроенный режим страницы (внутри панели): только содержимое страницы. */
+body.embed .sidebar,body.embed .hamburger-btn,body.embed .msg-fab,body.embed .top-banner,body.embed .voice-fab,body.embed .sidebar-backdrop{display:none !important;}
+body.embed .app-shell{display:block;height:100vh;margin-top:0;}
+body.embed .main{height:100vh;}
+body.embed .topbar{padding:12px 16px;}
+body.embed .topbar h1{display:none;}
+body.embed .page{padding:14px 16px 16px;}
+body.embed .msg-grid{height:calc(100vh - 110px) !important;grid-template-columns:280px 1fr !important;}
 .sidebar-backdrop.open{display:block;}
 .sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
 .sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
