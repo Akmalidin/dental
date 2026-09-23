@@ -856,6 +856,50 @@ def _tg_link_by_phone(chat_id, phone_raw, token):
     return patient
 
 
+def _tg_log_inbound(patient, chat_id, text, media_file=None, media_type="", snippet=None):
+    """Залогировать входящее Telegram-сообщение в единую ленту переписок
+    («Мессенджеры») + уведомить админов/врача — общая часть для всех веток
+    _tg_handle_update. Список переписок грузит только WaMessage с привязанным
+    пациентом (apps.users.views._newui_messages_data,
+    WaMessage.exclude(patient__isnull=True)), а привязка по номеру
+    («Поделиться номером», кнопки меню) раньше просто return'илась без
+    сохранения — переписка отвечала пациенту в самом Telegram, но в CRM не
+    появлялась вовсе."""
+    from .models import WaMessage
+    m = WaMessage(patient=patient, direction="in", channel="tg", phone=str(chat_id),
+                  body=text, media_type=media_type, read=False)
+    if patient is not None:
+        m.clinic = patient.clinic
+    if media_file is not None:
+        m.media_file = media_file
+    m.save()
+    if patient is not None:
+        try:
+            from apps.users.models import User as U, Role
+            from django.db.models import Q
+            from django.utils import timezone as _tz
+            recipients = U.objects.filter(clinic=patient.clinic, is_active=True).filter(
+                Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
+                | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
+            if patient.primary_doctor_id:
+                recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
+            snip = snippet if snippet is not None else text
+            disp = (snip[:80] + "…") if len(snip) > 80 else snip
+            link = "/patients/%s/notify/" % patient.pk
+            for u in recipients.distinct():
+                existing = Notification.objects.filter(
+                    user=u, link=link, type="wa", is_read=False).first()
+                if existing:
+                    Notification.objects.filter(pk=existing.pk).update(
+                        body="✈️ Telegram — %s: %s" % (patient.full_name, disp), created_at=_tz.now())
+                else:
+                    Notification.send(u, "✈️ Telegram", "%s: %s" % (patient.full_name, disp),
+                                      type="wa", link=link)
+        except Exception:
+            pass
+    return m
+
+
 @csrf_exempt
 def tg_webhook(request, clinic_slug):
     """Webhook Telegram Bot API — свой URL на каждую клинику (её слаг зашит в
@@ -937,6 +981,8 @@ def _tg_handle_update(body, clinic_slug):
             patient = _tg_link_by_phone(chat_id, contact.get("phone_number") or "", token)
             if patient is None:
                 tg_send_text(chat_id, "Не нашли карточку с таким номером в базе клиники. Обратитесь на ресепшене.")
+            else:
+                _tg_log_inbound(patient, chat_id, "📱 Поделился(ась) номером телефона — подключил(а) уведомления")
             return
 
         # ── Меню самообслуживания (после привязки номера) ──
@@ -946,6 +992,7 @@ def _tg_handle_update(body, clinic_slug):
             if patient is None:
                 tg_send_text(chat_id, "Сначала поделитесь номером телефона — нажмите /start")
                 return
+            _tg_log_inbound(patient, chat_id, text)
             if text == BTN_MY_DEBT:
                 cur = cs.currency_label if cs else "сом"
                 if patient.debt > 0:
@@ -975,6 +1022,7 @@ def _tg_handle_update(body, clinic_slug):
             if not already_linked and 9 <= len(digits) <= 15:
                 patient = _tg_link_by_phone(chat_id, text, token)
                 if patient is not None:
+                    _tg_log_inbound(patient, chat_id, "📱 Поделился(ась) номером телефона — подключил(а) уведомления")
                     return
 
         # ── Голосовое/аудио — скачиваем и сохраняем у себя (ссылки Telegram недолговечны) ──
@@ -993,38 +1041,8 @@ def _tg_handle_update(body, clinic_slug):
         # ── Обычное входящее сообщение (текст и/или медиа) — логируем + уведомляем персонал ──
         if text or media_file:
             from apps.patients.models import Patient
-            from .models import WaMessage
             patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
-            m = WaMessage(patient=patient, direction="in", channel="tg", phone=str(chat_id),
-                          body=text, media_type=media_type, read=False)
-            if patient is not None:
-                m.clinic = patient.clinic
-            if media_file is not None:
-                m.media_file = media_file
-            m.save()
-            if patient is not None:
-                try:
-                    from apps.users.models import User as U, Role
-                    from django.db.models import Q
-                    recipients = U.objects.filter(clinic=patient.clinic, is_active=True).filter(
-                        Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
-                        | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN]))
-                    if patient.primary_doctor_id:
-                        recipients = recipients | U.objects.filter(pk=patient.primary_doctor_id)
-                    disp = (snippet[:80] + "…") if len(snippet) > 80 else snippet
-                    link = "/patients/%s/notify/" % patient.pk
-                    from django.utils import timezone as _tz
-                    for u in recipients.distinct():
-                        existing = Notification.objects.filter(
-                            user=u, link=link, type="wa", is_read=False).first()
-                        if existing:
-                            Notification.objects.filter(pk=existing.pk).update(
-                                body="✈️ Telegram — %s: %s" % (patient.full_name, disp), created_at=_tz.now())
-                        else:
-                            Notification.send(u, "✈️ Telegram", "%s: %s" % (patient.full_name, disp),
-                                              type="wa", link=link)
-                except Exception:
-                    pass
+            _tg_log_inbound(patient, chat_id, text, media_file=media_file, media_type=media_type, snippet=snippet)
     finally:
         close_old_connections()
 

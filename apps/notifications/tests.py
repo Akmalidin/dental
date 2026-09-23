@@ -117,6 +117,66 @@ class TgConnectSecretTestCase(TestCase):
         self.assertTrue(cs.telegram_webhook_secret)
 
 
+class TgInboxLoggingTestCase(TestCase):
+    """До этого фикса /start, «поделился номером» и нажатия кнопок меню
+    самообслуживания обрабатывались ботом (пациенту реально приходил ответ
+    в Telegram), но не создавали WaMessage — переписка не попадала в общий
+    список «Мессенджеры» (apps.users.views грузит только WaMessage с
+    привязанным пациентом), хотя пациент уже привязан и бот ему отвечает —
+    ровно то, что сообщили: бот работает, а в CRM переписок нет."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника TG Inbox", slug="tg-inbox-clinic")
+        Branch.objects.create(name="Гл. филиал", address="-", phone="0", is_main=True, clinic=self.clinic)
+        ClinicSettings.objects.create(
+            clinic=self.clinic, name=self.clinic.name, telegram_bot_token="123:ABC",
+        )
+        from apps.patients.models import Patient
+        self.patient = Patient.objects.create(
+            first_name="Акмал", last_name="Тест", phone="+996553565674", clinic=self.clinic,
+        )
+
+    def _send(self, message):
+        import json
+        from apps.notifications.views import _tg_handle_update
+        with patch("apps.notifications.telegram._call", return_value={"ok": True, "result": {"message_id": 1}}):
+            _tg_handle_update(json.dumps({"message": message}).encode(), self.clinic.slug)
+
+    def test_contact_share_links_patient_and_logs_conversation(self):
+        self._send({"chat": {"id": 555}, "contact": {"phone_number": "+996553565674"}})
+        from apps.notifications.models import WaMessage
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.telegram_chat_id, 555)
+        m = WaMessage.objects.get()
+        self.assertEqual(m.patient_id, self.patient.pk)
+        self.assertEqual(m.channel, "tg")
+
+    def test_menu_button_press_is_logged(self):
+        self.patient.telegram_chat_id = 555
+        self.patient.save(update_fields=["telegram_chat_id"])
+        from apps.notifications.telegram import BTN_MY_DEBT
+        self._send({"chat": {"id": 555}, "text": BTN_MY_DEBT})
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertEqual(m.patient_id, self.patient.pk)
+        self.assertEqual(m.body, BTN_MY_DEBT)
+
+    def test_typed_phone_number_link_is_logged(self):
+        self._send({"chat": {"id": 555}, "text": "+996553565674"})
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertEqual(m.patient_id, self.patient.pk)
+
+    def test_regular_text_message_still_logged_as_before(self):
+        self.patient.telegram_chat_id = 555
+        self.patient.save(update_fields=["telegram_chat_id"])
+        self._send({"chat": {"id": 555}, "text": "Здравствуйте, можно перенести приём?"})
+        from apps.notifications.models import WaMessage
+        m = WaMessage.objects.get()
+        self.assertEqual(m.patient_id, self.patient.pk)
+        self.assertEqual(m.body, "Здравствуйте, можно перенести приём?")
+
+
 class BackfillTelegramWebhookSecretsCommandTestCase(TestCase):
     """apps.notifications.management.commands.backfill_telegram_webhook_secrets
     — вызывается из deploy/update.sh при каждом деплое, выпускает секрет
