@@ -165,6 +165,20 @@ class MarketingBookClinicTestCase(TestCase):
         patient = Patient.all_objects.get(pk=appt.patient_id)
         self.assertEqual(patient.clinic_id, self.clinic_b.pk)
 
+    def test_submit_also_creates_crm_lead_in_booked_stage(self):
+        from apps.patients.models import Lead
+        resp = self._post(f"/book/{self.clinic_b.slug}/submit/", {
+            "name": "Тест Заявка", "phone": "+996700555666",
+            "doctor": self.doctor_b.pk, "date": self._tomorrow(), "slot": "11:00",
+        })
+        self.assertTrue(resp.json()["ok"])
+        lead = Lead.all_clinics.get()
+        self.assertEqual(lead.clinic_id, self.clinic_b.pk)
+        self.assertEqual(lead.stage, Lead.STAGE_BOOKED)
+        self.assertEqual(lead.source.name, "Сайт")
+        self.assertEqual(lead.patient.clinic_id, self.clinic_b.pk)
+        self.assertIn("11:00", lead.comment)
+
     def test_submit_rejects_doctor_from_other_clinic(self):
         resp = self._post(f"/book/{self.clinic_a.slug}/submit/", {
             "name": "Тест Пациентов", "phone": "+996700333444",
@@ -172,6 +186,25 @@ class MarketingBookClinicTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(Appointment.all_objects.filter(doctor=self.doctor_b).exists())
+
+
+class LandingLeadNotifiesSuperadminTestCase(TestCase):
+    """Заявка «Подключить клинику» с главной stom.asia раньше тихо ложилась
+    только в django-admin — теперь супер-админ получает уведомление."""
+
+    def test_lead_notifies_superadmins(self):
+        from apps.marketing.models import LandingLead
+        from apps.notifications.models import Notification
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        su = User.objects.create(login="ll_su", name="Супер", email="llsu@test.local", role=su_role)
+        with override_settings(CRM_BASE_DOMAIN="stom.asia"):
+            resp = self.client.post("/lead/", {"clinic_name": "Новая Клиника", "phone": "+996700123456",
+                                              "city": "Ош"}, HTTP_HOST="stom.asia")
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(LandingLead.objects.filter(clinic_name="Новая Клиника").exists())
+        n = Notification.objects.get(user=su)
+        self.assertIn("Новая Клиника", n.title)
+        self.assertIn("Ош", n.body)
 
 
 class MarketingRobotsSitemapTestCase(TestCase):

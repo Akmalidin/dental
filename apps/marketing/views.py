@@ -149,5 +149,19 @@ def landing_lead(request):
         messages.error(request, "Укажите название клиники и телефон")
         return redirect("/#contact")
     LandingLead.objects.create(clinic_name=clinic_name, phone=phone, city=city)
+    # Раньше такие заявки лежали только в django-admin и никто о них не
+    # узнавал — уведомляем супер-админов (колокольчик + web push), тем же
+    # способом, что и запрос доступа (apps.users.views.clinic_access_request).
+    try:
+        from apps.users.models import User, Role
+        from apps.notifications.models import Notification
+        for su in User.objects.filter(role__name=Role.SUPERADMIN, is_active=True):
+            Notification.send(
+                su, "Заявка на подключение: %s" % clinic_name,
+                body=phone + (" — %s" % city if city else ""),
+                type="system", link="/django-admin/marketing/landinglead/",
+            )
+    except Exception:
+        pass
     messages.success(request, "Заявка отправлена — свяжемся с вами в течение дня.")
     return redirect("/#contact")
