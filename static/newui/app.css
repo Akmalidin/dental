@@ -46,7 +46,7 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .top-banner .tb-close:hover{background:rgba(255,255,255,.3);}
 body.has-broadcast .app-shell{margin-top:42px;height:calc(100vh - 42px);}
 body.has-broadcast .hamburger-btn{top:calc(14px + 42px);}
-@media (max-width:640px){ .top-banner{font-size:12.5px;padding:8px 40px;} body.has-broadcast .app-shell{margin-top:52px;height:calc(100vh - 52px);} body.has-broadcast .hamburger-btn{top:calc(14px + 52px);} }
+@media (max-width:640px){ .top-banner{font-size:12.5px;padding:8px 40px;} body.has-broadcast .app-shell{margin-top:52px;height:calc(100vh - 52px);} body.has-broadcast .hamburger-btn{top:calc(14px + 52px);} body.has-broadcast .msg-fab{top:calc(14px + 52px);} }
 
 /* ===== APP SHELL ===== */
 .app-shell{display:grid;grid-template-columns:240px 1fr;height:100vh;}
@@ -70,6 +70,12 @@ body.has-broadcast .hamburger-btn{top:calc(14px + 42px);}
    нужно трогать разметку ни одного из ~20 шаблонов страниц. */
 .hamburger-btn{display:none;position:fixed;top:14px;left:14px;z-index:101;width:38px;height:38px;border-radius:9px;background:var(--ink);color:#fff;border:none;font-size:18px;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);cursor:pointer;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(15,17,23,.45);z-index:90;}
+/* «Мессенджеры» одним нажатием рядом с ☰ (на телефоне пункт меню спрятан
+   внизу сайдбара) — видна там же, где и ☰; счётчик = непрочитанные входящие. */
+.msg-fab{display:none;position:fixed;top:14px;left:60px;z-index:101;width:38px;height:38px;border-radius:9px;background:var(--ink);color:#fff;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);text-decoration:none;}
+.msg-fab svg{width:19px;height:19px;}
+.msg-fab-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#E85D2D;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-sizing:border-box;}
+body.has-broadcast .msg-fab{top:calc(14px + 42px);}
 .sidebar-backdrop.open{display:block;}
 .sidebar-logo{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
 .sidebar-logo svg{width:20px;height:20px;flex-shrink:0;}
@@ -642,11 +648,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
    уменьшаем паддинги — тесная, но полностью читаемая раскладка на телефоне. */
 @media(max-width:900px){
   .hamburger-btn{display:flex;}
+  .msg-fab{display:flex;}
   .app-shell{display:block;height:auto;}
   .sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:100;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
   .main{height:auto;min-height:100vh;overflow-x:hidden;}
-  .topbar{padding-left:62px;flex-wrap:wrap;row-gap:10px;}
+  .topbar{padding-left:108px;flex-wrap:wrap;row-gap:10px;}
   .search-box{width:auto;flex:1;min-width:0;}
   /* Любая таблица внутри карточки получает собственный горизонтальный скролл
      вместо того, чтобы раздвигать всю страницу — тот же паттерн, что уже
@@ -657,7 +664,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 @media(max-width:640px){
   .kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr;}
   .page{padding:16px 14px 48px;}
-  .topbar{padding:14px 14px 14px 58px;}
+  .topbar{padding:14px 14px 14px 104px;}
   .kpi-grid{gap:10px;}
   /* Ряд услуги в «Быстрой продаже» (7 колонок фиксированной ширины —
      220px+ гарантированно) не влезает в модалку на телефоне (~320px) —
