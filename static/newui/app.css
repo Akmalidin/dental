@@ -702,7 +702,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   .msg-grid:not(.chat-open) .msg-chat{display:none !important;}
   .btn.msg-back{display:inline-flex;}
   .msg-composer{flex-wrap:wrap;}
-  .msg-composer textarea{order:-1;flex:1 1 100% !important;min-height:70px !important;}
+  .msg-composer textarea{order:-1;flex:1 1 100% !important;min-height:130px !important;font-size:16px !important;padding:10px 12px;}
+  .msg-composer-wrap{padding:10px 8px !important;}
+  .page:has(.msg-grid){padding-left:6px;padding-right:6px;}
+  .msg-grid .msg-chat #chatMessages{padding:12px !important;}
   .msg-composer select{flex:1;max-width:none !important;}
 }
 
