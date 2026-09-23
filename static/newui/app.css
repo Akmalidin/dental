@@ -671,7 +671,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
   .sidebar.sidebar-open{transform:translateX(0);box-shadow:10px 0 30px rgba(0,0,0,.28);}
   .main{height:auto;min-height:100vh;overflow-x:hidden;}
   .topbar{padding-left:108px;flex-wrap:wrap;row-gap:10px;}
-  .search-box{width:auto;flex:1;min-width:0;}
+  .search-box{width:auto;flex:1;min-width:200px;}
   /* Любая таблица внутри карточки получает собственный горизонтальный скролл
      вместо того, чтобы раздвигать всю страницу — тот же паттерн, что уже
      годами работает у .sched-wrap (расписание). Не задевает карточки без
@@ -681,7 +681,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 @media(max-width:640px){
   .kpi-grid,.grid-2,.form-row2{grid-template-columns:1fr;}
   .page{padding:16px 14px 48px;}
-  .topbar{padding:14px 14px 14px 104px;}
+  /* Шапка страницы на телефоне: заголовок — справа от плавающих ☰/💬,
+     а кнопки и поиск — отдельными строками во всю ширину. Раньше всё
+     стояло в одну строку и поиск сжимался до пустого квадратика. */
+  .topbar{padding:14px;}
+  .topbar h1{margin-left:90px;min-height:38px;display:flex;align-items:center;}
+  .topbar-right{flex:1 1 100%;flex-wrap:wrap;gap:8px;}
+  .topbar .search-box{flex:1 1 100%;order:-1;padding:7px 14px;}
+  .search-box input{font-size:16px !important;}
   .kpi-grid{gap:10px;}
   /* Ряд услуги в «Быстрой продаже» (7 колонок фиксированной ширины —
      220px+ гарантированно) не влезает в модалку на телефоне (~320px) —
