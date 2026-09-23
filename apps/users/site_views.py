@@ -310,6 +310,21 @@ def submit_booking(request, clinic):
     if service_id:
         appt.services.add(service_id)
 
+    # Та же заявка — и в воронку «Заявки · CRM» (этап «Записан», источник
+    # «Сайт»), чтобы администратор вёл онлайн-заявки там же, где и остальные.
+    try:
+        from apps.patients.models import Lead, LeadSource
+        doctor_name = User.objects.filter(pk=doctor_id).values_list("name", flat=True).first() or "—"
+        source, _c = LeadSource.objects.get_or_create(name="Сайт")
+        Lead.objects.create(
+            clinic=clinic, name=name, phone=phone, source=source, patient=patient,
+            stage=Lead.STAGE_BOOKED,
+            comment="Онлайн-запись с сайта: %s %s, врач %s, филиал %s" % (
+                d.strftime("%d.%m.%Y"), slot, doctor_name, branch.name),
+        )
+    except Exception:
+        pass
+
     try:
         from apps.appointments.gcal import push_event
         push_event(appt)
