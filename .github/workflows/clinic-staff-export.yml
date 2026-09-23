@@ -4,7 +4,8 @@ name: Clinic staff — export logins (optionally reset passwords to 1111)
 # клиники в CSV (для передачи руководству клиники). По умолчанию только
 # список, ничего не меняет. apply=yes — ещё и ставит пароль 1111 всем
 # АКТИВНЫМ сотрудникам клиники (кроме суперадминов). CSV кладётся
-# артефактом прогона (хранится 1 день), в лог попадает только сводка.
+# артефактом прогона (хранится 1 день) и копией в base64 в лог — логи
+# прогона после получения файла нужно удалить.
 on:
   workflow_dispatch:
     inputs:
@@ -36,6 +37,9 @@ jobs:
             "cd /var/www/sadaf && set -a && . ./.env && set +a && echo 'aW1wb3J0IGNzdiwgb3MsIHN5cwpmcm9tIGFwcHMudXNlcnMubW9kZWxzIGltcG9ydCBDbGluaWMsIFVzZXIKCnNsdWcgPSBvcy5lbnZpcm9uLmdldCgiQ0xJTklDX1NMVUciLCAiIikKYXBwbHkgPSBvcy5lbnZpcm9uLmdldCgiQVBQTFkiKSA9PSAieWVzIgpjbGluaWMgPSBDbGluaWMub2JqZWN0cy5maWx0ZXIoc2x1Zz1zbHVnKS5maXJzdCgpCmlmIGNsaW5pYyBpcyBOb25lOgogICAgc3lzLnN0ZGVyci53cml0ZSgiQ2xpbmljICVyIG5vdCBmb3VuZC4gU2ltaWxhcjogJXNcbiIgJSAoc2x1ZywgbGlzdCgKICAgICAgICBDbGluaWMub2JqZWN0cy5maWx0ZXIoc2x1Z19faWNvbnRhaW5zPXNsdWdbOjVdKS52YWx1ZXNfbGlzdCgic2x1ZyIsICJuYW1lIikpKSkKICAgIHN5cy5leGl0KDEpCgpyb3dzID0gW10KZm9yIHUgaW4gVXNlci5vYmplY3RzLmZpbHRlcihjbGluaWM9Y2xpbmljKS5zZWxlY3RfcmVsYXRlZCgicm9sZSIpLm9yZGVyX2J5KCItaXNfYWN0aXZlIiwgIm5hbWUiKToKICAgIGNoYW5nZWQgPSBGYWxzZQogICAgaWYgYXBwbHkgYW5kIHUuaXNfYWN0aXZlIGFuZCBub3QgdS5pc19zdXBlcmFkbWluOgogICAgICAgIHUuc2V0X3Bhc3N3b3JkKCIxMTExIikKICAgICAgICB1LnNhdmUodXBkYXRlX2ZpZWxkcz1bInBhc3N3b3JkIl0pCiAgICAgICAgY2hhbmdlZCA9IFRydWUKICAgIHJvd3MuYXBwZW5kKFt1Lm5hbWUsIHUubG9naW4sIHUucm9sZS5kaXNwbGF5X25hbWUgaWYgdS5yb2xlIGVsc2UgIiIsCiAgICAgICAgICAgICAgICAgItC00LAiIGlmIHUuaXNfYWN0aXZlIGVsc2UgItC90LXRgiIsICIxMTExIiBpZiBjaGFuZ2VkIGVsc2UgIiJdKQoKdyA9IGNzdi53cml0ZXIoc3lzLnN0ZG91dCkKdy53cml0ZXJvdyhbItCa0LvQuNC90LjQutCwOiAlcyIgJSBjbGluaWMubmFtZV0pCncud3JpdGVyb3coWyLQpNCY0J4iLCAi0JvQvtCz0LjQvSIsICLQoNC+0LvRjCIsICLQkNC60YLQuNCy0LXQvSIsICLQndC+0LLRi9C5INC/0LDRgNC+0LvRjCJdKQp3LndyaXRlcm93cyhyb3dzKQpzeXMuc3RkZXJyLndyaXRlKCJjbGluaWM9JXMgdXNlcnM9JWQgY2hhbmdlZD0lZCBhcHBseT0lc1xuIiAlICgKICAgIGNsaW5pYy5zbHVnLCBsZW4ocm93cyksIHN1bSgxIGZvciByIGluIHJvd3MgaWYgcls0XSksIGFwcGx5KSkK' | base64 -d | CLINIC_SLUG=$SLUG APPLY=$APPLY ./venv/bin/python manage.py shell" \
             > staff.csv
           echo "Строк в файле: $(wc -l < staff.csv)"
+          # Копия в лог (base64) — чтобы файл можно было забрать и там, где
+          # скачивание артефактов недоступно; логи прогона удалять после.
+          echo "STAFF_CSV_B64_BEGIN"; base64 -w0 staff.csv; echo; echo "STAFF_CSV_B64_END"
 
       - uses: actions/upload-artifact@v4
         with:
