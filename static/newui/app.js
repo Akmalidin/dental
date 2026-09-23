@@ -1440,7 +1440,7 @@ function msgSetChannelFilter(ch){
 function selectClient(id){
   currentClientId=id;
   const c=chatClients.find(x=>x.id===id);
-  if(c) c.unread=0;
+  if(c){ MESSAGES_UNREAD=Math.max(0, MESSAGES_UNREAD-(c.unread||0)); c.unread=0; updateMsgFab(); }
   // Канал отправки подставляем под открытый диалог — но оператор может его
   // сменить: ответить в Telegram на переписку из WhatsApp теперь можно.
   const sel=document.getElementById('chatSendChannel');
@@ -4837,6 +4837,7 @@ function saveMenuSettings(){
   SERVER_USER_MENU_PREFS=prefs;
   saveMenuPrefsToServer(prefs, 'user');
   applyMenuPrefs();
+  updateMsgFab();
   // если скрыли раздел, который сейчас открыт — уходим на дашборд
   const activeItem=document.querySelector('.nav-item.active');
   if(activeItem && activeItem.classList.contains('menu-hidden')){
@@ -7117,6 +7118,22 @@ let CUR_SYM='сом', CUR_SYM2='', CUR_HAS2=false;
 // умолчанию от директора), см. loadMenuPrefs() ниже. CAN_SET_CLINIC_MENU — может ли
 // текущий пользователь сохранить меню клиники (директор/суперадмин).
 let SERVER_USER_MENU_PREFS=null, SERVER_CLINIC_MENU_PREFS=null, CAN_SET_CLINIC_MENU=false;
+let MESSAGES_UNREAD=0;
+/* Плавающая кнопка «Мессенджеры» рядом с ☰ — видна, только если сам пункт
+   меню доступен (не скрыт правами — hideRestrictedNavItems — и не спрятан
+   в «Настроить меню» — applyMenuPrefs), поэтому вызывается после них. */
+function updateMsgFab(){
+  const fab=document.getElementById('msgFab');
+  const nav=document.querySelector('.sidebar .nav-item[data-view="messages"]');
+  if(!fab) return;
+  const navVisible=!!nav && !nav.classList.contains('hidden') && nav.style.display!=='none';
+  fab.classList.toggle('hidden', !navVisible);
+  const badge=document.getElementById('msgFabBadge');
+  if(badge){
+    badge.textContent=MESSAGES_UNREAD>99 ? '99+' : String(MESSAGES_UNREAD);
+    badge.classList.toggle('hidden', MESSAGES_UNREAD<=0);
+  }
+}
 // Расписание: подсказка «начать приём» после «Пришёл» — только для врача (см.
 // maybeOfferStartVisit). Касса: кнопка «Быстрая продажа» — только у права finance.quick_sale.
 // Голосовой ввод — общий виджет на всех страницах (см. #voiceFab). Работает
@@ -7757,6 +7774,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
     CUR_HAS2=!!data.clinicHasSecondaryCurrency;
     SERVER_USER_MENU_PREFS=data.userMenuPrefs || {};
     SERVER_CLINIC_MENU_PREFS=data.clinicMenuPrefs || {};
+    MESSAGES_UNREAD=Number(data.messagesUnread)||0;
     CAN_SET_CLINIC_MENU=!!data.canSetClinicMenu;
     document.getElementById('navSalary').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
     hideRestrictedNavItems(data.navSections);
@@ -7809,6 +7827,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
     if(VOICE_ENABLED && isWakeWordEnabled()) startWakeWordListening();
   }catch(e){ console.error('newui real data parse failed', e); }
   applyMenuPrefs();
+  updateMsgFab();
   redirectToHomeIfNeeded();
 })();
 

@@ -42,6 +42,14 @@ def _message_templates_queryset():
     return MessageTemplate.objects.all()
 
 
+def _messages_unread_count(clinic):
+    from apps.notifications.models import WaMessage
+    qs = WaMessage.all_clinics.filter(direction="in", read=False).exclude(patient__isnull=True)
+    if clinic:
+        qs = qs.filter(clinic=clinic)
+    return qs.count()
+
+
 def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
@@ -79,6 +87,10 @@ def _shared_options(request, clinic):
         "userMenuPrefs": getattr(request.user, "menu_prefs", None) or {},
         "clinicMenuPrefs": cs.menu_prefs or {},
         "canSetClinicMenu": bool(request.user.is_superadmin or request.user.has_role("admin_main")),
+        # Счётчик на плавающей кнопке «Мессенджеры» (рядом с ☰, base.html) —
+        # та же граница, что у списка бесед (_newui_messages_data): входящие
+        # непрочитанные с привязанным пациентом.
+        "messagesUnread": _messages_unread_count(clinic),
         "roleOptions": [
             # roleKey — стабильный системный ключ роли (Role.DOCTOR и т.п., не
             # зависит от языка/переименования display_name) — нужен, чтобы
