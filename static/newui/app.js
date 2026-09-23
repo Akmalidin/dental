@@ -2834,6 +2834,7 @@ const translations={
   w_no_docs_uploaded: {ru:'Пока нет загруженных документов', ky:'Азырынча жүктөлгөн документтер жок', en:'No documents uploaded yet', uz:'Hozircha yuklangan hujjatlar yo‘q'},
   w_docs_upload_old_ui_hint: {ru:'Договор, согласие на лечение, снимки — нажмите «Загрузить» выше', ky:'Келишим, дарылоого макулдук, сүрөттөр — жогорудагы «Жүктөө» баскычын басыңыз', en:'Contract, treatment consent, images — click «Upload» above', uz:'Shartnoma, davolashga rozilik, rasmlar — yuqoridagi «Yuklash» tugmasini bosing'},
   w_upload: {ru:'Загрузить', ky:'Жүктөө', en:'Upload', uz:'Yuklash'},
+  w_open_full_page: {ru:'Открыть на всю страницу', ky:'Толук баракта ачуу', en:'Open full page', uz:'To\'liq sahifada ochish'},
   w_generate_document: {ru:'Сформировать', ky:'Түзүү', en:'Generate', uz:'Yaratish'},
   w_on_deposit: {ru:'На депозите', ky:'Депозитте', en:'On deposit', uz:'Depozitda'},
   w_docs_dnd_hint: {ru:'Договор, согласие на лечение, снимки — перетащите сюда или нажмите «Загрузить»', ky:'Келишим, дарылоого макулдук, сүрөттөр — бул жерге сүйрөңүз же «Жүктөө» баскычын басыңыз', en:'Contract, consent for treatment, images — drag here or click “Upload”', uz:'Shartnoma, davolashga rozilik, rasmlar — shu yerga torting yoki «Yuklash»ni bosing'},
@@ -7128,12 +7129,67 @@ function updateMsgFab(){
   if(!fab) return;
   const navVisible=!!nav && !nav.classList.contains('hidden') && nav.style.display!=='none';
   fab.classList.toggle('hidden', !navVisible);
-  const badge=document.getElementById('msgFabBadge');
-  if(badge){
+  ['msgFabBadge','navMsgBadge'].forEach(id=>{
+    const badge=document.getElementById(id);
+    if(!badge) return;
     badge.textContent=MESSAGES_UNREAD>99 ? '99+' : String(MESSAGES_UNREAD);
     badge.classList.toggle('hidden', MESSAGES_UNREAD<=0);
+  });
+  // Встроенная страница (в панели) сообщает счётчик родительскому окну.
+  if(window.parent!==window){
+    try{ window.parent.postMessage({type:'msgUnread', n:MESSAGES_UNREAD}, location.origin); }catch(e){}
   }
 }
+
+/* Панель «Мессенджеры» на компьютере (шире 900px — там же, где нет ☰):
+   пункт меню открывает её поверх текущей страницы вместо перехода.
+   Ctrl/Cmd/Shift/средний клик — как обычная ссылка (новая вкладка). */
+const MSG_PANEL_MIN_WIDTH=901;
+function openMsgPanel(){
+  const panel=document.getElementById('msgPanel');
+  const frame=document.getElementById('msgPanelFrame');
+  if(!panel || !frame) return false;
+  if(!frame.getAttribute('src')) frame.setAttribute('src', '/new/messages/?embed=1');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden','false');
+  document.getElementById('msgPanelBackdrop').classList.add('open');
+  return true;
+}
+function closeMsgPanel(){
+  const panel=document.getElementById('msgPanel');
+  if(!panel) return;
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden','true');
+  document.getElementById('msgPanelBackdrop').classList.remove('open');
+}
+document.addEventListener('click', e=>{
+  const nav=e.target.closest && e.target.closest('.sidebar .nav-item[data-view="messages"]');
+  if(!nav) return;
+  if(e.ctrlKey || e.metaKey || e.shiftKey || e.button!==0) return;
+  if(window.innerWidth<MSG_PANEL_MIN_WIDTH) return;
+  if(document.getElementById('chatMessages')) return; // уже на странице «Мессенджеры»
+  if(openMsgPanel()) e.preventDefault();
+});
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  const panel=document.getElementById('msgPanel');
+  if(panel && panel.classList.contains('open')){ closeMsgPanel(); return; }
+  // Фокус внутри панели (встроенная страница): Esc закрывает панель, если
+  // сначала не нужно закрыть открытую модалку (например, «Шаблоны»).
+  if(document.body.classList.contains('embed') && window.parent!==window
+     && !document.querySelector('.modal-backdrop.open')){
+    try{ window.parent.postMessage({type:'msgPanelClose'}, location.origin); }catch(err){}
+  }
+});
+window.addEventListener('message', e=>{
+  if(e.origin!==location.origin || !e.data) return;
+  if(e.data.type==='msgUnread'){
+    MESSAGES_UNREAD=Math.max(0, Number(e.data.n)||0);
+    updateMsgFab();
+  } else if(e.data.type==='msgPanelClose'){
+    closeMsgPanel();
+  }
+});
 // Расписание: подсказка «начать приём» после «Пришёл» — только для врача (см.
 // maybeOfferStartVisit). Касса: кнопка «Быстрая продажа» — только у права finance.quick_sale.
 // Голосовой ввод — общий виджет на всех страницах (см. #voiceFab). Работает
