@@ -204,7 +204,7 @@ def tg_bot_link_for(clinic):
     страна. Чтобы пациент получал уведомления и в Telegram, ему нужно
     один раз самому нажать /start у бота клиники — тогда бот подтянет
     его карточку по номеру телефона (см. apps/notifications/views.py,
-    _tg_link_by_phone)."""
+    tg_patient.link_by_phone)."""
     from apps.settings_clinic.models import ClinicSettings
     cs = ClinicSettings.objects.filter(clinic=clinic).first()
     username = (cs.telegram_bot_username or "").strip() if cs else ""
@@ -246,38 +246,57 @@ def submit_booking(request, clinic):
     """Создать заявку на приём → серая запись в расписании + уведомления.
     Общая логика для public_book_submit (сайт клиники, поддомен) и
     apps.marketing.views.book_clinic_submit (общая страница записи без
-    сайта — apps.marketing.views.directory, для клиник без ClinicSite)."""
+    сайта — apps.marketing.views.directory, для клиник без ClinicSite).
+    Сама запись — create_booking (её же использует Telegram-бот)."""
     from django.http import JsonResponse
+    appt, err = create_booking(
+        clinic,
+        name=(request.POST.get("name") or "").strip(),
+        phone=(request.POST.get("phone") or "").strip(),
+        doctor_id=request.POST.get("doctor"),
+        date_str=request.POST.get("date"),
+        slot=request.POST.get("slot") or "",
+        branch_id=request.POST.get("branch"),
+        service_id=request.POST.get("service") or None,
+    )
+    if err:
+        return JsonResponse({"ok": False, "error": err[0]}, status=err[1])
+    return JsonResponse({"ok": True})
+
+
+def create_booking(clinic, *, name, phone, doctor_id, date_str, slot, branch_id=None,
+                   service_id=None, patient=None, channel="site"):
+    """Онлайн-запись: запись в расписании (статус «Записан») + лид в «Заявки ·
+    CRM» + уведомления персоналу. channel: "site" — с сайта (пациенту уходит
+    подтверждение в WhatsApp/Telegram), "telegram" — через бота клиники (бот
+    сам подтверждает пациенту на его языке). patient — уже известная карточка
+    (бот), иначе ищется/создаётся по номеру.
+    Возвращает (appt, None) или (None, (текст ошибки, HTTP-статус))."""
     from django.utils import timezone
     from django.db.models import Q
     from datetime import datetime, timedelta, time as dtime
-    name = (request.POST.get("name") or "").strip()
-    phone = (request.POST.get("phone") or "").strip()
-    doctor_id = request.POST.get("doctor")
-    date_str = request.POST.get("date")
-    slot = request.POST.get("slot") or ""
-    service_id = request.POST.get("service") or None
+    via_bot = channel == "telegram"
     if not (name and phone and doctor_id and date_str and slot):
-        return JsonResponse({"ok": False, "error": "Заполните все поля"}, status=400)
+        return None, ("Заполните все поля", 400)
 
     from apps.users.models import clinic_doctors, Branch, User, Role
     from apps.appointments.models import Appointment
     from apps.patients.models import Patient
 
     if not clinic_doctors(clinic).filter(pk=doctor_id).exists():
-        return JsonResponse({"ok": False, "error": "Врач не найден"}, status=400)
+        return None, ("Врач не найден", 400)
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
         hh = int(slot.split(":")[0])
     except (ValueError, IndexError):
-        return JsonResponse({"ok": False, "error": "Неверная дата/время"}, status=400)
+        return None, ("Неверная дата/время", 400)
 
     start = timezone.make_aware(datetime.combine(d, dtime(hour=hh)))
     end = start + timedelta(hours=SLOT_HOURS)
     clash = (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id,
              start_at__lt=end, end_at__gt=start).exclude(status__in=["cancelled", "no_show"]).exists())
     if clash:
-        return JsonResponse({"ok": False, "error": "Это время уже занято, выберите другое"}, status=409)
+        return None, ("Это время уже занято, выберите другое", 409)
 
     # Филиал, выбранный на странице записи (см. public_book, ?branch=<id>
     # из каталога клиник stom.asia) — если передан и реально принадлежит
@@ -285,7 +304,7 @@ def submit_booking(request, clinic):
     # затем любой филиал), чтобы не задеть однофилиальные клиники.
     branch = None
     try:
-        branch_id = int(request.POST.get("branch") or 0)
+        branch_id = int(branch_id or 0)
     except (TypeError, ValueError):
         branch_id = 0
     if branch_id:
@@ -294,7 +313,7 @@ def submit_booking(request, clinic):
         branch = (Branch.objects.filter(clinic=clinic, is_main=True).first()
                   or Branch.objects.filter(clinic=clinic).first())
     if branch is None:
-        return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
+        return None, ("Нет филиала", 400)
 
     from apps.patients.models import normalize_phone
     from django.db import transaction
@@ -303,20 +322,21 @@ def submit_booking(request, clinic):
         # а не по точному совпадению строки: иначе "+996700000000" и "0700000000"
         # (тот же номер, разное форматирование) считались бы разными пациентами
         # и с сайта каждый раз создавалась бы новая дублирующая карточка.
-        patient = (Patient.all_objects.select_for_update()
-                   .filter(clinic=clinic, phone_norm=normalize_phone(phone), is_deleted=False).first())
+        if patient is None:
+            patient = (Patient.all_objects.select_for_update()
+                       .filter(clinic=clinic, phone_norm=normalize_phone(phone), is_deleted=False).first())
         if patient is None:
             parts = name.split(None, 1)
             patient = Patient(first_name=parts[0], last_name=parts[1] if len(parts) > 1 else "",
                               phone=phone, branch=branch)
             patient.save()
 
-    note = "Заявка с сайта"
-    if name and patient.full_name.strip().lower() != name.strip().lower():
+    note = "Запись через Telegram-бот" if via_bot else "Заявка с сайта"
+    if not via_bot and name and patient.full_name.strip().lower() != name.strip().lower():
         note += " (на сайте указано имя: %s)" % name
     appt = Appointment(patient=patient, doctor_id=doctor_id, branch=branch,
                        start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED,
-                       source="online", notes=note)
+                       source="telegram" if via_bot else "online", notes=note)
     if service_id:
         appt.service_id = service_id
     appt.save()
@@ -328,11 +348,12 @@ def submit_booking(request, clinic):
     try:
         from apps.patients.models import Lead, LeadSource
         doctor_name = User.objects.filter(pk=doctor_id).values_list("name", flat=True).first() or "—"
-        source, _c = LeadSource.objects.get_or_create(name="Сайт")
+        source, _c = LeadSource.objects.get_or_create(name="Telegram" if via_bot else "Сайт")
         Lead.objects.create(
             clinic=clinic, name=name, phone=phone, source=source, patient=patient,
             stage=Lead.STAGE_BOOKED,
-            comment="Онлайн-запись с сайта: %s %s, врач %s, филиал %s" % (
+            comment="%s: %s %s, врач %s, филиал %s" % (
+                "Запись через Telegram-бот" if via_bot else "Онлайн-запись с сайта",
                 d.strftime("%d.%m.%Y"), slot, doctor_name, branch.name),
         )
     except Exception:
@@ -344,13 +365,14 @@ def submit_booking(request, clinic):
     except Exception:
         pass
 
+    title = "Новая запись через Telegram-бот" if via_bot else "Новая заявка с сайта"
     try:
         from apps.notifications.models import Notification
         admins = (User.objects.filter(clinic=clinic, is_active=True)
                   .filter(Q(role__name__in=[Role.ADMIN, Role.ADMIN_MAIN])
                           | Q(roles__name__in=[Role.ADMIN, Role.ADMIN_MAIN])).distinct())
         for u in admins:
-            Notification.send(u, "Новая заявка с сайта",
+            Notification.send(u, title,
                               "%s, %s — %s %s" % (patient.full_name, phone, d.strftime("%d.%m.%Y"), slot),
                               type="appointment", link="/calendar/")
     except Exception:
@@ -362,16 +384,17 @@ def submit_booking(request, clinic):
         from django.conf import settings as dj_settings
         d_str, doc = d.strftime("%d.%m.%Y"), User.objects.filter(pk=doctor_id).first()
         doc_name = doc.name if doc else "—"
-        wa_send_text(phone,
-            "🦷 *%s*\n\n"
-            "Здравствуйте, *%s*! 👋\n"
-            "Ваша заявка на приём принята ✅\n\n"
-            "📅 Дата: *%s*\n"
-            "🕐 Время: *%s*\n"
-            "👨‍⚕️ Врач: _%s_\n\n"
-            "Мы свяжемся с вами для подтверждения. Спасибо, что выбрали нас! 💙"
-            % (clinic.name, patient.first_name or patient.full_name, d_str, slot, doc_name))
-        if patient.telegram_chat_id:
+        if not via_bot:
+            wa_send_text(phone,
+                "🦷 *%s*\n\n"
+                "Здравствуйте, *%s*! 👋\n"
+                "Ваша заявка на приём принята ✅\n\n"
+                "📅 Дата: *%s*\n"
+                "🕐 Время: *%s*\n"
+                "👨‍⚕️ Врач: _%s_\n\n"
+                "Мы свяжемся с вами для подтверждения. Спасибо, что выбрали нас! 💙"
+                % (clinic.name, patient.first_name or patient.full_name, d_str, slot, doc_name))
+        if patient.telegram_chat_id and not via_bot:
             from apps.notifications.telegram import tg_send_text
             tg_send_text(patient.telegram_chat_id,
                 "🦷 <b>%s</b>\n\n"
@@ -386,26 +409,26 @@ def submit_booking(request, clinic):
             link = "https://%s/appointments/?focus=%s" % (
                 getattr(dj_settings, "APP_HOST", "app.denta.tw1.ru"), appt.pk)
             wa_send_text(doc.phone,
-                "🔔 *Новая заявка с сайта*\n\n"
+                "🔔 *%s*\n\n"
                 "👤 Пациент: *%s*\n"
                 "📞 Телефон: %s\n"
                 "📅 *%s*  🕐 *%s*\n\n"
                 "🔗 Открыть запись:\n%s"
-                % (patient.full_name, phone, d_str, slot, link))
+                % (title, patient.full_name, phone, d_str, slot, link))
         if doc:
             from apps.notifications.tg_staff import notify_user
             notify_user(doc,
-                "🔔 *Новая заявка с сайта*\n\n"
+                "🔔 *%s*\n\n"
                 "👤 Пациент: *%s*\n📞 Телефон: %s\n📅 *%s*  🕐 *%s*"
-                % (patient.full_name, phone, d_str, slot))
+                % (title, patient.full_name, phone, d_str, slot))
         # WhatsApp- и Telegram-группы клиники
         from apps.notifications.whatsapp import notify_groups
         notify_groups(
-            "🔔 *Новая заявка с сайта* — %s\n\n"
+            "🔔 *%s* — %s\n\n"
             "👤 Пациент: *%s*\n📞 %s\n📅 *%s*  🕐 *%s*\n👨‍⚕️ Врач: _%s_"
-            % (clinic.name, patient.full_name, phone, d_str, slot, doc_name),
+            % (title, clinic.name, patient.full_name, phone, d_str, slot, doc_name),
             clinic=clinic)
     except Exception:
         pass
 
-    return JsonResponse({"ok": True})
+    return appt, None

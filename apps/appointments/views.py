@@ -192,11 +192,16 @@ def notify_appointment_created(appt, created_by=None):
                 # Бот — только он умеет кнопки подтверждения приёма.
                 if appt.patient.telegram_chat_id:
                     from apps.notifications.telegram import tg_send_text, tg_enabled
+                    from apps.notifications.tg_patient import t as _t, lang_for_chat
                     if tg_enabled():
+                        lang = lang_for_chat(appt.clinic, appt.patient.telegram_chat_id)
+                        text = tg_text if lang == "ru" else _t(
+                            "appt_new", lang, clinic=clinic_name, name=pname,
+                            date=date_s, time=time_s, doctor=doctor_name)
                         return bool(tg_send_text(
-                            appt.patient.telegram_chat_id, tg_text,
-                            buttons=[[("✅ Подтвердить", "appt_confirm:%s" % appt.pk),
-                                      ("❌ Отменить", "appt_cancel:%s" % appt.pk)]],
+                            appt.patient.telegram_chat_id, text,
+                            buttons=[[(_t("btn_appt_confirm", lang), "appt_confirm:%s" % appt.pk),
+                                      (_t("btn_appt_cancel", lang), "appt_cancel:%s" % appt.pk)]],
                         ))
                 # Аккаунт Green-API — для тех, кто бота не запускал: кнопок нет.
                 from apps.notifications.telegram_ga import tga_enabled, tga_send_text

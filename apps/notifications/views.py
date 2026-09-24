@@ -835,27 +835,6 @@ def _tg_staff_ok(user):
     return user.is_superadmin or user.is_admin
 
 
-def _tg_link_by_phone(chat_id, phone_raw, token):
-    """Привязать chat_id к карточке пациента по номеру (из shared-контакта или
-    напечатанного текста). При успехе шлёт подтверждение + меню самообслуживания."""
-    from apps.patients.models import Patient, normalize_phone
-    from .telegram import tg_send_menu
-    pnorm = normalize_phone(phone_raw)
-    patient = Patient.objects.filter(phone_norm=pnorm).first() if pnorm else None
-    if patient is None:
-        return None
-    patient.telegram_chat_id = chat_id
-    patient.save(update_fields=["telegram_chat_id"])
-    name = (patient.first_name or "").strip() or "!"
-    tg_send_menu(
-        chat_id,
-        "✅ Готово, %s Теперь буду присылать сюда напоминания о приёмах.\n\n"
-        "Ниже — меню: можно посмотреть долг и историю приёмов." % name,
-        token=token,
-    )
-    return patient
-
-
 def _tg_log_inbound(patient, chat_id, text, media_file=None, media_type="", snippet=None):
     """Залогировать входящее Telegram-сообщение в единую ленту переписок
     («Мессенджеры») + уведомить админов/врача — общая часть для всех веток
@@ -942,10 +921,6 @@ def _tg_handle_update(body, clinic_slug):
             return
 
         from apps.settings_clinic.models import ClinicSettings
-        from .telegram import (
-            tg_send_text, tg_send_contact_request, tg_edit_message, tg_answer_callback,
-            tg_send_menu, BTN_MY_DEBT, BTN_MY_VISITS,
-        )
         cs = ClinicSettings.get()
         token = (cs.telegram_bot_token or "").strip()
         if not token:
@@ -956,6 +931,9 @@ def _tg_handle_update(body, clinic_slug):
         cq = update.get("callback_query")
         if cq:
             if tg_staff.handle_callback(clinic, cq, token):
+                return
+            from . import tg_patient
+            if tg_patient.handle_callback(clinic, cq, token):
                 return
             _handle_tg_callback(cq, token)
             return
@@ -975,67 +953,11 @@ def _tg_handle_update(body, clinic_slug):
 
         chat_id = msg.get("chat", {}).get("id")
         text = (msg.get("text") or "").strip()
-        contact = msg.get("contact")
 
-        # ── /start — приветствие + запрос номера для привязки к карточке пациента ──
-        if text.startswith("/start"):
-            tg_send_contact_request(
-                chat_id,
-                "👋 Здравствуйте! Это бот клиники «%s».\n\n"
-                "Чтобы получать напоминания о приёмах и другие уведомления, "
-                "поделитесь, пожалуйста, номером телефона (кнопка ниже)." % clinic.name,
-                token=token,
-            )
+        # ── Пациент: язык, привязка по номеру, регистрация, запись, меню ──
+        from . import tg_patient
+        if tg_patient.handle_message(clinic, msg, token, cs):
             return
-
-        # ── Поделился номером — привязываем chat_id к карточке пациента ──
-        if contact:
-            patient = _tg_link_by_phone(chat_id, contact.get("phone_number") or "", token)
-            if patient is None:
-                tg_send_text(chat_id, "Не нашли карточку с таким номером в базе клиники. Обратитесь на ресепшене.")
-            else:
-                _tg_log_inbound(patient, chat_id, "📱 Поделился(ась) номером телефона — подключил(а) уведомления")
-            return
-
-        # ── Меню самообслуживания (после привязки номера) ──
-        if text in (BTN_MY_DEBT, BTN_MY_VISITS):
-            from apps.patients.models import Patient
-            patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
-            if patient is None:
-                tg_send_text(chat_id, "Сначала поделитесь номером телефона — нажмите /start")
-                return
-            _tg_log_inbound(patient, chat_id, text)
-            if text == BTN_MY_DEBT:
-                cur = cs.currency_label if cs else "сом"
-                if patient.debt > 0:
-                    tg_send_text(chat_id, "💰 Ваш долг: <b>%.0f %s</b>" % (patient.debt, cur))
-                else:
-                    tg_send_text(chat_id, "💰 У вас нет задолженности. Спасибо!")
-            else:
-                from apps.treatments.models import Treatment
-                treatments = list(Treatment.objects.filter(patient=patient)
-                                  .exclude(status=Treatment.STATUS_DRAFT).order_by("-created_at")[:10])
-                if not treatments:
-                    tg_send_text(chat_id, "🗓 Приёмов пока не найдено.")
-                else:
-                    buttons = [[("%s — %s" % (t.created_at.strftime("%d.%m.%Y"), t.get_status_display()),
-                                "my_treatment:%s" % t.pk)] for t in treatments]
-                    tg_send_text(chat_id, "🗓 Ваши приёмы (последние %s) — выберите, чтобы посмотреть детали:"
-                                 % len(treatments), buttons=buttons)
-            return
-
-        # ── Номер телефона напечатан текстом (не через кнопку «Поделиться») —
-        # пробуем привязать так же, если ещё не привязаны ──
-        if text and not text.startswith("/"):
-            from apps.patients.models import Patient
-            import re as _re
-            digits = _re.sub(r"\D", "", text)
-            already_linked = Patient.objects.filter(telegram_chat_id=chat_id).exists()
-            if not already_linked and 9 <= len(digits) <= 15:
-                patient = _tg_link_by_phone(chat_id, text, token)
-                if patient is not None:
-                    _tg_log_inbound(patient, chat_id, "📱 Поделился(ась) номером телефона — подключил(а) уведомления")
-                    return
 
         # ── Голосовое/аудио — скачиваем и сохраняем у себя (ссылки Telegram недолговечны) ──
         media_file, media_type, snippet = None, "", text
@@ -1101,10 +1023,13 @@ def _handle_tg_callback(cq, token):
         appt = Appointment.objects.filter(pk=int(appt_id)).first()
     except (ValueError, TypeError):
         appt = None
-    if appt is None:
+    # кнопки записи — только у пациента этой записи (callback_data можно подделать)
+    if appt is None or appt.patient is None or appt.patient.telegram_chat_id != chat_id:
         tg_answer_callback(cq_id, "Запись не найдена", token=token)
         return
 
+    from .tg_patient import t as _t, lang_for_chat
+    lang = lang_for_chat(appt.clinic, chat_id)
     if action == "appt_confirm":
         if appt.status in ("scheduled",):
             appt.status = "confirmed"
@@ -1112,16 +1037,16 @@ def _handle_tg_callback(cq, token):
         from django.utils import timezone as _tz
         local_start = _tz.localtime(appt.start_at)
         tg_edit_message(chat_id, message_id,
-                        "✅ <b>Запись подтверждена</b>\nЖдём вас %s в %s" % (
-                            local_start.strftime("%d.%m.%Y"), local_start.strftime("%H:%M")),
+                        _t("appt_confirmed", lang, date=local_start.strftime("%d.%m.%Y"),
+                           time=local_start.strftime("%H:%M")),
                         token=token)
-        tg_answer_callback(cq_id, "Запись подтверждена ✅", token=token)
+        tg_answer_callback(cq_id, _t("toast_confirmed", lang), token=token)
     elif action == "appt_cancel":
         if appt.status not in ("completed", "cancelled"):
             appt.status = "cancelled"
             appt.save(update_fields=["status"])
-        tg_edit_message(chat_id, message_id, "❌ <b>Запись отменена</b>", token=token)
-        tg_answer_callback(cq_id, "Запись отменена", token=token)
+        tg_edit_message(chat_id, message_id, _t("appt_cancelled", lang), token=token)
+        tg_answer_callback(cq_id, _t("toast_cancelled", lang), token=token)
     else:
         tg_answer_callback(cq_id, token=token)
 
