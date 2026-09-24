@@ -108,6 +108,25 @@ class TgGroup(ClinicScopedModel):
         return self.title or str(self.chat_id)
 
 
+class TgChat(ClinicScopedModel):
+    """Состояние личного чата пациента с ботом клиники: выбранный язык
+    обслуживания (ru / uz — узбекский латиницей) и шаг диалога (ждём ФИО
+    нового пациента и т.п.) — см. apps.notifications.tg_patient."""
+    chat_id = models.BigIntegerField(verbose_name="ID чата Telegram")
+    lang = models.CharField(max_length=2, blank=True, verbose_name="Язык")
+    state = models.CharField(max_length=30, blank=True, verbose_name="Шаг диалога")
+    data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Telegram-чат пациента"
+        verbose_name_plural = "Telegram-чаты пациентов"
+        unique_together = [["clinic", "chat_id"]]
+
+    def __str__(self):
+        return "%s (%s)" % (self.chat_id, self.lang or "—")
+
+
 class Broadcast(models.Model):
     """Одна рассылка объявления из супер-админ-панели (/new/superadmin/,
     вкладка «Push-рассылка», apps.users.newui_views.

@@ -613,3 +613,139 @@ class TgStaffBotTestCase(TestCase):
         self.assertEqual(parse_date("25/09/26"), date(2026, 9, 25))
         self.assertIsNone(parse_date("99.99"))
         self.assertIsNone(parse_date("привет"))
+
+
+class TgPatientBookingTestCase(TestCase):
+    """Бот для пациентов: выбор языка (ru / uz), привязка по номеру,
+    регистрация нового пациента по ФИО и онлайн-запись прямо в боте."""
+
+    def setUp(self):
+        import json
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.patients.models import Patient
+        from apps.tenancy import set_current_clinic
+        self.json = json
+        self.clinic = Clinic.objects.create(name="Клиника Бот", slug="tg-book-clinic")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Главный", address="-", phone="0", is_main=True, clinic=self.clinic)
+        ClinicSettings.objects.update_or_create(
+            clinic=self.clinic, defaults={"name": self.clinic.name, "telegram_bot_token": "123:ABC"})
+        doc_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        self.doctor = User.objects.create(login="bk_doc", name="Доктор Бот", role=doc_role, clinic=self.clinic)
+        self.patient = Patient.objects.create(first_name="Азиз", last_name="Каримов",
+                                              phone="+998901234567", clinic=self.clinic)
+        self.day = timezone.localdate() + timedelta(days=2)
+        self.calls = []
+
+    def tearDown(self):
+        from apps.tenancy import clear_current_clinic
+        clear_current_clinic()
+
+    def _fake_call(self, method, payload, token=None):
+        self.calls.append((method, payload))
+        return {"ok": True, "result": {"message_id": 1}}
+
+    def _update(self, update):
+        from apps.notifications.views import _tg_handle_update
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            _tg_handle_update(self.json.dumps(update).encode(), self.clinic.slug)
+
+    def _msg(self, **kw):
+        m = {"chat": {"id": 777, "type": "private"}, "from": {"id": 777}}
+        m.update(kw)
+        self._update({"message": m})
+
+    def _cb(self, data):
+        self._update({"callback_query": {"id": "q", "from": {"id": 777}, "data": data,
+                                         "message": {"chat": {"id": 777}, "message_id": 5}}})
+
+    def _texts(self):
+        return "\n".join(p.get("text", "") for _m, p in self.calls)
+
+    def _buttons(self):
+        kb = (self.calls[-1][1].get("reply_markup") or {}).get("inline_keyboard") or []
+        return [b["callback_data"] for row in kb for b in row if "callback_data" in b]
+
+    def test_start_asks_language_then_contact_in_uzbek(self):
+        self._msg(text="/start")
+        self.assertEqual(self._buttons(), ["lang:ru", "lang:uz"])
+        self._cb("lang:uz")
+        from apps.notifications.models import TgChat
+        self.assertEqual(TgChat.all_clinics.get(chat_id=777).lang, "uz")
+        self.assertIn("telefon raqamingizni yuboring", self._texts())
+        kb = self.calls[-1][1]["reply_markup"]["keyboard"]
+        self.assertTrue(kb[0][0]["request_contact"])
+
+    def test_known_phone_links_and_offers_doctors(self):
+        self._msg(contact={"phone_number": "998901234567", "user_id": 777})
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.telegram_chat_id, 777)
+        self.assertIn("pbd:%s:%s" % (self.branch.pk, self.doctor.pk), self._buttons())
+
+    def test_unknown_phone_asks_name_and_registers(self):
+        from apps.patients.models import Patient
+        self._msg(contact={"phone_number": "+998 90 555 44 33", "user_id": 777})
+        self.assertIn("фамилию, имя и отчество", self._texts())
+        self._msg(text="Рахимов Бобур Алишерович")
+        p = Patient.objects.get(telegram_chat_id=777)
+        self.assertEqual((p.last_name, p.first_name, p.middle_name), ("Рахимов", "Бобур", "Алишерович"))
+        self.assertEqual(p.phone_norm, "905554433")
+        self.assertIn("pbd:%s:%s" % (self.branch.pk, self.doctor.pk), self._buttons())
+
+    def test_bad_name_is_rejected(self):
+        from apps.patients.models import Patient
+        self._msg(contact={"phone_number": "+998905554433", "user_id": 777})
+        self._msg(text="12345")
+        self.assertFalse(Patient.objects.filter(telegram_chat_id=777).exists())
+        self.assertIn("ФИО текстом", self._texts())
+
+    def test_full_booking_flow_creates_appointment(self):
+        from apps.appointments.models import Appointment
+        from apps.patients.models import Lead
+        self.patient.telegram_chat_id = 777
+        self.patient.save(update_fields=["telegram_chat_id"])
+        b, d, ds = self.branch.pk, self.doctor.pk, self.day.strftime("%Y%m%d")
+        self._cb("pbd:%s:%s" % (b, d))
+        self.assertIn("pbt:%s:%s:%s" % (b, d, ds), self._buttons())
+        self._cb("pbt:%s:%s:%s" % (b, d, ds))
+        self.assertIn("pbs:%s:%s:%s:10" % (b, d, ds), self._buttons())
+        self._cb("pbs:%s:%s:%s:10" % (b, d, ds))
+        self.assertIn("pbc:%s:%s:%s:10" % (b, d, ds), self._buttons())
+        self._cb("pbc:%s:%s:%s:10" % (b, d, ds))
+        a = Appointment.objects.get()
+        self.assertEqual((a.patient_id, a.doctor_id, a.source), (self.patient.pk, d, "telegram"))
+        from django.utils import timezone
+        self.assertEqual(timezone.localtime(a.start_at).hour, 10)
+        self.assertIn("Вы записаны", self._texts())
+        self.assertEqual(Lead.objects.get().source.name, "Telegram")
+        # второй раз то же время — занято
+        self._cb("pbc:%s:%s:%s:10" % (b, d, ds))
+        self.assertEqual(Appointment.objects.count(), 1)
+        self.assertIn("только что заняли", self._texts())
+
+    def test_booking_requires_linked_patient(self):
+        from apps.appointments.models import Appointment
+        self._cb("pbc:%s:%s:%s:10" % (self.branch.pk, self.doctor.pk, self.day.strftime("%Y%m%d")))
+        self.assertFalse(Appointment.objects.exists())
+
+    def test_menu_buttons_work_in_uzbek(self):
+        from apps.notifications.models import TgChat
+        self.patient.telegram_chat_id = 777
+        self.patient.save(update_fields=["telegram_chat_id"])
+        TgChat.all_clinics.create(clinic=self.clinic, chat_id=777, lang="uz")
+        self._msg(text="💰 Qarzlarim")
+        self.assertIn("Sizda qarz yo'q", self._texts())
+        self._msg(text="📝 Qabulga yozilish")
+        self.assertIn("Shifokorni tanlang", self._texts())
+
+    def test_appt_buttons_only_for_own_patient(self):
+        from datetime import datetime, time
+        from django.utils import timezone
+        from apps.appointments.models import Appointment
+        start = timezone.make_aware(datetime.combine(self.day, time(11, 0)))
+        appt = Appointment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch,
+                                          start_at=start, end_at=start, clinic=self.clinic)
+        self._cb("appt_cancel:%s" % appt.pk)  # чат 777 не привязан к этому пациенту
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "scheduled")
