@@ -1462,7 +1462,24 @@ function renderChatHeader(){
   const chLabel = c.channel==='whatsapp' ? '🟢 WhatsApp' : '🔵 Telegram';
   el.innerHTML=`<button type="button" class="btn btn-ghost btn-sm msg-back" onclick="msgBackToList()" aria-label="Назад">←</button>
     <div style="flex:1;min-width:0;"><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
-    <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>`;
+    <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>
+    ${window.newuiCanDeleteChats ? `<button type="button" class="btn btn-ghost btn-sm" title="${t('w_delete_chat')}" aria-label="${t('w_delete_chat')}" onclick="deleteCurrentChat()" style="color:var(--coral);">🗑</button>` : ''}`;
+}
+// Удалить беседу с пациентом (все сообщения и вложения; карточка остаётся).
+async function deleteCurrentChat(){
+  const c=chatClients.find(x=>x.id===currentClientId);
+  if(!c || !confirm(t('w_confirm_delete_chat').replace('{name}', c.name))) return;
+  const res=await postForm('/patients/'+c.id+'/wa-messages/delete/', new FormData());
+  if(!res.ok){ showToast(t('w_chat_delete_failed'), 'error'); return; }
+  stopChatAutoRefresh();
+  MESSAGES_UNREAD=Math.max(0, MESSAGES_UNREAD-(c.unread||0)); updateMsgFab(); updateMsgNavBadge();
+  chatClients=chatClients.filter(x=>x.id!==c.id);
+  currentClientId=null;
+  renderClientList();
+  renderChatHeader();
+  const el=document.getElementById('chatMessages'); if(el) el.innerHTML='';
+  msgBackToList();
+  showToast(t('w_chat_deleted'));
 }
 // Лента открытого диалога. Держим её в памяти, чтобы автообновление могло
 // дозапрашивать ТОЛЬКО новые сообщения (?after=<id>) и не перерисовывать всё
@@ -2951,6 +2968,10 @@ const translations={
   w_start_new_chat: {ru:'Начать новую переписку', ky:'Жаңы жазышуу баштоо', en:'Start a new chat', uz:'Yangi suhbat boshlash'},
   w_patient_card: {ru:'Карточка пациента', ky:'Бейтап картасы', en:'Patient card', uz:'Bemor kartasi'},
   w_loading: {ru:'Загрузка…', ky:'Жүктөлүүдө…', en:'Loading…', uz:'Yuklanmoqda…'},
+  w_delete_chat: {ru:'Удалить чат', ky:'Чатты өчүрүү', en:'Delete chat', uz:'Chatni o‘chirish'},
+  w_confirm_delete_chat: {ru:'Удалить всю переписку с «{name}»? Сообщения и вложения будут удалены без возможности восстановления. Карточка пациента останется.', ky:'«{name}» менен болгон бардык жазышууну өчүрөсүзбү? Билдирүүлөр жана тиркемелер кайтарылгыс өчүрүлөт. Бейтаптын картасы калат.', en:'Delete the whole conversation with “{name}”? Messages and attachments will be deleted permanently. The patient card stays.', uz:'«{name}» bilan butun yozishmani o‘chirasizmi? Xabarlar va ilovalar butunlay o‘chiriladi. Bemor kartasi qoladi.'},
+  w_chat_deleted: {ru:'Чат удалён', ky:'Чат өчүрүлдү', en:'Chat deleted', uz:'Chat o‘chirildi'},
+  w_chat_delete_failed: {ru:'Не удалось удалить чат', ky:'Чатты өчүрүү мүмкүн болгон жок', en:'Failed to delete the chat', uz:'Chatni o‘chirib bo‘lmadi'},
   w_chat_load_failed: {ru:'Не удалось загрузить переписку', ky:'Жазышууну жүктөө мүмкүн болгон жок', en:'Failed to load the chat', uz:'Suhbatni yuklab bo‘lmadi'},
   w_no_messages_yet: {ru:'Сообщений пока нет', ky:'Азырынча билдирүүлөр жок', en:'No messages yet', uz:'Hozircha xabarlar yo‘q'},
   w_file: {ru:'файл', ky:'файл', en:'file', uz:'fayl'},
@@ -7839,6 +7860,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
       currentClientId=chatClients.length ? chatClients[0].id : null;
       window.newuiWaEnabled=data.messagesData.waEnabled;
       window.newuiTgEnabled=data.messagesData.tgEnabled;
+      window.newuiCanDeleteChats=!!data.messagesData.canDelete;
     }
     setLanguage(data.clinicLanguage || 'ru');
     CUR_SYM=data.clinicCurrencySymbol || 'сом';

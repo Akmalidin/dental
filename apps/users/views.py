@@ -2144,9 +2144,13 @@ def _newui_messages_data(clinic):
     from apps.notifications.whatsapp import wa_enabled
     from apps.notifications.telegram import tg_enabled
 
-    base = WaMessage.all_clinics.exclude(patient__isnull=True)
+    # Карточка в корзине или из другой клиники — такую беседу не открыть
+    # (patient_wa_messages ищет пациента обычным менеджером → 404, в чате
+    # было «Не удалось загрузить переписку»), поэтому и в списке её не
+    # показываем.
+    base = WaMessage.all_clinics.exclude(patient__isnull=True).filter(patient__is_deleted=False)
     if clinic:
-        base = base.filter(clinic=clinic)
+        base = base.filter(clinic=clinic, patient__clinic=clinic)
     convos = {}
     for m in base.select_related("patient").order_by("-id")[:2000]:
         c = convos.get(m.patient_id)
