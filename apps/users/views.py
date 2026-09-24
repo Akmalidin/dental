@@ -2133,6 +2133,20 @@ def _newui_cashdesk_data(request, clinic):
     }
 
 
+def messages_conversation_qs(clinic):
+    """Сообщения, из которых строятся беседы «Мессенджеров» — общая выборка
+    для списка бесед и счётчика непрочитанных в меню (newui_views.
+    _messages_unread_count), чтобы бейдж не показывал сообщения, которых в
+    списке нет. Карточка в корзине или из другой клиники — такую беседу не
+    открыть (patient_wa_messages ищет пациента обычным менеджером → 404, в
+    чате было «Не удалось загрузить переписку»), поэтому её не показываем."""
+    from apps.notifications.models import WaMessage
+    base = WaMessage.all_clinics.exclude(patient__isnull=True).filter(patient__is_deleted=False)
+    if clinic:
+        base = base.filter(clinic=clinic, patient__clinic=clinic)
+    return base
+
+
 def _newui_messages_data(clinic):
     """Список бесед WhatsApp/Telegram для нового интерфейса — та же выборка
     (сгруппировать WaMessage по пациенту, взять последнее сообщение и счётчик
@@ -2144,13 +2158,7 @@ def _newui_messages_data(clinic):
     from apps.notifications.whatsapp import wa_enabled
     from apps.notifications.telegram import tg_enabled
 
-    # Карточка в корзине или из другой клиники — такую беседу не открыть
-    # (patient_wa_messages ищет пациента обычным менеджером → 404, в чате
-    # было «Не удалось загрузить переписку»), поэтому и в списке её не
-    # показываем.
-    base = WaMessage.all_clinics.exclude(patient__isnull=True).filter(patient__is_deleted=False)
-    if clinic:
-        base = base.filter(clinic=clinic, patient__clinic=clinic)
+    base = messages_conversation_qs(clinic)
     convos = {}
     for m in base.select_related("patient").order_by("-id")[:2000]:
         c = convos.get(m.patient_id)
