@@ -16,15 +16,57 @@ def booking_url_for(clinic):
     return f"https://{domain}/book/{clinic.slug}/"
 
 
+BOX = 20
+BORDER = 3
+DARK = (0, 0, 0, 255)
+LIGHT = (255, 255, 255, 255)
+
+
+def _render_rounded(qr):
+    """Свой рендер вместо стандартного: скруглённые «глазки» по углам
+    (рамка + внутренний квадрат), квадратные точки со слегка скруглёнными
+    углами (стыкуются, без зазоров — так надёжнее читается) и скруглённые
+    углы всей карточки (прозрачный фон за углами)."""
+    from PIL import Image, ImageDraw
+
+    matrix = qr.get_matrix()  # уже с рамкой BORDER модулей
+    n = len(matrix)
+    size = n * BOX
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=int(BOX * 2.2), fill=LIGHT)
+
+    count = n - 2 * BORDER
+    eyes = [(BORDER, BORDER), (BORDER, BORDER + count - 7), (BORDER + count - 7, BORDER)]
+
+    def in_eye(r, c):
+        return any(er <= r < er + 7 and ec <= c < ec + 7 for er, ec in eyes)
+
+    for r in range(n):
+        for c in range(n):
+            if matrix[r][c] and not in_eye(r, c):
+                x, y = c * BOX, r * BOX
+                d.rounded_rectangle((x, y, x + BOX - 1, y + BOX - 1), radius=int(BOX * 0.2), fill=DARK)
+
+    for er, ec in eyes:
+        x, y = ec * BOX, er * BOX
+        d.rounded_rectangle((x, y, x + 7 * BOX - 1, y + 7 * BOX - 1), radius=int(BOX * 2), fill=DARK)
+        d.rounded_rectangle((x + BOX, y + BOX, x + 6 * BOX - 1, y + 6 * BOX - 1),
+                            radius=int(BOX * 1.4), fill=LIGHT)
+        d.rounded_rectangle((x + 2 * BOX, y + 2 * BOX, x + 5 * BOX - 1, y + 5 * BOX - 1),
+                            radius=int(BOX * 0.9), fill=DARK)
+    return img
+
+
 def booking_qr_png(url, logo_file=None):
     import qrcode
     from qrcode.constants import ERROR_CORRECT_H
     from PIL import Image, ImageDraw
 
-    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=20, border=3)
+    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=BOX, border=BORDER)
     qr.add_data(url)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white").get_image().convert("RGB")
+    img = _render_rounded(qr)
 
     if logo_file:
         try:
