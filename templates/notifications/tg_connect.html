@@ -64,6 +64,50 @@
   </div>
   {% endif %}
 
+  {% if bot_link %}
+  <div class="card card-pad space-y-3">
+    <p class="font-bold" style="color:var(--text)">👨‍⚕️ Врачи и администраторы</p>
+    <p class="text-sm muted">
+      Сотрудник открывает <a href="{{ bot_link }}" target="_blank" style="color:var(--primary)">{{ bot_link }}</a>,
+      нажимает «Start» и «Поделиться номером». Если номер совпадает с телефоном сотрудника в CRM —
+      бот покажет меню сотрудника: <b>приёмы сегодня</b>, <b>выбрать дату</b>, <b>напомнить пациентам</b>,
+      и будет присылать новые записи и отмены. Врач видит только свои записи, администратор — все.
+    </p>
+    {% if tg_staff %}
+    <div class="space-y-1">
+      {% for u in tg_staff %}
+      <form method="post" class="flex items-center justify-between gap-2 text-sm">
+        {% csrf_token %}
+        <span style="color:var(--text)">✅ {{ u.name }}</span>
+        <button type="submit" name="unlink_staff" value="{{ u.pk }}" class="btn btn-ghost btn-sm">Отключить</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs muted">Пока никто из сотрудников не подключён.</p>
+    {% endif %}
+  </div>
+
+  <div class="card card-pad space-y-3">
+    <p class="font-bold" style="color:var(--text)">👥 Группа персонала</p>
+    <p class="text-sm muted">
+      Добавьте бота @{{ cs.telegram_bot_username }} в группу Telegram, затем администратор
+      (уже подключённый к боту, см. выше) пишет в группе команду <code>/group</code>.
+      В группу будут приходить новые записи, заявки с сайта, отмены и вечером — список записей на завтра.
+      Отключить — <code>/ungroup</code> в группе или кнопкой ниже.
+    </p>
+    {% for g in tg_groups %}
+    <form method="post" class="flex items-center justify-between gap-2 text-sm">
+      {% csrf_token %}
+      <span style="color:var(--text)">✅ {{ g.title|default:g.chat_id }}</span>
+      <button type="submit" name="remove_group" value="{{ g.pk }}" class="btn btn-ghost btn-sm">Отключить</button>
+    </form>
+    {% empty %}
+    <p class="text-xs muted">Группы пока не подключены.</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <p class="text-xs muted">Подключать бота может только администратор/директор клиники.</p>
 </div>
 {% endblock %}

@@ -209,13 +209,15 @@ def notify_appointment_created(appt, created_by=None):
             if not primary():
                 secondary()
         # врачу (если запись создал не сам врач)
-        if (wa_enabled() and appt.doctor_id and getattr(appt.doctor, "phone", "")
-                and getattr(created_by, "pk", None) != appt.doctor_id):
-            wa_send_text(appt.doctor.phone,
-                         "🆕 *Новая запись*\n\n"
-                         "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
-                         % (appt.patient.full_name if appt.patient_id else "—",
-                            date_s, time_s, doctor_name))
+        if appt.doctor_id and getattr(created_by, "pk", None) != appt.doctor_id:
+            doc_text = ("🆕 *Новая запись*\n\n"
+                        "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+                        % (appt.patient.full_name if appt.patient_id else "—",
+                           date_s, time_s, doctor_name))
+            if wa_enabled() and getattr(appt.doctor, "phone", ""):
+                wa_send_text(appt.doctor.phone, doc_text)
+            from apps.notifications.tg_staff import notify_user
+            notify_user(appt.doctor, doc_text)
         # группы клиники
         notify_groups(
             "🆕 *Новая запись* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
@@ -234,8 +236,6 @@ def notify_appointment_cancelled(appt):
         from apps.notifications.whatsapp import wa_send_text, notify_groups, wa_enabled
         from apps.settings_clinic.models import ClinicSettings
         from django.utils import timezone as _tz
-        if not wa_enabled():
-            return
         st = _tz.localtime(appt.start_at)
         clinic_name = ClinicSettings.get().name
         doctor_name = appt.doctor.name if appt.doctor else "—"
@@ -260,12 +260,15 @@ def notify_appointment_cancelled(appt):
                     % (clinic_name, pname, date_s, time_s, doctor_name),
                 )
         # врачу
-        if appt.doctor_id and getattr(appt.doctor, "phone", ""):
-            wa_send_text(appt.doctor.phone,
-                         "❌ *Отмена записи*\n\n"
-                         "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
-                         % (appt.patient.full_name if appt.patient_id else "—",
-                            date_s, time_s, doctor_name))
+        if appt.doctor_id:
+            doc_text = ("❌ *Отмена записи*\n\n"
+                        "Пациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
+                        % (appt.patient.full_name if appt.patient_id else "—",
+                           date_s, time_s, doctor_name))
+            if getattr(appt.doctor, "phone", ""):
+                wa_send_text(appt.doctor.phone, doc_text)
+            from apps.notifications.tg_staff import notify_user
+            notify_user(appt.doctor, doc_text)
         # группы клиники
         notify_groups(
             "❌ *Отмена записи* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"

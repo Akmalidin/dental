@@ -43,6 +43,11 @@ jobs:
             echo ">>> хвост лога unattended-upgrades (последние 40 строк — тут видно, было ли scheduled reboot)"
             tail -n 40 /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null || echo "лога нет"
             echo
+            echo ">>> cron: периодические команды (wa_reminders, backup_database)"
+            for u in root www-data $(whoami); do echo "--- crontab -u $u"; crontab -l -u "$u" 2>/dev/null | grep -v '^#' || echo "(пусто/нет доступа)"; done
+            ls /etc/cron.d 2>/dev/null && grep -rh "manage.py" /etc/cron.d 2>/dev/null || true
+            systemctl list-timers --all --no-pager 2>/dev/null | grep -iE "sadaf|remind|django" || echo "systemd-таймеров приложения нет"
+            echo
             echo ">>> место на диске"
             df -h / || true
             echo

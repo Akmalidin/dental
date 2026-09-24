@@ -28,7 +28,7 @@ class Command(BaseCommand):
 
         now = timezone.now()
         local_hour = timezone.localtime(now).hour
-        stat = {"hour": 0, "day": 0, "debt": 0}
+        stat = {"hour": 0, "day": 0, "debt": 0, "summary": 0}
 
         for clinic in Clinic.objects.filter(is_active=True):
             set_current_clinic(clinic)
@@ -112,5 +112,13 @@ class Command(BaseCommand):
                             Patient.all_objects.filter(pk=p.pk).update(last_debt_reminder=now)
                         stat["debt"] += 1
 
+            # — вечерняя сводка на завтра в Telegram-группы персонала —
+            if tg_on:
+                try:
+                    from apps.notifications.tg_staff import send_group_summaries
+                    stat["summary"] += send_group_summaries(clinic, now=now, dry=dry)
+                except Exception as e:  # noqa: BLE001
+                    self.stderr.write("Сводка в Telegram-группы (%s): %s" % (clinic.slug, e))
+
         self.stdout.write(self.style.SUCCESS(
-            "Готово: за час %(hour)s, за день %(day)s, должникам %(debt)s" % stat))
+            "Готово: за час %(hour)s, за день %(day)s, должникам %(debt)s, сводок в группы %(summary)s" % stat))
