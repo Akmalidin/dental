@@ -43,11 +43,8 @@ def _message_templates_queryset():
 
 
 def _messages_unread_count(clinic):
-    from apps.notifications.models import WaMessage
-    qs = WaMessage.all_clinics.filter(direction="in", read=False).exclude(patient__isnull=True)
-    if clinic:
-        qs = qs.filter(clinic=clinic)
-    return qs.count()
+    from .views import messages_conversation_qs
+    return messages_conversation_qs(clinic).filter(direction="in", read=False).count()
 
 
 def _shared_options(request, clinic):

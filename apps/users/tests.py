@@ -1442,11 +1442,13 @@ class NewUIMessagesTestCase(TestCase):
     def test_deleted_patient_chat_hidden_but_deletable(self):
         from apps.notifications.models import WaMessage
         WaMessage.objects.create(patient=self.patient, direction="in", channel="wa", phone=self.patient.phone,
-                                  body="x", clinic=self.clinic)
+                                  body="x", clinic=self.clinic, read=False)
         self.patient.is_deleted = True
         self.patient.save(update_fields=["is_deleted"])
         resp = self.client.get("/new/messages/")
-        self.assertEqual(_extract_newui_real_data(resp.content.decode())["messagesData"]["clients"], [])
+        data = _extract_newui_real_data(resp.content.decode())
+        self.assertEqual(data["messagesData"]["clients"], [])
+        self.assertEqual(data["messagesUnread"], 0)  # бейдж в меню — те же беседы, что в списке
         self.assertEqual(self.client.post(f"/patients/{self.patient.pk}/wa-messages/delete/").json()["deleted"], 1)
 
     def test_messages_page_lists_real_conversation_with_unread_count(self):
