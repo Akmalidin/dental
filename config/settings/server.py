@@ -55,6 +55,8 @@ PUBLIC_HOST_CLINIC_SLUG = config("PUBLIC_HOST_CLINIC_SLUG", default="sadaf")
 # Меняется через env, когда wildcard DNS/сертификат настроены на другом домене
 # (например "sadaf.kg" вместо унаследованного из development.py "denta.tw1.ru").
 PUBLIC_BASE_DOMAIN = config("PUBLIC_BASE_DOMAIN", default=PUBLIC_BASE_DOMAIN)
+# Google Maps JS API (каталог клиник stom.asia/book/). Пусто → карта OSM (Leaflet).
+GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
 # stom.asia — новый бренд, поддомены клиник открывают CRM напрямую (см. StomAsiaRoutingMiddleware).
 CRM_BASE_DOMAIN = config("CRM_BASE_DOMAIN", default="")
 # Отдельный фиксированный хост только для супер-админ панели (см.

@@ -201,6 +201,46 @@ class MarketingBookClinicTestCase(TestCase):
         self.assertFalse(Appointment.all_objects.filter(doctor=self.doctor_b).exists())
 
 
+class DirectoryGeoAndMapTestCase(TestCase):
+    """Каталог: по IP посетителя ближайшие клиники — первыми, с расстоянием;
+    Google Maps — только если задан ключ, иначе прежняя карта OSM."""
+
+    def setUp(self):
+        far = Clinic.objects.create(name="Клиника Бишкек", slug="geo-bishkek")
+        Branch.objects.create(name="Ц", address="Бишкек", phone="0", is_main=True, clinic=far,
+                              latitude=42.87, longitude=74.59)
+        near = Clinic.objects.create(name="Клиника Ош", slug="geo-osh")
+        Branch.objects.create(name="Ц", address="Ош", phone="0", is_main=True, clinic=near,
+                              latitude=40.52, longitude=72.80)
+
+    def test_nearest_clinic_first_with_distance(self):
+        from unittest.mock import patch
+        with patch("apps.users.geoip.get_ip_latlon", return_value={"lat": 40.53, "lng": 72.79, "city": "Osh"}):
+            resp = _get(self.client)
+        body = resp.content.decode()
+        self.assertLess(body.index("Клиника Ош"), body.index("Клиника Бишкек"))
+        self.assertContains(resp, "км от вас")
+
+    def test_without_geo_keeps_alphabetical_and_no_distance(self):
+        from unittest.mock import patch
+        with patch("apps.users.geoip.get_ip_latlon", return_value=None):
+            resp = _get(self.client)
+        body = resp.content.decode()
+        self.assertLess(body.index("Клиника Бишкек"), body.index("Клиника Ош"))
+        self.assertNotContains(resp, "км от вас")
+
+    def test_google_maps_only_with_key(self):
+        from unittest.mock import patch
+        with patch("apps.users.geoip.get_ip_latlon", return_value=None):
+            resp = _get(self.client)
+            self.assertNotContains(resp, "maps.googleapis.com")
+            self.assertContains(resp, "leaflet")
+            with override_settings(GOOGLE_MAPS_API_KEY="test-key"):
+                resp = _get(self.client)
+        self.assertContains(resp, "maps.googleapis.com/maps/api/js?key=test-key")
+        self.assertNotContains(resp, "leaflet.js")
+
+
 class LandingLeadNotifiesSuperadminTestCase(TestCase):
     """Заявка «Подключить клинику» с главной stom.asia раньше тихо ложилась
     только в django-admin — теперь супер-админ получает уведомление."""
