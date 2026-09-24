@@ -442,3 +442,174 @@ class ServiceWorkerProductionRoutingTestCase(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["start_url"], "/")
+
+
+class TgStaffBotTestCase(TestCase):
+    """Меню сотрудника в боте клиники: привязка врача по своему контакту,
+    приёмы на сегодня/выбранную дату, напоминания пациентам, группы."""
+
+    def setUp(self):
+        import json
+        from datetime import datetime, time, timedelta
+        from django.utils import timezone
+        from apps.patients.models import Patient
+        from apps.appointments.models import Appointment
+        from apps.tenancy import set_current_clinic
+        self.json = json
+        self.clinic = Clinic.objects.create(name="Клиника Staff", slug="tg-staff-clinic")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Гл.", address="-", phone="0", is_main=True, clinic=self.clinic)
+        ClinicSettings.objects.update_or_create(
+            clinic=self.clinic, defaults={"name": self.clinic.name, "telegram_bot_token": "123:ABC"})
+        doc_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        admin_role, _ = Role.objects.get_or_create(name=Role.ADMIN)
+        self.doctor = User.objects.create(login="st_doc", name="Доктор Один", phone="+996 700 111 222",
+                                          role=doc_role, clinic=self.clinic)
+        self.doctor2 = User.objects.create(login="st_doc2", name="Доктор Два", phone="0700333444",
+                                           role=doc_role, clinic=self.clinic)
+        self.admin = User.objects.create(login="st_adm", name="Админ", phone="+996700555666",
+                                         role=admin_role, clinic=self.clinic)
+        self.patient = Patient.objects.create(first_name="Иван", last_name="Пациентов",
+                                              phone="+996555000111", clinic=self.clinic, telegram_chat_id=999)
+        self.other = Patient.objects.create(first_name="Пётр", last_name="Чужой",
+                                            phone="+996555000222", clinic=self.clinic)
+        self.day = timezone.localdate() + timedelta(days=3)
+        start = timezone.make_aware(datetime.combine(self.day, time(10, 0)))
+        self.appt = Appointment.objects.create(
+            patient=self.patient, doctor=self.doctor, branch=self.branch, start_at=start,
+            end_at=start + timedelta(minutes=30), clinic=self.clinic)
+        Appointment.objects.create(
+            patient=self.other, doctor=self.doctor2, branch=self.branch, start_at=start,
+            end_at=start + timedelta(minutes=30), clinic=self.clinic)
+        self.calls = []
+
+    def tearDown(self):
+        from apps.tenancy import clear_current_clinic
+        clear_current_clinic()
+
+    def _fake_call(self, method, payload, token=None):
+        self.calls.append((method, payload))
+        return {"ok": True, "result": {"message_id": 1}}
+
+    def _update(self, update):
+        from apps.notifications.views import _tg_handle_update
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            _tg_handle_update(self.json.dumps(update).encode(), self.clinic.slug)
+
+    def _texts(self):
+        return "\n".join(p.get("text", "") for _m, p in self.calls)
+
+    def _link(self, user, tg_id):
+        user.telegram_id = tg_id
+        user.save(update_fields=["telegram_id"])
+
+    def test_doctor_links_by_own_contact(self):
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "contact": {"phone_number": "996700111222", "user_id": 42}}})
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.telegram_id, 42)
+        self.assertIn("подключены как врач", self._texts())
+        from apps.notifications.models import WaMessage
+        self.assertFalse(WaMessage.objects.exists())
+
+    def test_foreign_contact_does_not_link_staff(self):
+        self._update({"message": {"chat": {"id": 43, "type": "private"}, "from": {"id": 43},
+                                  "contact": {"phone_number": "996700111222", "user_id": 77}}})
+        self.doctor.refresh_from_db()
+        self.assertIsNone(self.doctor.telegram_id)
+
+    def test_doctor_sees_only_own_appointments_for_typed_date(self):
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "text": self.day.strftime("%d.%m")}})
+        txt = self._texts()
+        self.assertIn("Пациентов", txt)
+        self.assertNotIn("Чужой", txt)
+
+    def test_admin_sees_all_via_date_picker_callback(self):
+        self._link(self.admin, 50)
+        self._update({"callback_query": {"id": "q", "from": {"id": 50}, "data": "sdd:l:%s" % self.day.isoformat(),
+                                         "message": {"chat": {"id": 50}, "message_id": 7}}})
+        txt = self._texts()
+        self.assertIn("Пациентов", txt)
+        self.assertIn("Чужой", txt)
+        self.assertIn("Доктор Два", txt)
+
+    def test_picker_callback_rejected_for_non_staff(self):
+        self._update({"callback_query": {"id": "q", "from": {"id": 999}, "data": "sdd:l:%s" % self.day.isoformat(),
+                                         "message": {"chat": {"id": 999}, "message_id": 7}}})
+        self.assertNotIn("Пациентов", self._texts())
+
+    def test_date_picker_button(self):
+        from apps.notifications.tg_staff import BTN_PICK_DATE
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42}, "text": BTN_PICK_DATE}})
+        kb = self.calls[-1][1]["reply_markup"]["inline_keyboard"]
+        self.assertTrue(kb[0][0]["callback_data"].startswith("sdd:l:"))
+
+    def test_remind_sends_to_own_patients(self):
+        self._link(self.doctor, 42)
+        self._update({"callback_query": {"id": "q", "from": {"id": 42}, "data": "sdr:%s" % self.day.isoformat(),
+                                         "message": {"chat": {"id": 42}, "message_id": 7}}})
+        sent_to = [p.get("chat_id") for m, p in self.calls if m == "sendMessage"]
+        self.assertEqual(sent_to, [999])
+        self.assertIn("отправлены: <b>1</b> из 1", self._texts())
+
+    def test_group_connect_by_admin_only(self):
+        from apps.notifications.models import TgGroup
+        grp = {"id": -100500, "type": "supergroup", "title": "Персонал"}
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": grp, "from": {"id": 42}, "text": "/group@clinic_bot"}})
+        self.assertFalse(TgGroup.all_clinics.exists())
+        self._link(self.admin, 50)
+        self._update({"message": {"chat": grp, "from": {"id": 50}, "text": "/group@clinic_bot"}})
+        g = TgGroup.all_clinics.get()
+        self.assertEqual((g.chat_id, g.clinic_id, g.title), (-100500, self.clinic.pk, "Персонал"))
+        # обычные сообщения группы не попадают в переписки CRM
+        self._update({"message": {"chat": grp, "from": {"id": 1}, "text": "привет"}})
+        from apps.notifications.models import WaMessage
+        self.assertFalse(WaMessage.objects.exists())
+
+    def test_group_notify_and_evening_summary(self):
+        from datetime import datetime, time, timedelta
+        from django.utils import timezone
+        from apps.notifications.models import TgGroup
+        from apps.notifications.whatsapp import notify_groups
+        from apps.notifications.tg_staff import send_group_summaries
+        TgGroup.all_clinics.create(clinic=self.clinic, chat_id=-1001, title="G")
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            notify_groups("🆕 *Новая запись* <x>", clinic=self.clinic)
+        self.assertEqual(self.calls[-1][1]["chat_id"], -1001)
+        self.assertIn("<b>Новая запись</b> &lt;x&gt;", self.calls[-1][1]["text"])
+        self.calls.clear()
+        evening = timezone.make_aware(datetime.combine(self.day - timedelta(days=1), time(19, 30)))
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_group_summaries(self.clinic, now=evening), 1)
+            self.assertEqual(send_group_summaries(self.clinic, now=evening), 0)  # раз в день
+        self.assertIn("Пациентов", self._texts())
+        self.assertIn("Чужой", self._texts())
+
+    def test_kicked_group_is_removed(self):
+        from apps.notifications.models import TgGroup
+        from apps.notifications.whatsapp import notify_groups
+        TgGroup.all_clinics.create(clinic=self.clinic, chat_id=-1002)
+        with patch("apps.notifications.telegram._call",
+                   return_value={"ok": False, "error": b'{"description":"Forbidden: bot was kicked"}'}):
+            notify_groups("x", clinic=self.clinic)
+        self.assertFalse(TgGroup.all_clinics.exists())
+
+    def test_new_appointment_notifies_doctor_in_telegram(self):
+        from apps.appointments.views import notify_appointment_created
+        self._link(self.doctor, 42)
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            notify_appointment_created(self.appt, created_by=self.admin)
+        self.assertIn(42, [p.get("chat_id") for m, p in self.calls])
+
+    def test_parse_date(self):
+        from datetime import date
+        from apps.notifications.tg_staff import parse_date
+        self.assertEqual(parse_date("25.09.2026"), date(2026, 9, 25))
+        self.assertEqual(parse_date("2026-09-25"), date(2026, 9, 25))
+        self.assertEqual(parse_date("25/09/26"), date(2026, 9, 25))
+        self.assertIsNone(parse_date("99.99"))
+        self.assertIsNone(parse_date("привет"))

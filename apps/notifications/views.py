@@ -952,13 +952,25 @@ def _tg_handle_update(body, clinic_slug):
             return
 
         # ── Нажатие инлайн-кнопки (подтверждение/отмена записи и т.п.) ──
+        from . import tg_staff
         cq = update.get("callback_query")
         if cq:
+            if tg_staff.handle_callback(clinic, cq, token):
+                return
             _handle_tg_callback(cq, token)
             return
 
         msg = update.get("message")
         if not msg:
+            return
+
+        # ── Группы персонала: только служебные команды (/group, /ungroup) ──
+        if (msg.get("chat") or {}).get("type") in ("group", "supergroup", "channel"):
+            tg_staff.handle_group(clinic, msg, token)
+            return
+
+        # ── Сотрудник клиники (врач/админ) — своё меню, не пациентское ──
+        if tg_staff.handle_private(clinic, msg, token):
             return
 
         chat_id = msg.get("chat", {}).get("id")
@@ -1127,6 +1139,17 @@ def tg_connect(request):
     cs = ClinicSettings.get()
     clinic = get_current_clinic()
 
+    if request.method == "POST" and request.POST.get("remove_group"):
+        from .models import TgGroup
+        TgGroup.objects.filter(pk=request.POST.get("remove_group")).delete()
+        messages.success(request, "Группа отключена")
+        return redirect("tg_connect")
+    if request.method == "POST" and request.POST.get("unlink_staff"):
+        from apps.users.models import User as _U
+        _U.objects.filter(clinic=clinic, pk=request.POST.get("unlink_staff")).update(telegram_id=None)
+        messages.success(request, "Сотрудник отключён от бота")
+        return redirect("tg_connect")
+
     if request.method == "POST":
         cs.telegram_enabled = bool(request.POST.get("telegram_enabled"))
         token_changed = (request.POST.get("telegram_bot_token") or "").strip() != cs.telegram_bot_token
@@ -1178,7 +1201,21 @@ def tg_connect(request):
         "cs": cs,
         "webhook_info": webhook_info,
         "bot_link": ("https://t.me/%s" % cs.telegram_bot_username) if cs.telegram_bot_username else "",
+        "tg_groups": _tg_groups_list(),
+        "tg_staff": _tg_staff_list(clinic),
     })
+
+
+def _tg_groups_list():
+    from .models import TgGroup
+    return list(TgGroup.objects.all())
+
+
+def _tg_staff_list(clinic):
+    from apps.users.models import User as _U
+    if clinic is None:
+        return []
+    return list(_U.objects.filter(clinic=clinic, is_active=True, telegram_id__isnull=False).order_by("name"))
 
 
 @login_required

@@ -392,7 +392,13 @@ def submit_booking(request, clinic):
                 "📅 *%s*  🕐 *%s*\n\n"
                 "🔗 Открыть запись:\n%s"
                 % (patient.full_name, phone, d_str, slot, link))
-        # WhatsApp-группы клиники
+        if doc:
+            from apps.notifications.tg_staff import notify_user
+            notify_user(doc,
+                "🔔 *Новая заявка с сайта*\n\n"
+                "👤 Пациент: *%s*\n📞 Телефон: %s\n📅 *%s*  🕐 *%s*"
+                % (patient.full_name, phone, d_str, slot))
+        # WhatsApp- и Telegram-группы клиники
         from apps.notifications.whatsapp import notify_groups
         notify_groups(
             "🔔 *Новая заявка с сайта* — %s\n\n"

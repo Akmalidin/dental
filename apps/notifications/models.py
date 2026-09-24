@@ -87,6 +87,27 @@ class WaGroup(ClinicScopedModel):
         return self.name or self.chat_id
 
 
+class TgGroup(ClinicScopedModel):
+    """Telegram-группа персонала, куда бот клиники шлёт уведомления (новые
+    записи/заявки/отмены, вечерняя сводка на завтра). Подключается командой
+    /group, которую пишет в группе администратор клиники, привязанный к боту
+    (см. apps.notifications.tg_staff)."""
+    chat_id = models.BigIntegerField(verbose_name="ID чата Telegram")
+    title = models.CharField(max_length=255, blank=True, verbose_name="Название группы")
+    notify = models.BooleanField(default=True, verbose_name="Слать уведомления")
+    last_summary_on = models.DateField(null=True, blank=True, verbose_name="Последняя сводка")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Telegram-группа"
+        verbose_name_plural = "Telegram-группы"
+        ordering = ["title", "chat_id"]
+        unique_together = [["clinic", "chat_id"]]
+
+    def __str__(self):
+        return self.title or str(self.chat_id)
+
+
 class Broadcast(models.Model):
     """Одна рассылка объявления из супер-админ-панели (/new/superadmin/,
     вкладка «Push-рассылка», apps.users.newui_views.

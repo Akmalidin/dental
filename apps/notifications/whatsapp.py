@@ -109,7 +109,14 @@ def wa_send_text(phone, text):
 
 
 def notify_groups(text, clinic=None):
-    """Разослать текст во все включённые WhatsApp-группы клиники. Возвращает кол-во отправленных."""
+    """Разослать текст во все включённые WhatsApp-группы клиники (и в
+    Telegram-группы персонала, подключённые через /group — см. tg_staff).
+    Возвращает кол-во отправленных в WhatsApp."""
+    try:
+        from apps.notifications.tg_staff import notify_groups as tg_notify_groups
+        tg_notify_groups(text, clinic=clinic)
+    except Exception:  # noqa: BLE001
+        pass
     if not wa_enabled():
         return 0
     from apps.notifications.models import WaGroup
