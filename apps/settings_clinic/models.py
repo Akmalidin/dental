@@ -10,6 +10,9 @@ class ClinicSettings(models.Model):
         related_name="settings", verbose_name="Клиника",
     )
     logo = models.ImageField(upload_to="clinic/", null=True, blank=True, verbose_name="Логотип")
+    # Логотип в центре QR-кода онлайн-записи (Настройки → «Онлайн-запись (QR)»).
+    # Отдельно от logo — чтобы не менять логотип на чеках/странице входа.
+    qr_logo = models.ImageField(upload_to="clinic/qr/", null=True, blank=True, verbose_name="Логотип для QR")
     name = models.CharField(max_length=200, verbose_name="Название клиники")
     phone = models.CharField(max_length=30, blank=True, verbose_name="Телефон")
     address = models.CharField(max_length=500, blank=True, verbose_name="Адрес")

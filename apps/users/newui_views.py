@@ -1178,6 +1178,73 @@ def newui_settings(request):
 
 
 @login_required
+def newui_booking_qr(request):
+    """PNG QR-кода онлайн-записи текущей клиники (Настройки → «Онлайн-запись
+    (QR)»), с логотипом по центру, если он загружен. ?download=1 — скачать
+    файлом."""
+    from django.http import HttpResponse, Http404
+    from apps.tenancy import get_current_clinic
+    from apps.settings_clinic.models import ClinicSettings
+    from .booking_qr import booking_url_for, booking_qr_png
+
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    if clinic is None:
+        raise Http404("Клиника не выбрана")
+    cs = ClinicSettings.objects.filter(clinic=clinic).first()
+    png = booking_qr_png(booking_url_for(clinic), cs.qr_logo if cs and cs.qr_logo else None)
+    resp = HttpResponse(png, content_type="image/png")
+    resp["Cache-Control"] = "no-store"
+    if request.GET.get("download"):
+        resp["Content-Disposition"] = f'attachment; filename="qr-zapis-{clinic.slug}.png"'
+    return resp
+
+
+QR_LOGO_MAX_BYTES = 3 * 1024 * 1024
+
+
+@login_required
+def newui_booking_qr_logo(request):
+    """Загрузить (поле logo) или убрать (remove=1) логотип в центре QR —
+    директор/суперадмин, как и остальные настройки клиники."""
+    from django.http import JsonResponse
+    from apps.tenancy import get_current_clinic
+    from apps.settings_clinic.models import ClinicSettings
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+    if not (request.user.is_superadmin or request.user.has_role("admin_main")):
+        return JsonResponse({"error": "Недостаточно прав"}, status=403)
+    clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    if clinic is None:
+        return JsonResponse({"error": "Клиника не выбрана"}, status=400)
+    cs, _c = ClinicSettings.objects.get_or_create(clinic=clinic, defaults={"name": clinic.name})
+
+    if request.POST.get("remove"):
+        if cs.qr_logo:
+            cs.qr_logo.delete(save=False)
+        cs.qr_logo = None
+        cs.save(update_fields=["qr_logo"])
+        return JsonResponse({"ok": True, "hasLogo": False})
+
+    f = request.FILES.get("logo")
+    if f is None:
+        return JsonResponse({"error": "Выберите файл"}, status=400)
+    if f.size > QR_LOGO_MAX_BYTES:
+        return JsonResponse({"error": "Файл больше 3 МБ"}, status=400)
+    try:
+        from PIL import Image
+        Image.open(f).verify()
+        f.seek(0)
+    except Exception:
+        return JsonResponse({"error": "Это не изображение (нужен PNG или JPG)"}, status=400)
+    if cs.qr_logo:
+        cs.qr_logo.delete(save=False)
+    cs.qr_logo = f
+    cs.save(update_fields=["qr_logo"])
+    return JsonResponse({"ok": True, "hasLogo": True})
+
+
+@login_required
 def newui_menu_prefs_save(request):
     """Сохранение настройки сайдбара («Настроить меню» / «Меню клиники» в
     Настройках) — POST JSON {"prefs": {...}, "scope": "user"|"clinic"}.

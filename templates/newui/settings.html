@@ -11,6 +11,7 @@
             <button id="setNavContacts" onclick="setSettingsTab('contacts')" data-i18n="w_contacts_req">Контакты и реквизиты</button>
             <button id="setNavWa" onclick="setSettingsTab('wa')">WhatsApp / Telegram</button>
             <button id="setNavCabinets" onclick="setSettingsTab('cabinets')" data-i18n="w_cabinets_sched">Кабинеты и график</button>
+            <button id="setNavQr" onclick="setSettingsTab('qr')" data-i18n="w_booking_qr">Онлайн-запись (QR)</button>
             <!-- Только директор/суперадмин (CAN_SET_CLINIC_MENU) — общее меню для всех
                  сотрудников без личной настройки. Открывает тот же редактор, что и
                  «Настроить меню» в сайдбаре, но сохраняет в ClinicSettings.menu_prefs. -->
@@ -157,6 +158,34 @@
             </div>
           </div>
 
+          <!-- QR-код онлайн-записи: ссылка на stom.asia/book/<клиника>/, превью
+               PNG (newui_booking_qr), скачать, логотип в центре (директор/суперадмин). -->
+          <div id="setPanelQr" class="card hidden">
+            <div class="card-head"><h3 data-i18n="w_booking_qr">Онлайн-запись (QR)</h3></div>
+            <div class="card-body" style="padding:14px 18px;">
+              <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;" data-i18n="w_booking_qr_hint">Пациент сканирует QR или открывает ссылку и сам записывается: выбирает филиал, врача, день и время. Распечатайте и повесьте на ресепшене.</p>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+                <input type="text" id="qrBookingUrl" readonly style="flex:1;min-width:220px;">
+                <button type="button" class="btn btn-ghost" onclick="qrCopyUrl()" data-i18n="w_copy">Копировать</button>
+              </div>
+              <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;">
+                <img id="qrPreview" alt="QR" style="width:220px;height:220px;border:1px solid var(--mist);border-radius:12px;background:#fff;">
+                <div style="display:flex;flex-direction:column;gap:10px;min-width:220px;">
+                  <a id="qrDownloadBtn" class="btn btn-cobalt" href="/new/settings/booking-qr.png?download=1" download>⬇ <span data-i18n="w_download_png">Скачать PNG</span></a>
+                  <div id="qrLogoControls">
+                    <div style="font-weight:600;font-size:13px;margin:6px 0;" data-i18n="w_qr_logo">Логотип в центре QR</div>
+                    <input type="file" id="qrLogoInput" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="qrUploadLogo(this)">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-ghost" onclick="document.getElementById('qrLogoInput').click()"><span id="qrLogoBtnLabel" data-i18n="w_upload_logo">Загрузить логотип</span></button>
+                      <button type="button" class="btn btn-ghost hidden" id="qrLogoRemoveBtn" onclick="qrRemoveLogo()" data-i18n="w_remove">Убрать</button>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;" data-i18n="w_qr_logo_hint">PNG или JPG до 3 МБ, лучше квадратный. QR остаётся читаемым.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="setPanelInsurance" class="card hidden">
             <div class="card-head"><h3 data-i18n="w_insurance_companies">Страховые компании</h3></div>
             <div class="card-body" style="padding:4px 18px;">
@@ -252,8 +281,46 @@
   document.getElementById('set-primary-messenger').value = s.primaryMessenger || 'wa';
   document.getElementById('set-phone-country-code').value = s.phoneCountryCode || '';
 
+  // ── Онлайн-запись (QR) ──
+  let qrHasLogo = !!s.hasQrLogo;
+  const qrRefresh = () => {
+    document.getElementById('qrPreview').src = '/new/settings/booking-qr.png?t=' + Date.now();
+    document.getElementById('qrLogoRemoveBtn').classList.toggle('hidden', !qrHasLogo);
+    document.getElementById('qrLogoBtnLabel').textContent = qrHasLogo ? t('w_change_logo','Заменить логотип') : t('w_upload_logo','Загрузить логотип');
+  };
+  document.getElementById('qrBookingUrl').value = s.bookingUrl || '';
+  document.getElementById('qrLogoControls').classList.toggle('hidden', !CAN_SET_CLINIC_MENU);
+  qrRefresh();
+  window.qrCopyUrl = function(){
+    const el = document.getElementById('qrBookingUrl');
+    (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject()).then(
+      () => showToast(t('w_copied','Скопировано')),
+      () => { el.select(); document.execCommand('copy'); showToast(t('w_copied','Скопировано')); });
+  };
+  const qrPostLogo = async (fd) => {
+    try{
+      const res = await fetch('/new/settings/booking-qr/logo/', {method:'POST', credentials:'same-origin',
+        headers:{'X-CSRFToken':getCookie('csrftoken')}, body: fd});
+      const data = await res.json();
+      if(!res.ok || !data.ok){ showToast(data.error || t('w_error','Ошибка'), 'error'); return; }
+      qrHasLogo = data.hasLogo;
+      qrRefresh();
+      showToast(t('w_saved','Сохранено'));
+    }catch(e){ showToast(t('w_error','Ошибка'), 'error'); }
+  };
+  window.qrUploadLogo = function(input){
+    if(!input.files || !input.files[0]) return;
+    const fd = new FormData(); fd.append('logo', input.files[0]);
+    input.value = '';
+    qrPostLogo(fd);
+  };
+  window.qrRemoveLogo = function(){
+    const fd = new FormData(); fd.append('remove', '1');
+    qrPostLogo(fd);
+  };
+
   window.setSettingsTab = function(tab){
-    ['general','contacts','wa','cabinets','cancelreasons','insurance'].forEach(t=>{
+    ['general','contacts','wa','cabinets','qr','cancelreasons','insurance'].forEach(t=>{
       document.getElementById('setPanel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden', t!==tab);
       document.getElementById('setNav'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
     });
