@@ -42,7 +42,29 @@ def get_active_branch_id(request):
 
 
 def set_current_clinic(clinic):
+    """Текущая клиника (авто-скоуп менеджеров) + её часовой пояс
+    (Clinic.timezone) для timezone.localtime/make_aware/__date-фильтров.
+
+    Пояс включается ЗДЕСЬ, а не только в ClinicMiddleware: клиника часто
+    выбирается позже начала запроса или вообще вне запроса — общая страница
+    записи stom.asia/book/<slug>/ (apps.marketing.views), Telegram-бот
+    (фоновый поток), wa_reminders/appt_overdue (цикл по клиникам). Без этого
+    там действовал пояс сервера (Asia/Bishkek, UTC+6), и запись на 13:00 в
+    ташкентской клинике (UTC+5) попадала в расписание на 12:00."""
     _state.clinic = clinic
+    _activate_clinic_timezone(clinic)
+
+
+def _activate_clinic_timezone(clinic):
+    tzname = getattr(clinic, "timezone", None) if clinic is not None else None
+    if tzname:
+        try:
+            from zoneinfo import ZoneInfo
+            timezone.activate(ZoneInfo(tzname))
+            return
+        except Exception:
+            pass
+    timezone.deactivate()
 
 
 def get_current_clinic():
@@ -51,6 +73,7 @@ def get_current_clinic():
 
 def clear_current_clinic():
     _state.clinic = None
+    timezone.deactivate()
 
 
 class _Unscoped:
@@ -216,22 +239,11 @@ class CurrentClinicMiddleware:
                         set_current_clinic(getattr(user, "clinic", None))
             except Exception:
                 set_current_clinic(None)
-        # Часовой пояс клиники: время записей/расписания одинаково на всех устройствах.
-        activated_tz = False
-        clinic = get_current_clinic()
-        tzname = getattr(clinic, "timezone", None) if clinic is not None else None
-        if tzname:
-            try:
-                from zoneinfo import ZoneInfo
-                timezone.activate(ZoneInfo(tzname))
-                activated_tz = True
-            except Exception:
-                pass
+        # Часовой пояс клиники (время записей/расписания одинаково на всех
+        # устройствах) включает сам set_current_clinic, сбрасывает — clear.
         try:
             return self.get_response(request)
         finally:
-            if activated_tz:
-                timezone.deactivate()
             clear_current_clinic()
 
 

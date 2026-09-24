@@ -192,6 +192,26 @@ class MarketingBookClinicTestCase(TestCase):
         self.assertEqual(lead.patient.clinic_id, self.clinic_b.pk)
         self.assertIn("11:00", lead.comment)
 
+    def test_submit_uses_clinic_timezone(self):
+        """Ташкентская клиника (UTC+5), сервер в Asia/Bishkek (UTC+6): запись на
+        13:00 должна лечь в расписание на 13:00–14:00 по Ташкенту, а не на 12:00."""
+        from zoneinfo import ZoneInfo
+        self.clinic_b.timezone = "Asia/Tashkent"
+        self.clinic_b.save(update_fields=["timezone"])
+        resp = self._post(f"/book/{self.clinic_b.slug}/submit/", {
+            "name": "Тест Ташкент", "phone": "+998901112233",
+            "doctor": self.doctor_b.pk, "date": self._tomorrow(), "slot": "13:00",
+        })
+        self.assertTrue(resp.json()["ok"])
+        appt = Appointment.all_objects.get(doctor=self.doctor_b)
+        tz = ZoneInfo("Asia/Tashkent")
+        self.assertEqual((appt.start_at.astimezone(tz).hour, appt.end_at.astimezone(tz).hour), (13, 14))
+        self.assertContains(self._get(f"/book/{self.clinic_b.slug}/"), "по местному времени клиники: Ташкент (Узбекистан, UTC+5)")
+        # и этот час больше не предлагается как свободный
+        resp = self._get(f"/book/{self.clinic_b.slug}/slots/?doctor={self.doctor_b.pk}&date={self._tomorrow()}")
+        self.assertNotIn("13:00", resp.json()["slots"])
+        self.assertIn("12:00", resp.json()["slots"])
+
     def test_submit_rejects_doctor_from_other_clinic(self):
         resp = self._post(f"/book/{self.clinic_a.slug}/submit/", {
             "name": "Тест Пациентов", "phone": "+996700333444",
