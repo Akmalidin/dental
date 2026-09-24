@@ -1814,6 +1814,13 @@ def _newui_audit_data(clinic):
     return events[:80]
 
 
+def _booking_url_or_empty(clinic):
+    if clinic is None:
+        return ""
+    from .booking_qr import booking_url_for
+    return booking_url_for(clinic)
+
+
 def _newui_settings_data(clinic):
     """Настройки клиники — те же реальные поля ClinicSettings/Clinic.timezone,
     что и старый /settings/ (apps.settings_clinic.views.settings_view), просто
@@ -1832,6 +1839,10 @@ def _newui_settings_data(clinic):
         # их не затёрла пустыми/выключенными значениями.
         "primaryMessenger": cs.primary_messenger,
         "phoneCountryCode": cs.phone_country_code,
+        # Вкладка «Онлайн-запись (QR)»: ссылка на общую страницу записи и
+        # загружен ли логотип для центра QR (сам PNG — newui_booking_qr).
+        "bookingUrl": _booking_url_or_empty(clinic),
+        "hasQrLogo": bool(cs.qr_logo),
         "currency": cs.currency,
         "currencySecondary": cs.currency_secondary,
         "currencyChoices": [{"code": c, "label": lbl} for c, lbl in ClinicSettings.CURRENCY_CHOICES],

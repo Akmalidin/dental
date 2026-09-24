@@ -5405,3 +5405,72 @@ class NewUICanAcceptPaymentsFlagTestCase(TestCase):
         nurse_client.force_login(self.nurse)
         data = _extract_newui_real_data(nurse_client.get("/new/").content.decode())
         self.assertFalse(data["canAcceptPayments"])
+
+
+class NewuiBookingQrTestCase(TestCase):
+    """Настройки → «Онлайн-запись (QR)»: PNG QR (со скачиванием) и логотип
+    в центре, который может менять только директор/суперадмин."""
+
+    def setUp(self):
+        import tempfile
+        self._media = tempfile.mkdtemp()
+        self._override = override_settings(MEDIA_ROOT=self._media)
+        self._override.enable()
+        self.clinic = Clinic.objects.create(name="Клиника QR", slug="qr-clinic")
+        Branch.objects.create(name="Гл", address="-", phone="0", is_main=True, clinic=self.clinic)
+        admin_role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        doctor_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        self.director = User.objects.create(login="qr_dir", name="Дир", email="qrd@test.local",
+                                            role=admin_role, clinic=self.clinic)
+        self.doctor = User.objects.create(login="qr_doc", name="Врач", email="qrdoc@test.local",
+                                          role=doctor_role, clinic=self.clinic)
+
+    def tearDown(self):
+        import shutil
+        from apps.tenancy import clear_current_clinic
+        self._override.disable()
+        shutil.rmtree(self._media, ignore_errors=True)
+        clear_current_clinic()
+
+    def _logo(self, name="logo.png"):
+        import io
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        buf = io.BytesIO()
+        Image.new("RGB", (120, 120), (232, 93, 45)).save(buf, "PNG")
+        return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
+
+    def test_png_and_download(self):
+        self.client.force_login(self.director)
+        resp = self.client.get("/new/settings/booking-qr.png")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "image/png")
+        self.assertTrue(resp.content.startswith(b"\x89PNG"))
+        self.assertNotIn("Content-Disposition", resp)
+        resp = self.client.get("/new/settings/booking-qr.png?download=1")
+        self.assertIn('attachment; filename="qr-zapis-qr-clinic.png"', resp["Content-Disposition"])
+
+    def test_director_uploads_and_removes_logo(self):
+        from apps.settings_clinic.models import ClinicSettings
+        self.client.force_login(self.director)
+        plain = self.client.get("/new/settings/booking-qr.png").content
+        resp = self.client.post("/new/settings/booking-qr/logo/", {"logo": self._logo()})
+        self.assertEqual(resp.json(), {"ok": True, "hasLogo": True})
+        self.assertTrue(ClinicSettings.objects.get(clinic=self.clinic).qr_logo)
+        with_logo = self.client.get("/new/settings/booking-qr.png").content
+        self.assertNotEqual(plain, with_logo)
+        resp = self.client.post("/new/settings/booking-qr/logo/", {"remove": "1"})
+        self.assertEqual(resp.json(), {"ok": True, "hasLogo": False})
+        self.assertFalse(ClinicSettings.objects.get(clinic=self.clinic).qr_logo)
+
+    def test_non_image_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.force_login(self.director)
+        resp = self.client.post("/new/settings/booking-qr/logo/",
+                                {"logo": SimpleUploadedFile("x.png", b"not an image", content_type="image/png")})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_doctor_cannot_change_logo(self):
+        self.client.force_login(self.doctor)
+        resp = self.client.post("/new/settings/booking-qr/logo/", {"logo": self._logo()})
+        self.assertEqual(resp.status_code, 403)
