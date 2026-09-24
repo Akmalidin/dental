@@ -113,22 +113,11 @@
           </div>
         </div>
 
-        <!-- Услуга + дата -->
+        <!-- Дата -->
         <div class="glass card">
-          <div class="step">2 · Услуга и дата</div>
-          <div class="two-col">
-            <div>
-              <label class="fld">Услуга (необязательно)</label>
-              <select x-model="service">
-                <option value="">— Выберите услугу —</option>
-                {% for s in services %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
-              </select>
-            </div>
-            <div>
-              <label class="fld">Дата *</label>
-              <input type="date" x-model="date" :min="today" @change="loadSlots()">
-            </div>
-          </div>
+          <div class="step">2 · Дата</div>
+          <label class="fld">Дата *</label>
+          <input type="date" x-model="date" :min="today" @change="loadSlots()">
         </div>
 
         <!-- Слоты -->
@@ -188,7 +177,7 @@
   <script>
     function booking(){
       return {
-        doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'kg', branch:'',
+        doctor:'', service:'', date:'', slot:'', name:'', phone:'', country:'{{ default_country|default:"kg" }}', branch:'',
         slots:[], loading:false, sending:false, done:false, error:'',
         today:new Date().toISOString().slice(0,10),
         init(){

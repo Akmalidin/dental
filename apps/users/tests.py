@@ -5198,7 +5198,9 @@ class PublicSiteCrossTenantLeakTestCase(TestCase):
             resp = self.client.get("/book/", HTTP_HOST="leak-a.stom.asia")
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        self.assertIn("Услуга A", body)
+        # Выбор услуги на странице записи убран — услуг там нет вовсе,
+        # тем более чужой клиники.
+        self.assertNotIn("Услуга A", body)
         self.assertNotIn("Услуга B", body)
 
     def test_public_sitemap_only_lists_own_services(self):

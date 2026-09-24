@@ -130,8 +130,8 @@ WORK_START, WORK_END, SLOT_HOURS = 9, 18, 1  # рабочие часы и шаг
 
 
 def book_context_for(clinic, branch_id=None):
-    """Данные для формы онлайн-записи (public/booking.html): врачи/услуги
-    клиники, список филиалов и выбранный (если branch_id передан и реально
+    """Данные для формы онлайн-записи (public/booking.html): врачи клиники,
+    код страны телефона по умолчанию, список филиалов и выбранный (если branch_id передан и реально
     принадлежит этой клинике/активен). Общая логика и для сайта клиники
     (public_book, ?branch=<id> — переход из каталога клиник stom.asia,
     templates/marketing/directory.html), и для общей страницы записи без
@@ -139,7 +139,6 @@ def book_context_for(clinic, branch_id=None):
     _newui_schedule_data для фильтра расписания по филиалу: если филиал
     выбран, список врачей сужается до закреплённых за ним."""
     from apps.users.models import clinic_doctors, Branch
-    from apps.services.models import Service
     try:
         branch_id = int(branch_id or 0)
     except (TypeError, ValueError):
@@ -150,8 +149,22 @@ def book_context_for(clinic, branch_id=None):
     if selected_branch:
         doctors_qs = doctors_qs.filter(branches=selected_branch).distinct()
     doctors = list(doctors_qs)
-    services = list(Service.objects.filter(clinic=clinic, is_active=True).order_by("name"))
-    return {"doctors": doctors, "services": services, "branches": branches, "selected_branch": selected_branch}
+    return {"doctors": doctors, "branches": branches, "selected_branch": selected_branch,
+            "default_country": default_phone_country_for(clinic)}
+
+
+# ClinicSettings.phone_country_code → ключ в выпадающем списке кода страны
+# на странице записи (public/booking.html, countries в Alpine-компоненте).
+_PHONE_COUNTRY_KEYS = {"996": "kg", "7": "ru", "998": "uz"}
+
+
+def default_phone_country_for(clinic):
+    """Код страны, выбранный по умолчанию в поле телефона на странице записи —
+    из настроек клиники (Настройки → «Код страны для номеров»)."""
+    from apps.settings_clinic.models import ClinicSettings
+    cs = ClinicSettings.objects.filter(clinic=clinic).first()
+    code = (cs.phone_country_code or "").strip().lstrip("+") if cs else ""
+    return _PHONE_COUNTRY_KEYS.get(code, "kg")
 
 
 def slots_for_doctor(clinic, doctor_id, date_str):
