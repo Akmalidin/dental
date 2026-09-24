@@ -69,6 +69,33 @@ def get_ip_geolocation(ip):
     return result
 
 
+def get_ip_latlon(ip):
+    """{"lat", "lng", "city"} по IP или None — для каталога клиник stom.asia
+    (центрировать карту и поднять ближайшие клиники). Тот же ip-api.com и
+    та же политика кэша/ошибок, что и у get_ip_geolocation."""
+    if not ip or not _is_public(ip):
+        return None
+    cache_key = f"geoll:{ip}"
+    cached = cache.get(cache_key, "__miss__")
+    if cached != "__miss__":
+        return cached or None
+
+    result = None
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,city,lat,lon"
+        with urllib.request.urlopen(url, timeout=_TIMEOUT) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        if data.get("status") == "success" and data.get("lat") is not None:
+            result = {"lat": float(data["lat"]), "lng": float(data["lon"]),
+                      "city": (data.get("city") or "").strip()}
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, OSError, KeyError) as e:
+        log.info("geoip: не удалось определить координаты %s: %s", ip, e)
+        result = None
+
+    cache.set(cache_key, result or "", _CACHE_TTL_HIT if result else _CACHE_TTL_MISS)
+    return result
+
+
 _BATCH_CHUNK = 100  # лимит ip-api.com/batch за один запрос
 
 

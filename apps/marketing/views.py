@@ -82,9 +82,31 @@ def directory(request):
                     "bookUrl": f"{book_url}?branch={b['id']}",
                 })
 
+    # Местоположение посетителя по IP (без запроса разрешения в браузере):
+    # карта центрируется на его городе, ближайшие клиники — первыми в списке.
+    # Не определилось (локальный IP, сервис недоступен) — всё как раньше.
+    from apps.tenancy import get_client_ip
+    from apps.users.geoip import get_ip_latlon
+    user_loc = get_ip_latlon(get_client_ip(request))
+    if user_loc:
+        for item in clinics:
+            dists = [_distance_km(user_loc["lat"], user_loc["lng"], b["lat"], b["lng"])
+                     for b in item["branches"] if b["lat"] is not None and b["lng"] is not None]
+            item["distance_km"] = round(min(dists)) if dists else None
+        clinics.sort(key=lambda i: (i["distance_km"] is None, i["distance_km"] or 0))
+
+    from django.conf import settings as dj_settings
     return render(request, "marketing/directory.html", {
-        "clinics": clinics, "map_points": map_points,
+        "clinics": clinics, "map_points": map_points, "user_loc": user_loc,
+        "google_maps_key": getattr(dj_settings, "GOOGLE_MAPS_API_KEY", ""),
     })
+
+
+def _distance_km(lat1, lng1, lat2, lng2):
+    from math import radians, sin, cos, asin, sqrt
+    dlat, dlng = radians(lat2 - lat1), radians(lng2 - lng1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+    return 6371 * 2 * asin(sqrt(a))
 
 
 def book_clinic(request, slug):

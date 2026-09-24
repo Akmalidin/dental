@@ -253,6 +253,9 @@ PUBLIC_BASE_DOMAIN = "denta.tw1.ru"     # <slug>.denta.tw1.ru → публичн
 # Пусто по умолчанию (только на server.py, где реально настроен домен).
 CRM_BASE_DOMAIN = ""
 
+# Google Maps JS API — карта каталога клиник stom.asia/book/. Пусто → OSM (Leaflet).
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
 SUPERADMIN_EMAIL = "akmalmadakimov6@gmail.com"
 TELEGRAM_BOT_TOKEN = ""
 
