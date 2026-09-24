@@ -8442,13 +8442,20 @@ function lbShow(){
     vid.pause(); vid.style.display='none'; vid.src='';
     img.style.display=''; img.src=it.url;
   }
-  cap.textContent=it.name + (it.date ? ' · '+it.date : '') + ` (${lbIdx+1}/${lbItems.length})`;
+  const many=lbItems.length>1;
+  cap.textContent=it.name + (it.date ? ' · '+it.date : '') + (many ? ` (${lbIdx+1}/${lbItems.length})` : '');
+  lb.querySelectorAll('.lb-prev,.lb-next').forEach(b=>{ b.style.display=many?'':'none'; });
 }
 function openDocLightbox(idx){
   lbItems=window.patientCardLightboxItems || [];
   lbIdx=idx<0?0:idx;
   lbShow();
   document.getElementById('newuiLightbox').classList.add('open');
+}
+// Одиночная картинка в том же лайтбоксе (например, QR онлайн-записи в Настройках).
+function openImageLightbox(url, name){
+  window.patientCardLightboxItems=[{url:url, name:name||'', isImage:true}];
+  openDocLightbox(0);
 }
 function lbClose(){
   const lb=document.getElementById('newuiLightbox');
