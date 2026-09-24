@@ -1,0 +1,33 @@
+name: Superadmin phone (Telegram /admin)
+
+# Суперадмин подтверждает себя в Telegram-боте клиники командой /admin —
+# бот сверяет номер с User.phone суперадмина. Этот прогон показывает
+# суперадминов, заполнен ли у них телефон и совпадает ли он с PHONE
+# (печатаются только последние 4 цифры). set_login — записать PHONE в
+# телефон суперадмина с этим логином (только суперадмину).
+on:
+  workflow_dispatch:
+    inputs:
+      phone:
+        description: "Номер для сверки, например 996XXXXXXXXX"
+        required: true
+      set_login:
+        description: "Логин суперадмина, которому записать этот номер (пусто — только проверить)"
+        required: false
+        default: ""
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверить/записать телефон суперадмина
+        env:
+          PHONE: ${{ inputs.phone }}
+          SET_LOGIN: ${{ inputs.set_login }}
+        run: |
+          case "$PHONE" in (*[!0-9+]*|'') echo "bad phone"; exit 1;; esac
+          case "$SET_LOGIN" in (*[!A-Za-z0-9_.@-]*) echo "bad login"; exit 1;; esac
+          sudo apt-get install -y sshpass >/dev/null 2>&1
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd /var/www/sadaf && set -a && . ./.env && set +a && echo 'aW1wb3J0IG9zCmZyb20gZGphbmdvLmRiLm1vZGVscyBpbXBvcnQgUQpmcm9tIGFwcHMudXNlcnMubW9kZWxzIGltcG9ydCBVc2VyLCBSb2xlCmZyb20gYXBwcy5wYXRpZW50cy5tb2RlbHMgaW1wb3J0IG5vcm1hbGl6ZV9waG9uZQoKd2FudCA9IG5vcm1hbGl6ZV9waG9uZShvcy5lbnZpcm9uLmdldCgiUEhPTkUiLCAiIikpCnNldF9sb2dpbiA9IG9zLmVudmlyb24uZ2V0KCJTRVRfTE9HSU4iLCAiIikuc3RyaXAoKQpxcyA9IFVzZXIub2JqZWN0cy5maWx0ZXIoUShpc19zdXBlcnVzZXI9VHJ1ZSkgfCBRKHJvbGVfX25hbWU9Um9sZS5TVVBFUkFETUlOKSB8IFEocm9sZXNfX25hbWU9Um9sZS5TVVBFUkFETUlOKSkuZGlzdGluY3QoKQpmb3IgdSBpbiBxcy5vcmRlcl9ieSgibG9naW4iKToKICAgIG4gPSBub3JtYWxpemVfcGhvbmUodS5waG9uZSkKICAgIHByaW50KCJzdXBlcmFkbWluIGxvZ2luPSVzIGFjdGl2ZT0lcyBwaG9uZV9zZXQ9JXMgcGhvbmVfdGFpbD0lcyBtYXRjaGVzPSVzIHRnX2xpbmtlZD0lcyIgJSAoCiAgICAgICAgdS5sb2dpbiwgdS5pc19hY3RpdmUsIGJvb2wodS5waG9uZSksIG5bLTQ6XSBpZiBuIGVsc2UgIi0iLCBib29sKHdhbnQpIGFuZCBuID09IHdhbnQsIGJvb2wodS50ZWxlZ3JhbV9pZCkpKQppZiBzZXRfbG9naW4gYW5kIHdhbnQ6CiAgICB1ID0gcXMuZmlsdGVyKGxvZ2luPXNldF9sb2dpbikuZmlyc3QoKQogICAgaWYgdSBpcyBOb25lOgogICAgICAgIHByaW50KCJTRVQ6IHN1cGVyYWRtaW4gd2l0aCBsb2dpbiAlciBub3QgZm91bmQiICUgc2V0X2xvZ2luKQogICAgZWxzZToKICAgICAgICB1LnBob25lID0gb3MuZW52aXJvbi5nZXQoIlBIT05FIiwgIiIpLnN0cmlwKCkKICAgICAgICB1LnNhdmUodXBkYXRlX2ZpZWxkcz1bInBob25lIl0pCiAgICAgICAgcHJpbnQoIlNFVDogcGhvbmUgc2F2ZWQgZm9yICVzICh0YWlsICVzKSIgJSAodS5sb2dpbiwgd2FudFstNDpdKSkK' | base64 -d | PHONE=$PHONE SET_LOGIN=$SET_LOGIN ./venv/bin/python manage.py shell"
