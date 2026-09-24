@@ -123,6 +123,7 @@
         <!-- Слоты -->
         <div class="glass card" x-show="doctor && date" x-cloak>
           <div class="step">3 · Время</div>
+          {% if clinic_tz_label %}<p class="muted" style="margin:-4px 0 8px;font-size:13px">🕐 Время указано по местному времени клиники: {{ clinic_tz_label }}</p>{% endif %}
           <template x-if="loading"><p class="muted">Загрузка слотов…</p></template>
           <template x-if="!loading && slots.length===0"><p class="muted">На эту дату нет свободного времени. Выберите другую дату.</p></template>
           <div class="slots">

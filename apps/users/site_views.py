@@ -150,7 +150,10 @@ def book_context_for(clinic, branch_id=None):
         doctors_qs = doctors_qs.filter(branches=selected_branch).distinct()
     doctors = list(doctors_qs)
     return {"doctors": doctors, "branches": branches, "selected_branch": selected_branch,
-            "default_country": default_phone_country_for(clinic)}
+            "default_country": default_phone_country_for(clinic),
+            # Слоты — по местному времени клиники (Clinic.timezone), а пациент
+            # может быть из другой страны: подписываем, чьё это время.
+            "clinic_tz_label": clinic.get_timezone_display()}
 
 
 # ClinicSettings.phone_country_code → ключ в выпадающем списке кода страны

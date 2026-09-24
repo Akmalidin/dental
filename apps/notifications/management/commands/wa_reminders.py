@@ -27,11 +27,11 @@ class Command(BaseCommand):
         from apps.tenancy import set_current_clinic
 
         now = timezone.now()
-        local_hour = timezone.localtime(now).hour
         stat = {"hour": 0, "day": 0, "debt": 0, "summary": 0}
 
         for clinic in Clinic.objects.filter(is_active=True):
-            set_current_clinic(clinic)
+            set_current_clinic(clinic)  # + часовой пояс клиники (для {время} и «около 10:00»)
+            local_hour = timezone.localtime(now).hour
             cs = ClinicSettings.objects.filter(clinic=clinic).first()
             if cs is None:
                 continue
