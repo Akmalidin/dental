@@ -8023,10 +8023,32 @@ function patientsGoToPage(p){
   patientsPage=p;
   renderPatientsTable();
 }
+// Фильтр/страница/«Показывать по»/поиск списка пациентов переживают
+// перезагрузку страницы (например, после слияния «Есть в базе» страница
+// перезагружается — раньше фильтр сбрасывался на «Все» и «Возможные дубли»
+// приходилось выбирать заново). sessionStorage — в пределах вкладки.
+const PATIENTS_STATE_KEY='newui_patients_list_state';
+function savePatientsListState(q){
+  try{ sessionStorage.setItem(PATIENTS_STATE_KEY, JSON.stringify({filter:patientChipFilter, page:patientsPage, perPage:patientsPerPage, q:q||''})); }catch(e){}
+}
+function restorePatientsListState(){
+  if(!document.getElementById('patientsTableBody')) return;
+  let st=null;
+  try{ st=JSON.parse(sessionStorage.getItem(PATIENTS_STATE_KEY)||'null'); }catch(e){}
+  if(!st) return;
+  if(['all','treatment','debt','dupes'].includes(st.filter)) patientChipFilter=st.filter;
+  if(parseInt(st.page)>0) patientsPage=parseInt(st.page);
+  if([25,50,100,200].includes(parseInt(st.perPage))){
+    patientsPerPage=parseInt(st.perPage);
+    const sel=document.getElementById('patientsPerPageSelect'); if(sel) sel.value=String(patientsPerPage);
+  }
+  const inp=document.getElementById('patientSearchInput'); if(inp && st.q) inp.value=st.q;
+}
 async function renderPatientsTable(){
   const body=document.getElementById('patientsTableBody');
   if(!body) return;
   const q=(document.getElementById('patientSearchInput')?.value || '').trim();
+  savePatientsListState(q);
   const params=new URLSearchParams({page:patientsPage, per_page:patientsPerPage, filter:patientChipFilter});
   if(q) params.set('q', q);
   let data;
@@ -8037,6 +8059,9 @@ async function renderPatientsTable(){
     body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_load_failed','Не удалось загрузить')}</td></tr>`;
     return;
   }
+  // сервер поджимает номер страницы (Paginator.get_page), если после
+  // слияний/удалений сохранённая страница оказалась за концом списка
+  if(data.page && data.page!==patientsPage){ patientsPage=data.page; savePatientsListState(q); }
   patientsCounts=data.counts || patientsCounts;
   patientsStats=data.stats || patientsStats;
   renderPatientChips();
@@ -8976,6 +9001,7 @@ calSetView('day');
 })();
 updateSchedDoctorFilterBadge();
 renderDashboard();
+restorePatientsListState();
 renderPatientChips();
 renderPatientsTable();
 renderRolesTable();
