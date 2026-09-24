@@ -829,6 +829,54 @@ def patient_file_upload(request, pk):
     return JsonResponse({"files": created})
 
 
+def _chat_scope(patient):
+    """Все сообщения беседы с пациентом: по карточке и по его номеру (дубли
+    карточек с тем же номером) в пределах его клиники — см. patient_wa_messages."""
+    from django.db.models import Q
+    from apps.patients.models import normalize_phone
+    norm = normalize_phone(patient.phone)
+    scope = Q(patient=patient)
+    if norm:
+        # Чужие клиники не подмешиваем: тот же номер может быть пациентом и в
+        # другой клинике. Сообщения без клиники (не привязанные ни к кому)
+        # берём — они с этого же номера.
+        scope |= (Q(phone__contains=norm)
+                  & (Q(clinic=patient.clinic) | Q(clinic__isnull=True)))
+    return scope
+
+
+@login_required
+def patient_wa_messages_delete(request, pk):
+    """Удалить беседу с пациентом (все сообщения WhatsApp/Telegram, вместе с
+    вложениями) — «Мессенджеры» → 🗑 в шапке чата. Только администратор /
+    директор / суперадмин. Сама карточка пациента не трогается."""
+    from django.http import JsonResponse
+    from apps.notifications.models import WaMessage
+    from apps.tenancy import get_current_clinic
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    if not (request.user.is_superadmin or request.user.is_admin):
+        return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
+    clinic = get_current_clinic() or request.user.clinic
+    qs = Patient.all_objects.filter(pk=pk)
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    elif not request.user.is_superadmin:
+        return JsonResponse({"ok": False}, status=404)
+    patient = qs.first()
+    if patient is None:
+        return JsonResponse({"ok": False}, status=404)
+    msgs = list(WaMessage.all_clinics.filter(_chat_scope(patient)))
+    for m in msgs:
+        if m.media_file:
+            try:
+                m.media_file.delete(save=False)
+            except Exception:
+                pass
+    deleted = WaMessage.all_clinics.filter(pk__in=[m.pk for m in msgs]).delete()[0]
+    return JsonResponse({"ok": True, "deleted": deleted})
+
+
 @login_required
 def patient_wa_messages(request, pk):
     """JSON сообщений чата. ?after=<id> (как шлёт старый интерфейс,
@@ -838,10 +886,8 @@ def patient_wa_messages(request, pk):
     та же выборка, что и в patient_notify(), плюс отметка входящих прочитанными."""
     from django.http import JsonResponse
     from django.utils import timezone
-    from django.db.models import Q
     patient = get_object_or_404(Patient, pk=pk)
     from apps.notifications.models import WaMessage
-    from apps.patients.models import normalize_phone
 
     # Диалог собираем по НОМЕРУ, а не только по карточке.
     #
@@ -853,14 +899,7 @@ def patient_wa_messages(request, pk):
     #
     # Угадывать «правильную» карточку бесполезно — любой выбор рвёт половину
     # переписки. Поэтому показываем всё, что связано с этим номером.
-    norm = normalize_phone(patient.phone)
-    scope = Q(patient=patient)
-    if norm:
-        # Чужие клиники не подмешиваем: тот же номер может быть пациентом и в
-        # другой клинике. Сообщения без клиники (не привязанные ни к кому)
-        # берём — они с этого же номера.
-        scope |= (Q(phone__contains=norm)
-                  & (Q(clinic=patient.clinic) | Q(clinic__isnull=True)))
+    scope = _chat_scope(patient)
 
     after_raw = request.GET.get("after")
     if after_raw is None:

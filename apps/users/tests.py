@@ -1413,6 +1413,42 @@ class NewUIMessagesTestCase(TestCase):
             first_name="Чат", last_name="Тестов", phone="+996700123123", branch=self.branch, clinic=self.clinic,
         )
 
+    def test_director_deletes_chat_card_stays(self):
+        from apps.notifications.models import WaMessage
+        from apps.patients.models import Patient
+        WaMessage.objects.create(patient=self.patient, direction="in", channel="tg", phone="555",
+                                  body="Привет", clinic=self.clinic)
+        WaMessage.objects.create(patient=None, direction="in", channel="wa", phone="996700123123@c.us",
+                                  body="без карточки, тот же номер", clinic=self.clinic)
+        other = WaMessage.objects.create(patient=None, direction="in", channel="wa", phone="996700999999",
+                                         body="чужой", clinic=self.clinic)
+        resp = self.client.get("/new/messages/")
+        self.assertTrue(_extract_newui_real_data(resp.content.decode())["messagesData"]["canDelete"])
+        resp = self.client.post(f"/patients/{self.patient.pk}/wa-messages/delete/")
+        self.assertEqual(resp.json(), {"ok": True, "deleted": 2})
+        self.assertEqual(list(WaMessage.all_clinics.values_list("pk", flat=True)), [other.pk])
+        self.assertTrue(Patient.objects.filter(pk=self.patient.pk).exists())
+
+    def test_doctor_cannot_delete_chat(self):
+        from apps.notifications.models import WaMessage
+        WaMessage.objects.create(patient=self.patient, direction="in", channel="wa", phone=self.patient.phone,
+                                  body="x", clinic=self.clinic)
+        doc_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        doc = User.objects.create(login="ms_doc", name="Врач", role=doc_role, clinic=self.clinic)
+        c = Client(); c.force_login(doc)
+        self.assertEqual(c.post(f"/patients/{self.patient.pk}/wa-messages/delete/").status_code, 403)
+        self.assertEqual(WaMessage.all_clinics.count(), 1)
+
+    def test_deleted_patient_chat_hidden_but_deletable(self):
+        from apps.notifications.models import WaMessage
+        WaMessage.objects.create(patient=self.patient, direction="in", channel="wa", phone=self.patient.phone,
+                                  body="x", clinic=self.clinic)
+        self.patient.is_deleted = True
+        self.patient.save(update_fields=["is_deleted"])
+        resp = self.client.get("/new/messages/")
+        self.assertEqual(_extract_newui_real_data(resp.content.decode())["messagesData"]["clients"], [])
+        self.assertEqual(self.client.post(f"/patients/{self.patient.pk}/wa-messages/delete/").json()["deleted"], 1)
+
     def test_messages_page_lists_real_conversation_with_unread_count(self):
         from apps.notifications.models import WaMessage
         WaMessage.objects.create(patient=self.patient, direction="out", channel="wa", phone=self.patient.phone,

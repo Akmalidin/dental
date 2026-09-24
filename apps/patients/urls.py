@@ -28,6 +28,7 @@ urlpatterns = [
     path("<int:pk>/notify/", views.patient_notify, name="patient_notify"),
     path("<int:pk>/upload-file/", views.patient_file_upload, name="patient_file_upload"),
     path("<int:pk>/wa-messages/", views.patient_wa_messages, name="patient_wa_messages"),
+    path("<int:pk>/wa-messages/delete/", views.patient_wa_messages_delete, name="patient_wa_messages_delete"),
     path("leads/create/", views.lead_create, name="lead_create"),
     path("leads/<int:pk>/update/", views.lead_update, name="lead_update"),
     path("leads/<int:pk>/delete/", views.lead_delete, name="lead_delete"),

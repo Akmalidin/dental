@@ -1153,8 +1153,10 @@ def newui_accounting(request):
 def newui_messages(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
+    messages_data = _newui_messages_data(clinic)
+    messages_data["canDelete"] = bool(request.user.is_superadmin or request.user.is_admin)
     return _render(request, "messages", "messages.html", {
-        "messagesData": _newui_messages_data(clinic),
+        "messagesData": messages_data,
         # Поиск в списке бесед должен находить ЛЮБОГО пациента, не только
         # тех, у кого уже есть переписка (messagesData.clients) — иначе
         # начать НОВЫЙ чат из поиска было невозможно (жалоба: «при поиске
