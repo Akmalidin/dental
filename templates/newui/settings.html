@@ -169,7 +169,7 @@
                 <button type="button" class="btn btn-ghost" onclick="qrCopyUrl()" data-i18n="w_copy">Копировать</button>
               </div>
               <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;">
-                <img id="qrPreview" alt="QR" style="width:220px;height:220px;border:1px solid var(--mist);border-radius:12px;background:#fff;">
+                <img id="qrPreview" alt="QR" title="Нажмите, чтобы увеличить" onclick="openImageLightbox(this.src, 'QR онлайн-записи')" style="width:220px;height:220px;border:1px solid var(--mist);border-radius:12px;background:#fff;cursor:zoom-in;">
                 <div style="display:flex;flex-direction:column;gap:10px;min-width:220px;">
                   <a id="qrDownloadBtn" class="btn btn-cobalt" href="/new/settings/booking-qr.png?download=1" download>⬇ <span data-i18n="w_download_png">Скачать PNG</span></a>
                   <div id="qrLogoControls">
