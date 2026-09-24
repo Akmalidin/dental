@@ -141,6 +141,19 @@ class MarketingBookClinicTestCase(TestCase):
         resp = self._post("/book/does-not-exist/submit/", {})
         self.assertEqual(resp.status_code, 404)
 
+    def test_no_service_select_on_booking_page(self):
+        resp = self._get(f"/book/{self.clinic_a.slug}/")
+        self.assertNotContains(resp, "Выберите услугу")
+
+    def test_phone_country_defaults_from_clinic_settings(self):
+        from apps.settings_clinic.models import ClinicSettings
+        resp = self._get(f"/book/{self.clinic_a.slug}/")
+        self.assertContains(resp, "country:'kg'")
+        ClinicSettings.objects.update_or_create(
+            clinic=self.clinic_a, defaults={"name": "Клиника А", "phone_country_code": "998"})
+        resp = self._get(f"/book/{self.clinic_a.slug}/")
+        self.assertContains(resp, "country:'uz'")
+
     def test_telegram_opt_in_link_shown_only_when_clinic_bot_connected(self):
         resp = self._get(f"/book/{self.clinic_a.slug}/")
         self.assertNotContains(resp, "t.me/")
