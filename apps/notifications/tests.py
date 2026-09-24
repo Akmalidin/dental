@@ -570,6 +570,42 @@ class TgStaffBotTestCase(TestCase):
         from apps.notifications.models import WaMessage
         self.assertFalse(WaMessage.objects.exists())
 
+    def test_superadmin_confirms_with_admin_and_connects_group(self):
+        from apps.notifications.models import TgGroup
+        from apps.patients.models import Patient
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        su = User.objects.create(login="st_su", name="Супер", phone="+996 553 565 674", role=su_role, clinic=None)
+        # тот же номер — пациент клиники: обычный контакт остаётся пациентским
+        pat = Patient.objects.create(first_name="Акмал", last_name="Пациент", phone="996553565674", clinic=self.clinic)
+        self._update({"message": {"chat": {"id": 61, "type": "private"}, "from": {"id": 61},
+                                  "contact": {"phone_number": "996553565674", "user_id": 61}}})
+        su.refresh_from_db(); pat.refresh_from_db()
+        self.assertIsNone(su.telegram_id)
+        self.assertEqual(pat.telegram_chat_id, 61)
+        # /admin → подтверждение своим контактом
+        self._update({"message": {"chat": {"id": 61, "type": "private"}, "from": {"id": 61}, "text": "/admin"}})
+        self._update({"message": {"chat": {"id": 61, "type": "private"}, "from": {"id": 61},
+                                  "contact": {"phone_number": "+996553565674", "user_id": 61}}})
+        su.refresh_from_db()
+        self.assertEqual(su.telegram_id, 61)
+        self.assertIn("подтверждены как супер-админ", self._texts())
+        grp = {"id": -100777, "type": "supergroup", "title": "Персонал 2"}
+        self._update({"message": {"chat": grp, "from": {"id": 61}, "text": "/group"}})
+        self.assertTrue(TgGroup.all_clinics.filter(clinic=self.clinic, chat_id=-100777).exists())
+
+    def test_admin_command_rejects_foreign_contact_and_non_superadmin(self):
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        su = User.objects.create(login="st_su2", name="Супер", phone="+996553565674", role=su_role, clinic=None)
+        self._update({"message": {"chat": {"id": 62, "type": "private"}, "from": {"id": 62}, "text": "/admin"}})
+        self._update({"message": {"chat": {"id": 62, "type": "private"}, "from": {"id": 62},
+                                  "contact": {"phone_number": "+996553565674", "user_id": 99}}})
+        su.refresh_from_db()
+        self.assertIsNone(su.telegram_id)
+        self._update({"message": {"chat": {"id": 62, "type": "private"}, "from": {"id": 62}, "text": "/admin"}})
+        self._update({"message": {"chat": {"id": 62, "type": "private"}, "from": {"id": 62},
+                                  "contact": {"phone_number": "+996700111999", "user_id": 62}}})
+        self.assertIn("не принадлежит супер-админу", self._texts())
+
     def test_group_notify_and_evening_summary(self):
         from datetime import datetime, time, timedelta
         from django.utils import timezone

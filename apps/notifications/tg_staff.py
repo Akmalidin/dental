@@ -124,6 +124,34 @@ def find_staff_by_phone(clinic, phone):
     return None
 
 
+def _superadmin_q():
+    from django.db.models import Q
+    from apps.users.models import Role
+    return Q(is_superuser=True) | Q(role__name=Role.SUPERADMIN) | Q(roles__name=Role.SUPERADMIN)
+
+
+def superadmin_for_chat(from_id):
+    """Суперадмин платформы, подтвердивший себя в боте командой /admin.
+    Telegram ID один и тот же во всех ботах, поэтому подтверждения в одном
+    боте достаточно, чтобы подключать группы (/group) у любой клиники."""
+    from apps.users.models import User
+    if not from_id:
+        return None
+    return User.objects.filter(_superadmin_q(), is_active=True, telegram_id=from_id).distinct().first()
+
+
+def find_superadmin_by_phone(phone):
+    from apps.users.models import User
+    from apps.patients.models import normalize_phone
+    norm = normalize_phone(phone)
+    if len(norm) < 9:
+        return None
+    for u in User.objects.filter(_superadmin_q(), is_active=True).exclude(phone="").distinct():
+        if normalize_phone(u.phone) == norm:
+            return u
+    return None
+
+
 def sees_all(user):
     """Врач — только свои записи; админ/директор и прочий персонал — все."""
     return bool(user.is_superadmin or user.is_admin or not user.is_doctor)
@@ -332,6 +360,38 @@ def handle_private(clinic, msg, token):
 
     staff = staff_for_chat(clinic, from_id)
 
+    # Суперадмин: /admin → «Подтвердить номер» → его Telegram ID запоминается,
+    # и в группах он может писать /group. В личке остаётся обычным
+    # пациентом (его номер может быть и пациентом клиники), поэтому
+    # автоматически по контакту суперадмина не переключаем.
+    from .tg_patient import get_chat
+    if staff is None and _cmd(text) == "admin":
+        chat = get_chat(clinic, chat_id)
+        chat.state, chat.data = "await_admin", {}
+        chat.save(update_fields=["state", "data", "updated_at"])
+        _send(chat_id, "Подтвердите номер супер-админа — нажмите кнопку ниже.", token, keyboard={
+            "keyboard": [[{"text": "📱 Подтвердить номер", "request_contact": True}]],
+            "resize_keyboard": True, "one_time_keyboard": True})
+        return True
+    if staff is None and contact:
+        chat = get_chat(clinic, chat_id)
+        if chat.state == "await_admin":
+            chat.state = ""
+            chat.save(update_fields=["state", "updated_at"])
+            own = contact.get("user_id") and contact.get("user_id") == from_id
+            su = find_superadmin_by_phone(contact.get("phone_number") or "") if own else None
+            if su is None:
+                _send(chat_id, "Этот номер не принадлежит супер-админу (или отправлен чужой контакт).", token,
+                      keyboard={"remove_keyboard": True})
+                return True
+            su.telegram_id = from_id
+            su.save(update_fields=["telegram_id"])
+            _send(chat_id, "✅ Вы подтверждены как супер-админ: <b>%s</b>.\n\n"
+                           "Теперь добавьте бота клиники в группу и напишите там /group — "
+                           "это работает в группах ботов всех клиник." % _esc(su.name), token,
+                  keyboard={"remove_keyboard": True})
+            return True
+
     if staff is None:
         # Привязка только по СВОЕМУ контакту (кнопка «Поделиться номером»):
         # чужую визитку или напечатанный номер подделать легко, а сотрудник
@@ -475,10 +535,12 @@ def handle_group(clinic, msg, token):
     cmd = _cmd((msg.get("text") or "").strip())
     if cmd not in ("group", "ungroup"):
         return
-    staff = staff_for_chat(clinic, (msg.get("from") or {}).get("id"))
+    from_id = (msg.get("from") or {}).get("id")
+    staff = staff_for_chat(clinic, from_id) or superadmin_for_chat(from_id)
     if staff is None or not can_manage_groups(staff):
         _send(chat_id, "Подключать группу может только администратор или директор клиники, "
-                       "подключённый к боту: напишите боту в личные сообщения /start и поделитесь номером.", token)
+                       "подключённый к боту: напишите боту в личные сообщения /start и поделитесь номером. "
+                       "Супер-админ — один раз напишите боту в личные сообщения /admin.", token)
         return
     if cmd == "group":
         g, _c = TgGroup.all_clinics.update_or_create(
