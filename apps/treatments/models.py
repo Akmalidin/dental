@@ -273,12 +273,25 @@ class TreatmentFile(models.Model):
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+    # Сжимаются при загрузке только фото; диагностические снимки
+    # (прицельный, ОПТГ, КЛКТ, рентген) и документы хранятся в оригинале.
+    COMPRESS_KINDS = {"photo_oral", "photo_face", "before", "after", "other"}
+
     class Meta:
         verbose_name = "Файл приёма"
         verbose_name_plural = "Файлы приёма"
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if (self._state.adding and self.kind in self.COMPRESS_KINDS and self.file
+                and not getattr(self.file, "_committed", True)):
+            from .image_compress import compress_photo
+            small = compress_photo(self.file)
+            if small is not None:
+                self.file = small
+        super().save(*args, **kwargs)
 
     @property
     def is_image(self):
