@@ -242,3 +242,88 @@ class NewUIVisitWizardTestCase(_VisitWizardTestBase):
     def test_newui_visit_start_no_patient_redirects_to_schedule(self):
         resp = self.client.get("/new/visit/start/")
         self.assertRedirects(resp, "/new/schedule/")
+
+
+class PhotoCompressionTestCase(TestCase):
+    """Фото (до/после, полость рта, лицо, другое) сжимаются при загрузке до
+    2560 px JPEG; рентген/ОПТГ/КЛКТ/прицельный и документы — в оригинале."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        self._tmp = tempfile.mkdtemp()
+        self._ovr = override_settings(MEDIA_ROOT=self._tmp)
+        self._ovr.enable()
+        self.clinic = Clinic.objects.create(name="Клиника Фото", slug="photo-compress")
+        set_current_clinic(self.clinic)
+        self.patient = Patient.objects.create(first_name="Фото", last_name="Тест", phone="+996700000777", clinic=self.clinic)
+
+    def tearDown(self):
+        import shutil
+        self._ovr.disable()
+        shutil.rmtree(self._tmp, ignore_errors=True)
+        clear_current_clinic()
+
+    def _jpeg(self, w=4000, h=3000, name="IMG_0001.JPG"):
+        import io, random
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        rnd = random.Random(1)
+        img = Image.effect_noise((w // 8, h // 8), 60).resize((w, h)).convert("RGB")
+        img.putpixel((0, 0), (rnd.randrange(255), 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=98)
+        return SimpleUploadedFile(name, buf.getvalue(), content_type="image/jpeg")
+
+    def _create(self, f, kind):
+        from apps.treatments.models import TreatmentFile
+        return TreatmentFile.objects.create(patient=self.patient, file=f, kind=kind, name=f.name)
+
+    def test_photo_is_resized_and_smaller(self):
+        from PIL import Image
+        f = self._jpeg()
+        original = len(f.read()); f.seek(0)
+        obj = self._create(f, "before")
+        obj.file.open("rb")
+        with Image.open(obj.file) as im:
+            self.assertEqual(max(im.size), 2560)
+            self.assertEqual(im.format, "JPEG")
+        self.assertLess(obj.file.size, original)
+        self.assertTrue(obj.file.name.endswith(".jpg"))
+        self.assertEqual(obj.name, "IMG_0001.JPG")
+
+    def test_xray_kinds_and_documents_keep_original(self):
+        for kind in ("xray", "opg", "cbct", "intraoral", "document"):
+            f = self._jpeg(name="%s.jpg" % kind)
+            data = f.read(); f.seek(0)
+            obj = self._create(f, kind)
+            obj.file.open("rb")
+            self.assertEqual(obj.file.read(), data, kind)
+
+    def test_non_image_photo_kind_saved_as_is(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        pdf = SimpleUploadedFile("scan.pdf", b"%PDF-1.4 fake" * 50000, content_type="application/pdf")
+        obj = self._create(pdf, "other")
+        obj.file.open("rb")
+        self.assertTrue(obj.file.read().startswith(b"%PDF-1.4"))
+        self.assertTrue(obj.file.name.endswith(".pdf"))
+
+    def test_small_photo_untouched(self):
+        f = self._jpeg(800, 600, name="small.jpg")
+        data = f.read(); f.seek(0)
+        self.assertLess(len(data), 400 * 1024)
+        obj = self._create(f, "photo_oral")
+        obj.file.open("rb")
+        self.assertEqual(obj.file.read(), data)
+
+    def test_exif_orientation_applied(self):
+        import io
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        img = Image.effect_noise((400, 300), 60).resize((4000, 3000)).convert("RGB")
+        exif = Image.Exif(); exif[0x0112] = 6  # «повернуть на 90°» — так телефон сохраняет вертикальное фото
+        buf = io.BytesIO(); img.save(buf, "JPEG", quality=98, exif=exif)
+        obj = self._create(SimpleUploadedFile("v.jpg", buf.getvalue()), "photo_face")
+        obj.file.open("rb")
+        with Image.open(obj.file) as im:
+            self.assertEqual(im.size, (1920, 2560))
