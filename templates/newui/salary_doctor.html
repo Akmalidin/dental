@@ -11,7 +11,10 @@
   .sd-pay-head .sd-earn{font:700 15px var(--mono,monospace);color:var(--teal,#12b886);white-space:nowrap}
   .sd-pay-head .sd-earn.neg{color:var(--coral,#ff5a1f)}
   .sd-sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
-  .sd-tr{margin-top:8px;padding:8px 10px;background:var(--cloud,#f5f6fa);border-radius:8px}
+  .sd-tr{margin-top:8px;padding:8px 10px;background:var(--cloud,#f5f6fa);border-radius:8px;cursor:pointer;transition:box-shadow .15s,background .15s}
+  .sd-tr:hover{background:var(--mist,#eceef4);box-shadow:inset 0 0 0 1.5px var(--cobalt,#2f4bff)}
+  .sd-tr .sd-open{color:var(--cobalt,#2f4bff);font-weight:600;white-space:nowrap}
+  .sd-pat{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
   .sd-tr-head{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .sd-tr table{width:100%;margin-top:6px;font-size:12.5px}
   .sd-tr th{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:left;padding:3px 6px;background:none}
@@ -112,13 +115,13 @@
     box.innerHTML = D.payments.map(p => `
       <div class="sd-pay">
         <div class="sd-pay-head">
-          <div><b>${esc(p.patient)}</b> · ${p.isRefund ? 'возврат' : 'оплата'} ${money(p.amount)} <span class="sd-sub">· ${esc(p.date)} · ${esc(p.method)}</span></div>
+          <div>${p.patientId ? `<a class="sd-pat" href="/new/patients/${p.patientId}/" title="Карточка пациента"><b>${esc(p.patient)}</b></a>` : `<b>${esc(p.patient)}</b>`} · ${p.isRefund ? 'возврат' : 'оплата'} ${money(p.amount)} <span class="sd-sub">· ${esc(p.date)} · ${esc(p.method)}</span></div>
           <span class="sd-earn ${p.earned < 0 ? 'neg' : ''}">${p.earned < 0 ? '' : '+'}${money(p.earned)}</span>
         </div>
         ${p.treatments.map(t => `
-          <div class="sd-tr">
-            <div class="sd-tr-head"><span>→ <a href="/new/visitcard/${t.id}/" target="_blank">приём №${esc(t.number)} от ${esc(t.date)}</a>: ${money(t.amount)} из ${money(t.billed)}${t.otherDoctors ? ' <span class="sd-sub">(в приёме есть услуги других врачей)</span>' : ''}</span></div>
-            <table><thead><tr><th>Услуга</th><th>Категория</th><th class="n">База</th><th class="n">Скидка</th><th class="n">Себест.</th><th class="n">%</th><th class="n">Врачу</th></tr></thead>
+          <div class="sd-tr" role="link" tabindex="0" title="Открыть приём" onclick="sdOpenVisit(${t.id})" onkeydown="if(event.key==='Enter')sdOpenVisit(${t.id})">
+            <div class="sd-tr-head"><span>→ приём №${esc(t.number)} от ${esc(t.date)}: ${money(t.amount)} из ${money(t.billed)}${t.otherDoctors ? ' <span class="sd-sub">(в приёме есть услуги других врачей)</span>' : ''}</span><span class="sd-open">Открыть приём ›</span></div>
+            <div style="overflow-x:auto;"><table><thead><tr><th>Услуга</th><th>Категория</th><th class="n">База</th><th class="n">Скидка</th><th class="n">Себест.</th><th class="n">%</th><th class="n">Врачу</th></tr></thead>
             <tbody>${t.rows.map(r => `<tr>
               <td>${esc(r.service)}${r.quantity > 1 ? ' ×' + r.quantity : ''}${r.tooth ? ' <span class="sd-sub">· зуб ' + esc(r.tooth) + '</span>' : ''}</td>
               <td>${esc(r.category)}</td>
@@ -126,7 +129,7 @@
               <td class="n">${r.discount ? money(r.discount) : '—'}</td>
               <td class="n">${r.cost ? '−' + money(r.cost) : '—'}</td>
               <td class="n">${pct(r.percent)}</td>
-              <td class="n"><b>${money(r.earned)}</b></td></tr>`).join('')}</tbody></table>
+              <td class="n"><b>${money(r.earned)}</b></td></tr>`).join('')}</tbody></table></div>
           </div>`).join('')}
       </div>`).join('');
   }
@@ -140,6 +143,7 @@
       <button class="btn btn-ghost btn-sm" type="button" title="Удалить" onclick="sdDeletePayout(${po.id})">✕</button></li>`).join('')
     : '<li class="sd-sub">Выплат пока не было</li>';
 
+  window.sdOpenVisit = id => { location.href = '/new/visitcard/' + id + '/'; };
   function go(from, to){ location.href = '/new/salary/' + D.doctorId + '/' + q(from, to); }
   window.sdApply = () => go(document.getElementById('sdFrom').value, document.getElementById('sdTo').value);
   window.sdSince = () => go(D.unpaidSince, D.today);
