@@ -1,13 +1,25 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User, Role, Branch, UserActivity
-from .models_salary import SalaryScheme, DoctorSchedule
+from .models_salary import SalaryScheme, DoctorSchedule, SalaryCategoryPercent, SalaryPayout
+
+
+class SalaryCategoryPercentInline(admin.TabularInline):
+    model = SalaryCategoryPercent
+    extra = 0
 
 
 @admin.register(SalaryScheme)
 class SalarySchemeAdmin(admin.ModelAdmin):
     list_display = ["user", "scheme_type", "fixed_amount", "percent"]
     list_filter = ["scheme_type"]
+    inlines = [SalaryCategoryPercentInline]
+
+
+@admin.register(SalaryPayout)
+class SalaryPayoutAdmin(admin.ModelAdmin):
+    list_display = ["doctor", "amount", "paid_on", "period_from", "period_to", "created_by"]
+    list_filter = ["paid_on"]
 
 
 @admin.register(DoctorSchedule)

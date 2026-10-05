@@ -75,6 +75,11 @@ class ClinicSettings(models.Model):
     # директор (admin_main)/суперадмин видят корзину всегда и включают эту
     # настройку явно, если хотят дать доступ остальному персоналу.
     recycle_bin_staff = models.BooleanField(default=False, verbose_name="Корзина видна персоналу")
+    # Зарплата «% от услуги»: True — процент врача от реально оплаченной суммы
+    # (скидка уменьшает и доход клиники, и зарплату врача); False — от полной
+    # цены услуги (скидку целиком несёт клиника).
+    salary_discount_shared = models.BooleanField(
+        default=True, verbose_name="Скидка уменьшает зарплату врача")
     # Формат чека
     RECEIPT_FORMAT_CHOICES = [
         ("thermal", "80мм термолента (с QR)"),

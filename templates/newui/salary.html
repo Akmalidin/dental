@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="nav_зарплаты">Зарплаты</h1><div class="topbar-right"><a class="btn btn-ghost" id="salaryExportLink" target="_blank" rel="noopener"><span data-i18n="w_excel">Excel</span></a></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_salary_hint">Расчёт за текущий месяц, реальные приёмы и оплаты. Период и печать — в старом интерфейсе (кнопка «Excel» ведёт туда же). Схема зарплаты сохраняется тем же эндпоинтом, что и в старом интерфейсе.</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span>Расчёт за текущий месяц, реальные приёмы и оплаты. Нажмите на сотрудника — расшифровка по оплатам, другой период, выплаты и PDF.</span> <span id="sal-discount-mode"></span></div>
 
         <div class="kpi-grid" style="margin-bottom:16px;">
           <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_period">Период</span><b style="font-size:16px" id="sal-period">—</b></div>
@@ -14,21 +14,21 @@
 
         <div class="card">
           <div class="card-head"><h3 data-i18n="w_salary_calc">Расчёт зарплаты</h3></div>
-          <table>
+          <div style="overflow-x:auto;"><table>
             <thead><tr>
               <th data-i18n="w_employee">Сотрудник</th>
               <th data-i18n="w_position">Должность</th>
               <th data-i18n="w_scheme">Схема</th>
               <th data-i18n="w_treatments_short">Приёмов</th>
-              <th data-i18n="w_completed_short">Заверш.</th>
-              <th data-i18n="w_avg_check">Средний чек</th>
               <th data-i18n="w_revenue">Выручка</th>
-              <th data-i18n="w_paid">Оплачено</th>
-              <th data-i18n="w_total_to_pay">К выплате</th>
+              <th title="Оплаты пациентов по приёмам врача">Оплаты пациентов</th>
+              <th>Начислено</th>
+              <th>Выплачено</th>
+              <th>Остаток</th>
               <th></th>
             </tr></thead>
             <tbody id="salaryTableBody"></tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
@@ -38,7 +38,10 @@
           <div class="modal-body">
             <div class="form-group"><label data-i18n="w_scheme_type">Тип схемы</label><select id="ss-type" onchange="ssTypeChanged()"></select></div>
             <div class="form-group" id="ss-fixed-wrap"><label id="ss-fixed-label" data-i18n="w_fixed_rate">Фиксированная ставка</label><input autocomplete="off" type="number" id="ss-fixed" min="0" step="1"></div>
-            <div class="form-group" id="ss-percent-wrap"><label data-i18n="w_percent">Процент (%)</label><input autocomplete="off" type="number" id="ss-percent" min="0" max="100" step="0.5"></div>
+            <div class="form-group" id="ss-percent-wrap"><label id="ss-percent-label" data-i18n="w_percent">Процент (%)</label><input autocomplete="off" type="number" id="ss-percent" min="0" max="100" step="0.5"></div>
+            <div class="form-group hidden" id="ss-cats-wrap"><label>Процент по категориям услуг</label>
+              <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">Пустое поле — действует процент по умолчанию.</div>
+              <div id="ss-cats" style="display:grid;grid-template-columns:1fr 90px;gap:6px 10px;align-items:center;max-height:300px;overflow:auto;"></div></div>
             <div class="form-group"><label data-i18n="w_description">Описание</label><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="ss-description" placeholder="Примечание" data-i18n-placeholder="w_note_placeholder"></div>
           </div>
           <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-salaryScheme')"><span data-i18n="w_cancel">Отмена</span></button><button class="btn btn-cobalt" type="button" onclick="submitSalaryScheme()"><span data-i18n="w_save">Сохранить</span></button></div>
@@ -54,23 +57,27 @@
   document.getElementById('salaryExportLink').href = '/users/salary/export/?from='+s.exportFrom+'&to='+s.exportTo;
   document.getElementById('sal-period').textContent = s.periodFrom+' — '+s.periodTo;
   document.getElementById('sal-count').textContent = (s.rows||[]).length;
-  document.getElementById('sal-total').textContent = fmtSom(s.totalSalary);
+  document.getElementById('sal-total').textContent = fmtSom(s.totalRemaining);
+  document.getElementById('sal-discount-mode').textContent = 'Скидка: ' + (s.discountShared
+    ? 'уменьшает зарплату врача (процент от оплаченной суммы)'
+    : 'за счёт клиники (процент от полной цены)') + ' — меняется в Настройках → Общие.';
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   document.getElementById('sal-revenue').textContent = fmtSom(s.totalRevenue);
 
   const body = document.getElementById('salaryTableBody');
   body.innerHTML = (s.rows||[]).length===0
     ? `<tr><td colspan="10" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_doctors')}</td></tr>`
     : s.rows.map(r => `<tr>
-        <td style="font-weight:600;">${r.doctorName}</td>
+        <td style="font-weight:600;"><a href="/new/salary/${r.doctorId}/" style="color:var(--cobalt,#2f4bff);text-decoration:none;" title="Расшифровка, выплаты и PDF">${esc(r.doctorName)} →</a></td>
         <td style="color:var(--ink-soft);font-size:12px;">${r.roleLabel}</td>
         <td>${r.schemeTypeLabel ? `<span class="pill cobalt">${r.schemeTypeLabel}${r.schemePercent?' · '+r.schemePercent+'%':''}</span>` : `<span class="pill grey">${t('w_not_set')}</span>`}</td>
         <td class="mono">${r.treatmentsCount}</td>
-        <td class="mono">${r.completedCount}</td>
-        <td class="mono">${fmtSom(r.avgCheck)}</td>
         <td class="mono">${fmtSom(r.revenue)}</td>
         <td class="mono" style="color:var(--teal)">${fmtSom(r.paid)}</td>
         <td class="mono" style="font-weight:700;">${fmtSom(r.salary)}</td>
-        <td style="text-align:right;"><button class="btn btn-ghost btn-sm" type="button" onclick="openSalaryScheme(${r.doctorId})">${t('w_configure')}</button></td>
+        <td class="mono" style="color:var(--teal)">${fmtSom(r.paidOut)}</td>
+        <td class="mono" style="font-weight:700;">${fmtSom(r.remaining)}</td>
+        <td style="text-align:right;white-space:nowrap;"><button class="btn btn-ghost btn-sm" type="button" onclick="openSalaryScheme(${r.doctorId})">${t('w_configure')}</button></td>
       </tr>`).join('');
 
   let ssEditingDoctorId = null;
@@ -85,13 +92,19 @@
     document.getElementById('ss-fixed').value = row.schemeFixed || 0;
     document.getElementById('ss-percent').value = row.schemePercent || 0;
     document.getElementById('ss-description').value = row.schemeDescription || '';
+    const cp = row.categoryPercents || {};
+    document.getElementById('ss-cats').innerHTML = (s.categories||[]).map(c =>
+      `<span style="font-size:13px;">${esc(c.name)}</span><input type="number" min="0" max="100" step="0.5" data-cat="${c.id}" value="${cp[c.id] != null ? cp[c.id] : ''}" placeholder="—">`
+    ).join('') || '<span style="font-size:12px;color:var(--ink-soft);">Категорий услуг нет — действует общий процент.</span>';
     ssTypeChanged();
     openModal('m-salaryScheme');
   };
   window.ssTypeChanged = function(){
     const type = document.getElementById('ss-type').value;
     document.getElementById('ss-fixed-wrap').classList.toggle('hidden', !(type==='fixed'||type==='combined'));
-    document.getElementById('ss-percent-wrap').classList.toggle('hidden', !(type==='percent_revenue'||type==='percent_paid'||type==='combined'));
+    document.getElementById('ss-percent-wrap').classList.toggle('hidden', !(type==='percent_revenue'||type==='percent_paid'||type==='combined'||type==='percent_service'));
+    document.getElementById('ss-cats-wrap').classList.toggle('hidden', type!=='percent_service');
+    document.getElementById('ss-percent-label').textContent = type==='percent_service' ? 'Процент по умолчанию (%)' : t('w_percent');
   };
   window.submitSalaryScheme = async function(){
     if(ssEditingDoctorId==null) return;
@@ -100,6 +113,10 @@
     fd.append('fixed_amount', document.getElementById('ss-fixed').value || '0');
     fd.append('percent', document.getElementById('ss-percent').value || '0');
     fd.append('description', document.getElementById('ss-description').value);
+    if(document.getElementById('ss-type').value === 'percent_service'){
+      fd.append('has_cats', '1');
+      document.querySelectorAll('#ss-cats input[data-cat]').forEach(i => fd.append('cat_' + i.dataset.cat, i.value));
+    }
     const res = await postForm('/users/salary/'+ssEditingDoctorId+'/scheme/', fd);
     if(res.redirected){ closeModal('m-salaryScheme'); flashAndReload(t('w_settings_saved')); }
     else { showToast(t('w_settings_save_failed'), 'error'); }
