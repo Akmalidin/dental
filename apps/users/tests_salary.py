@@ -178,6 +178,26 @@ class ServiceSalaryTestCase(TestCase):
         self.assertEqual(c.post(f"/new/salary/payout/{po.pk}/delete/").json()["ok"], True)
         self.assertFalse(SalaryPayout.all_clinics.exists())
 
+    def test_doctor_sees_only_own_salary_read_only(self):
+        t = self._treatment([(self.filling, self.doc, 10000)])
+        self._pay(10000, treatment=t)
+        dc = self._client(self.doc)
+        r = dc.get("/new/salary/me/")
+        self.assertEqual(r.status_code, 200)
+        d = r.context["real_data"]["salaryDoctor"]
+        self.assertEqual((d["doctorId"], d["earned"], d["canManage"]), (self.doc.pk, 3000.0, False))
+        self.assertContains(r, 'data-view="mysalary"')
+        self.assertEqual(dc.get(f"/new/salary/{self.doc.pk}/").status_code, 200)
+        self.assertContains(dc.get(f"/new/salary/{self.doc.pk}/explain/"), "Объяснение — Ражапова Гулзат")
+        self.assertEqual(dc.get(f"/new/salary/{self.doc2.pk}/").status_code, 404)
+        self.assertEqual(dc.get(f"/new/salary/{self.doc2.pk}/explain/").status_code, 404)
+        # общий список зарплат врачу по-прежнему закрыт
+        self.assertNotEqual(dc.get("/new/salary/").status_code, 200)
+        # у директора своя «Моя зарплата» в меню не нужна — у него весь раздел
+        r = self._client().get(f"/new/salary/{self.doc.pk}/")
+        self.assertTrue(r.context["real_data"]["salaryDoctor"]["canManage"])
+        self.assertNotContains(r, 'data-view="mysalary"')
+
     def test_scheme_edit_saves_category_percents_and_scoped(self):
         c = self._client()
         r = c.post(f"/users/salary/{self.doc.pk}/scheme/", {

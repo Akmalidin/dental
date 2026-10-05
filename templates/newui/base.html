@@ -190,6 +190,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
       <span data-i18n="nav_зарплаты">Зарплаты</span>
     </a>
+    {% if not request.user.is_superadmin and not request.user.is_admin_main %}
+    <a class="nav-item{% if active == 'mysalary' %} active{% endif %}" data-view="mysalary" href="{% url 'newui_salary_me' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+      <span>Моя зарплата</span>
+    </a>
+    {% endif %}
 
     <div class="nav-label">Управление</div>
     <a class="nav-item{% if active == 'reports' %} active{% endif %}" data-view="reports" href="{% url 'newui_reports' %}">

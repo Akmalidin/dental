@@ -1,6 +1,7 @@
 """Зарплата врача в новом интерфейсе: расшифровка по оплатам («% от услуги»),
 выплаты и печатное «Объяснение» (сохраняется в PDF из окна печати).
-Доступ — как у раздела «Зарплаты»: директор и суперадмин."""
+Директор и суперадмин видят всех и фиксируют выплаты; любой сотрудник —
+только свою зарплату («Моя зарплата»), без кнопок выплат."""
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -19,6 +20,18 @@ from .salary_calc import service_salary, payouts_qs, payouts_total, unpaid_since
 def _staff_member(pk):
     from apps.tenancy import get_current_clinic
     return get_object_or_404(clinic_staff(get_current_clinic()), pk=pk)
+
+
+def _is_manager(user):
+    return user.is_superadmin or user.has_role("admin_main")
+
+
+def _viewable_member(request, pk):
+    """Директор/суперадмин — любой сотрудник клиники, остальные — только сами."""
+    from django.http import Http404
+    if not _is_manager(request.user) and pk != request.user.pk:
+        raise Http404
+    return _staff_member(pk)
 
 
 def _parse_date(value, default=None):
@@ -60,10 +73,16 @@ def _f(v):
 
 
 @login_required
-@role_required("superadmin", "admin_main")
+def newui_salary_me(request):
+    """«Моя зарплата» — своя расшифровка для любого сотрудника."""
+    return newui_salary_doctor(request, request.user.pk)
+
+
+@login_required
 def newui_salary_doctor(request, pk):
     from .newui_views import _render
-    doctor = _staff_member(pk)
+    doctor = _viewable_member(request, pk)
+    manager = _is_manager(request.user)
     date_from, date_to, since = _period(request, doctor)
     scheme, is_service, calc, earned, paid = _salary_summary(doctor, date_from, date_to)
     payments = []
@@ -92,6 +111,8 @@ def newui_salary_doctor(request, pk):
     } for po in SalaryPayout.objects.filter(doctor=doctor).select_related("created_by")[:50]]
     data = {
         "doctorId": doctor.pk,
+        "canManage": manager,
+        "isSelf": doctor.pk == request.user.pk,
         "doctorName": doctor.name,
         "schemeType": scheme.scheme_type if scheme else "",
         "schemeLabel": scheme.get_scheme_type_display() if scheme else "",
@@ -109,15 +130,14 @@ def newui_salary_doctor(request, pk):
         "payments": payments,
         "payouts": payouts,
     }
-    return _render(request, "salary", "salary_doctor.html", {"salaryDoctor": data})
+    return _render(request, "salary" if manager else "mysalary", "salary_doctor.html", {"salaryDoctor": data})
 
 
 @login_required
-@role_required("superadmin", "admin_main")
 def newui_salary_explain(request, pk):
     """«Объяснение» для врача: печатная форма, сохраняется в PDF из окна печати."""
     from apps.settings_clinic.models import ClinicSettings
-    doctor = _staff_member(pk)
+    doctor = _viewable_member(request, pk)
     date_from, date_to, _since = _period(request, doctor)
     scheme, is_service, calc, earned, paid = _salary_summary(doctor, date_from, date_to)
     cs = ClinicSettings.get()

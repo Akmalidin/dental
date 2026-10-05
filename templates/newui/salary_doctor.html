@@ -26,7 +26,7 @@
   @media(max-width:1000px){.sd-layout{grid-template-columns:1fr}}
 </style>
       <div class="topbar">
-        <h1><a href="/new/salary/" style="color:var(--ink-soft);text-decoration:none;">Зарплаты</a> / <span id="sdName">—</span></h1>
+        <h1><span id="sdCrumb"><a href="/new/salary/" style="color:var(--ink-soft);text-decoration:none;">Зарплаты</a> / </span><span id="sdName">—</span></h1>
         <div class="topbar-right"><a class="btn btn-ghost" id="sdPdf" target="_blank" rel="noopener">📄 Скачать PDF</a></div>
       </div>
       <div class="page">
@@ -54,7 +54,7 @@
             <div id="sdPayments"></div>
           </div>
           <div>
-            <div class="card" style="margin-bottom:14px;">
+            <div class="card" style="margin-bottom:14px;" id="sdPayCard">
               <div class="card-head"><h3>Выплатить</h3></div>
               <div class="card-body" style="padding:12px 18px;">
                 <div class="form-group"><label>Сумма</label><input type="number" min="0" step="1" id="sdPayAmount"></div>
@@ -84,7 +84,11 @@
   const pct = n => (Math.round(n*100)/100).toLocaleString('ru-RU') + '%';
   const q = (from, to) => '?from=' + from + '&to=' + to;
 
-  document.getElementById('sdName').textContent = D.doctorName;
+  document.getElementById('sdName').textContent = D.canManage ? D.doctorName : 'Моя зарплата — ' + D.doctorName;
+  if(!D.canManage){
+    document.getElementById('sdCrumb').classList.add('hidden');
+    document.getElementById('sdPayCard').classList.add('hidden');
+  }
   document.getElementById('sdFrom').value = D.from;
   document.getElementById('sdTo').value = D.to;
   document.getElementById('sdPdf').href = '/new/salary/' + D.doctorId + '/explain/' + q(D.from, D.to);
@@ -97,7 +101,7 @@
     ? 'Схема: <b>' + esc(D.schemeLabel) + '</b>' + (D.isService
         ? ' · ' + (D.discountShared ? 'процент от оплаченной суммы (скидка уменьшает зарплату)' : 'процент от полной цены (скидку несёт клиника)') + ' · себестоимость техника/лаборатории вычитается'
         : '')
-    : 'Схема зарплаты не задана — настройте её на странице «Зарплаты».';
+    : (D.canManage ? 'Схема зарплаты не задана — настройте её на странице «Зарплаты».' : 'Схема зарплаты пока не задана — обратитесь к директору.');
 
   document.getElementById('sdEarned').textContent = money(D.earned);
   document.getElementById('sdPaid').textContent = money(D.paidOut);
@@ -140,11 +144,11 @@
       ${po.period ? '<div class="sd-sub">за ' + esc(po.period) + '</div>' : ''}
       ${po.comment ? '<div class="sd-sub">' + esc(po.comment) + '</div>' : ''}
       ${po.by ? '<div class="sd-sub">выдал: ' + esc(po.by) + '</div>' : ''}</div>
-      <button class="btn btn-ghost btn-sm" type="button" title="Удалить" onclick="sdDeletePayout(${po.id})">✕</button></li>`).join('')
+      ${D.canManage ? `<button class="btn btn-ghost btn-sm" type="button" title="Удалить" onclick="sdDeletePayout(${po.id})">✕</button>` : ''}</li>`).join('')
     : '<li class="sd-sub">Выплат пока не было</li>';
 
   window.sdOpenVisit = id => { location.href = '/new/visitcard/' + id + '/'; };
-  function go(from, to){ location.href = '/new/salary/' + D.doctorId + '/' + q(from, to); }
+  function go(from, to){ location.href = (D.canManage ? '/new/salary/' + D.doctorId + '/' : '/new/salary/me/') + q(from, to); }
   window.sdApply = () => go(document.getElementById('sdFrom').value, document.getElementById('sdTo').value);
   window.sdSince = () => go(D.unpaidSince, D.today);
   window.sdMonth = () => go(D.monthStart, D.today);
