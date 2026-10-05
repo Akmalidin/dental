@@ -107,8 +107,6 @@ body.embed .msg-grid{height:calc(100vh - 110px) !important;grid-template-columns
 /* Иконки меню — один цвет; при наведении подсвечиваются */
 .nav-item:hover svg{color:#9DAEFF;opacity:1;}
 .nav-item.active:hover svg{color:inherit;}
-.nav-count{margin-left:auto;font-size:10.5px;line-height:1;color:#7E8698;background:rgba(255,255,255,.07);border-radius:6px;padding:3px 6px;}
-.nav-item.active .nav-count{background:var(--cloud);color:var(--ink-soft);}
 .nav-sec .nav-badge{margin-left:6px;}
 /* Вкладки раздела над страницей */
 .nav-tabs{display:flex;gap:2px;padding:0 28px;background:var(--cloud);border-bottom:1px solid var(--mist);overflow-x:auto;scrollbar-width:none;}
