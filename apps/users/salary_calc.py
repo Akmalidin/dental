@@ -159,6 +159,7 @@ def service_salary(doctor, date_from, date_to, scheme=None, discount_shared=None
                 "created_at": payment.created_at,
                 "date": timezone.localtime(payment.created_at).strftime("%d.%m.%Y %H:%M"),
                 "patient": payment.patient.full_name if payment.patient_id else "—",
+                "patient_id": payment.patient_id,
                 "amount": payment.amount,
                 "is_refund": payment.type == Payment.TYPE_REFUND,
                 "method": payment.get_method_display(),

@@ -70,6 +70,7 @@ def newui_salary_doctor(request, pk):
     for p in (calc["payments"] if calc else []):
         payments.append({
             "paymentId": p["payment_id"], "date": p["date"], "patient": p["patient"],
+            "patientId": p["patient_id"],
             "amount": _f(p["amount"]), "isRefund": p["is_refund"], "method": p["method"],
             "earned": _f(p["earned"]),
             "treatments": [{
