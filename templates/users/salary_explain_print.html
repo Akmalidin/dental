@@ -1,0 +1,70 @@
+{% load plan_print_tags %}<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Объяснение — {{ doctor.name }}, {{ date_from|date:"d.m.Y" }}–{{ date_to|date:"d.m.Y" }}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:24px auto;padding:0 24px;color:#111;font-size:12.5px}
+  h1{font-size:18px;margin:0 0 4px}
+  .muted{color:#555}
+  .summary{display:flex;gap:10px;margin:14px 0}
+  .summary div{flex:1;border:1px solid #bbb;border-radius:6px;padding:8px 10px}
+  .summary b{display:block;font-size:16px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top}
+  th{background:#eee;font-size:11.5px}
+  td.n,th.n{text-align:right;white-space:nowrap}
+  tr.pay td{background:#f3f3f3;font-weight:bold}
+  tr.tr td{font-style:italic;color:#333}
+  tr.total td{font-weight:bold;font-size:14px}
+  .rules{margin:10px 0;font-size:12px;line-height:1.5}
+  .no-print{text-align:center;margin:22px 0}
+  .no-print button{padding:10px 26px;background:#2f4bff;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
+  @media print{.no-print{display:none} body{margin:0 auto}}
+</style></head><body>
+<div class="muted">{{ cs.name }}</div>
+<h1>Объяснение — {{ doctor.name }}, {{ date_from|date:"d.m.Y" }}–{{ date_to|date:"d.m.Y" }}</h1>
+<div class="muted">Сформировано {{ generated|date:"d.m.Y H:i" }}{% if scheme %} · схема: {{ scheme.get_scheme_type_display }}{% endif %}</div>
+
+<div class="summary">
+  <div>Начислено<b>{{ earned|money }} {{ cur }}</b></div>
+  <div>Выплачено<b>{{ paid|money }} {{ cur }}</b></div>
+  <div>Остаток<b>{{ remaining|money }} {{ cur }}</b></div>
+</div>
+
+{% if is_service %}
+<div class="rules">
+  Зарплата считается с оплат пациентов за период. Оплата делится по приёмам, внутри приёма — пропорционально стоимости услуг.
+  {% if calc.discount_shared %}Процент берётся с оплаченной суммы (скидка уменьшает и доход клиники, и зарплату).{% else %}Процент берётся с полной цены услуги (скидку несёт клиника).{% endif %}
+  Себестоимость работы техника/лаборатории вычитается до расчёта процента. Предоплата без приёма в зарплату не идёт.<br>
+  Проценты: {% for name, p in categories %}{{ name }} — {{ p|floatformat:"-2" }}%; {% endfor %}остальные категории — {{ scheme.percent|floatformat:"-2" }}%.
+</div>
+<table>
+  <thead><tr><th>Услуга</th><th>Категория</th><th class="n">База, {{ cur }}</th><th class="n">Скидка</th><th class="n">Себест.</th><th class="n">%</th><th class="n">Врачу, {{ cur }}</th></tr></thead>
+  <tbody>
+  {% for p in calc.payments %}
+    <tr class="pay"><td colspan="6">{{ p.date }} · {{ p.patient }} · {% if p.is_refund %}возврат{% else %}оплата{% endif %} {{ p.amount|money }} {{ cur }} ({{ p.method }})</td><td class="n">{{ p.earned|money }}</td></tr>
+    {% for t in p.treatments %}
+      <tr class="tr"><td colspan="7">→ приём №{{ t.number }} от {{ t.date }}: {{ t.amount|money }} из {{ t.billed|money }} {{ cur }}{% if t.other_doctors %} (есть услуги других врачей){% endif %}</td></tr>
+      {% for r in t.rows %}
+      <tr><td>{{ r.service }}{% if r.quantity > 1 %} ×{{ r.quantity }}{% endif %}{% if r.tooth %} · зуб {{ r.tooth }}{% endif %}</td><td>{{ r.category }}</td>
+        <td class="n">{{ r.base|money }}</td><td class="n">{% if r.discount %}{{ r.discount|money }}{% else %}—{% endif %}</td>
+        <td class="n">{% if r.cost %}−{{ r.cost|money }}{% else %}—{% endif %}</td><td class="n">{{ r.percent|floatformat:"-2" }}%</td><td class="n">{{ r.earned|money }}</td></tr>
+      {% endfor %}
+    {% endfor %}
+  {% empty %}
+    <tr><td colspan="7" style="text-align:center" class="muted">За период нет оплат по услугам врача</td></tr>
+  {% endfor %}
+    <tr class="total"><td colspan="6" class="n">Итого начислено:</td><td class="n">{{ earned|money }}</td></tr>
+  </tbody>
+</table>
+{% else %}
+<p class="rules">Расшифровка по оплатам доступна для схемы «% от услуги (по категориям)».</p>
+{% endif %}
+
+{% if payouts %}
+<h3 style="font-size:14px;margin-top:18px;">Выплаты за период</h3>
+<table><thead><tr><th>Дата</th><th>За период</th><th>Комментарий</th><th class="n">Сумма, {{ cur }}</th></tr></thead><tbody>
+{% for po in payouts %}<tr><td>{{ po.paid_on|date:"d.m.Y" }}</td><td>{% if po.period_from %}{{ po.period_from|date:"d.m.Y" }}–{{ po.period_to|date:"d.m.Y" }}{% endif %}</td><td>{{ po.comment }}</td><td class="n">{{ po.amount|money }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+<div class="no-print"><button onclick="window.print()">🖨 Печать / Сохранить PDF</button></div>
+</body></html>

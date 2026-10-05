@@ -1,0 +1,169 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Зарплата врача{% endblock %}
+{% block content %}
+<style>
+  .sd-period{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .sd-period input{width:150px}
+  .sd-pay{border-top:1px solid var(--mist-line,#e3e5ec);padding:12px 18px}
+  .sd-pay:first-child{border-top:none}
+  .sd-pay-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .sd-pay-head b{font-size:14px}
+  .sd-pay-head .sd-earn{font:700 15px var(--mono,monospace);color:var(--teal,#12b886);white-space:nowrap}
+  .sd-pay-head .sd-earn.neg{color:var(--coral,#ff5a1f)}
+  .sd-sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
+  .sd-tr{margin-top:8px;padding:8px 10px;background:var(--cloud,#f5f6fa);border-radius:8px}
+  .sd-tr-head{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .sd-tr table{width:100%;margin-top:6px;font-size:12.5px}
+  .sd-tr th{font-size:11px;font-weight:600;color:var(--ink-soft);text-align:left;padding:3px 6px;background:none}
+  .sd-tr td{padding:4px 6px;border-top:1px dashed var(--mist-line,#dde0e8)}
+  .sd-tr td.n,.sd-tr th.n{text-align:right;white-space:nowrap;font-family:var(--mono,monospace)}
+  .sd-payouts li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--mist-line,#e3e5ec);font-size:13px}
+  .sd-payouts li:first-child{border-top:none}
+  .sd-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+  @media(max-width:1000px){.sd-layout{grid-template-columns:1fr}}
+</style>
+      <div class="topbar">
+        <h1><a href="/new/salary/" style="color:var(--ink-soft);text-decoration:none;">Зарплаты</a> / <span id="sdName">—</span></h1>
+        <div class="topbar-right"><a class="btn btn-ghost" id="sdPdf" target="_blank" rel="noopener">📄 Скачать PDF</a></div>
+      </div>
+      <div class="page">
+        <div class="card" style="margin-bottom:14px;"><div class="card-body" style="padding:12px 18px;">
+          <div class="sd-period">
+            <span style="font-size:13px;color:var(--ink-soft);">Период:</span>
+            <input type="date" id="sdFrom"> — <input type="date" id="sdTo">
+            <button class="btn btn-cobalt btn-sm" type="button" onclick="sdApply()">Показать</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="sdSinceBtn" onclick="sdSince()"></button>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="sdMonth()">Текущий месяц</button>
+          </div>
+          <div class="sd-sub" id="sdSchemeInfo" style="margin-top:8px;"></div>
+        </div></div>
+
+        <div class="kpi-grid" style="margin-bottom:16px;">
+          <div class="card kpi b-cobalt"><span class="lbl">Начислено за период</span><b style="font-size:22px" id="sdEarned">—</b></div>
+          <div class="card kpi b-teal"><span class="lbl">Выплачено за период</span><b style="font-size:22px" id="sdPaid">—</b></div>
+          <div class="card kpi b-amber"><span class="lbl">Остаток к выплате</span><b style="font-size:22px" id="sdRemaining">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl" id="sdUnpaidLbl">Не выплачено с</span><b style="font-size:16px" id="sdUnpaid">—</b></div>
+        </div>
+
+        <div class="sd-layout">
+          <div class="card">
+            <div class="card-head"><h3>Из чего сложилась сумма</h3><span class="sd-sub" id="sdCount"></span></div>
+            <div id="sdPayments"></div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:14px;">
+              <div class="card-head"><h3>Выплатить</h3></div>
+              <div class="card-body" style="padding:12px 18px;">
+                <div class="form-group"><label>Сумма</label><input type="number" min="0" step="1" id="sdPayAmount"></div>
+                <div class="form-group"><label>Дата выплаты</label><input type="date" id="sdPayDate"></div>
+                <div class="form-group"><label>Комментарий</label><input type="text" id="sdPayComment" autocomplete="off" placeholder="Необязательно"></div>
+                <div class="sd-sub" style="margin-bottom:10px;">Выплата фиксируется за выбранный период и в кассу расходом не проводится.</div>
+                <button class="btn btn-cobalt" type="button" style="width:100%;" onclick="sdPayout()">Зафиксировать выплату</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>История выплат</h3></div>
+              <div class="card-body" style="padding:4px 18px 10px;"><ul class="sd-payouts" id="sdPayouts" style="list-style:none;margin:0;padding:0;"></ul></div>
+            </div>
+          </div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  const D = REAL.salaryDoctor;
+  if(!D) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const cur = () => (typeof CUR_SYM !== 'undefined' && CUR_SYM) || 'сом';
+  const money = n => (Math.round(n*100)/100).toLocaleString('ru-RU', {maximumFractionDigits:2}) + ' ' + cur();
+  const pct = n => (Math.round(n*100)/100).toLocaleString('ru-RU') + '%';
+  const q = (from, to) => '?from=' + from + '&to=' + to;
+
+  document.getElementById('sdName').textContent = D.doctorName;
+  document.getElementById('sdFrom').value = D.from;
+  document.getElementById('sdTo').value = D.to;
+  document.getElementById('sdPdf').href = '/new/salary/' + D.doctorId + '/explain/' + q(D.from, D.to);
+  document.getElementById('sdPayDate').value = D.today;
+  const sinceBtn = document.getElementById('sdSinceBtn');
+  if(D.unpaidSince){ sinceBtn.textContent = 'С последней выплаты (' + D.unpaidSinceLabel + ')'; }
+  else { sinceBtn.classList.add('hidden'); }
+
+  document.getElementById('sdSchemeInfo').innerHTML = D.schemeLabel
+    ? 'Схема: <b>' + esc(D.schemeLabel) + '</b>' + (D.isService
+        ? ' · ' + (D.discountShared ? 'процент от оплаченной суммы (скидка уменьшает зарплату)' : 'процент от полной цены (скидку несёт клиника)') + ' · себестоимость техника/лаборатории вычитается'
+        : '')
+    : 'Схема зарплаты не задана — настройте её на странице «Зарплаты».';
+
+  document.getElementById('sdEarned').textContent = money(D.earned);
+  document.getElementById('sdPaid').textContent = money(D.paidOut);
+  document.getElementById('sdRemaining').textContent = money(D.remaining);
+  document.getElementById('sdUnpaid').textContent = D.unpaidSinceLabel || 'выплат ещё не было';
+  document.getElementById('sdPayAmount').value = D.remaining > 0 ? Math.round(D.remaining*100)/100 : '';
+
+  const box = document.getElementById('sdPayments');
+  if(!D.isService){
+    box.innerHTML = '<div class="sd-pay sd-sub">Расшифровка по оплатам доступна для схемы «% от услуги (по категориям)». Для текущей схемы сумма считается по общим итогам месяца.</div>';
+  } else if(!D.payments.length){
+    box.innerHTML = '<div class="sd-pay sd-sub">За период нет оплат по услугам этого врача.</div>';
+  } else {
+    document.getElementById('sdCount').textContent = D.payments.length + ' оплат';
+    box.innerHTML = D.payments.map(p => `
+      <div class="sd-pay">
+        <div class="sd-pay-head">
+          <div><b>${esc(p.patient)}</b> · ${p.isRefund ? 'возврат' : 'оплата'} ${money(p.amount)} <span class="sd-sub">· ${esc(p.date)} · ${esc(p.method)}</span></div>
+          <span class="sd-earn ${p.earned < 0 ? 'neg' : ''}">${p.earned < 0 ? '' : '+'}${money(p.earned)}</span>
+        </div>
+        ${p.treatments.map(t => `
+          <div class="sd-tr">
+            <div class="sd-tr-head"><span>→ <a href="/new/visitcard/${t.id}/" target="_blank">приём №${esc(t.number)} от ${esc(t.date)}</a>: ${money(t.amount)} из ${money(t.billed)}${t.otherDoctors ? ' <span class="sd-sub">(в приёме есть услуги других врачей)</span>' : ''}</span></div>
+            <table><thead><tr><th>Услуга</th><th>Категория</th><th class="n">База</th><th class="n">Скидка</th><th class="n">Себест.</th><th class="n">%</th><th class="n">Врачу</th></tr></thead>
+            <tbody>${t.rows.map(r => `<tr>
+              <td>${esc(r.service)}${r.quantity > 1 ? ' ×' + r.quantity : ''}${r.tooth ? ' <span class="sd-sub">· зуб ' + esc(r.tooth) + '</span>' : ''}</td>
+              <td>${esc(r.category)}</td>
+              <td class="n">${money(r.base)}</td>
+              <td class="n">${r.discount ? money(r.discount) : '—'}</td>
+              <td class="n">${r.cost ? '−' + money(r.cost) : '—'}</td>
+              <td class="n">${pct(r.percent)}</td>
+              <td class="n"><b>${money(r.earned)}</b></td></tr>`).join('')}</tbody></table>
+          </div>`).join('')}
+      </div>`).join('');
+  }
+
+  const ul = document.getElementById('sdPayouts');
+  ul.innerHTML = D.payouts.length ? D.payouts.map(po => `
+    <li><div><b>${money(po.amount)}</b> · ${esc(po.paidOn)}
+      ${po.period ? '<div class="sd-sub">за ' + esc(po.period) + '</div>' : ''}
+      ${po.comment ? '<div class="sd-sub">' + esc(po.comment) + '</div>' : ''}
+      ${po.by ? '<div class="sd-sub">выдал: ' + esc(po.by) + '</div>' : ''}</div>
+      <button class="btn btn-ghost btn-sm" type="button" title="Удалить" onclick="sdDeletePayout(${po.id})">✕</button></li>`).join('')
+    : '<li class="sd-sub">Выплат пока не было</li>';
+
+  function go(from, to){ location.href = '/new/salary/' + D.doctorId + '/' + q(from, to); }
+  window.sdApply = () => go(document.getElementById('sdFrom').value, document.getElementById('sdTo').value);
+  window.sdSince = () => go(D.unpaidSince, D.today);
+  window.sdMonth = () => go(D.monthStart, D.today);
+
+  window.sdPayout = async function(){
+    const amount = parseFloat(document.getElementById('sdPayAmount').value);
+    if(!(amount > 0)){ showToast('Укажите сумму выплаты', 'error'); return; }
+    const fd = new FormData();
+    fd.append('amount', amount);
+    fd.append('paid_on', document.getElementById('sdPayDate').value);
+    fd.append('period_from', D.from);
+    fd.append('period_to', D.to);
+    fd.append('comment', document.getElementById('sdPayComment').value);
+    const res = await postForm('/new/salary/' + D.doctorId + '/payout/', fd);
+    const data = await res.json().catch(() => null);
+    if(res.ok && data && data.ok){ flashAndReload('Выплата зафиксирована'); }
+    else { showToast((data && data.error) || 'Не удалось сохранить', 'error'); }
+  };
+  window.sdDeletePayout = async function(id){
+    if(!confirm('Удалить запись о выплате?')) return;
+    const res = await postForm('/new/salary/payout/' + id + '/delete/', new FormData());
+    if(res.ok){ flashAndReload('Выплата удалена'); } else { showToast('Не удалось удалить', 'error'); }
+  };
+})();
+</script>
+{% endblock %}

@@ -1855,6 +1855,10 @@ def _newui_settings_data(clinic):
         "telegramBotToken": cs.telegram_bot_token,
         "requireUniquePhone": cs.require_unique_phone,
         "visitsJournalStaff": cs.visits_journal_staff,
+        # Без этого поля частичное сохранение «Общих» через POST /settings/
+        # (ModelForm с recycle_bin_staff) молча выключало корзину для персонала.
+        "recycleBinStaff": cs.recycle_bin_staff,
+        "salaryDiscountShared": cs.salary_discount_shared,
         "appointmentSlot": cs.appointment_slot,
         "language": cs.language,
         "timezone": getattr(clinic, "timezone", "Asia/Bishkek"),
@@ -4265,7 +4269,8 @@ def _salary_rows(date_from, date_to, completed_only=False):
     from apps.finance.models import Payment
     from apps.users.models import clinic_staff
     from apps.tenancy import get_current_clinic
-    doctors = clinic_staff(get_current_clinic())
+    from .salary_calc import service_salary, payouts_total
+    doctors = clinic_staff(get_current_clinic()).prefetch_related("salary_scheme__category_percents")
     rows = []
     for doc in doctors:
         t_qs = Treatment.objects.filter(
@@ -4281,7 +4286,11 @@ def _salary_rows(date_from, date_to, completed_only=False):
         c_count = t_qs.filter(status__in=["completed", "paid"]).count()
         avg = (revenue / c_count) if (completed_only and c_count) else ((revenue / t_count) if t_count else Decimal(0))
         scheme = getattr(doc, "salary_scheme", None)
-        salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else Decimal(0)
+        if scheme and scheme.scheme_type == scheme.TYPE_PERCENT_SERVICE:
+            salary = service_salary(doc, date_from, date_to, scheme=scheme)["total"]
+        else:
+            salary = Decimal(str(scheme.calculate(float(revenue), float(paid)))) if scheme else Decimal(0)
+        paid_out = payouts_total(doc, date_from, date_to)
         role_label = ""
         if getattr(doc, "role", None):
             role_label = doc.role.display_name
@@ -4290,6 +4299,7 @@ def _salary_rows(date_from, date_to, completed_only=False):
             "revenue": revenue, "paid": paid,
             "treatments_count": t_count, "completed_count": c_count,
             "avg_check": avg, "salary": salary,
+            "paid_out": paid_out, "remaining": salary - paid_out,
         })
     return rows
 
@@ -4305,10 +4315,19 @@ def _newui_salary_data():
     from datetime import date
     from .models_salary import SalaryScheme
 
-    today = date.today()
+    from django.utils import timezone
+    from apps.services.models import ServiceCategory
+    from apps.settings_clinic.models import ClinicSettings
+
+    today = timezone.localdate()
     month_start = today.replace(day=1)
     rows = _salary_rows(month_start, today)
     return {
+        "categories": [{"id": c.pk, "name": c.name}
+                       for c in ServiceCategory.objects.order_by("sort_order", "name")],
+        "discountShared": bool(getattr(ClinicSettings.get(), "salary_discount_shared", True)),
+        "totalPaidOut": float(sum(r["paid_out"] for r in rows)),
+        "totalRemaining": float(sum(r["remaining"] for r in rows)),
         "periodFrom": month_start.strftime("%d.%m.%Y"),
         "periodTo": today.strftime("%d.%m.%Y"),
         "exportFrom": month_start.isoformat(),
@@ -4323,6 +4342,10 @@ def _newui_salary_data():
             "schemeFixed": float(r["scheme"].fixed_amount) if r["scheme"] else 0,
             "schemePercent": float(r["scheme"].percent) if r["scheme"] else 0,
             "schemeDescription": r["scheme"].description if r["scheme"] else "",
+            "categoryPercents": ({str(cp.category_id): float(cp.percent)
+                                  for cp in r["scheme"].category_percents.all()} if r["scheme"] else {}),
+            "paidOut": float(r["paid_out"]),
+            "remaining": float(r["remaining"]),
             "treatmentsCount": r["treatments_count"],
             "completedCount": r["completed_count"],
             "avgCheck": float(r["avg_check"]),
@@ -4447,15 +4470,36 @@ def salary_export(request):
 @login_required
 @role_required("superadmin", "admin_main")
 def salary_scheme_edit(request, pk):
-    from .models_salary import SalaryScheme
-    user = get_object_or_404(User, pk=pk)
+    from decimal import Decimal
+    from .models_salary import SalaryScheme, SalaryCategoryPercent
+    from .models import clinic_staff
+    from apps.tenancy import get_current_clinic
+    from apps.services.models import ServiceCategory
+    # Только сотрудник текущей клиники — раньше схему можно было поменять
+    # любому пользователю по id.
+    user = get_object_or_404(clinic_staff(get_current_clinic()), pk=pk)
     scheme, _created = SalaryScheme.objects.get_or_create(user=user)
     if request.method == "POST":
-        scheme.scheme_type = request.POST.get("scheme_type", scheme.scheme_type)
+        scheme_type = request.POST.get("scheme_type", scheme.scheme_type)
+        if scheme_type in dict(SalaryScheme.TYPE_CHOICES):
+            scheme.scheme_type = scheme_type
         scheme.fixed_amount = request.POST.get("fixed_amount") or 0
         scheme.percent = request.POST.get("percent") or 0
         scheme.description = request.POST.get("description", "")
         scheme.save()
+        # «% от услуги»: проценты по категориям (cat_<id>; пусто — общий процент).
+        if request.POST.get("has_cats"):
+            scheme.category_percents.all().delete()
+            for cat in ServiceCategory.objects.all():
+                raw = (request.POST.get(f"cat_{cat.pk}") or "").strip().replace(",", ".")
+                if raw == "":
+                    continue
+                try:
+                    pct = Decimal(raw)
+                except Exception:
+                    continue
+                if 0 <= pct <= 100:
+                    SalaryCategoryPercent.objects.create(scheme=scheme, category=cat, percent=pct)
         messages.success(request, _("Схема зарплаты сохранена"))
         return redirect("salary_report")
     return render(request, "users/salary_scheme_form.html", {

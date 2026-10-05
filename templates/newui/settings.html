@@ -67,6 +67,12 @@
                 <label><span data-i18n="w_currency_secondary">Дополнительная валюта</span><div class="hint" data-i18n="w_currency_secondary_hint">Необязательно — позволяет указывать вторую цену у услуг</div></label>
                 <select id="set-currency-secondary"></select>
               </div>
+              {% if request.user.is_superadmin or request.user.is_admin_main %}
+              <div class="field-row">
+                <label><span>Скидка уменьшает зарплату врача</span><div class="hint">Схема «% от услуги». Включено — процент от оплаченной суммы (скидку делят клиника и врач). Выключено — от полной цены услуги, скидку несёт клиника. Сохраняется сразу.</div></label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="set-salary-discount" onchange="saveSalaryDiscount(this)"> <span id="set-salary-discount-lbl"></span></label>
+              </div>
+              {% endif %}
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
                 <button class="btn btn-primary" type="button" onclick="saveSettingsGeneral()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
@@ -506,6 +512,7 @@
     fd.append('telegram_bot_token', s.telegramBotToken);
     if(s.requireUniquePhone) fd.append('require_unique_phone', 'on');
     if(s.visitsJournalStaff) fd.append('visits_journal_staff', 'on');
+    if(s.recycleBinStaff) fd.append('recycle_bin_staff', 'on');
     fd.append('name', document.getElementById('set-name').value);
     fd.append('phone', document.getElementById('set-phone').value);
     fd.append('address', document.getElementById('set-address').value);
@@ -543,6 +550,19 @@
       if(res.ok && data && data.ok) showToast(t('w_language_saved', 'Язык сохранён — лично для вас'));
       else showToast(t('w_settings_save_failed'), 'error');
     }catch(e){ showToast(t('w_settings_save_failed'), 'error'); }
+  };
+  const salaryDiscountBox = document.getElementById('set-salary-discount');
+  function salaryDiscountLabel(){
+    document.getElementById('set-salary-discount-lbl').textContent = salaryDiscountBox.checked ? 'Да' : 'Нет — за счёт клиники';
+  }
+  if(salaryDiscountBox){ salaryDiscountBox.checked = s.salaryDiscountShared !== false; salaryDiscountLabel(); }
+  window.saveSalaryDiscount = async function(box){
+    const fd = new FormData();
+    fd.append('discount_shared', box.checked ? '1' : '0');
+    const res = await postForm('/new/salary/settings/', fd);
+    const data = await res.json().catch(() => null);
+    if(res.ok && data && data.ok){ salaryDiscountLabel(); showToast(t('w_settings_saved')); }
+    else { box.checked = !box.checked; showToast(t('w_settings_save_failed'), 'error'); }
   };
   window.saveSettingsGeneral = submitSettings;
   window.saveSettingsContacts = submitSettings;
