@@ -5555,3 +5555,41 @@ class NewuiBookingQrTestCase(TestCase):
         self.client.force_login(self.doctor)
         resp = self.client.post("/new/settings/booking-qr/logo/", {"logo": self._logo()})
         self.assertEqual(resp.status_code, 403)
+
+
+class NewUIStaffRolesAndLoginAsTestCase(TestCase):
+    """Персонал в новом интерфейсе: порядок по ролям (директоры → врачи …) и
+    «Войти как сотрудник» с плашкой возврата."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника ST", slug="clinic-newui-staff-roles")
+        director = Role.objects.get(name="admin_main", clinic__isnull=True)
+        doctor = Role.objects.get(name="doctor", clinic__isnull=True)
+        self.director = User.objects.create(login="st_dir", name="Директор", role=director, clinic=self.clinic)
+        self.doctor = User.objects.create(login="st_doc", name="Аарон Врач", role=doctor, clinic=self.clinic)
+
+    def test_staff_data_has_role_order_and_login_as_flag(self):
+        c = Client(); c.force_login(self.director)
+        data = _extract_newui_real_data(c.get("/new/staff/").content.decode())
+        rows = {r["login"]: r for r in data["staff"]}
+        self.assertLess(rows["st_dir"]["roleOrder"], rows["st_doc"]["roleOrder"])
+        self.assertEqual(rows["st_doc"]["roleCode"], "doctor")
+        self.assertTrue(rows["st_doc"]["canLoginAs"])
+        self.assertFalse(rows["st_dir"]["canLoginAs"])  # сам себя — нет
+
+    def test_login_as_shows_banner_and_returns(self):
+        c = Client(); c.force_login(self.director)
+        r = c.post(f"/users/{self.doctor.pk}/login-as/")
+        self.assertEqual(r.status_code, 302)
+        html = c.get("/new/").content.decode()
+        self.assertIn("Вы вошли как <b>Аарон Врач</b>", html)
+        self.assertIn("/users/stop-impersonate/", html)
+        r = c.get("/users/stop-impersonate/")
+        self.assertEqual(r["Location"], "/new/staff/")
+        self.assertNotIn("режим просмотра", c.get("/new/").content.decode())
+
+    def test_doctor_cannot_login_as(self):
+        c = Client(); c.force_login(self.doctor)
+        data = _extract_newui_real_data(c.get("/new/").content.decode())
+        c.post(f"/users/{self.director.pk}/login-as/")
+        self.assertNotIn("режим просмотра", c.get("/new/").content.decode())
