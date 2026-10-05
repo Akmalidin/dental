@@ -281,3 +281,73 @@ class PaymentDeleteSuperadminOnlyTestCase(TestCase):
         from apps.users.models import Permission
 
         self.assertFalse(Permission.objects.filter(code="finance.delete_payment").exists())
+
+
+class ManualPaymentAllocationTestCase(TestCase):
+    """Ручное деление оплаты по приёмам: кассир указывает суммы на приёмы,
+    остаток распределяется автоматически; ошибки возвращаются понятным текстом."""
+
+    def setUp(self):
+        import json
+        from apps.services.models import Service
+        from apps.treatments.models import Treatment, TreatmentCure
+        self.json = json
+        self.clinic = Clinic.objects.create(name="Клиника Р", slug="clinic-alloc")
+        self.other = Clinic.objects.create(name="Чужая Р", slug="clinic-alloc-other")
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="alloc_dir", name="Директор", role=role, clinic=self.clinic)
+        self.stranger = User.objects.create(login="alloc_out", name="Чужой", role=role, clinic=self.other)
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Ф", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.patient = Patient.objects.create(first_name="Анна", last_name="Р", phone="+996555111222", clinic=self.clinic)
+        svc = Service.objects.create(name="Пломба", price=5000, clinic=self.clinic)
+        self.t = []
+        for price in (5000, 4000, 3000):
+            t = Treatment.objects.create(patient=self.patient, doctor=self.director, branch=self.branch, status="completed")
+            TreatmentCure.objects.create(treatment=t, service=svc, doctor=self.director, price=price, quantity=1)
+            t.recalculate_total()
+            self.t.append(t)
+        clear_current_clinic()
+        self.c = Client(); self.c.force_login(self.director)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def _pay(self, amount, alloc=None, client=None):
+        data = {"patient": self.patient.pk, "amount": amount, "method": "cash", "type": "income"}
+        if alloc is not None:
+            data["allocations"] = self.json.dumps([{"treatment": t.pk, "amount": a} for t, a in alloc])
+        return (client or self.c).post("/finance/payments/create/", data, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+    def _alloc(self, payment_id):
+        from apps.finance.models import PaymentAllocation
+        return {a.treatment_id: a.amount for a in PaymentAllocation.objects.filter(payment_id=payment_id)}
+
+    def test_open_treatments_list(self):
+        r = self.c.get(f"/finance/patients/{self.patient.pk}/open-treatments/")
+        self.assertEqual([row["debt"] for row in r.json()["rows"]], [5000.0, 4000.0, 3000.0])
+        other = Client(); other.force_login(self.stranger)
+        self.assertEqual(other.get(f"/finance/patients/{self.patient.pk}/open-treatments/").status_code, 404)
+
+    def test_manual_split_and_rest_goes_automatically(self):
+        r = self._pay(6000, [(self.t[1], 2500), (self.t[2], 3000)])
+        self.assertEqual(r.status_code, 200)
+        alloc = self._alloc(r.json()["payment_id"])
+        # 2500 + 3000 вручную, оставшиеся 500 — автоматически на самый старый долг
+        self.assertEqual(alloc, {self.t[1].pk: 2500, self.t[2].pk: 3000, self.t[0].pk: 500})
+        self.t[2].refresh_from_db()
+        self.assertEqual(self.t[2].paid_amount, 3000)
+
+    def test_without_split_old_behaviour(self):
+        r = self._pay(6000)
+        self.assertEqual(self._alloc(r.json()["payment_id"]), {self.t[0].pk: 5000, self.t[1].pk: 1000})
+
+    def test_split_errors(self):
+        from apps.finance.models import Payment
+        r = self._pay(6000, [(self.t[2], 3500)])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("больше его долга", r.json()["error"])
+        r = self._pay(3000, [(self.t[1], 2000), (self.t[2], 2000)])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("больше, чем сумма оплаты", r.json()["error"])
+        self.assertFalse(Payment.all_clinics.exists())

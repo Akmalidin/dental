@@ -8214,6 +8214,101 @@ async function patientsSendToCashier(patientId, btn){
   if(res.redirected){ showToast(t('w_sent_to_cashier')); }
   else { showToast(t('w_send_to_cashier_failed'), 'error'); if(btn) btn.disabled=false; }
 }
+// ─── Ручное деление оплаты по приёмам ───────────────────────────────────
+// Необязательный блок в окнах приёма оплаты: кассир сам указывает, сколько
+// из оплаты идёт на какой неоплаченный приём (как «5 600 → 28.09, 5 600 →
+// 29.09»). Что не распределено вручную — сервер распределяет как раньше,
+// автоматически по старым долгам (apps.finance.views._allocate_income).
+// Использование: allocReset(boxId) при открытии окна, allocInit(boxId,
+// patientId, amountInputId) когда пациент известен, allocCollect(boxId) при
+// отправке — вернёт JSON для поля "allocations", '' или null при ошибке.
+const ALLOC = {};
+function allocMoney(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + CUR_SYM; }
+function allocReset(boxId){
+  const box=document.getElementById(boxId);
+  if(!box) return;
+  ALLOC[boxId]=null;
+  box.innerHTML='';
+  box.classList.add('hidden');
+}
+async function allocInit(boxId, patientId, amountInputId){
+  const box=document.getElementById(boxId);
+  if(!box || !patientId) return;
+  const st={patientId, amountInputId, rows:[], open:false, loaded:false};
+  ALLOC[boxId]=st;
+  box.classList.add('hidden');
+  let data=null;
+  try{
+    const res=await fetch('/finance/patients/'+patientId+'/open-treatments/', {credentials:'same-origin'});
+    data=await res.json();
+  }catch(e){ return; }
+  if(ALLOC[boxId]!==st || !data || !data.ok) return;
+  st.rows=data.rows||[]; st.loaded=true;
+  // Делить есть смысл, только когда неоплаченных приёмов больше одного
+  if(st.rows.length<2) return;
+  box.classList.remove('hidden');
+  allocRender(boxId);
+  const amountEl=document.getElementById(amountInputId);
+  if(amountEl && !amountEl.dataset.allocBound){
+    amountEl.dataset.allocBound='1';
+    amountEl.addEventListener('input', ()=>{ Object.keys(ALLOC).forEach(k=>{ if(ALLOC[k] && ALLOC[k].amountInputId===amountInputId) allocSummary(k); }); });
+  }
+}
+function allocRender(boxId){
+  const st=ALLOC[boxId], box=document.getElementById(boxId);
+  if(!st || !box) return;
+  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  box.innerHTML=`
+    <button type="button" class="btn btn-ghost btn-sm" style="width:100%;justify-content:space-between;" onclick="allocToggle('${boxId}')">
+      <span>Распределить по приёмам вручную</span><span>${st.open?'▴':'▾'}</span></button>
+    <div class="${st.open?'':'hidden'}" style="margin-top:8px;">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">Неоплаченные приёмы: ${st.rows.length}. Пустые поля — система распределит сама, начиная со старых долгов.</div>
+      <div style="max-height:240px;overflow:auto;border:1px solid var(--mist-line);border-radius:8px;">
+        ${st.rows.map(r=>`<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--mist-line);">
+          <div style="flex:1;min-width:0;font-size:12.5px;"><b>Приём №${esc(r.number)}</b> · ${esc(r.date)}
+            <div style="color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.services||'—')}${r.doctors?' · '+esc(r.doctors):''}</div>
+            <div style="color:var(--coral);">долг ${allocMoney(r.debt)}</div></div>
+          <input type="number" min="0" step="1" data-alloc="${r.id}" data-max="${r.debt}" style="width:110px;" placeholder="0" oninput="allocSummary('${boxId}')">
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <span id="${boxId}-sum" style="font-size:12.5px;"></span>
+        <span style="display:flex;gap:6px;"><button type="button" class="btn btn-ghost btn-sm" onclick="allocFill('${boxId}')">По порядку</button><button type="button" class="btn btn-ghost btn-sm" onclick="allocClear('${boxId}')">Очистить</button></span>
+      </div>
+    </div>`;
+  allocSummary(boxId);
+}
+function allocToggle(boxId){ const st=ALLOC[boxId]; if(!st) return; st.open=!st.open; allocRender(boxId); }
+function allocInputs(boxId){ return [...document.querySelectorAll('#'+boxId+' input[data-alloc]')]; }
+function allocAmount(boxId){ const st=ALLOC[boxId]; const el=st && document.getElementById(st.amountInputId); return el ? (Number(el.value)||0) : 0; }
+function allocSummary(boxId){
+  const el=document.getElementById(boxId+'-sum');
+  if(!el) return;
+  const total=allocAmount(boxId);
+  const sum=allocInputs(boxId).reduce((s,i)=>s+(Number(i.value)||0),0);
+  const over=allocInputs(boxId).some(i=>(Number(i.value)||0)>Number(i.dataset.max)+0.001);
+  if(over){ el.innerHTML='<span style="color:var(--coral);">На приём больше его долга</span>'; return; }
+  if(sum>total+0.001){ el.innerHTML='<span style="color:var(--coral);">Распределено '+allocMoney(sum)+' — больше суммы оплаты '+allocMoney(total)+'</span>'; return; }
+  el.innerHTML = sum>0
+    ? 'Распределено <b>'+allocMoney(sum)+'</b> из '+allocMoney(total)+(total-sum>0.001 ? ' · остаток '+allocMoney(total-sum)+' — автоматически' : '')
+    : '<span style="color:var(--ink-soft);">Распределится автоматически</span>';
+}
+function allocFill(boxId){
+  let left=allocAmount(boxId);
+  allocInputs(boxId).forEach(i=>{ const v=Math.max(0, Math.min(left, Number(i.dataset.max))); i.value=v>0?Math.round(v*100)/100:''; left-=v; });
+  allocSummary(boxId);
+}
+function allocClear(boxId){ allocInputs(boxId).forEach(i=>{ i.value=''; }); allocSummary(boxId); }
+function allocCollect(boxId){
+  const st=ALLOC[boxId];
+  if(!st || !st.open) return '';
+  const items=allocInputs(boxId).map(i=>({treatment:Number(i.dataset.alloc), amount:Number(i.value)||0})).filter(x=>x.amount>0);
+  if(!items.length) return '';
+  if(allocInputs(boxId).some(i=>(Number(i.value)||0)>Number(i.dataset.max)+0.001)) return null;
+  if(items.reduce((s,x)=>s+x.amount,0)>allocAmount(boxId)+0.001) return null;
+  return JSON.stringify(items);
+}
+
 // «Принять оплату» напрямую (без похода в очередь кассы) — с карточки
 // пациента (Финансы) или строки должника в списке пациентов. Открывает
 // общую модалку m-payment (см. templates/newui/base.html) и реально
@@ -8245,7 +8340,9 @@ async function openPatientAcceptPayment(patientId, name, debt){
   document.getElementById('pmAmount').value=debt>0 ? debt : '';
   document.getElementById('pmMethod').value='cash';
   document.getElementById('pmNotes').value='';
+  allocReset('pmAlloc');
   openModal('m-payment');
+  allocInit('pmAlloc', patientId, 'pmAmount');
 }
 async function submitPatientPayment(){
   const errEl=document.getElementById('pmError');
@@ -8263,6 +8360,9 @@ async function submitPatientPayment(){
   fd.append('method', document.getElementById('pmMethod').value);
   fd.append('notes', document.getElementById('pmNotes').value);
   fd.append('type', 'income');
+  const alloc=allocCollect('pmAlloc');
+  if(alloc===null){ errEl.textContent='Проверьте распределение по приёмам: сумма больше оплаты или долга приёма'; errEl.classList.remove('hidden'); return; }
+  if(alloc) fd.append('allocations', alloc);
   const res=await fetch('/finance/payments/create/', {
     method:'POST', body:fd, credentials:'same-origin',
     headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
