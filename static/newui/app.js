@@ -4881,6 +4881,31 @@ function renderBottomNav(all){
   document.body.classList.add('has-bottom-nav');
 }
 
+/* Нижняя панель уезжает вниз при прокрутке страницы вниз и плавно
+   возвращается при прокрутке вверх (и у самого верха страницы). На
+   телефоне прокручивается окно; на всякий случай слушаем и .main. */
+(function(){
+  let lastY=0, ticking=false;
+  function scrollTopNow(){
+    const main=document.querySelector('.main');
+    return Math.max(window.scrollY||0, main ? main.scrollTop : 0);
+  }
+  function update(){
+    ticking=false;
+    const bar=document.getElementById('bottomNav');
+    if(!bar) return;
+    const y=scrollTopNow(), dy=y-lastY;
+    if(y<40) bar.classList.remove('bn-hidden');
+    else if(dy>6) bar.classList.add('bn-hidden');
+    else if(dy<-6) bar.classList.remove('bn-hidden');
+    if(Math.abs(dy)>6 || y<40) lastY=y;
+  }
+  function onScroll(){ if(!ticking){ ticking=true; requestAnimationFrame(update); } }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  const main=document.querySelector('.main');
+  if(main) main.addEventListener('scroll', onScroll, {passive:true});
+})();
+
 /* ─── «Настроить меню»: разделы и вкладки ──────────────────────────────── */
 let menuSettingsMode='user';
 let MS=null; // {sections, hidden:Set, hiddenSections:Set, home}
