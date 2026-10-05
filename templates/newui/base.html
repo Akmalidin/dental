@@ -12,9 +12,17 @@
 {% block extra_head %}{% endblock %}
 {% if request.GET.embed == '1' %}<base target="_top">{% endif %}
 </head>
-<body class="{% if real_data.broadcastBanner %}has-broadcast{% endif %}{% if request.GET.embed == '1' %} embed{% endif %}">
+<body class="{% if real_data.broadcastBanner or request.impersonator %}has-broadcast{% endif %}{% if request.GET.embed == '1' %} embed{% endif %}">
 
-{% if real_data.broadcastBanner %}
+{% if request.impersonator %}
+<!-- «Войти как сотрудник»: директор/суперадмин смотрит систему глазами
+     сотрудника (ImpersonationMiddleware). Плашка видна всегда, пока режим
+     включён, и возвращает в свой аккаунт. -->
+<div class="top-banner imp-banner">
+  <span>👁 Вы вошли как <b>{{ request.user.name }}</b> — режим просмотра</span>
+  <a class="imp-back" href="/users/stop-impersonate/">Вернуться в свой аккаунт</a>
+</div>
+{% elif real_data.broadcastBanner %}
 <!-- Объявление супер-админа — см. apps.users.newui_views._broadcast_banner_data.
      Крестик шлёт /notifications/<id>/read/ (уже существующий mark_read) —
      после этого баннер больше не попадёт в выборку непрочитанных ни на

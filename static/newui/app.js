@@ -8947,13 +8947,64 @@ async function submitNewPatient(){
   }
 }
 
+// Группы ролей для фильтра и заголовков (порядок — roleOrder с сервера:
+// директоры → администраторы → врачи → медсёстры → техники → прочие).
+const STAFF_GROUPS=[
+  {key:'all', label:'Все'},
+  {key:'directors', label:'Директоры', codes:['superadmin','admin_main']},
+  {key:'admins', label:'Администраторы', codes:['admin']},
+  {key:'doctors', label:'Врачи', codes:['doctor']},
+  {key:'nurses', label:'Медсёстры', codes:['nurse']},
+  {key:'techs', label:'Техники', codes:['technician']},
+  {key:'other', label:'Другие'},
+];
+function staffGroupOf(s){
+  const g=STAFF_GROUPS.find(g=>g.codes && g.codes.includes(s.roleCode));
+  return g ? g.key : 'other';
+}
+let staffFilter='all', staffQuery='';
+try{ staffFilter=sessionStorage.getItem('newui_staff_filter')||'all'; }catch(e){}
+function staffSetFilter(key){
+  staffFilter=key;
+  try{ sessionStorage.setItem('newui_staff_filter', key); }catch(e){}
+  renderStaffTable();
+}
+function staffSearch(q){ staffQuery=(q||'').trim().toLowerCase(); renderStaffTable(); }
+function staffLoginAs(id, name){
+  if(!confirm('Войти как «'+name+'»? Вы увидите систему так, как её видит этот сотрудник. Вернуться — кнопкой вверху экрана.')) return;
+  const f=document.createElement('form');
+  f.method='POST'; f.action='/users/'+id+'/login-as/';
+  f.innerHTML='<input type="hidden" name="csrfmiddlewaretoken" value="'+getCookie('csrftoken')+'">';
+  document.body.appendChild(f); f.submit();
+}
 function renderStaffTable(){
   const body=document.getElementById('staffTableBody');
   if(!body) return;
-  if(staffList.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_no_staff')}</td></tr>`; return; }
-  body.innerHTML = staffList.map(s=>{
-    const extraRolesHtml = (s.extraRoleNames||[]).map(n=>`<span class="pill grey" style="margin-left:4px;">${n}</span>`).join('');
-    return `<tr><td><b>${s.name}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${s.roleName}</span>`:'—'}${extraRolesHtml}</td><td>${s.branch}</td><td>${s.load}</td><td class="mono">${s.phone||'—'}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
+  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const sorted=[...staffList].sort((a,b)=>(a.roleOrder??9)-(b.roleOrder??9) || String(a.name).localeCompare(String(b.name),'ru'));
+  const filters=document.getElementById('staffFilters');
+  if(filters){
+    const counts={all:sorted.length};
+    sorted.forEach(s=>{ const g=staffGroupOf(s); counts[g]=(counts[g]||0)+1; });
+    if(staffFilter!=='all' && !counts[staffFilter]) staffFilter='all';
+    filters.innerHTML=STAFF_GROUPS.filter(g=>g.key==='all'||counts[g.key])
+      .map(g=>`<button type="button" class="staff-chip${staffFilter===g.key?' active':''}" onclick="staffSetFilter('${g.key}')">${g.label}<b>${counts[g.key]||0}</b></button>`).join('')
+      + `<input class="staff-search" type="search" placeholder="Поиск: имя, телефон, логин" value="${esc(staffQuery)}" oninput="staffSearch(this.value)">`;
+  }
+  const rows=sorted.filter(s=>(staffFilter==='all' || staffGroupOf(s)===staffFilter)
+    && (!staffQuery || [s.name,s.phone,s.login].some(v=>String(v||'').toLowerCase().includes(staffQuery))));
+  if(rows.length===0){ body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${staffList.length?'Никого не найдено':t('w_no_staff')}</td></tr>`; return; }
+  let lastGroup=null;
+  body.innerHTML = rows.map(s=>{
+    const g=staffGroupOf(s);
+    let head='';
+    if(staffFilter==='all' && g!==lastGroup){
+      lastGroup=g;
+      head=`<tr class="staff-group"><td colspan="7">${STAFF_GROUPS.find(x=>x.key===g).label}</td></tr>`;
+    }
+    const extraRolesHtml = (s.extraRoleNames||[]).map(n=>`<span class="pill grey" style="margin-left:4px;">${esc(n)}</span>`).join('');
+    const loginAs = s.canLoginAs ? `<button class="btn btn-ghost btn-sm" title="Посмотреть систему глазами сотрудника" onclick='staffLoginAs(${s.id}, ${JSON.stringify(String(s.name)).replace(/'/g,"&#39;")})'>👁 Войти как</button> ` : '';
+    return head+`<tr><td><b>${esc(s.name)}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${esc(s.roleName)}</span>`:'—'}${extraRolesHtml}</td><td>${esc(s.branch)}</td><td>${esc(s.load)}</td><td class="mono">${esc(s.phone||'—')}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;">${loginAs}<button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
   }).join('');
 }
 function renderRolesTable(){

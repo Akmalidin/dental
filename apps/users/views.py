@@ -67,6 +67,12 @@ def _newui_staff_data(request, clinic):
     for i, name in enumerate(Role.objects.filter(clinic__isnull=True).exclude(name=Role.SUPERADMIN).values_list("name", flat=True).order_by("name")):
         color_by_role[name] = ["cobalt", "teal", "amber", "coral", "grey"][i % 5]
 
+    # Порядок групп в списке: директоры → администраторы → врачи → медсёстры →
+    # техники → прочие (кастомные роли) → без роли.
+    role_order = {Role.SUPERADMIN: 0, Role.ADMIN_MAIN: 1, Role.ADMIN: 2, Role.DOCTOR: 3,
+                  Role.NURSE: 4, Role.TECHNICIAN: 5}
+    actor = getattr(request, "impersonator", None) or request.user
+    can_login_as = actor.is_superadmin or actor.is_admin_main
     data = []
     for u in users.order_by("name"):
         branch_ids = [b.pk for b in u.branches.all()]
@@ -80,6 +86,11 @@ def _newui_staff_data(request, clinic):
             "roleId": u.role_id,
             "roleName": u.role.display_name if u.role else "",
             "roleColor": color_by_role.get(u.role.name, "grey") if u.role else "grey",
+            "roleCode": u.role.name if u.role else "",
+            "roleOrder": role_order.get(u.role.name, 6) if u.role else 7,
+            # «Войти как» — те же правила, что и в staff_login_as
+            "canLoginAs": bool(can_login_as and u.is_active and u.pk != actor.pk
+                               and not (u.is_superadmin and not actor.is_superadmin)),
             "extraRoleIds": [r.pk for r in u.roles.all()],
             "extraRoleNames": [r.display_name for r in u.roles.all()],
             "branchIds": branch_ids,
@@ -3965,7 +3976,7 @@ def staff_stop_impersonate(request):
     request.session.pop("impersonator_id", None)  # очистка старого ключа, если остался
     request.session.modified = True
     messages.success(request, _("Вы вернулись в свой аккаунт"))
-    return redirect("/")
+    return redirect("/new/staff/")
 
 
 def _is_protected_target(target, actor):

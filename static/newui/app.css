@@ -44,6 +44,16 @@ input,select,textarea{font-family:inherit;font-size:13.5px;}
 .top-banner{position:fixed;top:0;left:0;right:0;z-index:2000;display:flex;align-items:center;justify-content:center;gap:10px;min-height:42px;background:var(--amber);color:#fff;font-weight:600;font-size:13.5px;line-height:1.35;padding:9px 44px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.12);}
 .top-banner .tb-close{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
 .top-banner .tb-close:hover{background:rgba(255,255,255,.3);}
+.imp-banner{background:var(--cobalt);}
+.imp-banner .imp-back{background:#fff;color:var(--cobalt);border-radius:8px;padding:4px 12px;font-weight:700;text-decoration:none;white-space:nowrap;}
+/* Персонал: фильтр по ролям и группы */
+.staff-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+.staff-chip{border:1px solid var(--mist-line);background:var(--paper);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+.staff-chip b{font-weight:600;color:var(--ink-faint);margin-left:4px;}
+.staff-chip.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+.staff-chip.active b{color:#C4CAD6;}
+.staff-search{margin-left:auto;min-width:200px;}
+tr.staff-group td{background:var(--cloud);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;padding:8px 14px;}
 body.has-broadcast .app-shell{margin-top:42px;height:calc(100vh - 42px);}
 body.has-broadcast .hamburger-btn{top:calc(14px + 42px);}
 @media (max-width:640px){ .top-banner{font-size:12.5px;padding:8px 40px;} body.has-broadcast .app-shell{margin-top:52px;height:calc(100vh - 52px);} body.has-broadcast .hamburger-btn{top:calc(14px + 52px);} body.has-broadcast .msg-fab{top:calc(14px + 52px);} }
