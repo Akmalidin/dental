@@ -1127,6 +1127,31 @@ def newui_treatplan_detail(request, pk):
 
 
 @login_required
+def newui_patient_plan(request, pk):
+    """«План лечения» из карточки приёма: открыть текущий план пациента
+    (последний не завершённый/не отменённый), а если его нет — создать
+    черновик (POST) и открыть. Пациент ищется в текущей клинике."""
+    from django.http import HttpResponseNotAllowed
+    from django.shortcuts import get_object_or_404, redirect
+    from apps.patients.models import Patient
+    from apps.treatments.models_plan import TreatmentPlan
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    patient = get_object_or_404(Patient, pk=pk)
+    plan = (TreatmentPlan.objects.filter(patient=patient)
+            .exclude(status__in=[TreatmentPlan.STATUS_COMPLETED, TreatmentPlan.STATUS_CANCELLED])
+            .order_by("-created_at").first())
+    if plan is None:
+        doctor = request.user if request.user.is_doctor else None
+        if doctor is None and request.POST.get("doctor"):
+            from apps.users.models import clinic_doctors
+            doctor = clinic_doctors(patient.clinic).filter(pk=request.POST.get("doctor")).first()
+        plan = TreatmentPlan.objects.create(patient=patient, doctor=doctor or request.user,
+                                            title="План лечения", status=TreatmentPlan.STATUS_DRAFT)
+    return redirect("/new/treatplans/%s/" % plan.pk)
+
+
+@login_required
 def newui_cashdesk(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)

@@ -1,6 +1,38 @@
 {% extends "newui/base.html" %}
 {% block page_title %}План лечения{% endblock %}
 {% block content %}
+<style>
+  .tp-bar{flex:1;min-width:160px;max-width:420px;height:8px;border-radius:4px;background:var(--mist,#e6e8ef);overflow:hidden}
+  .tp-bar i{display:block;height:100%;width:0;background:var(--teal,#12b886);transition:width .3s}
+  .tp-builder{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:22px;padding:14px 18px 18px}
+  @media(max-width:980px){.tp-builder{grid-template-columns:1fr}}
+  .tp-jaw-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px}
+  .tp-jaw{display:grid;gap:4px;margin-bottom:6px}
+  .tp-jaw.sep{padding-top:6px;border-top:1px dashed var(--mist-line,#dde0e8)}
+  .tp-tooth{position:relative;border:1.5px solid var(--mist-line,#dde0e8);background:var(--paper,#fff);border-radius:8px;padding:7px 0;text-align:center;font:600 13px/1 var(--mono,monospace);cursor:pointer;user-select:none}
+  .tp-tooth:hover{border-color:var(--cobalt,#2f4bff)}
+  .tp-tooth.has{border-color:#f08c00;background:#fff4e6}
+  .tp-tooth.done{border-color:var(--teal,#12b886);background:#e6fcf5}
+  .tp-tooth.sel{background:var(--cobalt,#2f4bff);border-color:var(--cobalt,#2f4bff);color:#fff}
+  .tp-tooth b{position:absolute;top:-7px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#f08c00;color:#fff;font:700 10.5px/17px sans-serif}
+  .tp-tooth.done b{background:var(--teal,#12b886)}
+  .tp-cats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .tp-cats .chip{font-size:12px;padding:5px 10px}
+  .tp-catalog{max-height:360px;overflow-y:auto;border:1px solid var(--mist-line,#e3e6ee);border-radius:10px}
+  .tp-svc{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--mist-line,#eef0f5);font-size:13px}
+  .tp-svc:last-child{border-bottom:none}
+  .tp-svc .nm{flex:1;min-width:0}
+  .tp-svc .nm small{display:block;color:var(--ink-soft);font-size:11px}
+  .tp-qty{display:flex;align-items:center;gap:4px}
+  .tp-qty button{width:24px;height:24px;border-radius:6px;border:1px solid var(--mist-line,#dde0e8);background:var(--paper,#fff);cursor:pointer;font-weight:700}
+  .tp-qty span{min-width:18px;text-align:center;font-family:var(--mono,monospace)}
+  .tp-add{width:30px;height:30px;border-radius:8px;border:none;background:var(--teal,#12b886);color:#fff;font-size:18px;font-weight:700;cursor:pointer}
+  .tp-need{display:inline-flex;align-items:center;gap:6px;border:1.5px solid #f08c00;background:#fff4e6;border-radius:999px;padding:4px 10px;font:600 12.5px var(--mono,monospace);cursor:pointer}
+  .tp-need.done{border-color:var(--teal,#12b886);background:#e6fcf5}
+  .tp-need.active{background:var(--cobalt,#2f4bff);border-color:var(--cobalt,#2f4bff);color:#fff}
+  .tp-need i{font-style:normal;background:#f08c00;color:#fff;border-radius:9px;padding:0 6px;font-size:11px}
+  .tp-need.done i{background:var(--teal,#12b886)}
+</style>
       <div class="topbar">
         <h1 id="tpTitle" data-i18n="w_treatment_plan_one">План лечения</h1>
         <div class="topbar-right" style="gap:8px;">
@@ -31,6 +63,34 @@
           </div>
         </div>
 
+        <div class="card" id="tpProgressCard" style="padding:14px 18px;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:13px;"><b id="tpProgressText"></b></div>
+            <div class="tp-bar"><i id="tpProgressBar"></i></div>
+          </div>
+          <div id="tpNeedRow" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px;overflow:hidden;">
+          <div class="card-head"><h3>🦷 Добавить услуги по зубной формуле</h3>
+            <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);">В этап
+              <select id="tpBStage" style="width:auto;"></select></div></div>
+          <div class="tp-builder">
+            <div>
+              <div class="tp-jaw-head"><span>Выберите зубы (можно несколько)</span>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="tpBaby" onchange="tpSetBaby(this.checked)"> Молочные</label></div>
+              <div id="tpTeeth"></div>
+              <div id="tpSelInfo" style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;"></div>
+            </div>
+            <div>
+              <div class="search-box" style="margin-bottom:10px;"><input type="text" id="tpSvcSearch" autocomplete="off" placeholder="⌕ Поиск услуги…" oninput="tpRenderCatalog()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+              <div id="tpCats" class="tp-cats"></div>
+              <div id="tpCatalog" class="tp-catalog"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tpFilterBanner" class="hidden" style="margin-bottom:10px;font-size:13px;"></div>
         <div id="tpStages"></div>
         <div id="tpEmptyState" class="card hidden" style="padding:32px;text-align:center;color:var(--ink-soft);">
           <span data-i18n="w_no_stages_yet">Этапов пока нет.</span> <button class="btn btn-cobalt btn-sm" onclick="tpAddStage()">+ <span data-i18n="w_add_first_stage">Добавить первый этап</span></button>
@@ -102,15 +162,42 @@
 <script>
 (function(){
   const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
-  const PLAN = REAL.planDetail;
+  let PLAN = REAL.planDetail;
   if(!PLAN){ return; }
+
+  // ── Состояние «по зубной формуле»: выбранные зубы, фильтр по зубу,
+  // категория каталога, молочные зубы. Переживает перезагрузку (этапы и
+  // удаление по-прежнему перезагружают страницу) — sessionStorage на план.
+  const TP_KEY = 'tp_state_' + PLAN.id;
+  let TP = {sel: [], filter: null, cat: 'all', baby: false, qty: {}};
+  try{ Object.assign(TP, JSON.parse(sessionStorage.getItem(TP_KEY) || '{}')); }catch(e){}
+  function tpSave(){ try{ sessionStorage.setItem(TP_KEY, JSON.stringify(TP)); }catch(e){} }
+  const ADULT = [[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28],[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]];
+  const BABY = [[55,54,53,52,51,61,62,63,64,65],[85,84,83,82,81,71,72,73,74,75]];
+  function itemTeeth(it){ return String(it.toothNumber||'').split(/[^0-9]+/).filter(Boolean); }
+  function allItems(){ return PLAN.stages.flatMap(s => s.items); }
+  // Сводка по зубам: сколько пунктов плана и сколько из них выполнено
+  function teethSummary(){
+    const m = {};
+    allItems().forEach(it => {
+      if(it.status === 'cancelled') return;
+      itemTeeth(it).forEach(n => {
+        m[n] = m[n] || {total:0, done:0};
+        m[n].total++; if(it.status === 'done') m[n].done++;
+      });
+    });
+    return m;
+  }
 
   const STATUS_PILL = {draft:'grey', approved:'cobalt', in_progress:'amber', completed:'teal', cancelled:'coral'};
   const ITEM_STATUS_PILL = {pending:'grey', scheduled:'cobalt', done:'teal', cancelled:'coral'};
   let tpCurrentStageId = null;   // для модалки «добавить услугу»
   let tpCurrentItemId = null;    // для модалки «переместить/дублировать»
 
-  function fmt(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + (window.CUR_SYM || 'сом'); }
+  // CUR_SYM — глобальная let из app.js (валюта клиники), на window её нет
+  // (читаем при каждом вызове: app.js выставляет её позже, при загрузке данных)
+  function cur(){ return (typeof CUR_SYM !== 'undefined' && CUR_SYM) || 'сом'; }
+  function fmt(n){ return Math.round(n).toLocaleString('ru-RU') + ' ' + cur(); }
 
   function renderHeader(){
     document.title = PLAN.title;
@@ -137,7 +224,16 @@
       return;
     }
     empty.classList.add('hidden');
-    wrap.innerHTML = PLAN.stages.map(stage => `
+    const flt = TP.filter;
+    const banner = document.getElementById('tpFilterBanner');
+    if(flt){
+      banner.classList.remove('hidden');
+      banner.innerHTML = `Показаны услуги зуба <b>${flt}</b> — <a href="#" onclick="tpSetFilter(null);return false;" style="color:var(--cobalt);font-weight:600;">сбросить фильтр</a>`;
+    } else { banner.classList.add('hidden'); banner.innerHTML=''; }
+    const stagesView = PLAN.stages.map(st => Object.assign({}, st, {
+      items: flt ? st.items.filter(it => itemTeeth(it).includes(String(flt))) : st.items,
+    })).filter(st => !flt || st.items.length);
+    wrap.innerHTML = stagesView.map(stage => `
       <div class="card" style="margin-bottom:14px;overflow:hidden;">
         <div class="card-head" style="flex-wrap:wrap;gap:8px;">
           <div style="font-size:13px;">
@@ -178,7 +274,7 @@
 
   function populateServiceSelect(){
     document.getElementById('tpItemService').innerHTML = PLAN.services.map(s =>
-      `<option value="${s.id}" data-price="${s.price}">${s.name}${s.cat ? ' · ' + s.cat : ''} — ${Math.round(s.price)} ${window.CUR_SYM || 'сом'}</option>`
+      `<option value="${s.id}" data-price="${s.price}">${s.name}${s.cat ? ' · ' + s.cat : ''} — ${Math.round(s.price)} ${cur()}</option>`
     ).join('');
   }
 
@@ -303,11 +399,115 @@
 
   window.tpToggleItem = async function(itemId){
     const res = await postForm(`/treatments/plans/items/${itemId}/toggle/`, new FormData());
-    if(res.ok){ flashAndReload(t('w_item_status_updated')); } else { showToast(t('w_save_failed'), 'error'); }
+    let data = null; try{ data = await res.json(); }catch(e){}
+    if(!res.ok || !data || !data.ok){ showToast(t('w_save_failed'), 'error'); return; }
+    const it = allItems().find(x => x.id === itemId);
+    if(it){ it.status = data.status; it.statusLabel = data.status === 'done' ? 'Выполнен' : 'Ожидает'; }
+    renderAll();
   };
 
-  renderHeader();
-  renderStages();
+  // ── Прогресс и «Нужно лечить» ──
+  function renderProgress(){
+    const items = allItems().filter(it => it.status !== 'cancelled');
+    const done = items.filter(it => it.status === 'done').length;
+    const pct = items.length ? Math.round(done * 100 / items.length) : 0;
+    document.getElementById('tpProgressText').textContent = `Выполнено ${done} из ${items.length} — ${pct}%`;
+    document.getElementById('tpProgressBar').style.width = pct + '%';
+    const sum = teethSummary();
+    const teeth = Object.keys(sum).sort((a,b) => +a - +b);
+    document.getElementById('tpNeedRow').innerHTML = teeth.length
+      ? `<span style="font-size:12.5px;color:var(--ink-soft);">Нужно лечить:</span>` + teeth.map(n => {
+          const r = sum[n], left = r.total - r.done, cls = left ? '' : ' done';
+          return `<span class="tp-need${cls}${String(TP.filter)===n?' active':''}" onclick="tpSetFilter('${n}')" title="Показать услуги зуба ${n}">${n} <i>${left ? left : '✓'}</i></span>`;
+        }).join('')
+      : `<span style="font-size:12.5px;color:var(--ink-soft);">Отметьте зубы ниже и добавьте услуги из каталога — здесь появятся зубы, которые нужно лечить.</span>`;
+  }
+  window.tpSetFilter = function(n){
+    TP.filter = (n && String(TP.filter) !== String(n)) ? String(n) : null; tpSave();
+    renderProgress(); renderStages();
+    if(TP.filter) document.getElementById('tpFilterBanner').scrollIntoView({behavior:'smooth', block:'center'});
+  };
+
+  // ── Зубная формула (выбор зубов) ──
+  function renderTeeth(){
+    const sum = teethSummary();
+    const rows = TP.baby ? BABY : ADULT;
+    document.getElementById('tpTeeth').innerHTML = rows.map((row, ri) =>
+      `<div class="tp-jaw${ri ? ' sep' : ''}" style="grid-template-columns:repeat(${row.length},minmax(0,1fr));">` +
+      row.map(n => {
+        const r = sum[n], sel = TP.sel.includes(String(n));
+        const cls = sel ? ' sel' : (r ? (r.done === r.total ? ' done' : ' has') : '');
+        const badge = r ? `<b>${r.total - r.done || '✓'}</b>` : '';
+        return `<div class="tp-tooth${cls}" onclick="tpToggleTooth('${n}')" title="Зуб ${n}${r ? ' · в плане: ' + r.total : ''}">${n}${badge}</div>`;
+      }).join('') + `</div>`).join('');
+    document.getElementById('tpSelInfo').innerHTML = TP.sel.length
+      ? `Выбраны зубы: <b>${TP.sel.slice().sort((a,b)=>+a - +b).join(', ')}</b> — услуга добавится на каждый · <a href="#" onclick="tpClearTeeth();return false;" style="color:var(--cobalt);">очистить</a>`
+      : 'Зуб не выбран — услуга добавится как общая (без зуба).';
+  }
+  window.tpToggleTooth = function(n){
+    n = String(n);
+    TP.sel = TP.sel.includes(n) ? TP.sel.filter(x => x !== n) : TP.sel.concat(n); tpSave(); renderTeeth();
+  };
+  window.tpClearTeeth = function(){ TP.sel = []; tpSave(); renderTeeth(); };
+  window.tpSetBaby = function(on){ TP.baby = !!on; tpSave(); renderTeeth(); };
+
+  // ── Каталог услуг по категориям ──
+  function renderCats(){
+    const cats = [{id:'all', name:'Все'}].concat(PLAN.categories || []);
+    document.getElementById('tpCats').innerHTML = cats.map(c =>
+      `<button class="chip${String(TP.cat)===String(c.id)?' active':''}" onclick="tpSetCat('${c.id}')">${c.name}</button>`).join('');
+  }
+  window.tpSetCat = function(id){ TP.cat = id; tpSave(); renderCats(); tpRenderCatalog(); };
+  window.tpRenderCatalog = function(){
+    const q = (document.getElementById('tpSvcSearch').value || '').trim().toLowerCase();
+    const list = PLAN.services.filter(sv =>
+      (TP.cat === 'all' || String(sv.catId) === String(TP.cat)) && (!q || sv.name.toLowerCase().includes(q)));
+    document.getElementById('tpCatalog').innerHTML = list.length ? list.slice(0, 300).map(sv => {
+      const qty = TP.qty[sv.id] || 1;
+      return `<div class="tp-svc"><div class="nm">${sv.name}${TP.cat==='all' && sv.cat ? `<small>${sv.cat}</small>` : ''}</div>
+        <span class="mono" style="white-space:nowrap;">${fmt(sv.price)}</span>
+        <div class="tp-qty"><button onclick="tpQty(${sv.id},-1)">−</button><span>${qty}</span><button onclick="tpQty(${sv.id},1)">+</button></div>
+        <button class="tp-add" title="Добавить в план" onclick="tpBulkAdd(${sv.id}, this)">+</button></div>`;
+    }).join('') : `<div style="padding:18px;text-align:center;color:var(--ink-soft);font-size:13px;">Ничего не найдено</div>`;
+  };
+  window.tpQty = function(id, d){ TP.qty[id] = Math.max(1, Math.min(99, (TP.qty[id] || 1) + d)); tpSave(); tpRenderCatalog(); };
+
+  function renderStageSelect(){
+    const sel = document.getElementById('tpBStage');
+    const cur = sel.value;
+    sel.innerHTML = PLAN.stages.length
+      ? PLAN.stages.map(st => `<option value="${st.id}">${st.title || (t('w_stage') + ' #' + st.id)}</option>`).join('')
+      : `<option value="">Этап 1 (создастся)</option>`;
+    if(cur && PLAN.stages.some(st => String(st.id) === cur)) sel.value = cur;
+    else if(PLAN.stages.length) sel.value = PLAN.stages[PLAN.stages.length - 1].id;
+  }
+
+  window.tpBulkAdd = async function(serviceId, btn){
+    if(btn) btn.disabled = true;
+    try{
+      const res = await fetch(`/treatments/plans/${PLAN.id}/items/bulk-add/`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({service_id: serviceId, teeth: TP.sel, qty: TP.qty[serviceId] || 1,
+                              stage_id: document.getElementById('tpBStage').value || null}),
+      });
+      let data = null; try{ data = await res.json(); }catch(e){}
+      if(!res.ok || !data || !data.ok){ showToast((data && data.error) || t('w_save_failed'), 'error'); return; }
+      PLAN = data.plan;
+      renderAll();
+      const sv = PLAN.services.find(x => x.id === serviceId);
+      showToast(`Добавлено: ${sv ? sv.name : ''}${data.added > 1 ? ' × ' + data.added + ' зуб.' : ''}`);
+    } finally { if(btn) btn.disabled = false; }
+  };
+
+  function renderAll(){
+    renderHeader(); renderProgress(); renderTeeth(); renderStageSelect(); renderStages();
+  }
+
+  renderCats();
+  tpRenderCatalog();
+  document.getElementById('tpBaby').checked = !!TP.baby;
+  renderAll();
 })();
 </script>
 {% endblock %}

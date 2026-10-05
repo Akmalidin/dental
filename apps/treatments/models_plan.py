@@ -50,6 +50,22 @@ class TreatmentPlan(models.Model):
         from decimal import Decimal
         return sum((it.subtotal for it in self.items.filter(status="done")), Decimal(0))
 
+    def teeth_groups(self):
+        """Пункты плана, сгруппированные по зубам — для печатной формы и
+        блока «Нужно лечить»: [{"teeth": [26], "items": [...], "total": D}],
+        группы по возрастанию номера зуба (FDI), пункты без зуба — в конце
+        (teeth == []). Пункт на несколько зубов («11, 12, 13» — мост)
+        остаётся одной группой с этими зубами, а не размножается."""
+        import re
+        from decimal import Decimal
+        groups = {}
+        for it in self.items.exclude(status="cancelled").select_related("service").order_by("sort_order", "id"):
+            teeth = tuple(sorted({int(x) for x in re.findall(r"\d+", it.tooth_number or "")}))
+            g = groups.setdefault(teeth, {"teeth": list(teeth), "items": [], "total": Decimal(0)})
+            g["items"].append(it)
+            g["total"] += it.subtotal
+        return sorted(groups.values(), key=lambda g: (not g["teeth"], g["teeth"]))
+
     @property
     def completion_pct(self):
         total = self.items.count()
