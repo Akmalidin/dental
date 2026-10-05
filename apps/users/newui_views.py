@@ -1268,6 +1268,48 @@ def newui_booking_qr_logo(request):
     return JsonResponse({"ok": True, "hasLogo": True})
 
 
+def _clean_menu_prefs(prefs):
+    """Нормализует настройку меню перед сохранением. Формат:
+    hidden — скрытые вкладки (view), home — стартовая страница,
+    sections — разделы меню [{id, label, icon, tabs: [view, ...]}] (перенос
+    вкладок между разделами), hiddenSections — скрытые разделы (id).
+    order — старый формат (порядок пунктов по группам), хранится как есть для
+    совместимости. Строки обрезаются, размеры ограничены — это JSON с клиента."""
+    import re
+    token = re.compile(r"^[a-z0-9_-]{1,40}$")
+
+    def views(value, limit=60):
+        out = []
+        for v in value if isinstance(value, list) else []:
+            if isinstance(v, str) and token.match(v) and v not in out:
+                out.append(v)
+        return out[:limit]
+
+    sections = []
+    seen_tabs = set()
+    for sec in prefs.get("sections") if isinstance(prefs.get("sections"), list) else []:
+        if not isinstance(sec, dict) or not token.match(str(sec.get("id") or "")):
+            continue
+        tabs = [v for v in views(sec.get("tabs")) if v not in seen_tabs]
+        seen_tabs.update(tabs)
+        label = str(sec.get("label") or "").strip()[:40]
+        icon = str(sec.get("icon") or "")
+        sections.append({
+            "id": sec["id"], "label": label, "tabs": tabs,
+            "icon": icon if token.match(icon) else "",
+        })
+        if len(sections) >= 30:
+            break
+    home = prefs.get("home")
+    return {
+        "hidden": views(prefs.get("hidden")),
+        "order": prefs.get("order") if isinstance(prefs.get("order"), dict) else {},
+        "home": home if isinstance(home, str) and token.match(home) else None,
+        "sections": sections,
+        "hiddenSections": views(prefs.get("hiddenSections"), 30),
+    }
+
+
 @login_required
 def newui_menu_prefs_save(request):
     """Сохранение настройки сайдбара («Настроить меню» / «Меню клиники» в
@@ -1289,11 +1331,7 @@ def newui_menu_prefs_save(request):
     if not isinstance(prefs, dict):
         return JsonResponse({"error": "prefs required", "error_key": "menu_prefs_required"}, status=400)
     scope = data.get("scope", "user")
-    prefs = {
-        "hidden": prefs.get("hidden") or [],
-        "order": prefs.get("order") or {},
-        "home": prefs.get("home"),
-    }
+    prefs = _clean_menu_prefs(prefs)
     if scope == "clinic":
         if not (request.user.is_superadmin or request.user.has_role("admin_main")):
             return JsonResponse({"error": "Только директор может менять меню клиники", "error_key": "menu_only_director"}, status=403)

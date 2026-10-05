@@ -110,6 +110,12 @@
     </form>
     {% endif %}
 
+    <!-- Меню разделами с вкладками (renderNavSections в app.js) собирается из
+         пунктов ниже: они остаются источником ссылок, иконок и прав доступа
+         (скрываются как раньше классом hidden). Пока скрипт не отработал или
+         упал — виден старый плоский список, меню не пропадает. -->
+    <div id="navSections" class="hidden"></div>
+    <div id="navSource">
     <div class="nav-label">Продажи</div>
     <a class="nav-item{% if active == 'dashboard' %} active{% endif %}" data-view="dashboard" href="{% url 'newui_dashboard' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
@@ -228,6 +234,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
       <span data-i18n="nav_superadmin">Супер-админ</span>
     </a>
+    </div>
 
     <a class="nav-item" href="#" onclick="event.preventDefault();openMenuSettings();" style="margin-top:2px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
@@ -250,6 +257,7 @@
   </aside>
 
   <main class="main">
+<div id="navTabs" class="nav-tabs hidden"></div>
 {% block content %}{% endblock %}
   </main>
 </div>
@@ -591,11 +599,10 @@
   <div class="modal wide">
     <div class="modal-head"><h3 id="menuSettingsTitle" data-i18n="nav_настроить_меню">Настроить меню</h3><button class="modal-close" onclick="closeModal('m-menu-settings')">✕</button></div>
     <div class="modal-body">
-      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;" data-i18n="w_menu_settings_hint">Скройте разделы, которыми вы не пользуетесь, и перетащите ⠿, чтобы поменять порядок — это только для вас, остальные сотрудники видят меню по-своему.</div>
       <div id="menuSettingsList"></div>
     </div>
     <div class="modal-foot" style="justify-content:space-between;">
-      <button class="btn btn-ghost" onclick="resetMenuSettings()">Показать всё</button>
+      <button class="btn btn-ghost" onclick="resetMenuSettings()">Вернуть как было</button>
       <div style="display:flex;gap:10px;">
         <button class="btn btn-ghost" onclick="closeModal('m-menu-settings')"><span data-i18n="w_cancel">Отмена</span></button>
         <button class="btn btn-cobalt" onclick="saveMenuSettings()"><span data-i18n="w_save">Сохранить</span></button>

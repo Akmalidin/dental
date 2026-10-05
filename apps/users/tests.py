@@ -633,6 +633,49 @@ class NewUIMenuPrefsTestCase(TestCase):
         self.director.refresh_from_db()
         self.assertEqual(self.director.menu_prefs, {})
 
+    def test_sections_with_moved_tabs_are_saved_and_sanitized(self):
+        """Меню разделами: вкладку можно перенести в другой раздел (sections),
+        скрыть раздел (hiddenSections). Мусор с клиента отбрасывается."""
+        client = Client()
+        client.force_login(self.staff)
+        prefs = {
+            "hidden": ["medicines", "<script>"],
+            "home": "cashdesk",
+            "hiddenSections": ["reports"],
+            "sections": [
+                {"id": "schedule", "label": "Расписание", "icon": "schedule",
+                 "tabs": ["schedule", "cashdesk", "visits", "cashdesk"]},
+                {"id": "money", "label": "Деньги", "tabs": ["finance", "cashdesk"]},
+                {"id": "c1", "label": "  Мой раздел " + "x" * 80, "icon": "<b>", "tabs": ["lab"]},
+                {"id": "bad id!", "tabs": ["patients"]},
+                "garbage",
+            ],
+        }
+        res = client.post("/new/menu-prefs/save/", data=json.dumps({"prefs": prefs, "scope": "user"}),
+                          content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.staff.refresh_from_db()
+        mp = self.staff.menu_prefs
+        self.assertEqual(mp["hidden"], ["medicines"])
+        self.assertEqual(mp["home"], "cashdesk")
+        self.assertEqual(mp["hiddenSections"], ["reports"])
+        self.assertEqual([s["id"] for s in mp["sections"]], ["schedule", "money", "c1"])
+        # «Касса» перенесена в «Расписание» и только туда (без дублей)
+        self.assertEqual(mp["sections"][0]["tabs"], ["schedule", "cashdesk", "visits"])
+        self.assertEqual(mp["sections"][1]["tabs"], ["finance"])
+        self.assertEqual(len(mp["sections"][2]["label"]), 40)
+        self.assertEqual(mp["sections"][2]["icon"], "")
+        data = _extract_newui_real_data(client.get("/new/").content.decode())
+        self.assertEqual(data["userMenuPrefs"]["sections"][0]["tabs"], ["schedule", "cashdesk", "visits"])
+
+    def test_sidebar_has_section_menu_and_tab_bar_containers(self):
+        client = Client()
+        client.force_login(self.staff)
+        html = client.get("/new/").content.decode()
+        self.assertIn('id="navSections"', html)
+        self.assertIn('id="navSource"', html)
+        self.assertIn('id="navTabs"', html)
+
     def test_non_admin_cannot_save_clinic_wide_menu(self):
         client = Client()
         client.force_login(self.staff)

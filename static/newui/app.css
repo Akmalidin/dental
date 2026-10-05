@@ -104,6 +104,46 @@ body.embed .msg-grid{height:calc(100vh - 110px) !important;grid-template-columns
 .nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;border-radius:8px;font-size:13.5px;color:#C4CAD6;margin-bottom:2px;width:100%;text-align:left;transition:.12s;}
 .nav-item svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
 .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+/* Иконки меню — один цвет; при наведении подсвечиваются */
+.nav-item:hover svg{color:#9DAEFF;opacity:1;}
+.nav-item.active:hover svg{color:inherit;}
+.nav-count{margin-left:auto;font-size:10.5px;line-height:1;color:#7E8698;background:rgba(255,255,255,.07);border-radius:6px;padding:3px 6px;}
+.nav-item.active .nav-count{background:var(--cloud);color:var(--ink-soft);}
+.nav-sec .nav-badge{margin-left:6px;}
+/* Вкладки раздела над страницей */
+.nav-tabs{display:flex;gap:2px;padding:0 28px;background:var(--cloud);border-bottom:1px solid var(--mist);overflow-x:auto;scrollbar-width:none;}
+.nav-tabs::-webkit-scrollbar{display:none;}
+.nav-tab{padding:11px 14px 10px;font-size:13.5px;font-weight:600;color:var(--ink-soft);border-bottom:2.5px solid transparent;white-space:nowrap;text-decoration:none;}
+.nav-tab:hover{color:var(--ink);}
+.nav-tab.active{color:var(--cobalt);border-bottom-color:var(--cobalt);}
+/* «Настроить меню» — разделы и вкладки */
+.ms-hint{font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;}
+.ms-home{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;}
+.ms-home select{flex:1;max-width:280px;}
+.ms-sec{border:1px solid var(--mist-line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--paper);transition:.12s;}
+.ms-sec.ms-drop,.ms-newsec.ms-drop{border:2px dashed var(--cobalt);background:#F5F7FF;}
+.ms-sec-off{opacity:.55;}
+.ms-sec-head{display:flex;align-items:center;gap:9px;font-size:14px;flex-wrap:wrap;}
+.ms-sec-head svg{width:17px;height:17px;color:var(--ink-soft);flex-shrink:0;}
+.ms-sec-actions{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;}
+.ms-link{background:none;border:none;color:var(--cobalt);font-size:12px;cursor:pointer;padding:2px 4px;}
+.ms-link:disabled{color:var(--ink-faint);cursor:default;}
+.ms-eye{display:flex;align-items:center;gap:4px;color:var(--ink-soft);cursor:pointer;}
+.ms-eye input{width:auto;}
+.ms-grip{color:var(--ink-faint);cursor:grab;user-select:none;}
+.ms-chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px 26px;min-height:30px;}
+.ms-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--mist-line);border-radius:8px;padding:5px 6px 5px 9px;font-size:13px;background:var(--cloud);cursor:grab;}
+.ms-chip.dragging{opacity:.4;}
+.ms-chip-off{opacity:.5;text-decoration:line-through;}
+.ms-chip-more{background:none;border:none;color:var(--ink-soft);font-size:15px;line-height:1;padding:0 4px;cursor:pointer;border-radius:5px;}
+.ms-chip-more:hover{background:var(--mist);color:var(--ink);}
+.ms-empty{font-size:12px;color:var(--ink-faint);padding:6px 0;}
+.ms-newsec{border:1.5px dashed var(--mist-line);border-radius:12px;padding:12px;text-align:center;font-size:12.5px;color:var(--ink-soft);}
+.ms-chip-menu{position:fixed;z-index:3000;background:var(--paper);border:1px solid var(--mist-line);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;min-width:220px;max-height:70vh;overflow:auto;}
+.ms-chip-menu button{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 10px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--ink);}
+.ms-chip-menu button:hover{background:var(--cloud);}
+.ms-cm-title{font-weight:700;font-size:13px;padding:6px 10px 4px;}
+.ms-cm-sub{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);padding:8px 10px 2px;}
 .nav-item.active{background:#fff;color:var(--ink);}
 .nav-item.active svg{opacity:1;}
 .nav-item.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--coral);border-radius:3px;}
@@ -685,6 +725,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
      а кнопки и поиск — отдельными строками во всю ширину. Раньше всё
      стояло в одну строку и поиск сжимался до пустого квадратика. */
   .topbar{padding:14px;}
+  .nav-tabs{padding:0 8px;}
+  .nav-tab{padding:10px 11px 9px;font-size:13px;}
+  .ms-chips{margin-left:0;}
   .topbar h1{margin-left:90px;min-height:38px;display:flex;align-items:center;}
   .topbar-right{flex:1 1 100%;flex-wrap:wrap;gap:8px;}
   .topbar .search-box{flex:1 1 100%;order:-1;padding:7px 14px;}
@@ -717,6 +760,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 }
 
 @media print{
+  .nav-tabs{display:none !important;}
   body{background:#fff;}
   .sidebar,.modal-backdrop,.topbar .search-box,.topbar .icon-btn,#schedPrintBtn,#finPrintBtn,.btn-cobalt,.toolbar-right-nav{display:none !important;}
   .app-shell{display:block;height:auto;}

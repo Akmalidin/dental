@@ -4680,14 +4680,14 @@ const MENU_PREFS_KEY='newui_menu_prefs';
    для всех) → localStorage (офлайн-кэш на случай, если real_data не пришли) →
    пусто (обычный порядок сайдбара как есть). */
 function loadMenuPrefs(){
-  const norm=p=>({hidden:p.hidden||[], order:p.order||{}, home:p.home||null});
+  const norm=p=>({hidden:p.hidden||[], order:p.order||{}, home:p.home||null, sections:p.sections||[], hiddenSections:p.hiddenSections||[]});
   if(SERVER_USER_MENU_PREFS && Object.keys(SERVER_USER_MENU_PREFS).length) return norm(SERVER_USER_MENU_PREFS);
   if(SERVER_CLINIC_MENU_PREFS && Object.keys(SERVER_CLINIC_MENU_PREFS).length) return norm(SERVER_CLINIC_MENU_PREFS);
   try{
     const raw=localStorage.getItem(MENU_PREFS_KEY);
-    if(!raw) return {hidden:[], order:{}, home:null};
+    if(!raw) return norm({});
     return norm(JSON.parse(raw));
-  }catch(e){ return {hidden:[], order:{}, home:null}; }
+  }catch(e){ return norm({}); }
 }
 function saveMenuPrefsToStorage(prefs){
   try{ localStorage.setItem(MENU_PREFS_KEY, JSON.stringify(prefs)); }catch(e){}
@@ -4709,41 +4709,14 @@ async function saveMenuPrefsToServer(prefs, scope){
 function redirectToHomeIfNeeded(){
   const prefs=loadMenuPrefs();
   if(!prefs.home || prefs.home==='dashboard') return;
-  const activeItem=document.querySelector('.nav-item.active');
+  const activeItem=document.querySelector('#navSource .nav-item.active');
   if(!activeItem || activeItem.dataset.view!=='dashboard') return;
-  const target=document.querySelector(`.nav-item[data-view="${prefs.home}"]`);
+  const target=document.querySelector(`#navSource .nav-item[data-view="${prefs.home}"]:not(.hidden)`);
   const href=target && target.getAttribute('href');
   if(href) location.replace(href);
 }
 function applyMenuPrefs(){
-  const prefs=loadMenuPrefs();
-  const sidebar=document.querySelector('.sidebar');
-  if(!sidebar) return;
-  sidebar.querySelectorAll('.nav-item[data-view]').forEach(el=>{
-    const hidden=prefs.hidden.includes(el.dataset.view) && !PINNED_VIEWS.includes(el.dataset.view);
-    el.classList.toggle('menu-hidden', hidden);
-    el.style.display = hidden ? 'none' : '';
-  });
-  // порядок — переставляем узлы внутри каждой группы согласно сохранённому массиву view
-  Object.keys(prefs.order).forEach(group=>{
-    const label=[...sidebar.querySelectorAll('.nav-label')].find(l=>l.textContent.trim()===group);
-    if(!label) return;
-    const order=prefs.order[group];
-    order.forEach(view=>{
-      const el=sidebar.querySelector(`.nav-item[data-view="${view}"]`);
-      if(el) sidebar.insertBefore(el, findGroupEnd(label));
-    });
-  });
-  function findGroupEnd(label){
-    // .sidebar-user (карточка профиля) — тоже <a> с недавних пор (ссылка на
-    // /new/profile/), но это не пункт группы «Управление», а конец сайдбара —
-    // без явной остановки здесь insertBefore() промахивался мимо неё и мимо
-    // «Старый интерфейс» (тоже <a>) до самого конца .sidebar, и переставленные
-    // пункты «Управления» улетали за них.
-    let n=label.nextElementSibling;
-    while(n && !n.classList.contains('nav-label') && !n.classList.contains('sidebar-user') && n.tagName==='A'){ n=n.nextElementSibling; }
-    return n;
-  }
+  renderNavSections();
 }
 // Пункты сайдбара → ключ раздела (Personal allowed_sections) — то же
 // сопоставление URL-префиксов, что и в apps.tenancy.SectionAccessMiddleware
@@ -4767,103 +4740,309 @@ function hideRestrictedNavItems(navSections){
     el.classList.toggle('hidden', !navSections.includes(section));
   });
 }
-function msSetHiddenLook(item, hidden){
-  item.classList.toggle('ms-item-hidden', hidden);
+/* ─── Меню разделами с вкладками ─────────────────────────────────────────
+   Сайдбар показывает разделы (Расписание, Пациенты, Деньги…), а страницы
+   внутри раздела — вкладками над содержимым страницы. Пункты #navSource в
+   base.html остаются источником ссылок, подписей, иконок и прав доступа
+   (их по-прежнему прячут классом hidden hideRestrictedNavItems и др.),
+   отсюда меню только собирается. Настройка (loadMenuPrefs): sections —
+   раскладка вкладок по разделам (можно переносить вкладку в другой раздел
+   или вынести в свой), hidden — скрытые вкладки, hiddenSections — скрытые
+   разделы, home — стартовая страница. */
+const NAV_ICON_PATHS = {
+  dashboard:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  schedule:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  patients:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
+  messages:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  money:'<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/>',
+  stock:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+  reports:'<path d="M3 3v18h18"/><path d="M7 15l4-6 3 4 5-7"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  superadmin:'<path d="M12 2 3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z"/><path d="M9 12l2 2 4-4"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+};
+function navIconSvg(key){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${NAV_ICON_PATHS[key]||NAV_ICON_PATHS.folder}</svg>`;
 }
-let msHomeSelection=null;
-function msPickHome(view, btn){
-  msHomeSelection=view;
-  document.querySelectorAll('#menuSettingsList .ms-home-btn').forEach(b=>{
-    const active=b.dataset.view===view;
-    b.classList.toggle('ms-home-active', active);
-    b.title = active ? t('w_home_screen_current') : t('w_home_screen_set');
-  });
-}
-let menuSettingsMode='user';
-function openMenuSettings(mode){
-  menuSettingsMode = mode==='clinic' ? 'clinic' : 'user';
-  const list=document.getElementById('menuSettingsList');
-  const sidebar=document.querySelector('.sidebar');
-  const titleEl=document.getElementById('menuSettingsTitle');
-  if(titleEl) titleEl.textContent = menuSettingsMode==='clinic' ? t('w_clinic_menu_title','Меню клиники (по умолчанию для всех сотрудников)') : t('w_menu_settings_title','Настроить меню');
-  // Вкладку «Меню клиники» открывают редактировать ОБЩУЮ настройку — стартуем
-  // от неё (а не от личной пользователя), иначе директор случайно продавит
-  // всем свою личную раскладку вместо осознанно заданной общей.
-  const basePrefs = menuSettingsMode==='clinic'
-    ? {hidden:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.hidden)||[], order:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.order)||{}, home:(SERVER_CLINIC_MENU_PREFS&&SERVER_CLINIC_MENU_PREFS.home)||null}
-    : loadMenuPrefs();
-  msHomeSelection=basePrefs.home || 'dashboard';
-  let html='';
-  // Плоский список (без вложенных .ms-group на каждую секцию) — заголовки
-  // групп тут просто неперетаскиваемые метки среди пунктов, поэтому пункт
-  // можно перетащить в ЛЮБОЕ место списка, в т.ч. в другую секцию или вовсе
-  // на самый верх (раньше перетаскивание работало только внутри своей группы).
-  sidebar.querySelectorAll('.nav-label, .nav-item[data-view]').forEach(el=>{
-    if(el.classList.contains('nav-label')){
-      html+=`<div class="ms-group-label">${el.textContent.trim()}</div>`;
-      return;
-    }
-    const view=el.dataset.view;
-    const pinned=PINNED_VIEWS.includes(view);
+const DEFAULT_NAV_SECTIONS = [
+  {id:'dashboard', label:'Дашборд', labelKey:'nav_дашборд', icon:'dashboard', tabs:['dashboard']},
+  {id:'schedule', label:'Расписание', icon:'schedule', tabs:['schedule','visits','visitsjournal']},
+  {id:'patients', label:'Пациенты', labelKey:'nav_пациенты', icon:'patients', tabs:['patients','treatplans','funnel','marketing']},
+  {id:'messages', label:'Мессенджеры', labelKey:'nav_мессенджеры', icon:'messages', tabs:['messages']},
+  {id:'money', label:'Деньги', icon:'money', tabs:['cashdesk','finance','accounting','salary','mysalary']},
+  {id:'stock', label:'Склад и лаборатория', icon:'stock', tabs:['warehouse','lab','medicines']},
+  {id:'reports', label:'Отчёты', labelKey:'nav_отч_ты', icon:'reports', tabs:['reports','audit']},
+  {id:'settings', label:'Настройки', labelKey:'nav_настройки', icon:'settings', tabs:['settings','staff','services','recycle']},
+  {id:'superadmin', label:'Супер-админ', labelKey:'nav_superadmin', icon:'superadmin', tabs:['superadmin']},
+];
+function navEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function navSourceItems(){
+  const items={};
+  document.querySelectorAll('#navSource .nav-item[data-view]').forEach(el=>{
     const clone=el.cloneNode(true);
     clone.querySelectorAll('svg, .nav-badge').forEach(n=>n.remove());
-    const label=clone.textContent.replace(/\s+/g,' ').trim();
-    const iconHtml=el.querySelector('svg') ? el.querySelector('svg').outerHTML : '';
-    // В режиме «Меню клиники» видимость берём из basePrefs (общей настройки),
-    // а не из classList текущего сайдбара — тот отражает ЛИЧНЫЙ эффективный
-    // вид сидящего сейчас директора, который может отличаться от общей.
-    const isVisible = menuSettingsMode==='clinic' ? !basePrefs.hidden.includes(view) : !el.classList.contains('menu-hidden');
-    const isHome=view===msHomeSelection;
-    html+=`<label class="ms-item${isVisible?'':' ms-item-hidden'}" draggable="${!pinned}" data-menu-item="${view}" style="cursor:${pinned?'default':'grab'};">
-      <span class="ms-drag-handle" style="color:var(--ink-faint);${pinned?'visibility:hidden;':''}">⠿</span>
-      ${iconHtml}
-      <span class="ms-item-label">${label}</span>
-      <span class="ms-home-btn${isHome?' ms-home-active':''}" data-view="${view}" title="${isHome?t('w_home_screen_current'):t('w_home_screen_set')}" onclick="event.preventDefault();msPickHome('${view}', this)">🏠</span>
-      ${pinned ? '' : `<div class="toggle"><input autocomplete="off" type="checkbox" data-menu-view="${view}" ${isVisible?'checked':''} style="width:auto;" onchange="msSetHiddenLook(this.closest('.ms-item'), !this.checked)"></div>`}
-    </label>`;
+    items[el.dataset.view]={
+      view:el.dataset.view, el, href:el.getAttribute('href'),
+      label:clone.textContent.replace(/\s+/g,' ').trim(),
+      svg:el.querySelector('svg') ? el.querySelector('svg').outerHTML : '',
+      available:!el.classList.contains('hidden'),
+      active:el.classList.contains('active'),
+    };
   });
-  list.innerHTML=html;
-  list.querySelectorAll('.ms-item[draggable="true"]').forEach(item=>{
-    item.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', item.dataset.menuItem); item.classList.add('dragging'); });
-    item.addEventListener('dragend', ()=>item.classList.remove('dragging'));
+  return items;
+}
+function navSectionLabel(sec){
+  const def=DEFAULT_NAV_SECTIONS.find(d=>d.id===sec.id);
+  if(def && def.labelKey && (!sec.label || sec.label===def.label)) return t(def.labelKey, def.label);
+  return sec.label || (def ? def.label : 'Раздел');
+}
+/* Раскладка разделов: сохранённая или стандартная. Вкладки, которых в ней
+   нет (новые страницы или раскладка сохранена до их появления), кладём в их
+   стандартный раздел — ни одна страница не теряется из меню. */
+function effectiveNavSections(prefs, viewsPresent){
+  const saved=(prefs.sections||[]).filter(s=>s && s.id && Array.isArray(s.tabs));
+  const out=(saved.length ? saved : DEFAULT_NAV_SECTIONS).map(s=>({id:s.id, label:s.label||'', icon:s.icon||'', tabs:[...s.tabs]}));
+  const placed=new Set(out.flatMap(s=>s.tabs));
+  (viewsPresent||[]).forEach(view=>{
+    if(placed.has(view)) return;
+    const def=DEFAULT_NAV_SECTIONS.find(d=>d.tabs.includes(view));
+    const id=def ? def.id : 'other';
+    let sec=out.find(s=>s.id===id);
+    if(!sec){
+      sec=def ? {id:def.id, label:def.label, icon:def.icon, tabs:[]} : {id:'other', label:'Прочее', icon:'folder', tabs:[]};
+      out.push(sec);
+    }
+    sec.tabs.push(view); placed.add(view);
   });
-  list.addEventListener('dragover', e=>{
-    e.preventDefault();
-    const dragging=list.querySelector('.dragging');
-    if(!dragging) return;
-    // Ищем ближайший элемент (пункт МЕНЮ) — не заголовок группы, чтобы можно
-    // было бросить пункт прямо под заголовком новой секции.
-    const candidates=[...list.querySelectorAll('.ms-item:not(.dragging), .ms-group-label')];
-    const after=candidates.find(el=>e.clientY < el.getBoundingClientRect().top + el.getBoundingClientRect().height/2);
-    list.insertBefore(dragging, after || null);
+  return out;
+}
+function renderNavSections(){
+  const box=document.getElementById('navSections'), src=document.getElementById('navSource');
+  if(!box || !src) return;
+  const prefs=loadMenuPrefs();
+  const items=navSourceItems();
+  const badge=document.getElementById('navMsgBadge');
+  if(badge && items.messages && box.contains(badge)) items.messages.el.appendChild(badge);
+  const hiddenTabs=new Set((prefs.hidden||[]).filter(v=>!PINNED_VIEWS.includes(v)));
+  const hiddenSecs=new Set(prefs.hiddenSections||[]);
+  Object.values(items).forEach(it=>{
+    const h=hiddenTabs.has(it.view);
+    it.el.classList.toggle('menu-hidden', h);
+    it.el.style.display = h ? 'none' : '';
   });
+  const activeView=(Object.values(items).find(it=>it.active)||{}).view;
+  let html='', activeTabs=null;
+  effectiveNavSections(prefs, Object.keys(items)).forEach(sec=>{
+    const tabs=sec.tabs.filter(v=>items[v] && items[v].available && !hiddenTabs.has(v));
+    if(tabs.includes(activeView)) activeTabs=tabs;
+    const pinned=sec.tabs.some(v=>PINNED_VIEWS.includes(v));
+    if(!tabs.length || (hiddenSecs.has(sec.id) && !pinned)) return;
+    const isActive=tabs.includes(activeView);
+    const icon=(sec.icon && NAV_ICON_PATHS[sec.icon]) ? navIconSvg(sec.icon) : (items[tabs[0]].svg || navIconSvg('folder'));
+    html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span>${tabs.length>1?`<span class="nav-count">${tabs.length}</span>`:''}</a>`;
+    if(sec.tabs.includes('messages') && tabs.includes('messages')) html=html.replace(/<\/a>$/, '<i data-msg-badge></i></a>');
+  });
+  box.innerHTML=html;
+  const slot=box.querySelector('[data-msg-badge]');
+  if(slot && badge) slot.replaceWith(badge);
+  box.classList.remove('hidden');
+  src.classList.add('hidden');
+  // Вкладки раздела над страницей — когда в разделе больше одной доступной страницы
+  const bar=document.getElementById('navTabs');
+  if(!bar) return;
+  if(activeTabs && activeTabs.length>1){
+    bar.innerHTML=activeTabs.map(v=>`<a class="nav-tab${v===activeView?' active':''}" href="${navEsc(items[v].href)}">${navEsc(items[v].label)}</a>`).join('');
+    const top=document.querySelector('.main > .topbar');
+    if(top && top.nextElementSibling!==bar) top.after(bar);
+    bar.classList.remove('hidden');
+    const act=bar.querySelector('.nav-tab.active');
+    if(act) bar.scrollLeft=Math.max(0, act.offsetLeft - bar.clientWidth/2 + act.offsetWidth/2);
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+/* ─── «Настроить меню»: разделы и вкладки ──────────────────────────────── */
+let menuSettingsMode='user';
+let MS=null; // {sections, hidden:Set, hiddenSections:Set, home}
+function msState(prefs, items){
+  return {
+    sections: effectiveNavSections(prefs, Object.keys(items)),
+    hidden: new Set(prefs.hidden||[]),
+    hiddenSections: new Set(prefs.hiddenSections||[]),
+    home: prefs.home || 'dashboard',
+  };
+}
+function openMenuSettings(mode){
+  menuSettingsMode = mode==='clinic' ? 'clinic' : 'user';
+  const titleEl=document.getElementById('menuSettingsTitle');
+  if(titleEl) titleEl.textContent = menuSettingsMode==='clinic' ? t('w_clinic_menu_title','Меню клиники (по умолчанию для всех сотрудников)') : t('w_menu_settings_title','Настроить меню');
+  // «Меню клиники» редактирует ОБЩУЮ настройку — стартуем от неё, а не от
+  // личной, иначе директор случайно продавит всем свою личную раскладку.
+  const prefs = menuSettingsMode==='clinic' ? Object.assign({hidden:[], order:{}, home:null}, SERVER_CLINIC_MENU_PREFS||{}) : loadMenuPrefs();
+  MS=msState(prefs, navSourceItems());
+  msRender();
+  if(typeof closeSidebar==='function') closeSidebar(); // на телефоне меню перекрыло бы окно
   openModal('m-menu-settings');
 }
+function msRender(){
+  const list=document.getElementById('menuSettingsList');
+  if(!list || !MS) return;
+  const items=navSourceItems();
+  const homeOptions=MS.sections.flatMap(sec=>sec.tabs.filter(v=>items[v] && items[v].available))
+    .map(v=>`<option value="${navEsc(v)}" ${v===MS.home?'selected':''}>${navEsc(items[v].label)}</option>`).join('');
+  let html=`<div class="ms-hint">Перетаскивайте <b>⠿</b>: разделы — чтобы поменять порядок, вкладки — чтобы перенести их в другой раздел или в «Новый раздел». На телефоне — кнопка <b>⋯</b> у вкладки. Доступы сотрудников от этого не меняются.</div>
+    <div class="ms-home"><label>Стартовая страница</label><select onchange="MS.home=this.value">${homeOptions}</select></div>`;
+  MS.sections.forEach((sec, si)=>{
+    const shown=sec.tabs.filter(v=>items[v] && items[v].available);
+    // Раздел только из недоступных этому сотруднику страниц — не показываем
+    // (в раскладке он сохраняется, например «Супер-админ» в меню клиники)
+    if(!shown.length && sec.tabs.length) return;
+    const pinned=sec.tabs.some(v=>PINNED_VIEWS.includes(v));
+    const secHidden=MS.hiddenSections.has(sec.id) && !pinned;
+    const icon=(sec.icon && NAV_ICON_PATHS[sec.icon]) ? navIconSvg(sec.icon) : ((shown[0] && items[shown[0]].svg) || navIconSvg('folder'));
+    html+=`<div class="ms-sec${secHidden?' ms-sec-off':''}" data-sec="${si}">
+      <div class="ms-sec-head">
+        <span class="ms-grip" draggable="true" data-drag-sec="${si}" title="Перетащить раздел">⠿</span>${icon}
+        <b>${navEsc(navSectionLabel(sec))}</b>
+        <span class="ms-sec-actions">
+          <button type="button" class="ms-link" onclick="msMoveSec(${si},-1)" title="Выше" ${si===0?'disabled':''}>↑</button>
+          <button type="button" class="ms-link" onclick="msMoveSec(${si},1)" title="Ниже" ${si===MS.sections.length-1?'disabled':''}>↓</button>
+          <button type="button" class="ms-link" onclick="msRenameSec(${si})">Переименовать</button>
+          ${pinned ? '' : `<label class="ms-eye"><input type="checkbox" ${secHidden?'':'checked'} onchange="msToggleSec(${si}, this.checked)"> Показывать</label>`}
+        </span>
+      </div>
+      <div class="ms-chips" data-drop-sec="${si}">${shown.length ? shown.map(v=>{
+        const off=MS.hidden.has(v) && !PINNED_VIEWS.includes(v);
+        return `<span class="ms-chip${off?' ms-chip-off':''}" draggable="true" data-drag-tab="${navEsc(v)}"><span class="ms-grip">⠿</span>${navEsc(items[v].label)}${v===MS.home?' <span title="Стартовая страница">🏠</span>':''}<button type="button" class="ms-chip-more" onclick="msChipMenu(event,'${navEsc(v)}')" title="Действия">⋯</button></span>`;
+      }).join('') : '<span class="ms-empty">Пусто — перетащите сюда вкладку</span>'}</div>
+    </div>`;
+  });
+  html+=`<div class="ms-newsec" data-drop-new="1">＋ Новый раздел — перетащите сюда вкладку, чтобы она стала отдельным пунктом меню</div>`;
+  list.innerHTML=html;
+  msBindDnD(list);
+}
+function msFindTab(view){
+  for(const sec of MS.sections){ const i=sec.tabs.indexOf(view); if(i>=0) return {sec, i}; }
+  return null;
+}
+function msMoveTab(view, targetIdx, beforeView){
+  const from=msFindTab(view);
+  if(!from) return;
+  from.sec.tabs.splice(from.i, 1);
+  let target;
+  if(targetIdx==='new'){
+    const name=(prompt('Название нового раздела', 'Новый раздел')||'').trim() || 'Новый раздел';
+    target={id:'c'+Date.now().toString(36), label:name.slice(0,40), icon:'', tabs:[]};
+    MS.sections.push(target);
+  } else {
+    target=MS.sections[targetIdx];
+  }
+  if(!target){ from.sec.tabs.splice(from.i, 0, view); return; }
+  const bi=beforeView ? target.tabs.indexOf(beforeView) : -1;
+  if(bi>=0) target.tabs.splice(bi, 0, view); else target.tabs.push(view);
+  msRender();
+}
+function msMoveSec(si, delta){
+  const j=si+delta;
+  if(j<0 || j>=MS.sections.length) return;
+  const [sec]=MS.sections.splice(si,1);
+  MS.sections.splice(j,0,sec);
+  msRender();
+}
+function msRenameSec(si){
+  const sec=MS.sections[si];
+  const name=prompt('Название раздела', navSectionLabel(sec));
+  if(name===null) return;
+  sec.label=name.trim().slice(0,40);
+  msRender();
+}
+function msToggleSec(si, show){
+  const id=MS.sections[si].id;
+  if(show) MS.hiddenSections.delete(id); else MS.hiddenSections.add(id);
+  msRender();
+}
+function msCloseChipMenu(){ const m=document.getElementById('msChipMenu'); if(m) m.remove(); }
+function msChipMenu(e, view){
+  e.preventDefault(); e.stopPropagation();
+  msCloseChipMenu();
+  const items=navSourceItems();
+  const here=msFindTab(view);
+  const pinned=PINNED_VIEWS.includes(view);
+  const off=MS.hidden.has(view);
+  const menu=document.createElement('div');
+  menu.id='msChipMenu';
+  menu.className='ms-chip-menu';
+  menu.innerHTML=`<div class="ms-cm-title">${navEsc(items[view] ? items[view].label : view)}</div>
+    ${pinned ? '' : `<button type="button" data-act="toggle">${off?'👁 Показывать вкладку':'🚫 Скрыть вкладку'}</button>`}
+    <button type="button" data-act="home">🏠 Сделать стартовой</button>
+    <div class="ms-cm-sub">Перенести в раздел:</div>
+    ${MS.sections.map((sec,si)=> (sec===(here&&here.sec) || (sec.tabs.length && !sec.tabs.some(v=>items[v] && items[v].available))) ? '' : `<button type="button" data-act="move" data-to="${si}">→ ${navEsc(navSectionLabel(sec))}</button>`).join('')}
+    <button type="button" data-act="move" data-to="new">＋ В новый раздел</button>`;
+  menu.addEventListener('click', ev=>{
+    const b=ev.target.closest('button'); if(!b) return;
+    const act=b.dataset.act;
+    msCloseChipMenu();
+    if(act==='toggle'){ if(MS.hidden.has(view)) MS.hidden.delete(view); else MS.hidden.add(view); msRender(); }
+    else if(act==='home'){ MS.home=view; msRender(); }
+    else if(act==='move'){ msMoveTab(view, b.dataset.to==='new' ? 'new' : Number(b.dataset.to)); }
+  });
+  document.body.appendChild(menu);
+  const r=e.target.getBoundingClientRect();
+  const w=menu.offsetWidth, h=menu.offsetHeight;
+  menu.style.left=Math.max(8, Math.min(window.innerWidth-w-8, r.right-w))+'px';
+  menu.style.top=(r.bottom+h+8>window.innerHeight ? Math.max(8, r.top-h-4) : r.bottom+4)+'px';
+  setTimeout(()=>document.addEventListener('click', msCloseChipMenu, {once:true}), 0);
+}
+function msBindDnD(list){
+  let drag=null; // {tab: view} | {sec: index}
+  list.querySelectorAll('[data-drag-tab]').forEach(el=>{
+    el.addEventListener('dragstart', e=>{ drag={tab:el.dataset.dragTab}; e.dataTransfer.setData('text/plain', el.dataset.dragTab); e.stopPropagation(); el.classList.add('dragging'); });
+    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); list.querySelectorAll('.ms-drop').forEach(x=>x.classList.remove('ms-drop')); });
+  });
+  list.querySelectorAll('[data-drag-sec]').forEach(el=>{
+    el.addEventListener('dragstart', e=>{ drag={sec:Number(el.dataset.dragSec)}; e.dataTransfer.setData('text/plain', 'sec'); const card=el.closest('.ms-sec'); if(card) e.dataTransfer.setDragImage(card, 20, 20); });
+  });
+  list.querySelectorAll('.ms-sec, .ms-newsec').forEach(zone=>{
+    zone.addEventListener('dragover', e=>{
+      if(!drag) return;
+      if(drag.sec!==undefined && zone.classList.contains('ms-newsec')) return;
+      e.preventDefault();
+      list.querySelectorAll('.ms-drop').forEach(x=>{ if(x!==zone) x.classList.remove('ms-drop'); });
+      zone.classList.add('ms-drop');
+    });
+    zone.addEventListener('dragleave', e=>{ if(!zone.contains(e.relatedTarget)) zone.classList.remove('ms-drop'); });
+    zone.addEventListener('drop', e=>{
+      e.preventDefault();
+      zone.classList.remove('ms-drop');
+      const d=drag; drag=null;
+      if(!d) return;
+      if(d.tab){
+        if(zone.dataset.dropNew){ msMoveTab(d.tab, 'new'); return; }
+        const chip=e.target.closest && e.target.closest('[data-drag-tab]');
+        msMoveTab(d.tab, Number(zone.dataset.sec), chip && chip.dataset.dragTab!==d.tab ? chip.dataset.dragTab : null);
+      } else if(d.sec!==undefined && zone.dataset.sec!==undefined){
+        const to=Number(zone.dataset.sec);
+        if(to===d.sec) return;
+        const [sec]=MS.sections.splice(d.sec,1);
+        MS.sections.splice(to,0,sec);
+        msRender();
+      }
+    });
+  });
+}
 function saveMenuSettings(){
-  const hidden=[];
-  document.querySelectorAll('#menuSettingsList input[data-menu-view]').forEach(chk=>{
-    if(!chk.checked) hidden.push(chk.dataset.menuView);
-  });
-  // Порядок И группа каждого пункта считываются по его ТЕКУЩЕЙ позиции в
-  // плоском списке (после перетаскивания) — какой заголовок секции идёт
-  // перед пунктом, в ту секцию он и попадёт в реальном сайдбаре.
-  const order={};
-  let currentGroup=null;
-  document.querySelectorAll('#menuSettingsList > *').forEach(el=>{
-    if(el.classList.contains('ms-group-label')){
-      currentGroup=el.textContent.trim();
-      if(!order[currentGroup]) order[currentGroup]=[];
-      return;
-    }
-    if(el.classList.contains('ms-item') && currentGroup){
-      order[currentGroup].push(el.dataset.menuItem);
-    }
-  });
-  const prefs={hidden, order, home: msHomeSelection};
+  if(!MS) return;
+  const prefs={
+    hidden:[...MS.hidden].filter(v=>!PINNED_VIEWS.includes(v)),
+    hiddenSections:[...MS.hiddenSections],
+    sections:MS.sections.filter(s=>s.tabs.length).map(s=>({id:s.id, label:s.label||'', icon:s.icon||'', tabs:[...s.tabs]})),
+    order:{},
+    home:MS.home,
+  };
   if(menuSettingsMode==='clinic'){
-    // Меню клиники — общий дефолт для всех сотрудников без личной настройки,
-    // это НЕ личный вид сохраняющего директора: не трогаем localStorage/личные
-    // серверные prefs и не применяем к текущему сайдбару принудительно.
+    // Меню клиники — общий дефолт для сотрудников без личной настройки, не
+    // личный вид директора: не трогаем его личные prefs и текущий сайдбар.
     SERVER_CLINIC_MENU_PREFS=prefs;
     saveMenuPrefsToServer(prefs, 'clinic').then(ok=>{
       showToast(ok ? t('w_clinic_menu_saved','Меню клиники сохранено — применится сотрудникам без личной настройки') : t('w_save_failed','Не удалось сохранить'), ok?'success':'error');
@@ -4876,8 +5055,8 @@ function saveMenuSettings(){
   saveMenuPrefsToServer(prefs, 'user');
   applyMenuPrefs();
   updateMsgFab();
-  // если скрыли раздел, который сейчас открыт — уходим на дашборд
-  const activeItem=document.querySelector('.nav-item.active');
+  // открытая сейчас страница скрыта — уходим на дашборд
+  const activeItem=document.querySelector('#navSource .nav-item.active');
   if(activeItem && activeItem.classList.contains('menu-hidden')){
     location.href='/new/';
     return;
@@ -4885,7 +5064,9 @@ function saveMenuSettings(){
   closeModal('m-menu-settings');
 }
 function resetMenuSettings(){
-  document.querySelectorAll('#menuSettingsList input[data-menu-view]').forEach(chk=>{ chk.checked=true; });
+  MS={sections:DEFAULT_NAV_SECTIONS.map(s=>({id:s.id, label:s.label, icon:s.icon, tabs:[...s.tabs]})), hidden:new Set(), hiddenSections:new Set(), home:'dashboard'};
+  MS.sections=effectiveNavSections({sections:MS.sections}, Object.keys(navSourceItems()));
+  msRender();
 }
 
 function nav(view, el){
@@ -7200,7 +7381,7 @@ function closeMsgPanel(){
   document.getElementById('msgPanelBackdrop').classList.remove('open');
 }
 document.addEventListener('click', e=>{
-  const nav=e.target.closest && e.target.closest('.sidebar .nav-item[data-view="messages"]');
+  const nav=e.target.closest && e.target.closest('.sidebar .nav-item[data-view="messages"], .sidebar .nav-item[data-sec-first="messages"]');
   if(!nav) return;
   if(e.ctrlKey || e.metaKey || e.shiftKey || e.button!==0) return;
   if(window.innerWidth<MSG_PANEL_MIN_WIDTH) return;
