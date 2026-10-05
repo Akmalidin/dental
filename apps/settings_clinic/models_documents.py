@@ -9,6 +9,7 @@ class DocumentTemplate(ClinicScopedModel):
     TYPE_PRESCRIPTION = "prescription"
     TYPE_REFERRAL = "referral"
     TYPE_CERTIFICATE = "certificate"
+    TYPE_PLAN_NOTE = "plan_note"
     TYPE_OTHER = "other"
 
     TYPE_CHOICES = [
@@ -17,6 +18,7 @@ class DocumentTemplate(ClinicScopedModel):
         (TYPE_PRESCRIPTION, "Назначение / рецепт"),
         (TYPE_REFERRAL, "Направление"),
         (TYPE_CERTIFICATE, "Справка"),
+        (TYPE_PLAN_NOTE, "Текст к плану лечения (печать)"),
         (TYPE_OTHER, "Другое"),
     ]
 

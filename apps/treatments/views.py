@@ -25,6 +25,15 @@ def _get_own_treatment_or_404(pk, queryset=None):
     return treatment
 
 
+def _check_plan_access(plan):
+    """План лечения не привязан к клинике напрямую — граница доступа, как и у
+    приёмов (_get_own_treatment_or_404), его ПАЦИЕНТ: он должен быть виден
+    вызывающему в текущей клинике. Без этой проверки по номеру плана/этапа/
+    пункта можно было открыть и менять план пациента чужой клиники."""
+    get_object_or_404(Patient, pk=plan.patient_id)
+    return plan
+
+
 @login_required
 def treatment_list(request):
     qs = Treatment.objects.select_related("patient", "doctor", "branch").order_by("-created_at")
@@ -478,6 +487,7 @@ def plan_item_toggle(request, pk):
     При отметке «выполнено» можно привязать пункт к конкретному приёму (treatment_id)."""
     from .models_plan import TreatmentPlanItem
     item = get_object_or_404(TreatmentPlanItem, pk=pk)
+    _check_plan_access(item.plan)
     now_done = item.status != TreatmentPlanItem.STATUS_DONE
     item.status = TreatmentPlanItem.STATUS_DONE if now_done else TreatmentPlanItem.STATUS_PENDING
     fields = ["status"]
@@ -500,7 +510,7 @@ def plan_item_toggle(request, pk):
 def plan_detail(request, pk):
     """Full treatment-plan editor page with stages."""
     from .models_plan import TreatmentPlan, TreatmentPlanStage
-    plan = get_object_or_404(TreatmentPlan.objects.select_related("patient", "doctor"), pk=pk)
+    plan = _check_plan_access(get_object_or_404(TreatmentPlan.objects.select_related("patient", "doctor"), pk=pk))
     # самоисцеление: услуги без этапа (старые планы) — привязать к этапу
     orphans = plan.items.filter(stage__isnull=True)
     if orphans.exists():
@@ -531,7 +541,7 @@ def plan_detail(request, pk):
 @require_POST
 def plan_stage_add(request, pk):
     from .models_plan import TreatmentPlan, TreatmentPlanStage
-    plan = get_object_or_404(TreatmentPlan, pk=pk)
+    plan = _check_plan_access(get_object_or_404(TreatmentPlan, pk=pk))
     n = plan.stages.count()
     TreatmentPlanStage.objects.create(plan=plan, title=f"Этап {n+1}", sort_order=n)
     return redirect("plan_detail", pk=pk)
@@ -543,6 +553,7 @@ def plan_stage_edit(request, pk):
     """Изменить этап плана: название, продолжительность, привязанный визит (приём)."""
     from .models_plan import TreatmentPlanStage
     stage = get_object_or_404(TreatmentPlanStage, pk=pk)
+    _check_plan_access(stage.plan)
     title = (request.POST.get("title") or "").strip()
     if title:
         stage.title = title
@@ -560,6 +571,7 @@ def plan_stage_edit(request, pk):
 def plan_stage_delete(request, pk):
     from .models_plan import TreatmentPlanStage
     stage = get_object_or_404(TreatmentPlanStage, pk=pk)
+    _check_plan_access(stage.plan)
     plan_pk = stage.plan_id
     stage.delete()
     return redirect("plan_detail", pk=plan_pk)
@@ -574,6 +586,7 @@ def plan_item_add(request):
     try:
         data = json.loads(request.body)
         stage = TreatmentPlanStage.objects.get(pk=data["stage_id"])
+        _check_plan_access(stage.plan)
         service = Service.objects.get(pk=data["service_id"])
         TreatmentPlanItem.objects.create(
             plan=stage.plan, stage=stage, service=service,
@@ -594,6 +607,7 @@ def plan_item_add(request):
 def plan_item_delete(request, pk):
     from .models_plan import TreatmentPlanItem
     item = get_object_or_404(TreatmentPlanItem, pk=pk)
+    _check_plan_access(item.plan)
     plan_pk = item.plan_id
     item.delete()
     return redirect("plan_detail", pk=plan_pk)
@@ -605,6 +619,7 @@ def plan_item_move(request, pk):
     """Move or duplicate an item to another stage."""
     from .models_plan import TreatmentPlanItem, TreatmentPlanStage
     item = get_object_or_404(TreatmentPlanItem, pk=pk)
+    _check_plan_access(item.plan)
     target_stage_id = request.POST.get("stage_id")
     mode = request.POST.get("mode", "move")  # move | copy
     target = TreatmentPlanStage.objects.filter(pk=target_stage_id, plan=item.plan).first()
@@ -623,44 +638,99 @@ def plan_item_move(request, pk):
 
 
 @login_required
+@require_POST
+def plan_items_bulk_add(request, pk):
+    """Новый интерфейс, план лечения по зубной формуле: добавить услугу на
+    выбранные зубы — по одному пункту на каждый зуб (в печатной форме и в
+    «Нужно лечить» они группируются по зубам), без зубов — один общий пункт.
+    JSON: {service_id, teeth: ["26","27"], stage_id?, qty?}. Этап не указан
+    или чужой — последний этап плана (нет ни одного — создаётся «Этап 1»).
+    Отвечает свежими данными плана, чтобы страница обновилась без перезагрузки
+    (выбранные зубы и фильтр при этом не сбрасываются)."""
+    import re
+    from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
+    from apps.services.models import Service
+    plan = _check_plan_access(get_object_or_404(TreatmentPlan.objects.select_related("patient", "doctor"), pk=pk))
+    try:
+        data = json.loads(request.body or b"{}")
+    except ValueError:
+        return JsonResponse({"error": "bad json"}, status=400)
+    service = Service.objects.filter(pk=data.get("service_id"), is_active=True).first()
+    if service is None:
+        return JsonResponse({"error": "Услуга не найдена"}, status=400)
+    teeth = []
+    for t in data.get("teeth") or []:
+        t = str(t).strip()
+        if re.fullmatch(r"[1-8][1-8]", t) and t not in teeth:
+            teeth.append(t)
+    try:
+        qty = max(1, min(99, int(data.get("qty") or 1)))
+    except (TypeError, ValueError):
+        qty = 1
+    stage = plan.stages.filter(pk=data.get("stage_id")).first() if data.get("stage_id") else None
+    if stage is None:
+        stage = plan.stages.order_by("-sort_order", "-id").first()
+    if stage is None:
+        stage = TreatmentPlanStage.objects.create(plan=plan, title="Этап 1", sort_order=0)
+    order = stage.items.count()
+    with transaction.atomic():
+        for k, tooth in enumerate(teeth or [""]):
+            TreatmentPlanItem.objects.create(
+                plan=plan, stage=stage, service=service, tooth_number=tooth,
+                price=service.price, quantity=qty, doctor=plan.doctor, sort_order=order + k,
+            )
+    from apps.users.views import _newui_treatplan_detail_data
+    return JsonResponse({"ok": True, "added": len(teeth) or 1, "plan": _newui_treatplan_detail_data(plan)})
+
+
+@login_required
 def plan_print(request, pk):
-    """Printable treatment plan (HTML)."""
+    """Печатная форма «План лечения (предварительный)»: услуги сгруппированы по
+    зубам с «Итого по зубу», общий итог и прогресс выполнения, текст о
+    предварительной стоимости (Настройки → Документы → шаблон типа «Текст к
+    плану лечения», иначе стандартный) и подписи сторон. Печать/«Сохранить
+    как PDF» — из браузера."""
+    from django.utils import timezone
     from .models_plan import TreatmentPlan
     from apps.settings_clinic.models import ClinicSettings
-    plan = get_object_or_404(
-        TreatmentPlan.objects.select_related("patient", "doctor").prefetch_related("stages__items__service"),
-        pk=pk,
-    )
-    from django.utils.html import escape
-    clinic = ClinicSettings.get()
-    rows = ""
-    for si, stage in enumerate(plan.stages.all(), 1):
-        rows += f'<tr style="background:#f3f3f3"><td colspan="6"><b>Этап {si}: {escape(stage.title)}</b></td></tr>'
-        for it in stage.items.all():
-            rows += (f"<tr><td>{escape(it.service.name)}</td><td>{escape(it.tooth_number) or '—'}</td>"
-                     f"<td>{it.quantity}</td><td>{it.price:.0f}</td><td>{it.discount:.0f}%</td>"
-                     f"<td>{it.subtotal:.0f} сом</td></tr>")
-    html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>План лечения</title>
-    <style>body{{font-family:Arial,sans-serif;max-width:800px;margin:30px auto;padding:0 30px;color:#1a1a1a}}
-    h1{{font-size:20px;text-align:center}} .hdr{{text-align:center;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:20px}}
-    table{{width:100%;border-collapse:collapse;margin-top:10px}} th,td{{border:1px solid #ccc;padding:7px;text-align:left;font-size:14px}}
-    th{{background:#f0f0f0}} .total{{text-align:right;font-weight:bold;font-size:16px;margin-top:14px}}
-    @media print{{.no-print{{display:none}}}}</style></head><body>
-    <div class="hdr"><h1>{escape(clinic.name)}</h1><p>{escape(clinic.address)} · {escape(clinic.phone)}</p></div>
-    <h2>План лечения: {escape(plan.title)}</h2>
-    <p>Пациент: <b>{escape(plan.patient.full_name)}</b> · Врач: {escape(plan.doctor.name)} · Дата: {plan.created_at:%d.%m.%Y}</p>
-    <table><thead><tr><th>Услуга</th><th>Зуб</th><th>Кол-во</th><th>Цена</th><th>Скидка</th><th>Итого</th></tr></thead>
-    <tbody>{rows}</tbody></table>
-    <p class="total">Итого по плану: {plan.total_price:.0f} сом</p>
-    <div class="no-print" style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:10px 28px;background:#6366F1;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨 Печать</button></div>
-    </body></html>"""
-    return HttpResponse(html)
+    from apps.settings_clinic.models_documents import DocumentTemplate
+    plan = _check_plan_access(get_object_or_404(
+        TreatmentPlan.objects.select_related("patient", "doctor"), pk=pk))
+    cs = ClinicSettings.get()
+    groups = plan.teeth_groups()
+    n = 0
+    for g in groups:
+        for it in g["items"]:
+            n += 1
+            it.row_no = n
+    items = [it for g in groups for it in g["items"]]
+    total = sum((g["total"] for g in groups), 0)
+    done = sum(1 for it in items if it.status == "done")
+    today = timezone.localdate()
+    note = ""
+    tpl = (DocumentTemplate.objects.filter(doc_type=DocumentTemplate.TYPE_PLAN_NOTE, is_active=True)
+           .order_by("-updated_at").first())
+    if tpl:
+        note = tpl.render({
+            "patient_name": plan.patient.full_name, "doctor_name": plan.doctor.name if plan.doctor_id else "",
+            "clinic_name": cs.name, "date": today.strftime("%d.%m.%Y"),
+            "total": "%s %s" % (_money(total), cs.currency_label),
+        })
+    return render(request, "treatments/plan_print.html", {
+        "plan": plan, "cs": cs, "groups": groups, "total": total, "done": done, "count": len(items),
+        "has_discount": any(it.discount for it in items), "today": today, "note": note,
+        "cur": cs.currency_label,
+    })
+
+
+def _money(v):
+    return "{:,.0f}".format(v or 0).replace(",", " ")
 
 
 @login_required
 def plan_delete(request, pk):
     from .models_plan import TreatmentPlan
-    plan = get_object_or_404(TreatmentPlan, pk=pk)
+    plan = _check_plan_access(get_object_or_404(TreatmentPlan, pk=pk))
     patient_pk = plan.patient_id
     if request.method == "POST":
         plan.delete()

@@ -24,6 +24,7 @@ urlpatterns = [
     path("plans/items/<int:pk>/delete/", views.plan_item_delete, name="plan_item_delete"),
     path("plans/items/<int:pk>/move/", views.plan_item_move, name="plan_item_move"),
     path("plans/<int:pk>/print/", views.plan_print, name="plan_print"),
+    path("plans/<int:pk>/items/bulk-add/", views.plan_items_bulk_add, name="plan_items_bulk_add"),
     path("<int:pk>/", views.treatment_detail, name="treatment_detail"),
     path("<int:pk>/edit/", views.treatment_edit, name="treatment_edit"),
     path("<int:pk>/delete/", views.treatment_delete, name="treatment_delete"),

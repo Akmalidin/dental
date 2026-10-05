@@ -1501,8 +1501,13 @@ def _newui_treatplan_detail_data(plan):
         })
 
     services = list(Service.objects.filter(is_active=True).select_related("category")
-                    .order_by("category__sort_order", "name")
-                    .values("id", "name", "price", "category__name"))
+                    .order_by("category__sort_order", "category__name", "name")
+                    .values("id", "name", "price", "category__name", "category_id"))
+    categories, seen = [], set()
+    for sv in services:
+        if sv["category_id"] and sv["category_id"] not in seen:
+            seen.add(sv["category_id"])
+            categories.append({"id": sv["category_id"], "name": sv["category__name"]})
     patient_treatments = (Treatment.all_objects.filter(patient=plan.patient, is_deleted=False)
                           .exclude(status="cancelled").order_by("-created_at")[:50])
 
@@ -1518,7 +1523,8 @@ def _newui_treatplan_detail_data(plan):
         "totalPrice": float(plan.total_price),
         "stages": stages,
         "services": [{"id": s["id"], "name": s["name"], "price": float(s["price"]),
-                     "cat": s["category__name"] or ""} for s in services],
+                     "cat": s["category__name"] or "", "catId": s["category_id"]} for s in services],
+        "categories": categories,
         "patientTreatments": [{"id": t.pk, "number": t.display_number, "dateStr": t.created_at.strftime("%d.%m.%Y")}
                               for t in patient_treatments],
         "doctors": [{"id": d.pk, "name": d.name} for d in clinic_doctors(get_current_clinic())],

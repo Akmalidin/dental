@@ -9,6 +9,7 @@ urlpatterns = [
     path("patients/data/", v.newui_patients_data_json, name="newui_patients_data"),
     path("patients/<int:pk>/lookup/", v.newui_patient_lookup_json, name="newui_patient_lookup"),
     path("patients/<int:pk>/", v.newui_patientcard, name="newui_patientcard"),
+    path("patients/<int:pk>/plan/", v.newui_patient_plan, name="newui_patient_plan"),
     path("blacklist/", v.newui_blacklist, name="newui_blacklist"),
     path("visits-journal/", v.newui_visits_journal, name="newui_visits_journal"),
     path("tasks/", v.newui_tasks, name="newui_tasks"),

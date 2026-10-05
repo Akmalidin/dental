@@ -15,6 +15,7 @@
             <input autocomplete="off" type="checkbox" id="vwSimpleModeToggle" onchange="vwSetSimpleMode(this.checked)">
             <span data-i18n="w_simple_mode">Простой режим</span>
           </div>
+          <button class="btn btn-ghost" id="vwPlanBtn" onclick="vwOpenPlan()" title="Открыть план лечения пациента в новой вкладке">📋 <span>План лечения</span></button>
           <button class="btn btn-ghost" id="vwPrintReceiptBtn" onclick="printTreatmentReceipt(vw.treatmentId)">🖨 <span data-i18n="w_print_receipt">Печать чека</span></button>
           <button class="btn btn-ghost" id="vwBackBtn" onclick="location.href='/new/patients/'">← <span data-i18n="w_back_to_card">Назад в карту</span></button>
         </div>
@@ -178,6 +179,21 @@
 
 {% endblock %}
 {% block extra_js %}
+<script>
+// «План лечения» — текущий план пациента в новой вкладке (нет плана —
+// создаётся черновик), см. apps.users.newui_views.newui_patient_plan.
+function vwOpenPlan(){
+  let w = null;
+  try{ w = JSON.parse(document.getElementById('newui-real-data').textContent).visitWizard; }catch(e){}
+  if(!w || !w.patientId) return;
+  const f = document.createElement('form');
+  f.method = 'POST'; f.action = `/new/patients/${w.patientId}/plan/`; f.target = '_blank';
+  [['csrfmiddlewaretoken', getCookie('csrftoken')], ['doctor', w.doctorId || '']].forEach(([n, v]) => {
+    const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i);
+  });
+  document.body.appendChild(f); f.submit(); f.remove();
+}
+</script>
 <script>
 (function(){
   const vw = window.visitWizard;

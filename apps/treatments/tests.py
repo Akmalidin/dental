@@ -327,3 +327,99 @@ class PhotoCompressionTestCase(TestCase):
         obj.file.open("rb")
         with Image.open(obj.file) as im:
             self.assertEqual(im.size, (1920, 2560))
+
+
+class TreatmentPlanByTeethTestCase(TestCase):
+    """План лечения по зубной формуле: добавление услуги на выбранные зубы,
+    печатная форма с группировкой по зубам и подписями, доступ только к
+    планам своей клиники, кнопка «План лечения» из карточки приёма."""
+
+    def setUp(self):
+        from apps.services.models import Service, ServiceCategory
+        from apps.treatments.models_plan import TreatmentPlan
+        self.clinic = Clinic.objects.create(name="Клиника План", slug="plan-teeth")
+        self.other = Clinic.objects.create(name="Чужая", slug="plan-teeth-other")
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.user = User.objects.create(login="pt_dir", name="Директор", role=role, clinic=self.clinic)
+        self.other_user = User.objects.create(login="pt_other", name="Чужой", role=role, clinic=self.other)
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Ф", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.patient = Patient.objects.create(first_name="Мерием", last_name="Мазаева", phone="+996555000111", clinic=self.clinic)
+        cat = ServiceCategory.objects.create(name="Ортопедия", clinic=self.clinic)
+        self.crown = Service.objects.create(name="Циркониевая коронка", price=14000, category=cat, clinic=self.clinic)
+        self.clean = Service.objects.create(name="Обезболивание", price=500, clinic=self.clinic)
+        self.plan = TreatmentPlan.objects.create(patient=self.patient, doctor=self.user, title="План")
+        clear_current_clinic()
+        self.c = Client(); self.c.force_login(self.user)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def _bulk(self, client, **body):
+        return client.post(f"/treatments/plans/{self.plan.pk}/items/bulk-add/", data=json.dumps(body),
+                           content_type="application/json")
+
+    def test_bulk_add_one_item_per_tooth_and_creates_stage(self):
+        r = self._bulk(self.c, service_id=self.crown.pk, teeth=["26", "11", "26", "99", "x"], qty=1)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["added"], 2)
+        items = list(self.plan.items.order_by("tooth_number").values_list("tooth_number", "price"))
+        self.assertEqual([t for t, _ in items], ["11", "26"])
+        self.assertEqual(self.plan.stages.count(), 1)
+        self.assertEqual(len(data["plan"]["stages"][0]["items"]), 2)
+        self.assertTrue(any(c["name"] == "Ортопедия" for c in data["plan"]["categories"]))
+
+    def test_bulk_add_without_teeth_is_general_item(self):
+        self._bulk(self.c, service_id=self.clean.pk, teeth=[], qty=2)
+        it = self.plan.items.get()
+        self.assertEqual((it.tooth_number, it.quantity), ("", 2))
+
+    def test_other_clinic_cannot_touch_plan(self):
+        other = Client(); other.force_login(self.other_user)
+        self.assertEqual(self._bulk(other, service_id=self.crown.pk, teeth=["26"]).status_code, 404)
+        self.assertEqual(other.get(f"/treatments/plans/{self.plan.pk}/print/").status_code, 404)
+        self._bulk(self.c, service_id=self.crown.pk, teeth=["26"])
+        item = self.plan.items.get()
+        self.assertEqual(other.post(f"/treatments/plans/items/{item.pk}/toggle/").status_code, 404)
+        self.assertEqual(other.post(f"/treatments/plans/items/{item.pk}/delete/").status_code, 404)
+        self.assertTrue(self.plan.items.filter(pk=item.pk).exists())
+
+    def test_print_groups_by_tooth_with_totals_and_signatures(self):
+        self._bulk(self.c, service_id=self.crown.pk, teeth=["26", "11"])
+        self._bulk(self.c, service_id=self.clean.pk, teeth=["26"])
+        self._bulk(self.c, service_id=self.clean.pk, teeth=[])
+        item = self.plan.items.filter(tooth_number="11").first()
+        self.c.post(f"/treatments/plans/items/{item.pk}/toggle/")
+        html = self.c.get(f"/treatments/plans/{self.plan.pk}/print/").content.decode()
+        self.assertIn("ПЛАН ЛЕЧЕНИЯ (ПРЕДВАРИТЕЛЬНЫЙ)", html)
+        self.assertLess(html.index("Зуб 11"), html.index("Зуб 26"))
+        self.assertLess(html.index("Зуб 26"), html.index("Общие услуги"))
+        self.assertIn("Итого по зубу 26: 14 500", html)
+        self.assertIn("29 000", html)  # 14000*2 + 500*2
+        self.assertIn("1 из 4", html)
+        self.assertIn("ознакомлен(а) и согласен(на)", html)
+        self.assertIn("является предварительной", html)
+
+    def test_print_uses_clinic_note_template(self):
+        from apps.settings_clinic.models_documents import DocumentTemplate
+        set_current_clinic(self.clinic)
+        DocumentTemplate.objects.create(name="Текст", doc_type="plan_note", clinic=self.clinic,
+                                        content="Уважаемый(ая) {{patient_name}}, итого {{total}}.")
+        clear_current_clinic()
+        self._bulk(self.c, service_id=self.crown.pk, teeth=["26"])
+        html = self.c.get(f"/treatments/plans/{self.plan.pk}/print/").content.decode()
+        self.assertIn("Уважаемый(ая) Мазаева Мерием, итого 14 000", html)
+        self.assertNotIn("является предварительной", html)
+
+    def test_visit_plan_button_opens_existing_or_creates(self):
+        from apps.treatments.models_plan import TreatmentPlan
+        r = self.c.post(f"/new/patients/{self.patient.pk}/plan/")
+        self.assertRedirects(r, f"/new/treatplans/{self.plan.pk}/", fetch_redirect_response=False)
+        TreatmentPlan.objects.filter(pk=self.plan.pk).update(status="completed")
+        r = self.c.post(f"/new/patients/{self.patient.pk}/plan/")
+        new = TreatmentPlan.objects.exclude(pk=self.plan.pk).get()
+        self.assertEqual((new.patient_id, new.status), (self.patient.pk, "draft"))
+        self.assertRedirects(r, f"/new/treatplans/{new.pk}/", fetch_redirect_response=False)
+        other = Client(); other.force_login(self.other_user)
+        self.assertEqual(other.post(f"/new/patients/{self.patient.pk}/plan/").status_code, 404)
