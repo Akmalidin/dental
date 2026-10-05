@@ -4839,7 +4839,7 @@ function renderNavSections(){
     if(!tabs.length || (hiddenSecs.has(sec.id) && !pinned)) return;
     const isActive=tabs.includes(activeView);
     const icon=(sec.icon && NAV_ICON_PATHS[sec.icon]) ? navIconSvg(sec.icon) : (items[tabs[0]].svg || navIconSvg('folder'));
-    html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span>${tabs.length>1?`<span class="nav-count">${tabs.length}</span>`:''}</a>`;
+    html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span></a>`;
     if(sec.tabs.includes('messages') && tabs.includes('messages')) html=html.replace(/<\/a>$/, '<i data-msg-badge></i></a>');
   });
   box.innerHTML=html;
