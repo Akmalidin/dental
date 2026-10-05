@@ -106,6 +106,7 @@
               </select>
             </div>
             <div class="form-group"><label data-i18n="w_discount_on_visit">Скидка на приём</label><input autocomplete="off" type="number" id="cash-accept-discount" min="0" placeholder="0"></div>
+            <div class="form-group hidden" id="cashAcceptAlloc"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-accept')" data-i18n="w_cancel">Отмена</button>
@@ -143,6 +144,7 @@
               </div>
             </div>
             <div class="form-group"><label data-i18n="w_discount_on_visit">Скидка на приём</label><input autocomplete="off" type="number" id="ag-discount" min="0" placeholder="0"></div>
+            <div class="form-group hidden" id="agAlloc"></div>
           </div>
           <div class="modal-foot">
             <button class="btn btn-ghost" onclick="closeModal('m-cash-accept-general')" data-i18n="w_cancel">Отмена</button>
@@ -243,7 +245,9 @@ function openCashAcceptModal(notifId){
   document.getElementById('cash-accept-amount').value=item.amount || item.debt || '';
   document.getElementById('cash-accept-method').value='cash';
   document.getElementById('cash-accept-discount').value='';
+  allocReset('cashAcceptAlloc');
   openModal('m-cash-accept');
+  if(item.patientId) allocInit('cashAcceptAlloc', item.patientId, 'cash-accept-amount');
 }
 async function submitCashAccept(){
   if(!cashAcceptItem || !cashAcceptItem.patientId) return;
@@ -269,6 +273,13 @@ async function submitCashAccept(){
   if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
+  const alloc=allocCollect('cashAcceptAlloc');
+  if(alloc===null){
+    const err=document.getElementById('cashAcceptError');
+    err.textContent='Проверьте распределение по приёмам: сумма больше оплаты или долга приёма'; err.classList.remove('hidden');
+    return;
+  }
+  if(alloc) fd.append('allocations', alloc);
   // X-Requested-With — payment_create() в ответ на него отдаёт JSON с id
   // платежа вместо redirect на список платежей старого интерфейса, чтобы
   // «Выдать чек» открывал именно этот чек, а не старую версию сайта.
@@ -303,6 +314,7 @@ function openCashAcceptGeneral(){
   document.getElementById('ag-method').value='cash';
   document.getElementById('ag-discount').value='';
   document.getElementById('ag-debt-note').classList.add('hidden');
+  allocReset('agAlloc');
   openModal('m-cash-accept-general');
 }
 // patientsList капнут на последние 300 созданных (см.
@@ -361,6 +373,7 @@ async function agSelectPatient(id){
   document.getElementById('ag-patient-search').value=p.fullName;
   document.getElementById('ag-patient-id').value=p.id;
   document.getElementById('ag-patient-suggestions').classList.add('hidden');
+  allocInit('agAlloc', p.id, 'ag-amount');
   const note=document.getElementById('ag-debt-note');
   // Долг пациента (если есть) — сразу подставляем в сумму (можно поправить
   // вручную), чтобы кассиру не приходилось идти в карточку пациента за цифрой.
@@ -388,6 +401,9 @@ async function submitCashAcceptGeneral(){
   if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
+  const alloc=allocCollect('agAlloc');
+  if(alloc===null){ errEl.textContent='Проверьте распределение по приёмам: сумма больше оплаты или долга приёма'; errEl.classList.remove('hidden'); return; }
+  if(alloc) fd.append('allocations', alloc);
   const res=await fetch('/finance/payments/create/', {
     method:'POST', body:fd, credentials:'same-origin',
     headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},

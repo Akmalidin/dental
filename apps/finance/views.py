@@ -119,9 +119,63 @@ def _recompute_treatment_paid(treatment):
     Treatment.all_objects.filter(pk=treatment.pk).update(paid_amount=total)
 
 
-def _allocate_income(payment):
-    """Распределить income-платёж по приёмам пациента: сначала привязанный приём,
-    затем остальные по возрастанию даты, заполняя остаток долга. Создаёт PaymentAllocation."""
+def _open_treatments(patient):
+    """Неоплаченные приёмы пациента (по возрастанию даты): [(treatment, остаток долга)].
+    Те же правила, что у _allocate_income: без черновиков/отменённых/удалённых."""
+    from .models import PaymentAllocation
+    from apps.treatments.models import Treatment
+    rows = []
+    for t in (Treatment.all_objects.filter(patient=patient, is_deleted=False)
+              .exclude(status__in=["cancelled", "draft"]).order_by("created_at")):
+        already = PaymentAllocation.objects.filter(treatment=t).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        remaining = (t.total_amount or Decimal(0)) - (t.discount or Decimal(0)) - already
+        if remaining > 0:
+            rows.append((t, remaining))
+    return rows
+
+
+def _parse_manual_allocation(raw, patient, amount):
+    """Ручное деление оплаты по приёмам из POST: JSON [{"treatment": id, "amount": x}].
+    Пусто — None (делим автоматически). Ошибка — ValueError с текстом для кассира."""
+    import json
+    if not raw:
+        return None
+    try:
+        items = json.loads(raw)
+    except (TypeError, ValueError):
+        raise ValueError("Не удалось прочитать распределение по приёмам")
+    if not isinstance(items, list):
+        raise ValueError("Не удалось прочитать распределение по приёмам")
+    open_rows = {t.pk: (t, rem) for t, rem in _open_treatments(patient)}
+    merged = {}
+    for it in items:
+        try:
+            tid = int(it.get("treatment"))
+            value = Decimal(str(it.get("amount") or "0"))
+        except Exception:
+            raise ValueError("Не удалось прочитать распределение по приёмам")
+        if value <= 0:
+            continue
+        if tid not in open_rows:
+            raise ValueError("Приём для распределения не найден или уже оплачен")
+        merged[tid] = merged.get(tid, Decimal(0)) + value
+    if not merged:
+        return None
+    for tid, value in merged.items():
+        t, rem = open_rows[tid]
+        if value > rem:
+            raise ValueError(f"На приём №{t.display_number} больше его долга ({rem:.0f})")
+    if sum(merged.values()) > (amount or Decimal(0)):
+        raise ValueError("Распределено больше, чем сумма оплаты")
+    return [(open_rows[tid][0], value) for tid, value in merged.items()]
+
+
+def _allocate_income(payment, manual=None):
+    """Распределить income-платёж по приёмам пациента. manual — ручное деление
+    [(treatment, сумма)] (см. _parse_manual_allocation): эти суммы идут на
+    указанные приёмы, остаток — автоматически. Автоматически: сначала
+    привязанный приём, затем остальные по возрастанию даты, заполняя остаток
+    долга. Создаёт PaymentAllocation."""
     from .models import PaymentAllocation
     from apps.treatments.models import Treatment
     patient = payment.patient
@@ -129,6 +183,17 @@ def _allocate_income(payment):
         return
     # уже распределено по этому платежу — не дублируем
     PaymentAllocation.objects.filter(payment=payment).delete()
+    left = payment.amount
+    affected = []
+    for t, value in manual or []:
+        already = PaymentAllocation.objects.filter(treatment=t).aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        # скидку могли применить уже после проверки — не уходим в переплату
+        value = min(value, left, (t.total_amount or Decimal(0)) - (t.discount or Decimal(0)) - already)
+        if value <= 0:
+            continue
+        PaymentAllocation.objects.create(payment=payment, treatment=t, amount=value)
+        left -= value
+        affected.append(t)
     # all_objects — распределяем по клинике ПАЦИЕНТА, а не по активной клинике вызывающего
     # (иначе платёж суперадмина при другой выбранной клинике не находил бы приёмы вовсе).
     treatments = list(Treatment.all_objects.filter(patient=patient, is_deleted=False)
@@ -136,8 +201,6 @@ def _allocate_income(payment):
     # привязанный приём — первым
     if payment.treatment_id:
         treatments.sort(key=lambda t: 0 if t.pk == payment.treatment_id else 1)
-    left = payment.amount
-    affected = []
     for t in treatments:
         if left <= 0:
             break
@@ -484,13 +547,34 @@ def payment_edit(request, pk):
 
 
 @login_required
+def patient_open_treatments(request, patient_id):
+    """JSON: неоплаченные приёмы пациента — для ручного деления оплаты в кассе."""
+    from django.http import JsonResponse
+    from django.utils import timezone as tz
+    patient = get_object_or_404(Patient, pk=patient_id)
+    rows = []
+    for t, remaining in _open_treatments(patient):
+        cures = list(t.cures.select_related("service", "doctor")[:6])
+        doctors = sorted({c.doctor.name for c in cures if c.doctor_id}) or ([t.doctor.name] if t.doctor_id else [])
+        rows.append({
+            "id": t.pk,
+            "number": t.display_number,
+            "date": tz.localtime(t.created_at).strftime("%d.%m.%Y"),
+            "services": ", ".join(c.service.name for c in cures),
+            "doctors": ", ".join(doctors),
+            "debt": float(remaining),
+        })
+    return JsonResponse({"ok": True, "rows": rows})
+
+
+@login_required
 def payment_allocations(request, pk):
     """JSON: на что распределён платёж (для модала «распределение»)."""
     from django.http import JsonResponse
     payment = _get_own_payment_or_404(pk, Payment.all_clinics.select_related("patient"))
     rows = [{
         "treatment": a.treatment_id,
-        "label": f"Приём #{a.treatment_id}",
+        "label": f"Приём #{a.treatment.display_number}" if a.treatment_id else "",
         "date": a.treatment.created_at.strftime("%d.%m.%Y") if a.treatment_id else "",
         "services": ", ".join(c.service.name for c in a.treatment.cures.all()[:6]) if a.treatment_id else "",
         "amount": float(a.amount),
@@ -562,6 +646,16 @@ def payment_create(request):
     })
     if verified_patient_id:
         form.fields["treatment"].queryset = valid_treatments_qs
+    manual_alloc = None
+    if request.method == "POST" and form.is_valid() and request.POST.get("allocations") \
+            and form.cleaned_data.get("type", Payment.TYPE_INCOME) == Payment.TYPE_INCOME:
+        try:
+            manual_alloc = _parse_manual_allocation(
+                request.POST.get("allocations"), form.cleaned_data["patient"], form.cleaned_data["amount"])
+        except ValueError as e:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": False, "error": str(e)}, status=400)
+            form.add_error(None, str(e))
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.received_by = request.user
@@ -594,9 +688,10 @@ def payment_create(request):
                         target.save(update_fields=["discount", "updated_at"])
             except Exception:
                 pass
-        # Распределение платежа по приёмам (счетам)
+        # Распределение платежа по приёмам (счетам): вручную, если кассир
+        # разделил оплату сам, остальное — автоматически по долгам
         if payment.type == Payment.TYPE_INCOME:
-            _allocate_income(payment)
+            _allocate_income(payment, manual_alloc)
         # update patient balance
         _recalc_patient_balance(payment.patient)
         # уведомление администраторам о принятой оплате

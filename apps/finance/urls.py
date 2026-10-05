@@ -12,6 +12,7 @@ urlpatterns = [
     path("payments/<int:pk>/edit/", views.payment_edit, name="payment_edit"),
     path("payments/<int:pk>/delete/", views.payment_delete, name="payment_delete"),
     path("payments/<int:pk>/allocations/", views.payment_allocations, name="payment_allocations"),
+    path("patients/<int:patient_id>/open-treatments/", views.patient_open_treatments, name="patient_open_treatments"),
     path("payments/<int:pk>/receipt/", views.payment_receipt, name="payment_receipt"),
     path("expenses/", views.expense_list, name="expense_list"),
     path("expenses/create/", views.expense_create, name="expense_create"),
