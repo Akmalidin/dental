@@ -44,6 +44,7 @@ urlpatterns = [
     path("reports/", v.newui_reports, name="newui_reports"),
     path("salary/", v.newui_salary, name="newui_salary"),
     path("salary/settings/", sv.newui_salary_settings, name="newui_salary_settings"),
+    path("salary/me/", sv.newui_salary_me, name="newui_salary_me"),
     path("salary/<int:pk>/", sv.newui_salary_doctor, name="newui_salary_doctor"),
     path("salary/<int:pk>/explain/", sv.newui_salary_explain, name="newui_salary_explain"),
     path("salary/<int:pk>/payout/", sv.newui_salary_payout_add, name="newui_salary_payout_add"),
