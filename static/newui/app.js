@@ -4832,6 +4832,7 @@ function renderNavSections(){
   });
   const activeView=(Object.values(items).find(it=>it.active)||{}).view;
   let html='', activeTabs=null;
+  const bottom=[];
   effectiveNavSections(prefs, Object.keys(items)).forEach(sec=>{
     const tabs=sec.tabs.filter(v=>items[v] && items[v].available && !hiddenTabs.has(v));
     if(tabs.includes(activeView)) activeTabs=tabs;
@@ -4840,6 +4841,7 @@ function renderNavSections(){
     const isActive=tabs.includes(activeView);
     const icon=(sec.icon && NAV_ICON_PATHS[sec.icon]) ? navIconSvg(sec.icon) : (items[tabs[0]].svg || navIconSvg('folder'));
     html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span></a>`;
+    bottom.push({icon, label:navSectionLabel(sec), href:items[tabs[0]].href, active:isActive, msg:tabs.includes('messages'), msgOnly:tabs.length===1 && tabs[0]==='messages'});
     if(sec.tabs.includes('messages') && tabs.includes('messages')) html=html.replace(/<\/a>$/, '<i data-msg-badge></i></a>');
   });
   box.innerHTML=html;
@@ -4847,6 +4849,7 @@ function renderNavSections(){
   if(slot && badge) slot.replaceWith(badge);
   box.classList.remove('hidden');
   src.classList.add('hidden');
+  renderBottomNav(bottom);
   // Вкладки раздела над страницей — когда в разделе больше одной доступной страницы
   const bar=document.getElementById('navTabs');
   if(!bar) return;
@@ -4860,6 +4863,22 @@ function renderNavSections(){
   } else {
     bar.classList.add('hidden');
   }
+}
+
+/* Нижняя панель на телефоне (CSS показывает её только до 900px): первые
+   четыре раздела меню в порядке пользователя + «Ещё» — открывает боковое
+   меню со всеми разделами и «Настроить меню». */
+function renderBottomNav(all){
+  const bar=document.getElementById('bottomNav');
+  if(!bar) return;
+  // «Мессенджеры» на телефоне уже есть отдельной кнопкой вверху (msgFab)
+  const sections=all.filter(s=>!s.msgOnly);
+  if(!sections.length){ bar.innerHTML=''; document.body.classList.remove('has-bottom-nav'); return; }
+  const main=sections.length<=5 ? sections : sections.slice(0,4);
+  const moreActive=sections.length>5 && !main.some(s=>s.active);
+  bar.innerHTML=main.map(s=>`<a class="bn-item${s.active?' active':''}" href="${navEsc(s.href)}">${s.icon}<span>${navEsc(s.label)}</span>${s.msg?'<b class="bn-badge hidden" id="navBottomMsgBadge"></b>':''}</a>`).join('')
+    + (sections.length>5 ? `<button type="button" class="bn-item${moreActive?' active':''}" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Ещё</span></button>` : '');
+  document.body.classList.add('has-bottom-nav');
 }
 
 /* ─── «Настроить меню»: разделы и вкладки ──────────────────────────────── */
@@ -7347,7 +7366,7 @@ function updateMsgFab(){
   if(!fab) return;
   const navVisible=!!nav && !nav.classList.contains('hidden') && nav.style.display!=='none';
   fab.classList.toggle('hidden', !navVisible);
-  ['msgFabBadge','navMsgBadge'].forEach(id=>{
+  ['msgFabBadge','navMsgBadge','navBottomMsgBadge'].forEach(id=>{
     const badge=document.getElementById(id);
     if(!badge) return;
     badge.textContent=MESSAGES_UNREAD>99 ? '99+' : String(MESSAGES_UNREAD);
@@ -9239,12 +9258,14 @@ async function deleteRoleReal(){
 
 // ---- мобильное меню: sidebar как off-canvas панель ниже 900px (см. CSS) ----
 function toggleSidebar(){
-  document.querySelector('.sidebar').classList.toggle('sidebar-open');
-  document.getElementById('sidebarBackdrop').classList.toggle('open');
+  const open=document.querySelector('.sidebar').classList.toggle('sidebar-open');
+  document.getElementById('sidebarBackdrop').classList.toggle('open', open);
+  document.body.classList.toggle('sidebar-is-open', open);
 }
 function closeSidebar(){
   document.querySelector('.sidebar').classList.remove('sidebar-open');
   document.getElementById('sidebarBackdrop').classList.remove('open');
+  document.body.classList.remove('sidebar-is-open');
 }
 // Закрывать меню при переходе по пункту навигации — без правок разметки
 // каждого из ~17 <a class="nav-item"> (делегирование одним слушателем).
