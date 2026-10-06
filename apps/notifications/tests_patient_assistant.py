@@ -139,6 +139,40 @@ class PatientAssistantTestCase(TestCase):
         m2.refresh_from_db()
         self.assertEqual(m2.ai_status, "skip")
 
+    def test_ai_led_chat_answers_without_delay_until_manager_joins(self):
+        from apps.notifications.models import WaMessage
+        from apps.notifications.patient_assistant import is_paused
+        phone = "998907770000"
+        self._in("Здравствуйте", phone=phone, ago=10)
+        n, _ = self._tick([_final("Здравствуйте! Чем помочь?")])
+        self.assertEqual(n, 1)
+        # разговор ведёт ассистент — следующее сообщение без 5-минутной задержки
+        self._in("Сколько стоит чистка?", phone=phone, ago=1)
+        n, _ = self._tick([_final("200 000 сум.")])
+        self.assertEqual(n, 1)
+        # менеджер ответил из CRM — ассистент замолкает в этом чате
+        out = WaMessage.objects.create(direction="out", channel="wa", phone=phone, body="Я подключусь",
+                                       sent_by=self.admin, clinic=self.clinic)
+        WaMessage.objects.filter(pk=out.pk).update(created_at=self.noon - timedelta(seconds=50))
+        m = self._in("Спасибо", phone=phone, ago=0)
+        WaMessage.objects.filter(pk=m.pk).update(created_at=self.noon - timedelta(seconds=30))
+        n, calls = self._tick([])
+        self.assertEqual((n, calls), (0, []))
+        self.assertTrue(is_paused(self.clinic, "wa", phone, self.noon))
+        # пауза «менеджер подключился» снимается сама через несколько часов
+        self.assertFalse(is_paused(self.clinic, "wa", phone, timezone.now() + timedelta(hours=13)))
+
+    def test_phone_reply_from_clinic_pauses_assistant(self):
+        from apps.notifications.patient_assistant import is_paused
+        phone = "998907771111"
+        self._in("Привет", phone=phone, ago=1)
+        payload = {"typeWebhook": "outgoingMessageReceived", "instanceData": {"idInstance": 1},
+                   "senderData": {"chatId": phone + "@c.us"}}
+        with override_settings(GREENAPI_WEBHOOK_KEY="k"):
+            Client().post("/notifications/wa-webhook/?key=k", json.dumps(payload),
+                          content_type="application/json")
+        self.assertTrue(is_paused(self.clinic, "wa", phone))
+
     def test_reschedule_and_cancel_only_own_appointments(self):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
