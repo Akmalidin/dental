@@ -62,6 +62,14 @@ class ClinicSettings(models.Model):
         choices=[("wa", "WhatsApp"), ("tg", "Telegram")],
         verbose_name="Основной мессенджер")
     # WhatsApp авто-напоминания
+    # ИИ-ассистент для пациентов в WhatsApp/Telegram (apps/notifications/
+    # patient_assistant.py): отвечает, записывает, переносит и отменяет, если
+    # администратор не ответил за ai_patient_delay_min минут (в нерабочее
+    # время — сразу). ai_patient_since — с какого момента включён (старые
+    # сообщения бот не трогает).
+    ai_patient_bot = models.BooleanField(default=False, verbose_name="ИИ-ассистент отвечает пациентам")
+    ai_patient_delay_min = models.PositiveIntegerField(default=5, verbose_name="Ассистент отвечает, если админ молчит (мин)")
+    ai_patient_since = models.DateTimeField(null=True, blank=True)
     wa_remind_day = models.BooleanField(default=True, verbose_name="Напоминать за день до приёма")
     wa_remind_hour = models.BooleanField(default=True, verbose_name="Напоминать за час до приёма")
     wa_remind_debt_days = models.PositiveIntegerField(default=7, verbose_name="Напоминать должникам каждые N дней (0 — выкл)")

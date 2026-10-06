@@ -141,6 +141,14 @@
                 <label><span data-i18n="w_remind_debtors">Напоминать должникам каждые N дней</span><div class="hint" data-i18n="w_zero_off">0 — выключено</div></label>
                 <input autocomplete="off" type="number" min="0" id="set-remind-debt-days" style="max-width:120px;">
               </div>
+              <div class="field-row">
+                <label><span data-i18n="w_ai_patient_bot">🤖 ИИ-ассистент отвечает пациентам</span><div class="hint" data-i18n="w_ai_patient_bot_hint">В WhatsApp и Telegram: отвечает на вопросы, сам записывает, переносит и отменяет записи пациента (после его «да»). Сообщения ассистента помечены 🤖, в любом чате его можно выключить.</div><div class="hint" id="set-ai-unavailable" style="color:var(--coral);display:none;" data-i18n="w_ai_unavailable">Ключ OpenAI на сервере не настроен — ассистент не будет отвечать.</div></label>
+                <div class="toggle"><input autocomplete="off" type="checkbox" id="set-ai-patient-bot"></div>
+              </div>
+              <div class="field-row">
+                <label><span data-i18n="w_ai_patient_delay">Отвечать, если администратор молчит (мин)</span><div class="hint" data-i18n="w_ai_patient_delay_hint">В нерабочее время клиники ассистент отвечает сразу. 0 — всегда сразу.</div></label>
+                <input autocomplete="off" type="number" min="0" max="120" id="set-ai-patient-delay" style="max-width:120px;">
+              </div>
               <div class="field-row" style="border-bottom:none;">
                 <label></label>
                 <button class="btn btn-primary" type="button" onclick="saveSettingsWa()"><span data-i18n="w_save_changes">Сохранить изменения</span></button>
@@ -284,6 +292,9 @@
   document.getElementById('set-remind-day').checked = s.waRemindDay;
   document.getElementById('set-remind-hour').checked = s.waRemindHour;
   document.getElementById('set-remind-debt-days').value = s.waRemindDebtDays;
+  document.getElementById('set-ai-patient-bot').checked = !!s.aiPatientBot;
+  document.getElementById('set-ai-patient-delay').value = s.aiPatientDelay==null ? 5 : s.aiPatientDelay;
+  document.getElementById('set-ai-unavailable').style.display = s.aiAvailable ? 'none' : '';
   document.getElementById('set-primary-messenger').value = s.primaryMessenger || 'wa';
   document.getElementById('set-phone-country-code').value = s.phoneCountryCode || '';
 
@@ -729,6 +740,9 @@
     if(document.getElementById('set-remind-day').checked) fd.append('wa_remind_day', 'on');
     if(document.getElementById('set-remind-hour').checked) fd.append('wa_remind_hour', 'on');
     fd.append('wa_remind_debt_days', document.getElementById('set-remind-debt-days').value || '0');
+    fd.append('ai_patient_present', '1');
+    if(document.getElementById('set-ai-patient-bot').checked) fd.append('ai_patient_bot', 'on');
+    fd.append('ai_patient_delay_min', document.getElementById('set-ai-patient-delay').value || '5');
     fd.append('primary_messenger', document.getElementById('set-primary-messenger').value || 'wa');
     fd.append('phone_country_code', document.getElementById('set-phone-country-code').value || '');
     const res = await postForm('/notifications/wa-settings/', fd);

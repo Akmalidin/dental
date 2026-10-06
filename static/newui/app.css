@@ -893,3 +893,5 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .vcp-hist-del:hover{opacity:1;}
 .cd-warn{background:#fff4e5;border:1px solid #ffd59e;color:#8a5300;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.4;}
 .cd-today{font-size:14px;} .cd-today b{font-size:16px;} .cd-today span{color:var(--ink-soft);font-size:12.5px;}
+.chat-ai{display:block;font-size:11px;font-weight:700;opacity:.8;margin-bottom:3px;}
+.chat-transcript{font-size:12.5px;font-style:italic;opacity:.85;margin-top:4px;}

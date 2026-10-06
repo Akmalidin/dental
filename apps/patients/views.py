@@ -921,11 +921,50 @@ def patient_wa_messages(request, pk):
             "id": m.id, "dir": m.direction, "body": m.body, "ok": m.ok, "channel": m.channel,
             "media_url": (m.media_file.url if m.media_file else ""), "media_type": m.media_type,
             "by": m.sent_by.name if m.sent_by else "",
+            "ai": m.by_ai, "transcript": m.transcript,
             "time": local.strftime("%d.%m %H:%M"),
             "date": local.strftime("%Y-%m-%d"),
             "hm": local.strftime("%H:%M"),
         })
-    return JsonResponse({"messages": msgs})
+    return JsonResponse({"messages": msgs, "aiBot": _ai_bot_state(patient)})
+
+
+def _chat_addresses(patient):
+    """Адреса переписки пациента для ИИ-ассистента: номера WhatsApp из его
+    сообщений (как их присылает Green-API) и chat_id Telegram."""
+    from apps.notifications.models import WaMessage
+    addrs = {("wa", p) for p in WaMessage.all_clinics.filter(_chat_scope(patient), channel="wa")
+             .values_list("phone", flat=True).distinct() if p}
+    if patient.telegram_chat_id:
+        addrs.add(("tg", str(patient.telegram_chat_id)))
+    return addrs
+
+
+def _ai_bot_state(patient):
+    from apps.settings_clinic.models import ClinicSettings
+    from apps.notifications.patient_assistant import is_paused
+    if not ClinicSettings.get().ai_patient_bot:
+        return {"on": False, "paused": False}
+    return {"on": True, "paused": any(is_paused(patient.clinic, ch, a) for ch, a in _chat_addresses(patient))}
+
+
+@login_required
+def patient_ai_bot(request, pk):
+    """«Мессенджеры» → 🤖 в шапке чата: выключить/включить ИИ-ассистента в
+    переписке с этим пациентом."""
+    from django.http import JsonResponse
+    from apps.notifications.patient_assistant import set_paused
+    patient = get_object_or_404(Patient, pk=pk)
+    if request.method == "POST":
+        paused = request.POST.get("paused") == "1"
+        addrs = _chat_addresses(patient)
+        if not addrs and patient.phone:
+            from apps.patients.models import normalize_phone
+            addrs = {("wa", normalize_phone(patient.phone))}
+        for ch, a in addrs:
+            set_paused(patient.clinic, ch, a, paused,
+                       reason=("Выключил %s" % request.user.name) if paused else "")
+    return JsonResponse(_ai_bot_state(patient))
 
 
 @login_required

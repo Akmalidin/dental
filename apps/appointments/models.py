@@ -62,6 +62,8 @@ class Appointment(ClinicSoftDeleteModel):
         ("manual", "Вручную"),
         ("online", "Онлайн"),
         ("telegram", "Telegram"),
+        ("whatsapp", "WhatsApp"),
+        ("ai", "ИИ-ассистент"),
     ]
 
     patient = models.ForeignKey(

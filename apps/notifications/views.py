@@ -321,6 +321,20 @@ def wa_webhook(request):
                 logging.getLogger("apps").warning(
                     "Не удалось записать входящий звонок: %s", exc)
         return JsonResponse({"ok": True})
+    if data.get("typeWebhook") == "outgoingMessageReceived":
+        # Администратор ответил пациенту прямо с телефона клиники (не из CRM):
+        # ИИ-ассистент в этом чате не должен отвечать поверх человека.
+        try:
+            out_phone = ((data.get("senderData") or {}).get("chatId") or "").split("@")[0]
+            if out_phone:
+                from apps.notifications.models import WaMessage
+                from apps.tenancy import unscoped
+                with unscoped():
+                    WaMessage.objects.filter(channel=channel, phone=out_phone, direction="in",
+                                             ai_status="").update(ai_status="skip")
+        except Exception:  # noqa: BLE001
+            pass
+        return JsonResponse({"ok": True})
     if data.get("typeWebhook") == "incomingMessageReceived":
         md = data.get("messageData", {}) or {}
         tm = md.get("typeMessage")
@@ -452,6 +466,13 @@ def wa_webhook(request):
                               media_type=media_type, channel=channel, read=False)
                 if patient is not None:
                     m.clinic = patient.clinic
+                elif inst:
+                    # Новый номер, но инстанс клиники свой — переписка этой клиники
+                    # (иначе ИИ-ассистент не увидел бы новых пациентов).
+                    from apps.settings_clinic.models import ClinicSettings
+                    cs_inst = ClinicSettings.objects.filter(wa_id_instance=inst).exclude(clinic=None).first()
+                    if cs_inst is not None:
+                        m.clinic = cs_inst.clinic
                 if media_file is not None:
                     m.media_file = media_file
                 m.save()
@@ -601,6 +622,20 @@ def wa_settings(request):
     except (TypeError, ValueError):
         cs.wa_remind_debt_days = 0
     fields = ["wa_remind_day", "wa_remind_hour", "wa_remind_debt_days"]
+    # ИИ-ассистент для пациентов — только из новой формы настроек (старая
+    # форма рассылок этих полей не присылает и не должна их сбрасывать).
+    if request.POST.get("ai_patient_present"):
+        from django.utils import timezone as _tz
+        on = bool(request.POST.get("ai_patient_bot"))
+        if on and not cs.ai_patient_bot:
+            cs.ai_patient_since = _tz.now()   # старые сообщения ассистент не трогает
+            fields.append("ai_patient_since")
+        cs.ai_patient_bot = on
+        try:
+            cs.ai_patient_delay_min = max(0, min(120, int(request.POST.get("ai_patient_delay_min") or 5)))
+        except (TypeError, ValueError):
+            cs.ai_patient_delay_min = 5
+        fields += ["ai_patient_bot", "ai_patient_delay_min"]
     # Основной мессенджер — по нему идут автоуведомления и рассылки.
     pm = (request.POST.get("primary_messenger") or "").strip()
     if pm in ("wa", "tg"):

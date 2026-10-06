@@ -414,8 +414,9 @@ def _tool_clinic_finance(ctx, **_):
             "debtors": Patient.objects.filter(balance__lt=0).count()}
 
 
-def validate_appointment(doctor, start, duration):
-    """Те же проверки, что у «Новой записи» в расписании. Ошибка или None."""
+def validate_appointment(doctor, start, duration, exclude_pk=None):
+    """Те же проверки, что у «Новой записи» в расписании. Ошибка или None.
+    exclude_pk — переносимая запись (не конфликтует сама с собой)."""
     from apps.appointments.models import Appointment
     from apps.appointments.views import _duration_sanity_error, _overlap_error_message, schedule_violation
     end = start + timedelta(minutes=duration)
@@ -426,7 +427,7 @@ def validate_appointment(doctor, start, duration):
         return "Это время уже прошло"
     overlap = (Appointment.objects.select_related("branch", "patient")
                .filter(doctor=doctor, start_at__lt=end, end_at__gt=start)
-               .exclude(status__in=["cancelled", "no_show"]).first())
+               .exclude(status__in=["cancelled", "no_show"]).exclude(pk=exclude_pk).first())
     if overlap:
         return _overlap_error_message(overlap)
     return schedule_violation(doctor, start, end)
@@ -612,12 +613,13 @@ def system_prompt(ctx, assistant_name=""):
 
 
 def _chat(messages, tools=True):
+    """tools: True — инструменты сотрудника (TOOLS), список — свои, False — без."""
     model = getattr(settings, "OPENAI_MODEL", "") or CHAT_FALLBACKS[0]
     tried = []
     for m in (model,) + tuple(x for x in CHAT_FALLBACKS if x != model):
         body = {"model": m, "messages": messages}
         if tools:
-            body["tools"] = TOOLS
+            body["tools"] = TOOLS if tools is True else tools
         data, err = _request("/chat/completions", body, timeout=60)
         if err and _model_missing(err):
             tried.append(m)
