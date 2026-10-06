@@ -731,6 +731,51 @@ class TgStaffBotTestCase(TestCase):
         with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
             self.assertEqual(send_doctor_morning_digests(self.clinic, now=evening), 0)
 
+    # ── язык бота сотрудника: русский / узбекский ──
+    def test_language_button_switches_staff_menu_to_uzbek_and_back(self):
+        from apps.notifications.models import TgChat
+        from apps.notifications.tg_staff import S
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "text": S["btn_lang"]["ru"]}})
+        self.assertEqual(TgChat.all_clinics.get(clinic=self.clinic, chat_id=42).lang, "uz")
+        kb = self.calls[-1][1]["reply_markup"]["keyboard"]
+        self.assertEqual(kb[0][0]["text"], "📅 Bugungi qabullar")
+        self.assertIn("xodim menyusi", self.calls[-1][1]["text"])
+        # узбекские кнопки и даты работают
+        self.calls.clear()
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "text": self.day.strftime("%d.%m.%Y")}})
+        self.assertIn("qabullar", self._texts())
+        self.assertIn("Jami", self._texts())
+        self.calls.clear()
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "text": "⚙️ Bildirishnomalar"}})
+        self.assertIn("30 daqiqa oldin", self._texts())
+        # обратно на русский
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42},
+                                  "text": S["btn_lang"]["uz"]}})
+        self.assertEqual(TgChat.all_clinics.get(clinic=self.clinic, chat_id=42).lang, "ru")
+        self.assertEqual(self.calls[-1][1]["reply_markup"]["keyboard"][0][0]["text"], "📅 Приёмы сегодня")
+
+    def test_uzbek_doctor_gets_uzbek_reminders_and_notifications(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.notifications.models import TgChat
+        from apps.notifications.tg_staff import send_doctor_soon_reminders
+        from apps.appointments.views import notify_appointment_created
+        self._link(self.doctor, 42)
+        TgChat.all_clinics.create(clinic=self.clinic, chat_id=42, lang="uz")
+        now = timezone.now()
+        self._appt_at(now + timedelta(minutes=30))
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            send_doctor_soon_reminders(self.clinic, now=now)
+            notify_appointment_created(self.appt, created_by=self.admin)
+        texts = [p["text"] for m, p in self.calls if p.get("chat_id") == 42]
+        self.assertIn("30 daqiqadan so'ng", texts[0])
+        self.assertTrue(any("Yangi yozuv" in t for t in texts))
+        self.assertFalse(any("Новая запись" in t for t in texts))
+
 
 class TgPatientBookingTestCase(TestCase):
     """Бот для пациентов: выбор языка (ru / uz), привязка по номеру,

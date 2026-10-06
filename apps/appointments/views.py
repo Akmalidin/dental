@@ -222,7 +222,11 @@ def notify_appointment_created(appt, created_by=None):
             if wa_enabled() and getattr(appt.doctor, "phone", ""):
                 wa_send_text(appt.doctor.phone, doc_text)
             from apps.notifications.tg_staff import notify_user
-            notify_user(appt.doctor, doc_text)
+            notify_user(appt.doctor, doc_text, (
+                "🆕 *Yangi yozuv*\n\n"
+                "Bemor: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Shifokor: _%s_"
+                % (appt.patient.full_name if appt.patient_id else "—",
+                   date_s, time_s, doctor_name)))
         # группы клиники
         notify_groups(
             "🆕 *Новая запись* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"
@@ -273,7 +277,11 @@ def notify_appointment_cancelled(appt):
             if getattr(appt.doctor, "phone", ""):
                 wa_send_text(appt.doctor.phone, doc_text)
             from apps.notifications.tg_staff import notify_user
-            notify_user(appt.doctor, doc_text)
+            notify_user(appt.doctor, doc_text, (
+                "❌ *Yozuv bekor qilindi*\n\n"
+                "Bemor: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Shifokor: _%s_"
+                % (appt.patient.full_name if appt.patient_id else "—",
+                   date_s, time_s, doctor_name)))
         # группы клиники
         notify_groups(
             "❌ *Отмена записи* — %s\n\nПациент: *%s*\n📅 %s 🕐 %s\n👨‍⚕️ Врач: _%s_"

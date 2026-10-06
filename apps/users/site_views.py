@@ -423,7 +423,11 @@ def create_booking(clinic, *, name, phone, doctor_id, date_str, slot, branch_id=
             notify_user(doc,
                 "🔔 *%s*\n\n"
                 "👤 Пациент: *%s*\n📞 Телефон: %s\n📅 *%s*  🕐 *%s*"
-                % (title, patient.full_name, phone, d_str, slot))
+                % (title, patient.full_name, phone, d_str, slot),
+                "🔔 *%s*\n\n"
+                "👤 Bemor: *%s*\n📞 Telefon: %s\n📅 *%s*  🕐 *%s*"
+                % ("Telegram-bot orqali yangi yozuv" if via_bot else "Saytdan yangi ariza",
+                   patient.full_name, phone, d_str, slot))
         # WhatsApp- и Telegram-группы клиники
         from apps.notifications.whatsapp import notify_groups
         notify_groups(
