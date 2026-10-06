@@ -317,7 +317,8 @@ def system_prompt(ctx):
         "(до 5 позиций, например «Установка импланта (Osstem) — 25 000 сом»), а не общий диапазон. Если "
         "в прайсе нет нужной услуги — скажи, что точную стоимость назовёт врач на консультации.\n"
         "- Перед записью/переносом/отменой один раз назови врача, дату и время и спроси подтверждение. "
-        "Если пациент согласился (да, ха, хоп, ок, давайте, запишите, сойдёт, mayli, bo'ladi, yozing…) — "
+        "Если пациент согласился (да, ха, хоп, ок, давайте, запишите, сойдёт, mayli, bo'ladi, yozing, "
+        "ооба, макул…) или просто повторил то же время/врача — это согласие, "
         "СРАЗУ вызывай book_appointment / reschedule_appointment / cancel_appointment. НИКОГДА не "
         "переспрашивай подтверждение второй раз и не перечисляй время заново.\n"
         "- Если инструмент вернул ошибку — честно скажи пациенту причину простыми словами и предложи, "
@@ -357,7 +358,13 @@ def _confirmation_hint(history):
     if last["role"] != "user" or prev["role"] != "assistant":
         return None
     said = (last["text"] or "").replace("🎤", "").strip()
-    if _YES.search(said) and _ASKED_CONFIRM.search(prev["text"] or ""):
+    asked = prev["text"] or ""
+    # повторил то же время («на 9:15», «тогуз он беш» → «...за 15») — тоже согласие
+    times = _re.findall(r"\b(\d{1,2})[:.](\d{2})\b", asked)
+    nums = set(_re.findall(r"\d+", said))
+    same_time = bool(times) and any(mm in nums and (mm != "00" or str(int(hh)) in nums) for hh, mm in times) \
+        and not _re.search(r"\b(нет|не|жок|yo'q|йўқ)\b", said, _re.I)
+    if (_YES.search(said) or same_time) and _ASKED_CONFIRM.search(asked):
         return ("Пациент ПОДТВЕРДИЛ то, что ты только что предложил. Сейчас же выполни это инструментом "
                 "(book_appointment / reschedule_appointment / cancel_appointment) с теми же врачом, датой и "
                 "временем из своего последнего сообщения. Не переспрашивай и не повторяй вопрос.")
@@ -516,7 +523,11 @@ def _message_text(m):
         if not m.transcript:
             try:
                 with m.media_file.open("rb") as f:
-                    text, _err = core.transcribe(f, m.media_file.name.rsplit("/", 1)[-1])
+                    # полная модель распознаёт кыргызскую/узбекскую речь заметно лучше mini
+                    from django.conf import settings
+                    text, _err = core.transcribe(
+                        f, m.media_file.name.rsplit("/", 1)[-1], prompt=core.patient_transcription_prompt(),
+                        model=getattr(settings, "OPENAI_PATIENT_TRANSCRIBE_MODEL", "") or "gpt-4o-transcribe")
                 m.transcript = text or "(неразборчиво)"
                 m.save(update_fields=["transcript"])
             except Exception:  # noqa: BLE001

@@ -109,8 +109,24 @@ def transcription_prompt():
     return ", ".join(words)[:900]
 
 
-def transcribe(file_obj, filename="voice.webm"):
-    """Аудио → текст через OpenAI. Возвращает (text, error)."""
+def patient_transcription_prompt():
+    """Подсказка распознаванию голосовых ПАЦИЕНТОВ: они говорят по-кыргызски,
+    по-узбекски или по-русски (часто вперемешку). Без неё кыргызская речь
+    распознавалась кашей («Токузу он бешкеяз» вместо «тогуз он беште»)."""
+    words = ["Кыргызча, o'zbekcha, по-русски.", "Ооба, макул, жок, ырас, ха, хоп, майли, bo'ladi, да, нет.",
+             "Эртең, бүгүн, ертага, бугун, саат, тогуз, он, он беш, жарым, тогуз жарым, он бир, он эки.",
+             "Тиш, тиш оорут, тиш алдыруу, тиш олиш, пломба, имплант, тазалоо, дарыгер, врач, жазылуу, ёзилиш."]
+    try:
+        from apps.users.models import clinic_doctors
+        words.append(", ".join(d.name for d in clinic_doctors(_clinic())[:15]))
+    except Exception:  # noqa: BLE001
+        pass
+    return " ".join(words)[:900]
+
+
+def transcribe(file_obj, filename="voice.webm", prompt=None, model=None):
+    """Аудио → текст через OpenAI. Возвращает (text, error).
+    prompt/model — для голосовых пациентов (patient_transcription_prompt)."""
     boundary = uuid.uuid4().hex
     audio = file_obj.read()
     # Голосовые WhatsApp/Telegram приходят как .oga/.opus — это ogg, но OpenAI
@@ -118,11 +134,12 @@ def transcribe(file_obj, filename="voice.webm"):
     base, _dot, ext = (filename or "voice.ogg").rpartition(".")
     if ext.lower() in ("oga", "opus"):
         filename = (base or "voice") + ".ogg"
-    model = getattr(settings, "OPENAI_TRANSCRIBE_MODEL", "") or "gpt-4o-mini-transcribe"
+    model = model or getattr(settings, "OPENAI_TRANSCRIBE_MODEL", "") or "gpt-4o-mini-transcribe"
+    prompt = prompt if prompt is not None else transcription_prompt()
 
     def body_for(m):
         parts = []
-        for name, value in (("model", m), ("prompt", transcription_prompt()), ("response_format", "json")):
+        for name, value in (("model", m), ("prompt", prompt), ("response_format", "json")):
             parts.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
                           % (boundary, name, value)).encode("utf-8"))
         parts.append(("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
@@ -138,7 +155,7 @@ def transcribe(file_obj, filename="voice.webm"):
     if err:
         return None, "Не удалось распознать речь"
     text = (data.get("text") or "").strip()
-    if looks_like_prompt_echo(text, transcription_prompt()):
+    if looks_like_prompt_echo(text, prompt):
         return "", None
     return text, None
 
