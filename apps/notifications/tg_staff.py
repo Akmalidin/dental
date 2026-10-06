@@ -29,30 +29,154 @@ from django.utils import timezone
 
 log = logging.getLogger("apps")
 
-BTN_TODAY = "📅 Приёмы сегодня"
-BTN_TOMORROW = "📅 Завтра"
-BTN_PICK_DATE = "📆 Выбрать дату"
-BTN_REMIND = "🔔 Напомнить пациентам"
-BTN_SETTINGS = "⚙️ Уведомления"
-STAFF_KEYBOARD = {
-    "keyboard": [[{"text": BTN_TODAY}, {"text": BTN_TOMORROW}],
-                 [{"text": BTN_PICK_DATE}, {"text": BTN_REMIND}],
-                 [{"text": BTN_SETTINGS}]],
-    "resize_keyboard": True,
+# Тексты меню сотрудника на русском и узбекском (язык — тот же, что выбран в
+# боте при /start: TgChat.lang этого чата; сменить — кнопкой «🌐 Язык / Til»).
+LANGS = ("ru", "uz")
+S = {
+    "btn_today": {"ru": "📅 Приёмы сегодня", "uz": "📅 Bugungi qabullar"},
+    "btn_tomorrow": {"ru": "📅 Завтра", "uz": "📅 Ertaga"},
+    "btn_pick": {"ru": "📆 Выбрать дату", "uz": "📆 Sanani tanlash"},
+    "btn_remind": {"ru": "🔔 Напомнить пациентам", "uz": "🔔 Bemorlarga eslatish"},
+    "btn_settings": {"ru": "⚙️ Уведомления", "uz": "⚙️ Bildirishnomalar"},
+    "btn_lang": {"ru": "🌐 Язык / Til", "uz": "🌐 Til / Язык"},
+    "lang_set": {"ru": "✅ Язык: русский", "uz": "✅ Til: o'zbekcha"},
+    "scope_all": {"ru": "все записи клиники", "uz": "klinikaning barcha yozuvlari"},
+    "scope_own": {"ru": "ваши записи", "uz": "sizning yozuvlaringiz"},
+    "menu": {
+        "ru": "👋 {name}, это меню сотрудника.\n\n"
+              "📅 <b>Приёмы сегодня</b> — {scope} на сегодня\n"
+              "📅 <b>Завтра</b> — {scope} на завтра\n"
+              "📆 <b>Выбрать дату</b> — приёмы на любой день (можно просто написать дату, например 25.09)\n"
+              "🔔 <b>Напомнить пациентам</b> — отправить напоминание пациентам записей на выбранный день\n"
+              "⚙️ <b>Уведомления</b> — напоминание за 30 минут до приёма и утренняя сводка\n"
+              "🌐 <b>Язык / Til</b> — русский или узбекский",
+        "uz": "👋 {name}, bu xodim menyusi.\n\n"
+              "📅 <b>Bugungi qabullar</b> — {scope} bugun uchun\n"
+              "📅 <b>Ertaga</b> — {scope} ertaga uchun\n"
+              "📆 <b>Sanani tanlash</b> — istalgan kun qabullari (sanani yozish ham mumkin, masalan 25.09)\n"
+              "🔔 <b>Bemorlarga eslatish</b> — tanlangan kundagi bemorlarga eslatma yuborish\n"
+              "⚙️ <b>Bildirishnomalar</b> — qabuldan 30 daqiqa oldin eslatma va ertalabki ro'yxat\n"
+              "🌐 <b>Til / Язык</b> — o'zbek yoki rus tili"},
+    "linked": {
+        "ru": "✅ Вы подключены как {role}: <b>{name}</b>.\n\n"
+              "Сюда будут приходить новые записи к вам, заявки с сайта и отмены.\n"
+              "Кнопки внизу — приёмы на сегодня, на любую дату и напоминания пациентам.",
+        "uz": "✅ Siz {role} sifatida ulandingiz: <b>{name}</b>.\n\n"
+              "Bu yerga sizga yangi yozuvlar, saytdan arizalar va bekor qilishlar keladi.\n"
+              "Pastdagi tugmalar — bugungi va istalgan kun qabullari hamda bemorlarga eslatmalar."},
+    "stopped": {"ru": "Вы отключены от бота. Чтобы подключиться снова — /start",
+                "uz": "Siz botdan uzildingiz. Qayta ulanish uchun — /start"},
+    "unknown": {"ru": "Не понял команду. Выберите кнопку внизу или напишите дату, например <b>25.09</b>.",
+                "uz": "Buyruq tushunilmadi. Pastdagi tugmani tanlang yoki sanani yozing, masalan <b>25.09</b>."},
+    "role_director": {"ru": "директор", "uz": "direktor"},
+    "role_admin": {"ru": "администратор", "uz": "administrator"},
+    "role_doctor": {"ru": "врач", "uz": "shifokor"},
+    "role_staff": {"ru": "сотрудник", "uz": "xodim"},
+    "today": {"ru": "сегодня", "uz": "bugun"},
+    "tomorrow": {"ru": "завтра", "uz": "ertaga"},
+    "Today": {"ru": "Сегодня", "uz": "Bugun"},
+    "Tomorrow": {"ru": "Завтра", "uz": "Ertaga"},
+    "day_head": {"ru": "📅 <b>Приёмы на {day}</b>", "uz": "📅 <b>{day} — qabullar</b>"},
+    "no_records": {"ru": "Записей нет.", "uz": "Yozuvlar yo'q."},
+    "cancelled_n": {"ru": "Отменено: {n}", "uz": "Bekor qilingan: {n}"},
+    "total": {"ru": "Всего: <b>{n}</b>", "uz": "Jami: <b>{n}</b>"},
+    "total_cancelled": {"ru": " · отменено: {n}", "uz": " · bekor qilingan: {n}"},
+    "from_site": {"ru": "🌐 с сайта", "uz": "🌐 saytdan"},
+    "earlier": {"ru": "◀ Раньше", "uz": "◀ Oldinroq"},
+    "later": {"ru": "Позже ▶", "uz": "Keyinroq ▶"},
+    "pick_remind": {"ru": "🔔 <b>Напомнить пациентам</b> — выберите день приёмов:",
+                    "uz": "🔔 <b>Bemorlarga eslatish</b> — qabul kunini tanlang:"},
+    "pick_list": {"ru": "📆 <b>Выберите дату</b> (или напишите её, например 25.09):",
+                  "uz": "📆 <b>Sanani tanlang</b> (yoki yozing, masalan 25.09):"},
+    "remind_none": {"ru": "🔔 На {day} нет предстоящих записей, кому можно напомнить.",
+                    "uz": "🔔 {day} uchun eslatma yuboriladigan yozuvlar yo'q."},
+    "other_date": {"ru": "◀ Другая дата", "uz": "◀ Boshqa sana"},
+    "remind_ask": {"ru": "🔔 Напомнить <b>{n}</b> пациентам о приёме на {day}?\n\n{names}",
+                   "uz": "🔔 <b>{n}</b> nafar bemorga {day} qabuli haqida eslatilsinmi?\n\n{names}"},
+    "and_more": {"ru": "… и ещё {n}", "uz": "… yana {n}"},
+    "send": {"ru": "✅ Отправить", "uz": "✅ Yuborish"},
+    "cancel": {"ru": "✖ Отмена", "uz": "✖ Bekor qilish"},
+    "sending": {"ru": "⏳ Отправляю напоминания…", "uz": "⏳ Eslatmalar yuborilmoqda…"},
+    "remind_done": {"ru": "✅ Напоминания на {day} отправлены: <b>{sent}</b> из {total}.",
+                    "uz": "✅ {day} uchun eslatmalar yuborildi: <b>{sent}</b> / {total}."},
+    "remind_fail": {"ru": "\nОстальным не удалось — нет Telegram/WhatsApp или номер не в мессенджере.",
+                    "uz": "\nQolganlariga yuborilmadi — Telegram/WhatsApp yo'q yoki raqam messenjerda emas."},
+    "on": {"ru": "✅ включено", "uz": "✅ yoqilgan"},
+    "off": {"ru": "⛔ выключено", "uz": "⛔ o'chirilgan"},
+    "settings": {
+        "ru": "⚙️ <b>Ваши уведомления в Telegram</b>\n\n"
+              "⏰ Напоминание за {m} минут до приёма — {soon}\n"
+              "☀️ Утренняя сводка приёмов на сегодня (около 8:00) — {digest}\n\n"
+              "Новые записи к вам и отмены приходят всегда.",
+        "uz": "⚙️ <b>Telegramdagi bildirishnomalaringiz</b>\n\n"
+              "⏰ Qabuldan {m} daqiqa oldin eslatma — {soon}\n"
+              "☀️ Bugungi qabullarning ertalabki ro'yxati (taxminan 8:00) — {digest}\n\n"
+              "Sizga yangi yozuvlar va bekor qilishlar har doim keladi."},
+    "soon_off": {"ru": "Выключить напоминание за {m} мин", "uz": "{m} daqiqalik eslatmani o'chirish"},
+    "soon_on": {"ru": "Включить напоминание за {m} мин", "uz": "{m} daqiqalik eslatmani yoqish"},
+    "digest_off": {"ru": "Выключить утреннюю сводку", "uz": "Ertalabki ro'yxatni o'chirish"},
+    "digest_on": {"ru": "Включить утреннюю сводку", "uz": "Ertalabki ro'yxatni yoqish"},
+    "soon_head": {"ru": "⏰ <b>Через {m} мин — приём в {time}</b>", "uz": "⏰ <b>{m} daqiqadan so'ng — {time} dagi qabul</b>"},
+    "soon_confirmed": {"ru": "✅ Пациент подтвердил запись", "uz": "✅ Bemor yozuvni tasdiqladi"},
+    "soon_arrived": {"ru": "🚪 Пациент уже пришёл", "uz": "🚪 Bemor allaqachon keldi"},
+    "digest_title": {"ru": "☀️ <b>Доброе утро! Ваши приёмы сегодня</b> ({d})",
+                     "uz": "☀️ <b>Xayrli tong! Bugungi qabullaringiz</b> ({d})"},
 }
+WEEKDAYS_L = {"ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+              "uz": ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]}
+STATUS_L = {
+    "ru": {"scheduled": "🕓 Записан", "confirmed": "✅ Подтвердил", "arrived": "🚪 Пришёл",
+           "in_progress": "🦷 На приёме", "completed": "✔️ Завершён", "no_show": "⚠️ Не пришёл"},
+    "uz": {"scheduled": "🕓 Yozilgan", "confirmed": "✅ Tasdiqladi", "arrived": "🚪 Keldi",
+           "in_progress": "🦷 Qabulda", "completed": "✔️ Tugallandi", "no_show": "⚠️ Kelmadi"},
+}
+
+
+def st(key, lang, **kw):
+    s_ = S[key].get(lang) or S[key]["ru"]
+    return s_.format(**kw) if kw else s_
+
+
+def btn_texts(key):
+    return {S[key][lg] for lg in LANGS}
+
+
+def staff_keyboard(lang):
+    return {"keyboard": [[{"text": st("btn_today", lang)}, {"text": st("btn_tomorrow", lang)}],
+                         [{"text": st("btn_pick", lang)}, {"text": st("btn_remind", lang)}],
+                         [{"text": st("btn_settings", lang)}, {"text": st("btn_lang", lang)}]],
+            "resize_keyboard": True}
+
+
+# Совместимость: русские подписи кнопок (используются в тестах и старом коде)
+BTN_TODAY, BTN_TOMORROW = S["btn_today"]["ru"], S["btn_tomorrow"]["ru"]
+BTN_PICK_DATE, BTN_REMIND = S["btn_pick"]["ru"], S["btn_remind"]["ru"]
+BTN_SETTINGS = S["btn_settings"]["ru"]
+STAFF_KEYBOARD = staff_keyboard("ru")
+
+
+def staff_lang(user, clinic=None):
+    """Язык сотрудника в боте: выбранный в этом Telegram-чате (TgChat.lang),
+    иначе — язык интерфейса CRM, если узбекский; по умолчанию русский."""
+    if user is None:
+        return "ru"
+    lg = ""
+    if getattr(user, "telegram_id", None):
+        from .models import TgChat
+        cl = clinic if clinic is not None else getattr(user, "clinic", None)
+        q = TgChat.all_clinics.filter(chat_id=user.telegram_id)
+        if cl is not None:
+            q = q.filter(clinic=cl)
+        lg = q.values_list("lang", flat=True).first() or ""
+    if lg in LANGS:
+        return lg
+    return "uz" if getattr(user, "interface_language", "") == "uz" else "ru"
 SOON_MINUTES = 30        # напоминание врачу «через ~30 минут»
 SOON_WINDOW = 40         # окно поиска: крон раз в 15 минут → приходит за 25–40 минут
 DIGEST_HOURS = (8, 11)   # утренняя сводка: с 8:00 до 11:00 местного, раз в день
 
-WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-STATUS_ICONS = {
-    "scheduled": "🕓 Записан",
-    "confirmed": "✅ Подтвердил",
-    "arrived": "🚪 Пришёл",
-    "in_progress": "🦷 На приёме",
-    "completed": "✔️ Завершён",
-    "no_show": "⚠️ Не пришёл",
-}
+WEEKDAYS = WEEKDAYS_L["ru"]
+STATUS_ICONS = STATUS_L["ru"]
 PICKER_DAYS = 14
 TG_LIMIT = 3800  # у Telegram предел 4096 символов, оставляем запас на разметку
 
@@ -85,13 +209,13 @@ def _send(chat_id, text, token, buttons=None, keyboard=None):
     return _call("sendMessage", payload, token=token)
 
 
-def _day_label(d):
+def _day_label(d, lang="ru"):
     today = timezone.localdate()
-    base = "%s, %s" % (WEEKDAYS[d.weekday()], d.strftime("%d.%m.%Y"))
+    base = "%s, %s" % (WEEKDAYS_L.get(lang, WEEKDAYS)[d.weekday()], d.strftime("%d.%m.%Y"))
     if d == today:
-        return "сегодня (%s)" % base
+        return "%s (%s)" % (st("today", lang), base)
     if d == today + timedelta(days=1):
-        return "завтра (%s)" % base
+        return "%s (%s)" % (st("tomorrow", lang), base)
     return base
 
 
@@ -172,27 +296,22 @@ def can_manage_groups(user):
     return bool(user.is_superadmin or user.is_admin)
 
 
-def _role_label(user):
+def _role_label(user, lang="ru"):
     if user.is_superadmin or user.is_admin_main:
-        return "директор"
+        return st("role_director", lang)
     if user.is_admin:
-        return "администратор"
+        return st("role_admin", lang)
     if user.is_doctor:
-        return "врач"
-    return "сотрудник"
+        return st("role_doctor", lang)
+    return st("role_staff", lang)
 
 
-def send_staff_menu(chat_id, user, token, text=None):
+def send_staff_menu(chat_id, user, token, text=None, lang=None):
+    lang = lang or staff_lang(user)
     if text is None:
-        scope = "все записи клиники" if sees_all(user) else "ваши записи"
-        text = ("👋 %s, это меню сотрудника.\n\n"
-                "📅 <b>Приёмы сегодня</b> — %s на сегодня\n"
-                "📅 <b>Завтра</b> — %s на завтра\n"
-                "📆 <b>Выбрать дату</b> — приёмы на любой день (можно просто написать дату, например 25.09)\n"
-                "🔔 <b>Напомнить пациентам</b> — отправить напоминание пациентам записей на выбранный день\n"
-                "⚙️ <b>Уведомления</b> — напоминание за 30 минут до приёма и утренняя сводка"
-                % (_esc(user.name), scope, scope))
-    return _send(chat_id, text, token, keyboard=STAFF_KEYBOARD)
+        scope = st("scope_all" if sees_all(user) else "scope_own", lang)
+        text = st("menu", lang, name=_esc(user.name), scope=scope)
+    return _send(chat_id, text, token, keyboard=staff_keyboard(lang))
 
 
 # ── Списки приёмов ───────────────────────────────────────────────────────
@@ -206,17 +325,17 @@ def _day_qs(user, day):
     return qs
 
 
-def day_report(user, day, title=None):
+def day_report(user, day, title=None, lang="ru"):
     """Список приёмов на день → список сообщений (длинный день режется на части)."""
     appts = list(_day_qs(user, day))
     active = [a for a in appts if a.status != "cancelled"]
     cancelled = len(appts) - len(active)
     show_doctor = user is None or sees_all(user)
-    head = title or "📅 <b>Приёмы на %s</b>" % _day_label(day)
+    head = title or st("day_head", lang, day=_day_label(day, lang))
     if not active:
-        body = head + "\n\nЗаписей нет."
+        body = head + "\n\n" + st("no_records", lang)
         if cancelled:
-            body += "\nОтменено: %s" % cancelled
+            body += "\n" + st("cancelled_n", lang, n=cancelled)
         return [body]
 
     blocks = []
@@ -226,13 +345,13 @@ def day_report(user, day, title=None):
             by_doc.setdefault(a.doctor.name if a.doctor_id else "—", []).append(a)
         for doc_name, items in sorted(by_doc.items()):
             blocks.append("\n👨‍⚕️ <b>%s</b> — %s" % (_esc(doc_name), len(items)))
-            blocks.extend(_appt_line(a) for a in items)
+            blocks.extend(_appt_line(a, lang) for a in items)
     else:
-        blocks.extend(_appt_line(a) for a in active)
+        blocks.extend(_appt_line(a, lang) for a in active)
 
-    foot = "\nВсего: <b>%s</b>" % len(active)
+    foot = "\n" + st("total", lang, n=len(active))
     if cancelled:
-        foot += " · отменено: %s" % cancelled
+        foot += st("total_cancelled", lang, n=cancelled)
 
     chunks, cur = [], head + "\n"
     for b in blocks:
@@ -245,23 +364,23 @@ def day_report(user, day, title=None):
     return chunks
 
 
-def _appt_line(a):
-    st, en = timezone.localtime(a.start_at), timezone.localtime(a.end_at)
+def _appt_line(a, lang="ru"):
+    start, en = timezone.localtime(a.start_at), timezone.localtime(a.end_at)
     p = a.patient
     name = _esc(p.full_name) if p else "—"
-    line = "🕘 <b>%s–%s</b> %s" % (st.strftime("%H:%M"), en.strftime("%H:%M"), name)
+    line = "🕘 <b>%s–%s</b> %s" % (start.strftime("%H:%M"), en.strftime("%H:%M"), name)
     extra = []
     if p and p.phone:
         extra.append("📞 %s" % _esc(p.phone))
-    extra.append(STATUS_ICONS.get(a.status, _esc(a.get_status_display())))
+    extra.append(STATUS_L.get(lang, STATUS_ICONS).get(a.status, _esc(a.get_status_display())))
     if a.source == "online":
-        extra.append("🌐 с сайта")
+        extra.append(st("from_site", lang))
     return line + "\n      " + " · ".join(extra)
 
 
 # ── Выбор даты (инлайн-календарь) ────────────────────────────────────────
 
-def date_picker(mode, page=0):
+def date_picker(mode, page=0, lang="ru"):
     """mode: 'l' — показать приёмы, 'r' — напомнить пациентам.
     Страница — 14 дней начиная с сегодня + 14*page (для напоминаний только вперёд)."""
     today = timezone.localdate()
@@ -271,8 +390,9 @@ def date_picker(mode, page=0):
     days = [start + timedelta(days=i) for i in range(PICKER_DAYS)]
     rows, row = [], []
     for d in days:
-        label = "Сегодня" if d == today else ("Завтра" if d == today + timedelta(days=1)
-                                              else "%s %s" % (WEEKDAYS[d.weekday()], d.strftime("%d.%m")))
+        label = st("Today", lang) if d == today else (
+            st("Tomorrow", lang) if d == today + timedelta(days=1)
+            else "%s %s" % (WEEKDAYS_L.get(lang, WEEKDAYS)[d.weekday()], d.strftime("%d.%m")))
         row.append((label, "sdd:%s:%s" % (mode, d.isoformat())))
         if len(row) == 4:
             rows.append(row)
@@ -281,13 +401,10 @@ def date_picker(mode, page=0):
         rows.append(row)
     nav = []
     if mode == "l" or page > 0:
-        nav.append(("◀ Раньше", "sdp:%s:%s" % (mode, page - 1)))
-    nav.append(("Позже ▶", "sdp:%s:%s" % (mode, page + 1)))
+        nav.append((st("earlier", lang), "sdp:%s:%s" % (mode, page - 1)))
+    nav.append((st("later", lang), "sdp:%s:%s" % (mode, page + 1)))
     rows.append(nav)
-    if mode == "r":
-        text = "🔔 <b>Напомнить пациентам</b> — выберите день приёмов:"
-    else:
-        text = "📆 <b>Выберите дату</b> (или напишите её, например 25.09):"
+    text = st("pick_remind" if mode == "r" else "pick_list", lang)
     text += "\n%s — %s" % (days[0].strftime("%d.%m.%Y"), days[-1].strftime("%d.%m.%Y"))
     return text, rows
 
@@ -416,53 +533,61 @@ def handle_private(clinic, msg, token):
                 User.objects.filter(clinic=clinic, telegram_id=from_id).exclude(pk=u.pk).update(telegram_id=None)
                 u.telegram_id = from_id
                 u.save(update_fields=["telegram_id"])
-                send_staff_menu(chat_id, u, token, text=(
-                    "✅ Вы подключены как %s: <b>%s</b>.\n\n"
-                    "Сюда будут приходить новые записи к вам, заявки с сайта и отмены.\n"
-                    "Кнопки внизу — приёмы на сегодня, на любую дату и напоминания пациентам."
-                    % (_role_label(u), _esc(u.name))))
+                lang = staff_lang(u, clinic)
+                send_staff_menu(chat_id, u, token, lang=lang, text=st(
+                    "linked", lang, role=_role_label(u, lang), name=_esc(u.name)))
                 return True
         return False
 
     cmd = _cmd(text)
+    lang = staff_lang(staff, clinic)
+    if text in btn_texts("btn_lang") or cmd in ("lang", "til"):
+        chat = get_chat(clinic, chat_id)
+        lang = "uz" if lang == "ru" else "ru"
+        chat.lang = lang
+        chat.save(update_fields=["lang", "updated_at"])
+        send_staff_menu(chat_id, staff, token, lang=lang,
+                        text=st("lang_set", lang) + "\n\n" + st(
+                            "menu", lang, name=_esc(staff.name),
+                            scope=st("scope_all" if sees_all(staff) else "scope_own", lang)))
+        return True
     if cmd == "stop":
         staff.telegram_id = None
         staff.save(update_fields=["telegram_id"])
         from .telegram import _call
         _call("sendMessage", {"chat_id": chat_id,
-                              "text": "Вы отключены от бота. Чтобы подключиться снова — /start",
+                              "text": st("stopped", lang),
                               "reply_markup": {"remove_keyboard": True}}, token=token)
         return True
     if cmd in ("start", "menu", "help") or contact:
-        send_staff_menu(chat_id, staff, token)
+        send_staff_menu(chat_id, staff, token, lang=lang)
         return True
-    if text == BTN_TODAY or cmd == "today":
-        for part in day_report(staff, timezone.localdate()):
+    if text in btn_texts("btn_today") or cmd == "today":
+        for part in day_report(staff, timezone.localdate(), lang=lang):
             _send(chat_id, part, token)
         return True
-    if text == BTN_TOMORROW or cmd == "tomorrow":
-        for part in day_report(staff, timezone.localdate() + timedelta(days=1)):
+    if text in btn_texts("btn_tomorrow") or cmd == "tomorrow":
+        for part in day_report(staff, timezone.localdate() + timedelta(days=1), lang=lang):
             _send(chat_id, part, token)
         return True
-    if text == BTN_SETTINGS or cmd == "settings":
-        t, rows = notify_settings(staff)
+    if text in btn_texts("btn_settings") or cmd == "settings":
+        t, rows = notify_settings(staff, lang)
         _send(chat_id, t, token, buttons=rows)
         return True
-    if text == BTN_PICK_DATE or cmd == "date":
-        t, rows = date_picker("l")
+    if text in btn_texts("btn_pick") or cmd == "date":
+        t, rows = date_picker("l", lang=lang)
         _send(chat_id, t, token, buttons=rows)
         return True
-    if text == BTN_REMIND or cmd == "remind":
-        t, rows = date_picker("r")
+    if text in btn_texts("btn_remind") or cmd == "remind":
+        t, rows = date_picker("r", lang=lang)
         _send(chat_id, t, token, buttons=rows)
         return True
     d = parse_date(text)
     if d is not None:
-        for part in day_report(staff, d):
+        for part in day_report(staff, d, lang=lang):
             _send(chat_id, part, token)
         return True
-    send_staff_menu(chat_id, staff, token, text=(
-        "Не понял команду. Выберите кнопку внизу или напишите дату, например <b>25.09</b>."))
+    send_staff_menu(chat_id, staff, token, lang=lang, text=st("unknown", lang))
     return True
 
 
@@ -482,17 +607,18 @@ def handle_callback(clinic, cq, token):
         return True
 
     parts = data.split(":")
+    lang = staff_lang(staff, clinic)
     try:
         if parts[0] == "sns":
             field = {"soon": "tg_remind_soon", "digest": "tg_daily_digest"}.get(parts[1])
             if field:
                 setattr(staff, field, not getattr(staff, field))
                 staff.save(update_fields=[field])
-            t, rows = notify_settings(staff)
+            t, rows = notify_settings(staff, lang)
             tg_edit_message(chat_id, message_id, t, buttons=rows, token=token)
         elif parts[0] == "sdp":
             mode, page = parts[1], int(parts[2])
-            t, rows = date_picker(mode, page)
+            t, rows = date_picker(mode, page, lang=lang)
             tg_edit_message(chat_id, message_id, t, buttons=rows, token=token)
         elif parts[0] == "sdd":
             mode, day = parts[1], date.fromisoformat(parts[2])
@@ -500,35 +626,32 @@ def handle_callback(clinic, cq, token):
                 targets = _remind_targets(staff, day)
                 if not targets:
                     tg_edit_message(chat_id, message_id,
-                                    "🔔 На %s нет предстоящих записей, кому можно напомнить." % _day_label(day),
-                                    buttons=[[("◀ Другая дата", "sdp:r:0")]], token=token)
+                                    st("remind_none", lang, day=_day_label(day, lang)),
+                                    buttons=[[(st("other_date", lang), "sdp:r:0")]], token=token)
                 else:
                     names = "\n".join("• %s — %s" % (timezone.localtime(a.start_at).strftime("%H:%M"),
                                                       _esc(a.patient.full_name)) for a in targets[:30])
                     if len(targets) > 30:
-                        names += "\n… и ещё %s" % (len(targets) - 30)
+                        names += "\n" + st("and_more", lang, n=len(targets) - 30)
                     tg_edit_message(chat_id, message_id,
-                                    "🔔 Напомнить <b>%s</b> пациентам о приёме на %s?\n\n%s"
-                                    % (len(targets), _day_label(day), names),
-                                    buttons=[[("✅ Отправить", "sdr:%s" % day.isoformat()),
-                                              ("✖ Отмена", "sdp:r:0")]], token=token)
+                                    st("remind_ask", lang, n=len(targets), day=_day_label(day, lang), names=names),
+                                    buttons=[[(st("send", lang), "sdr:%s" % day.isoformat()),
+                                              (st("cancel", lang), "sdp:r:0")]], token=token)
             else:
-                reports = day_report(staff, day)
+                reports = day_report(staff, day, lang=lang)
                 tg_edit_message(chat_id, message_id, reports[0],
-                                buttons=[[("◀ Другая дата", "sdp:l:0")]] if len(reports) == 1 else None,
+                                buttons=[[(st("other_date", lang), "sdp:l:0")]] if len(reports) == 1 else None,
                                 token=token)
                 for part in reports[1:]:
                     _send(chat_id, part, token)
         elif parts[0] == "sdr":
             day = date.fromisoformat(parts[1])
             targets = _remind_targets(staff, day)
-            tg_edit_message(chat_id, message_id, "⏳ Отправляю напоминания…", token=token)
+            tg_edit_message(chat_id, message_id, st("sending", lang), token=token)
             sent = sum(1 for a in targets if send_patient_reminder(a))
             tg_edit_message(chat_id, message_id,
-                            "✅ Напоминания на %s отправлены: <b>%s</b> из %s.%s"
-                            % (_day_label(day), sent, len(targets),
-                               "" if sent == len(targets) else
-                               "\nОстальным не удалось — нет Telegram/WhatsApp или номер не в мессенджере."),
+                            st("remind_done", lang, day=_day_label(day, lang), sent=sent, total=len(targets))
+                            + ("" if sent == len(targets) else st("remind_fail", lang)),
                             token=token)
     except (ValueError, IndexError):
         pass
@@ -582,25 +705,20 @@ def handle_group(clinic, msg, token):
 
 # ── Уведомления персоналу ────────────────────────────────────────────────
 
-def notify_settings(user):
+def notify_settings(user, lang="ru"):
     """Сообщение «⚙️ Уведомления» с переключателями (callback sns:*)."""
-    on = lambda v: "✅ включено" if v else "⛔ выключено"  # noqa: E731
-    text = ("⚙️ <b>Ваши уведомления в Telegram</b>\n\n"
-            "⏰ Напоминание за %s минут до приёма — %s\n"
-            "☀️ Утренняя сводка приёмов на сегодня (около 8:00) — %s\n\n"
-            "Новые записи к вам и отмены приходят всегда."
-            % (SOON_MINUTES, on(user.tg_remind_soon), on(user.tg_daily_digest)))
-    rows = [[("%s напоминание за %s мин" % ("Выключить" if user.tg_remind_soon else "Включить", SOON_MINUTES),
-              "sns:soon")],
-            [("%s утреннюю сводку" % ("Выключить" if user.tg_daily_digest else "Включить"), "sns:digest")]]
+    on = lambda v: st("on" if v else "off", lang)  # noqa: E731
+    text = st("settings", lang, m=SOON_MINUTES, soon=on(user.tg_remind_soon), digest=on(user.tg_daily_digest))
+    rows = [[(st("soon_off" if user.tg_remind_soon else "soon_on", lang, m=SOON_MINUTES), "sns:soon")],
+            [(st("digest_off" if user.tg_daily_digest else "digest_on", lang), "sns:digest")]]
     return text, rows
 
 
-def _soon_text(a, now):
-    st = timezone.localtime(a.start_at)
+def _soon_text(a, now, lang="ru"):
+    start = timezone.localtime(a.start_at)
     mins = max(1, int(round((a.start_at - now).total_seconds() / 60)))
     p = a.patient
-    lines = ["⏰ <b>Через %s мин — приём в %s</b>" % (mins, st.strftime("%H:%M")),
+    lines = [st("soon_head", lang, m=mins, time=start.strftime("%H:%M")),
              "👤 %s" % (_esc(p.full_name) if p else "—")]
     services = [s.name for s in a.services.all()] or ([a.service.name] if a.service_id else [])
     if services:
@@ -608,9 +726,9 @@ def _soon_text(a, now):
     if p and p.phone:
         lines.append("📞 %s" % _esc(p.phone))
     if a.status == "confirmed":
-        lines.append("✅ Пациент подтвердил запись")
+        lines.append(st("soon_confirmed", lang))
     elif a.status == "arrived":
-        lines.append("🚪 Пациент уже пришёл")
+        lines.append(st("soon_arrived", lang))
     return "\n".join(lines)
 
 
@@ -633,7 +751,7 @@ def send_doctor_soon_reminders(clinic, now=None, dry=False):
     sent = 0
     for a in qs:
         if not dry:
-            if not tg_send_chat(a.doctor.telegram_id, _soon_text(a, now)):
+            if not tg_send_chat(a.doctor.telegram_id, _soon_text(a, now, staff_lang(a.doctor, clinic))):
                 continue
             Appointment.all_objects.filter(pk=a.pk).update(doctor_reminded_for=a.start_at)
         sent += 1
@@ -658,8 +776,9 @@ def send_doctor_morning_digests(clinic, now=None, dry=False):
             continue
         has = _day_qs(u, today).exclude(status__in=["cancelled", "no_show"]).exists()
         if has and not dry:
-            parts = day_report(u, today, title="☀️ <b>Доброе утро! Ваши приёмы сегодня</b> (%s)"
-                                                % today.strftime("%d.%m"))
+            lang = staff_lang(u, clinic)
+            parts = day_report(u, today, lang=lang,
+                               title=st("digest_title", lang, d=today.strftime("%d.%m")))
             if not all(tg_send_chat(u.telegram_id, part) for part in parts):
                 continue
         if not dry:
@@ -667,12 +786,15 @@ def send_doctor_morning_digests(clinic, now=None, dry=False):
         sent += int(has)
     return sent
 
-def notify_user(user, text_wa):
-    """Личное уведомление сотруднику в Telegram (если он подключён к боту)."""
+def notify_user(user, text_wa, text_wa_uz=None):
+    """Личное уведомление сотруднику в Telegram (если он подключён к боту).
+    text_wa_uz — тот же текст на узбекском: уйдёт, если сотрудник выбрал uz."""
     try:
         from .telegram import tg_enabled, tg_send_chat
         if user is None or not getattr(user, "telegram_id", None) or not tg_enabled():
             return False
+        if text_wa_uz and staff_lang(user) == "uz":
+            text_wa = text_wa_uz
         return bool(tg_send_chat(user.telegram_id, wa_to_html(text_wa)))
     except Exception:  # noqa: BLE001
         log.exception("Telegram: уведомление сотруднику не отправлено")
