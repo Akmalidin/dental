@@ -333,8 +333,11 @@ def _search_services(query):
             for w in words:
                 q_any |= Q(name__icontains=w[:max(4, len(w) - 2)])
             found = list(qs.filter(q_any)[:20])
-    return [{"id": s.pk, "name": s.name, "price": float(s.price), "duration_min": s.duration,
-             "category": s.category.name if s.category_id else None} for s in found]
+    from apps.settings_clinic.models import ClinicSettings
+    cur = ClinicSettings.get().currency_label
+    # Цена сразу с валютой клиники: без неё модель дописывала «рублей».
+    return [{"id": s.pk, "name": s.name, "price": "%s %s" % (format(int(s.price), ",").replace(",", " "), cur),
+             "duration_min": s.duration, "category": s.category.name if s.category_id else None} for s in found]
 
 
 class Ctx:

@@ -197,6 +197,14 @@ class PatientAssistantTestCase(TestCase):
         self.assertEqual(Appointment.objects.get(patient=self.patient).doctor, self.doctor)
         self.assertIn("id=%s Хожибек" % self.doctor.pk, calls[0]["messages"][0]["content"])
 
+    def test_prices_in_clinic_currency(self):
+        self.cs.currency = "KGS"
+        self.cs.save()
+        self._in("Сколько стоит чистка?", phone="998901112233", patient=self.patient)
+        n, calls = self._tick([_tool_call("search_services", {"query": "истка"}), _final("Чистка — 200 000 сом.")])
+        self.assertIn("Валюта клиники: сом (KGS)", calls[0]["messages"][0]["content"])
+        self.assertIn("200 000 сом", calls[1]["messages"][-1]["content"])
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command
