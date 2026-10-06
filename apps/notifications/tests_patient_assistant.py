@@ -150,7 +150,7 @@ class PatientAssistantTestCase(TestCase):
         self._in("Сколько стоит чистка?", phone=phone, ago=1)
         n, _ = self._tick([_final("200 000 сум.")])
         self.assertEqual(n, 1)
-        # менеджер ответил из CRM — ассистент замолкает в этом чате
+        # менеджер ответил из CRM — на это сообщение ассистент не отвечает
         out = WaMessage.objects.create(direction="out", channel="wa", phone=phone, body="Я подключусь",
                                        sent_by=self.admin, clinic=self.clinic)
         WaMessage.objects.filter(pk=out.pk).update(created_at=self.noon - timedelta(seconds=50))
@@ -158,16 +158,31 @@ class PatientAssistantTestCase(TestCase):
         WaMessage.objects.filter(pk=m.pk).update(created_at=self.noon - timedelta(seconds=30))
         n, calls = self._tick([])
         self.assertEqual((n, calls), (0, []))
-        self.assertTrue(is_paused(self.clinic, "wa", phone, self.noon))
-        # пауза «менеджер подключился» снимается сама через несколько часов
-        self.assertFalse(is_paused(self.clinic, "wa", phone, timezone.now() + timedelta(hours=13)))
+        self.assertFalse(is_paused(self.clinic, "wa", phone, self.noon))
+        # пациент пишет снова: менеджер ведёт чат — ассистент ждёт его 5 минут, а не отвечает сразу
+        m2 = self._in("А когда можно прийти?", phone=phone, ago=0)
+        WaMessage.objects.filter(pk=m2.pk).update(created_at=self.noon + timedelta(seconds=10))
+        n, calls = self._tick([], now=self.noon + timedelta(minutes=1))
+        self.assertEqual((n, calls), (0, []))
+        # менеджер молчит 5 минут — отвечает ассистент
+        n, _ = self._tick([_final("Можно завтра в 10:00.")], now=self.noon + timedelta(minutes=6))
+        self.assertEqual(n, 1)
 
-    def test_phone_reply_from_clinic_pauses_assistant(self):
-        from apps.notifications.patient_assistant import is_paused
+    def test_phone_reply_from_clinic_makes_assistant_wait_for_manager(self):
+        from apps.notifications.patient_assistant import is_paused, manager_active, set_paused
         phone = "998907771111"
-        self._in("Привет", phone=phone, ago=1)
+        m = self._in("Привет", phone=phone, ago=1)
         payload = {"typeWebhook": "outgoingMessageReceived", "instanceData": {"idInstance": 1},
                    "senderData": {"chatId": phone + "@c.us"}}
+        with override_settings(GREENAPI_WEBHOOK_KEY="k"):
+            Client().post("/notifications/wa-webhook/?key=k", json.dumps(payload),
+                          content_type="application/json")
+        m.refresh_from_db()
+        self.assertEqual(m.ai_status, "skip")       # на то, на что ответил менеджер, ассистент не отвечает
+        self.assertFalse(is_paused(self.clinic, "wa", phone))
+        self.assertTrue(manager_active(self.clinic, "wa", phone))
+        # выключенный вручную ассистент ответ менеджера не включает обратно
+        set_paused(self.clinic, "wa", phone, True, reason="Выключил Админ")
         with override_settings(GREENAPI_WEBHOOK_KEY="k"):
             Client().post("/notifications/wa-webhook/?key=k", json.dumps(payload),
                           content_type="application/json")

@@ -321,17 +321,32 @@ MANAGER_HOLD_HOURS = 12   # после последнего ответа мен�
 
 
 def is_paused(clinic, channel, address, now=None):
+    """Ассистент выключен в чате вручную или сам позвал администратора.
+    Ответ менеджера паузой не считается (см. manager_active)."""
     from .models import ChatBotState
-    st = ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=True).first()
-    if not st:
-        return False
-    if st.reason == MANAGER_REASON:   # пауза «менеджер подключился» сама снимается через MANAGER_HOLD_HOURS
-        return (now or timezone.now()) - st.updated_at < timedelta(hours=MANAGER_HOLD_HOURS)
-    return True
+    return (ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=True)
+            .exclude(reason=MANAGER_REASON).exists())
+
+
+def manager_active(clinic, channel, address, now=None):
+    """Менеджер недавно отвечал в этом чате (с телефона клиники или из CRM) —
+    ассистент не отвечает сразу, а ждёт менеджера ClinicSettings.ai_patient_delay_min
+    минут после каждого нового сообщения пациента."""
+    from .models import ChatBotState, WaMessage
+    now = now or timezone.now()
+    hold = now - timedelta(hours=MANAGER_HOLD_HOURS)
+    st = ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address).first()
+    if st and st.paused and st.reason == MANAGER_REASON and st.updated_at > hold:
+        return True
+    after = st.updated_at if st and not st.paused and st.updated_at > hold else hold
+    return WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=False,
+                                    sent_by__isnull=False, created_at__gt=after).exists()
 
 
 def manager_joined(clinic, channel, address):
-    """Менеджер ответил пациенту (из CRM или с телефона клиники) — ассистент в этом чате замолкает."""
+    """Менеджер ответил пациенту (из CRM или с телефона клиники)."""
+    if is_paused(clinic, channel, address):
+        return      # ассистент выключен вручную — не превращаем это в мягкий режим
     set_paused(clinic, channel, address, True, reason=MANAGER_REASON)
 
 
@@ -375,17 +390,6 @@ def resume_chat(clinic, channel, address, hours=1):
     if last_human and last_human > since:
         since = last_human
     return qs.filter(direction="in", ai_status="skip", created_at__gt=since).update(ai_status="")
-
-
-def _manager_replied_in_crm(clinic, channel, address, now):
-    """Ответ менеджера из CRM после последнего ручного включения ассистента в этом чате."""
-    from .models import ChatBotState, WaMessage
-    after = now - timedelta(hours=MANAGER_HOLD_HOURS)
-    st = ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=False).first()
-    if st and st.updated_at > after:
-        after = st.updated_at
-    return WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=False,
-                                    sent_by__isnull=False, created_at__gt=after).exists()
 
 
 def _ai_leads_chat(channel, address, now):
@@ -544,13 +548,16 @@ def tick_clinic(clinic, now=None, out=None):
         if is_paused(clinic, channel, address, now):
             WaMessage.objects.filter(pk__in=ids).update(ai_status="skip")
             continue
-        # менеджер подключился к чату из CRM — ассистент замолкает
-        if _manager_replied_in_crm(clinic, channel, address, now):
+        # менеджер уже ответил на эти сообщения из CRM — ассистент не вмешивается
+        if WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=False,
+                                    sent_by__isnull=False, created_at__gt=msgs[0].created_at).exists():
             manager_joined(clinic, channel, address)
             WaMessage.objects.filter(pk__in=ids).update(ai_status="skip")
             continue
-        # ночью или если разговор уже ведёт ассистент — отвечаем сразу, иначе ждём менеджера
-        fast = night or _ai_leads_chat(channel, address, now)
+        # Менеджер ведёт чат — ждём его ответа обычную задержку (5 мин), и только
+        # если он молчит, отвечает ассистент. Иначе ночью или в разговоре, который
+        # ведёт ассистент, — сразу.
+        fast = not manager_active(clinic, channel, address, now) and (night or _ai_leads_chat(channel, address, now))
         wait = timedelta(seconds=FAST_WAIT_SECONDS) if fast else delay
         if now - msgs[-1].created_at < wait:
             continue
