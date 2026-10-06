@@ -4,6 +4,23 @@ from django.utils.translation import gettext_lazy as _
 from .models import User, Role, Branch, SECTIONS
 
 
+# Защита от подбора пароля: после LOGIN_MAX_FAILS неудачных попыток подряд
+# для одного логина вход по нему закрыт на LOGIN_LOCK_MINUTES (успешный вход
+# обнуляет счётчик). С одного IP — не больше LOGIN_MAX_IP_FAILS неудач за то
+# же окно (перебор разных логинов). Считаем по журналу входов
+# ClinicLoginEvent — он общий для всех воркеров gunicorn, в отличие от
+# локального кэша.
+LOGIN_MAX_FAILS = 5
+LOGIN_MAX_IP_FAILS = 20
+LOGIN_LOCK_MINUTES = 15
+
+
+def _minutes_left(oldest, now):
+    import math
+    from datetime import timedelta
+    return max(1, math.ceil(((oldest + timedelta(minutes=LOGIN_LOCK_MINUTES)) - now).total_seconds() / 60))
+
+
 class LoginForm(forms.Form):
     login = forms.CharField(
         label=_("Логин"),
@@ -36,6 +53,25 @@ class LoginForm(forms.Form):
                 Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
             ).exists():
                 raise forms.ValidationError(_("Доступ с этого IP заблокирован"))
+            from datetime import timedelta
+            now = timezone.now()
+            since = now - timedelta(minutes=LOGIN_LOCK_MINUTES)
+            last_ok = (ClinicLoginEvent.objects.filter(attempted_login__iexact=login, success=True, created_at__gte=since)
+                       .order_by("-created_at").values_list("created_at", flat=True).first())
+            fails = list(ClinicLoginEvent.objects.filter(
+                attempted_login__iexact=login, success=False, created_at__gte=last_ok or since)
+                .order_by("-created_at").values_list("created_at", flat=True)[:LOGIN_MAX_FAILS])
+            if len(fails) >= LOGIN_MAX_FAILS:
+                raise forms.ValidationError(
+                    _("Слишком много неверных попыток. Вход заблокирован, попробуйте через %(m)s мин.")
+                    % {"m": _minutes_left(fails[-1], now)})
+            if ip:
+                ip_fails = list(ClinicLoginEvent.objects.filter(ip_address=ip, success=False, created_at__gte=since)
+                                .order_by("-created_at").values_list("created_at", flat=True)[:LOGIN_MAX_IP_FAILS])
+                if len(ip_fails) >= LOGIN_MAX_IP_FAILS:
+                    raise forms.ValidationError(
+                        _("Слишком много неверных попыток с этого устройства. Попробуйте через %(m)s мин.")
+                        % {"m": _minutes_left(ip_fails[-1], now)})
             self.user_cache = authenticate(self.request, username=login, password=password)
             success = self.user_cache is not None and self.user_cache.is_active
             # Пишем событие входа в любом случае (успех/провал) — супер-админ
@@ -52,6 +88,13 @@ class LoginForm(forms.Form):
             except Exception:
                 pass
             if self.user_cache is None:
+                left = LOGIN_MAX_FAILS - len(fails) - 1
+                if left <= 0:
+                    raise forms.ValidationError(
+                        _("Неверный логин или пароль. Вход заблокирован на %(m)s мин.") % {"m": LOGIN_LOCK_MINUTES})
+                if left <= 3:
+                    raise forms.ValidationError(
+                        _("Неверный логин или пароль. Осталось попыток: %(n)s") % {"n": left})
                 raise forms.ValidationError(_("Неверный логин или пароль"))
             if not self.user_cache.is_active:
                 raise forms.ValidationError(_("Аккаунт отключён"))
