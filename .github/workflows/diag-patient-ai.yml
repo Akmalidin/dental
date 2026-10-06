@@ -35,11 +35,11 @@ jobs:
                 print("clinic", cs.clinic_id, cs.name, "| bot:", cs.ai_patient_bot, "| delay:", cs.ai_patient_delay_min,
                       "| since:", cs.ai_patient_since, "| inst:", cs.wa_id_instance or "-")
             since = timezone.now() - timedelta(hours=4)
-            for m in WaMessage.all_clinics.filter(created_at__gte=since).order_by("created_at")[:40]:
+            for m in reversed(list(WaMessage.all_clinics.filter(created_at__gte=since).order_by("-created_at")[:40])):
                 print("msg", m.pk, m.created_at.strftime("%H:%M:%S"), "clinic=%s" % m.clinic_id, m.channel, m.direction,
-                      "phone=..%s" % (m.phone or "")[-4:], "patient=%s" % m.patient_id, "ai=%r" % m.ai_status,
+                      "phone=..%s" % (m.phone or "")[-6:], "patient=%s" % m.patient_id, "ai=%r" % m.ai_status,
                       "by_ai=%s" % m.by_ai, "sent_by=%s" % m.sent_by_id, (m.body or "")[:40].replace("\n", " "))
-            print("paused:", list(ChatBotState.all_clinics.filter(paused=True).values_list("clinic_id", "channel", "address", "reason")))
+            print("chat states:", list(ChatBotState.all_clinics.values_list("clinic_id", "channel", "address", "paused", "reason", "updated_at")))
             print("now:", timezone.now())
             last_in = WaMessage.all_clinics.filter(direction="in", channel="wa").order_by("-created_at")[:3]
             print("последние входящие WA:", [(m.pk, m.created_at.strftime("%d.%m %H:%M"), m.clinic_id) for m in last_in])
