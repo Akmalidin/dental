@@ -1459,6 +1459,8 @@ def voice_command(request):
         voice_enabled, transcribe_audio, parse_schedule_command, parse_visit_command,
         ai_enabled, ask_ai,
     )
+    from .assistant import ensure_clinic
+    ensure_clinic(request)   # супер-админ без выбранной клиники — данные только его клиники
     mode = request.POST.get("mode") or "dictate"
     text_question = (request.POST.get("question") or "").strip()
     try:

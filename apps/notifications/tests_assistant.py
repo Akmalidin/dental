@@ -259,3 +259,17 @@ class AssistantTestCase(TestCase):
             _tool_call("start_visit", {"appointment_id": a.pk}), _final("Открыл приём: Сатторова, 09:00. Слушаю вас.")])
         self.assertEqual(resp.json()["actions"], [{"type": "open", "url": "/new/visit/start/?appointment=%s" % a.pk}])
         self.assertIn("Сатторова", calls[1][1]["messages"][-1]["content"])
+
+    def test_superadmin_without_selected_clinic_sees_only_own_clinic(self):
+        other = Clinic.objects.create(name="Другая", slug="ai-other")
+        doc_role, _ = Role.objects.get_or_create(name=Role.DOCTOR)
+        for k in range(3):
+            User.objects.create(login="oth%s" % k, name="Чужой врач %s" % k, role=doc_role, clinic=other)
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        su = User.objects.create(login="ai_su", name="Супер", role=su_role, clinic=self.clinic)
+        self.client.force_login(su)
+        resp, calls = self._ask("Какие врачи есть?", [_tool_call("list_doctors", {}), _final("Один врач.")])
+        result = calls[1][1]["messages"][-1]["content"]
+        self.assertIn("Каримов Алишер", result)
+        self.assertNotIn("Чужой врач", result)
+        self.assertIn("Клиника ИИ", calls[0][1]["messages"][0]["content"])
