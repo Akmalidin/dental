@@ -35,5 +35,12 @@ jobs:
               -d '{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"Скажи: ок"}],"max_tokens":5}' | head -c 700; echo
             rm -f /tmp/oa.json
             echo
+            echo ">>> cron ИИ-ассистента для пациентов"
+            crontab -l -u www-data 2>/dev/null | grep -c patient_assistant_tick || true
+            echo "--- хвост backups/patient_ai.log"
+            tail -n 15 backups/patient_ai.log 2>/dev/null || echo "(лога ещё нет — значит, ошибок и ответов не было)"
+            echo "--- ручной прогон команды от www-data"
+            sudo -u www-data sh -c 'set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server ./venv/bin/python manage.py patient_assistant_tick && echo tick-ok' 2>&1 | tail -5 || true
+            echo
             echo ">>> внешний IP сервера (страна)"
             curl -s --max-time 10 https://ipinfo.io/country || true
