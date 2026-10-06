@@ -205,6 +205,34 @@ class PatientAssistantTestCase(TestCase):
         self.assertIn("Валюта клиники: сом (KGS)", calls[0]["messages"][0]["content"])
         self.assertIn("200 000 сом", calls[1]["messages"][-1]["content"])
 
+    def test_unknown_number_gets_clinic(self):
+        from apps.notifications.models import WaMessage
+        from apps.notifications.patient_assistant import assign_orphans, clinic_for_unknown_number
+        from apps.tenancy import unscoped
+        other = Clinic.objects.create(name="Другая", slug="pa-other")
+        ClinicSettings.objects.update_or_create(clinic=other, defaults={"name": "Другая"})
+        with patch("apps.notifications.patient_assistant._shared_number", return_value=""):
+            # сотрудник клиники пишет со своего номера
+            self.doctor.phone = "+996 553 676 710"
+            self.doctor.save()
+            self.assertEqual(clinic_for_unknown_number("996553676710"), self.clinic)
+            # клиника недавно писала на этот номер
+            WaMessage.objects.create(direction="out", channel="wa", phone="996700111222", body="x", clinic=other)
+            self.assertEqual(clinic_for_unknown_number("996700111222"), other)
+            # совсем новый номер — единственная клиника на общих ключах с ассистентом
+            self.assertEqual(clinic_for_unknown_number("996700999888"), self.clinic)
+            # входящее без клиники подхватывается командой
+            with unscoped():
+                m = WaMessage.objects.create(direction="in", channel="wa", phone="996700999888", body="Салом")
+            assign_orphans()
+            with unscoped():
+                m.refresh_from_db()
+            self.assertEqual(m.clinic, self.clinic)
+        # номер общего инстанса указан в настройках клиники — она владелец
+        ClinicSettings.objects.filter(clinic=other).update(wa_phone="+996 555 000 111", ai_patient_bot=True)
+        with patch("apps.notifications.patient_assistant._shared_number", return_value="996555000111"):
+            self.assertEqual(clinic_for_unknown_number("996700999777"), other)
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command
