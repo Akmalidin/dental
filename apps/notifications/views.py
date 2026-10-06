@@ -326,7 +326,13 @@ def wa_webhook(request):
         # ИИ-ассистент в этом чате не должен отвечать поверх человека.
         try:
             out_phone = ((data.get("senderData") or {}).get("chatId") or "").split("@")[0]
-            if out_phone:
+            omd = data.get("messageData", {}) or {}
+            out_text = ((omd.get("textMessageData") or {}).get("textMessage")
+                        or (omd.get("extendedTextMessageData") or {}).get("text") or "")
+            from apps.notifications.patient_assistant import sent_by_system
+            # Напоминания и уведомления, которые отправила сама система, Green-API
+            # может прислать как исходящее с телефона — это не ответ менеджера.
+            if out_phone and not sent_by_system(channel, out_phone, out_text):
                 from datetime import timedelta
                 from django.utils import timezone
                 from apps.notifications.models import WaMessage

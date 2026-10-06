@@ -953,7 +953,7 @@ def patient_ai_bot(request, pk):
     """«Мессенджеры» → 🤖 в шапке чата: выключить/включить ИИ-ассистента в
     переписке с этим пациентом."""
     from django.http import JsonResponse
-    from apps.notifications.patient_assistant import set_paused
+    from apps.notifications.patient_assistant import resume_chat, set_paused
     patient = get_object_or_404(Patient, pk=pk)
     if request.method == "POST":
         paused = request.POST.get("paused") == "1"
@@ -964,6 +964,8 @@ def patient_ai_bot(request, pk):
         for ch, a in addrs:
             set_paused(patient.clinic, ch, a, paused,
                        reason=("Выключил %s" % request.user.name) if paused else "")
+            if not paused:
+                resume_chat(patient.clinic, ch, a)
     return JsonResponse(_ai_bot_state(patient))
 
 
