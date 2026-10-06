@@ -320,6 +320,7 @@ class Ctx:
         self.user = request.user
         self.page = page or {}
         self.actions = []
+        self.trace = []   # какие инструменты вызывались — сохраняется в истории для разбора
 
 
 def _tool_search_patients(ctx, query="", **_):
@@ -543,6 +544,26 @@ def _page_context(page):
     return "Пользователь на странице %s." % (page.get("path") or "CRM")
 
 
+def _today_snapshot():
+    """Короткая сводка расписания на сегодня — в системный промпт, чтобы на
+    «сколько записей сегодня» модель не отвечала по памяти разговора (баг:
+    «сегодня записей нет», хотя в расписании их две)."""
+    from apps.appointments.models import Appointment
+    today = timezone.localdate()
+    qs = (Appointment.objects.filter(start_at__date=today).exclude(status="cancelled")
+          .select_related("doctor", "patient").order_by("start_at"))
+    items = list(qs[:40])
+    if not items:
+        return "Сегодня (%s) в расписании клиники записей нет." % today.isoformat()
+    by_doc = {}
+    for a in items:
+        by_doc.setdefault(a.doctor.name if a.doctor_id else "без врача", []).append(
+            "%s %s" % (timezone.localtime(a.start_at).strftime("%H:%M"),
+                       a.patient.full_name if a.patient_id else "без пациента"))
+    parts = ["%s: %s" % (d, ", ".join(v)) for d, v in by_doc.items()]
+    return "Сегодня (%s) в расписании клиники записей: %s. %s." % (today.isoformat(), len(items), "; ".join(parts))
+
+
 def system_prompt(ctx, assistant_name=""):
     from apps.settings_clinic.models import ClinicSettings
     now = timezone.localtime()
@@ -553,8 +574,11 @@ def system_prompt(ctx, assistant_name=""):
         f"Ты — «{name}», голосовой ИИ-ассистент стоматологической клиники «{ClinicSettings.get().name}» "
         f"в CRM ODONTIS (разработчик AKM SOFT CLINIC). Сейчас {now.strftime('%Y-%m-%d %H:%M')}, "
         f"{WEEKDAYS[now.weekday()]} (время клиники). С тобой говорит {ctx.user.name}, {role}"
-        f"{' (id врача ' + str(ctx.user.pk) + ')' if ctx.user.is_doctor else ''}. {_page_context(ctx.page)}\n\n"
+        f"{' (id врача ' + str(ctx.user.pk) + ')' if ctx.user.is_doctor else ''}. {_page_context(ctx.page)}\n"
+        f"{_today_snapshot()}\n\n"
         "Правила:\n"
+        "- На вопросы о записях, расписании и пациентах ВСЕГДА смотри свежие данные (сводка выше, "
+        "doctor_day, patient_details), а не прошлые ответы в разговоре — данные могли измениться.\n"
         "- Данные клиники бери ТОЛЬКО из инструментов, ничего не выдумывай (пациентов, время, цены).\n"
         "- Запись: найди пациента (search_patients), врача (list_doctors), проверь free_slots и вызови "
         "propose_appointment. Если «к себе» говорит врач — врач это он сам. Если пациентов несколько или "
@@ -607,7 +631,8 @@ def run(request, text, history=None, page=None, assistant_name=""):
         msg = data["choices"][0]["message"]
         calls = msg.get("tool_calls") or []
         if not calls:
-            return {"answer": (msg.get("content") or "").strip() or "Готово.", "actions": ctx.actions}
+            return {"answer": (msg.get("content") or "").strip() or "Готово.", "actions": ctx.actions,
+                    "trace": ctx.trace}
         messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
         for call in calls:
             fn = call.get("function") or {}
@@ -618,9 +643,12 @@ def run(request, text, history=None, page=None, assistant_name=""):
             except Exception as e:  # noqa: BLE001
                 log.exception("assistant: tool %s failed", fn.get("name"))
                 result = {"error": "Ошибка инструмента: %s" % e}
+            ctx.trace.append({"tool": fn.get("name"), "args": (fn.get("arguments") or "")[:300],
+                              "result": json.dumps(result, ensure_ascii=False, default=str)[:300]})
             messages.append({"role": "tool", "tool_call_id": call.get("id"),
                              "content": json.dumps(result, ensure_ascii=False, default=str)[:12000]})
-    return {"answer": "Не получилось довести запрос до конца — уточните, пожалуйста.", "actions": ctx.actions}
+    return {"answer": "Не получилось довести запрос до конца — уточните, пожалуйста.", "actions": ctx.actions,
+            "trace": ctx.trace}
 
 
 def simple_answer(question, history=None, assistant_name=""):

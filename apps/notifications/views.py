@@ -1528,7 +1528,7 @@ def voice_command(request):
         res["transcript"] = transcript
         if res.get("error"):
             return JsonResponse(res, status=502)
-        data = {}
+        data = {"tools": res.pop("trace", [])}
         confirm = next((a for a in res.get("actions") or [] if a.get("type") == "confirm_appointment"), None)
         if confirm:
             # прошлые неподтверждённые записи в этом разговоре больше не актуальны

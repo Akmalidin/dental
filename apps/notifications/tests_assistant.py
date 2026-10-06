@@ -273,3 +273,33 @@ class AssistantTestCase(TestCase):
         self.assertIn("Каримов Алишер", result)
         self.assertNotIn("Чужой врач", result)
         self.assertIn("Клиника ИИ", calls[0][1]["messages"][0]["content"])
+
+    def test_doctor_day_today_for_superadmin(self):
+        from apps.appointments.models import Appointment
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        su = User.objects.create(login="ai_su2", name="Супер", role=su_role, clinic=self.clinic)
+        self.client.force_login(su)
+        today = timezone.localdate()
+        for h, p in ((11, self.patient), (14, None)):
+            st = timezone.make_aware(datetime.combine(today, time(h, 0)))
+            Appointment.objects.create(patient=p, doctor=self.doctor, branch=self.branch,
+                                       start_at=st, end_at=st + timedelta(minutes=30), clinic=self.clinic)
+        resp, calls = self._ask("Сколько записей сегодня?", [
+            _tool_call("doctor_day", {"date": today.isoformat()}), _final("Две.")])
+        result = json.loads(calls[1][1]["messages"][-1]["content"])
+        self.assertEqual(len(result["appointments"]), 2, result)
+
+    def test_today_snapshot_in_prompt_and_tool_trace_saved(self):
+        from apps.appointments.models import Appointment
+        from apps.notifications.models import AssistantMessage
+        st = timezone.make_aware(datetime.combine(timezone.localdate(), time(11, 0)))
+        Appointment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch,
+                                   start_at=st, end_at=st + timedelta(minutes=30), clinic=self.clinic)
+        resp, calls = self._ask("Сколько записей сегодня?", [
+            _tool_call("doctor_day", {"date": timezone.localdate().isoformat()}), _final("Одна.")])
+        sysmsg = calls[0][1]["messages"][0]["content"]
+        self.assertIn("записей: 1", sysmsg)
+        self.assertIn("Каримов Алишер: 11:00 Сатторова Нилуфар", sysmsg)
+        m = AssistantMessage.objects.get(pk=resp.json()["message_id"])
+        self.assertEqual(m.data["tools"][0]["tool"], "doctor_day")
+        self.assertNotIn("trace", resp.json())
