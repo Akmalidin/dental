@@ -214,10 +214,13 @@ class PatientAssistantTestCase(TestCase):
 
     def test_prices_in_clinic_currency(self):
         self.cs.currency = "KGS"
+        self.cs.phone = "+996 555 12 34 56"
         self.cs.save()
         self._in("Сколько стоит чистка?", phone="998901112233", patient=self.patient)
         n, calls = self._tick([_tool_call("search_services", {"query": "истка"}), _final("Чистка — 200 000 сом.")])
         self.assertIn("Валюта клиники: сом (KGS)", calls[0]["messages"][0]["content"])
+        self.assertIn("оставь телефон администратора", calls[0]["messages"][0]["content"])
+        self.assertIn("Телефон администратора: +996 555 12 34 56", calls[0]["messages"][0]["content"])
         self.assertIn("200 000 сом", calls[1]["messages"][-1]["content"])
 
     def test_unknown_number_gets_clinic(self):
