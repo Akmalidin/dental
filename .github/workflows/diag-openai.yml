@@ -1,0 +1,39 @@
+name: Diag OpenAI
+
+# Только чтение: почему ИИ-помощник отвечает «недоступен». Показывает ошибки
+# OpenAI из журнала сервиса и делает пробный запрос к API с ключом из .env
+# (сам ключ не печатается — только код ответа и текст ошибки OpenAI).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            echo ">>> переменные OpenAI в .env (значения скрыты)"
+            grep -oE '^(OPENAI_[A-Z_]+|GUNICORN_CMD_ARGS)=' .env || echo "нет"
+            KEY=$(grep -E '^OPENAI_API_KEY=' .env | tail -1 | cut -d= -f2- | tr -d "\"' \r")
+            echo "длина ключа: ${#KEY}, начало: ${KEY:0:7}"
+            echo
+            echo ">>> ошибки ассистента в журнале"
+            journalctl -u sadaf.service --since "-3 hours" --no-pager | grep -E "assistant:|OpenAI" | tail -20 || true
+            echo
+            echo ">>> пробный запрос /v1/models"
+            curl -s -o /tmp/oa.json -w "HTTP %{http_code}\n" --max-time 20 https://api.openai.com/v1/models -H "Authorization: Bearer $KEY" || echo "curl не удался"
+            head -c 600 /tmp/oa.json | grep -v '"id"' ; echo
+            grep -oE '"id": ?"(gpt-4\.1-mini|gpt-4o-mini|gpt-4o-mini-transcribe|gpt-4o-mini-tts|whisper-1|tts-1)"' /tmp/oa.json | sort -u
+            echo
+            echo ">>> пробный чат gpt-4.1-mini"
+            curl -s --max-time 30 https://api.openai.com/v1/chat/completions -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+              -d '{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"Скажи: ок"}],"max_tokens":5}' | head -c 700; echo
+            rm -f /tmp/oa.json
+            echo
+            echo ">>> внешний IP сервера (страна)"
+            curl -s --max-time 10 https://ipinfo.io/country || true
