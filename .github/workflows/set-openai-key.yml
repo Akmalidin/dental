@@ -1,0 +1,40 @@
+name: Set OpenAI key
+
+# Записывает ключ OpenAI из секрета репозитория OPENAI_API_KEY в .env на
+# сервере (заменяя старый), перезапускает сайт и проверяет ключ запросом к
+# API. Сам ключ нигде не печатается.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  set-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secret
+        env:
+          K: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$K" ]; then echo "Секрет OPENAI_API_KEY не задан в Settings → Secrets → Actions"; exit 1; fi
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          NEWKEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: NEWKEY
+          script: |
+            set -e
+            cd /var/www/sadaf
+            KEY=$(printf '%s' "$NEWKEY" | tr -d "\"' \r\n")
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 https://api.openai.com/v1/models -H "Authorization: Bearer $KEY")
+            echo "проверка нового ключа: HTTP $CODE"
+            if [ "$CODE" != "200" ]; then echo "Ключ не принят OpenAI — .env не меняю"; exit 1; fi
+            cp .env .env.bak-openai
+            grep -v '^OPENAI_API_KEY=' .env > .env.tmp
+            printf 'OPENAI_API_KEY=%s\n' "$KEY" >> .env.tmp
+            cat .env.tmp > .env && rm -f .env.tmp
+            systemctl restart sadaf.service
+            sleep 3
+            systemctl is-active sadaf.service
+            echo "ключ обновлён, сайт перезапущен"
