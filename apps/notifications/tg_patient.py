@@ -247,6 +247,11 @@ def link_by_phone(clinic, chat, phone_raw, token):
     pnorm = normalize_phone(phone_raw)
     patient = Patient.objects.filter(phone_norm=pnorm).first() if len(pnorm) >= 9 else None
     lang = chat.lang or "ru"
+    auto = Patient.objects.filter(telegram_chat_id=chat.chat_id, phone="").first()
+    if patient is not None and auto is not None:
+        # писал боту без номера — переписка переезжает в настоящую карточку
+        from .patient_assistant import merge_tg_card
+        patient = merge_tg_card(auto, patient)
     if patient is None:
         _set_state(chat, "await_name", {"phone": phone_raw})
         _send(chat.chat_id, t("ask_name", lang), token, keyboard={"remove_keyboard": True})
@@ -278,8 +283,16 @@ def register_patient(clinic, chat, full_name, token):
         last, first, middle = words[0], words[1], " ".join(words[2:])
     branch = (Branch.objects.filter(clinic=clinic, is_active=True, is_main=True).first()
               or Branch.objects.filter(clinic=clinic, is_active=True).first())
-    patient = Patient(first_name=first[:100], last_name=last[:100], middle_name=middle[:100],
-                      phone=phone, branch=branch, telegram_chat_id=chat.chat_id, clinic=clinic)
+    auto = Patient.objects.filter(telegram_chat_id=chat.chat_id, phone="").first()
+    if auto is not None:
+        # уже была автокарточка (писал боту без номера) — дополняем её, а не плодим дубль
+        patient = auto
+        patient.first_name, patient.last_name, patient.middle_name = first[:100], last[:100], middle[:100]
+        patient.phone = phone
+        patient.branch = patient.branch or branch
+    else:
+        patient = Patient(first_name=first[:100], last_name=last[:100], middle_name=middle[:100],
+                          phone=phone, branch=branch, telegram_chat_id=chat.chat_id, clinic=clinic)
     patient.save()
     _set_state(chat)
     _log_in(patient, chat.chat_id, "🆕 Новый пациент через Telegram-бот: %s, %s" % (patient.full_name, phone))
@@ -503,6 +516,8 @@ def handle_message(clinic, msg, token, cs):
     chat = get_chat(clinic, chat_id)
     lang = chat.lang if chat.lang in LANGS else "ru"
     patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
+    if patient is not None and not patient.phone:
+        patient = None    # автокарточка без номера (написал, не поделившись) — ещё не привязан
 
     if text.startswith("/start"):
         _set_state(chat)

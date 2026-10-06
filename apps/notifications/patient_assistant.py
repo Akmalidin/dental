@@ -50,7 +50,9 @@ TOOLS = [
          "doctor_name": {"type": "string", "description": "имя врача, если не уверен в id"},
          "start": {"type": "string", "description": "YYYY-MM-DDTHH:MM"},
          "duration_min": {"type": "integer"}, "service_ids": {"type": "array", "items": {"type": "integer"}},
-         "full_name": {"type": "string"}}, ["start"]),
+         "full_name": {"type": "string"},
+         "phone": {"type": "string", "description": "телефон, если пациент написал в Telegram без номера"}},
+        ["start"]),
     _fn("reschedule_appointment", "Перенести запись пациента (после его согласия на новое время).",
         {"appointment_id": {"type": "integer"}, "new_start": {"type": "string", "description": "YYYY-MM-DDTHH:MM"}},
         ["appointment_id", "new_start"]),
@@ -147,9 +149,26 @@ def _t_my_appointments(ctx, **_):
     return {"patient": ctx.patient.full_name, "appointments": [core._appt_brief(a) for a in _own_appts(ctx)[:10]]}
 
 
-def _ensure_patient(ctx, full_name):
+def _ensure_patient(ctx, full_name, phone=""):
     from apps.patients.models import Patient, normalize_phone
     name = (full_name or "").strip()
+    if ctx.patient is not None and ctx.channel == "tg" and not ctx.patient.phone:
+        # написал боту, не поделившись номером: для записи нужны ФИО и телефон
+        digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+        if len(name.split()) < 2 or len(digits) < 9:
+            return None, ("Для записи нужны имя, фамилия и номер телефона пациента — спроси одним "
+                          "сообщением (или пусть нажмёт в боте «Поделиться номером»), потом передай "
+                          "full_name и phone")
+        from apps.patients.models import normalize_phone
+        other = Patient.objects.filter(phone_norm=normalize_phone(digits)).exclude(pk=ctx.patient.pk).first()
+        if other is not None:
+            ctx.patient = merge_tg_card(ctx.patient, other)
+            return ctx.patient, None
+        parts = name.split(None, 1)
+        ctx.patient.last_name, ctx.patient.first_name = parts[0][:100], parts[1][:100]
+        ctx.patient.phone = "+" + digits
+        ctx.patient.save()
+        return ctx.patient, None
     if ctx.patient is not None and not ctx.patient.last_name:
         # карточку завели автоматически по номеру WhatsApp — имя ещё не спрашивали
         if len(name.split()) < 2:
@@ -174,7 +193,8 @@ def _ensure_patient(ctx, full_name):
     return p, None
 
 
-def _t_book(ctx, doctor_id=None, doctor_name="", start=None, duration_min=None, service_ids=None, full_name="", **_):
+def _t_book(ctx, doctor_id=None, doctor_name="", start=None, duration_min=None, service_ids=None, full_name="",
+            phone="", **_):
     from apps.appointments.models import Appointment
     from apps.appointments.views import _default_visit_service, notify_appointment_created
     from apps.services.models import Service
@@ -189,7 +209,7 @@ def _t_book(ctx, doctor_id=None, doctor_name="", start=None, duration_min=None, 
     err = core.validate_appointment(doc, st, duration)
     if err:
         return {"error": err, "hint": "Предложи другое свободное время (free_slots)"}
-    patient, perr = _ensure_patient(ctx, full_name)
+    patient, perr = _ensure_patient(ctx, full_name, phone)
     if perr:
         return {"error": perr}
     branch = doc.branches.filter(is_active=True).first() or Branch.objects.filter(is_active=True).first()
@@ -257,6 +277,10 @@ def system_prompt(ctx):
     now = timezone.localtime()
     if ctx.patient and ctx.patient.last_name:
         who = "Пациент: %s (patient_id=%s)." % (ctx.patient.full_name, ctx.patient.pk)
+    elif ctx.patient and ctx.channel == "tg" and not ctx.patient.phone:
+        who = ("Новый пациент из Telegram (имя в профиле: %s), номер не известен. На вопросы отвечай как "
+               "обычно; для записи спроси имя, фамилию и номер телефона одним сообщением и передай "
+               "full_name и phone." % ctx.patient.first_name)
     elif ctx.patient:
         who = ("Новый пациент (имя в WhatsApp: %s) — для записи спроси имя и фамилию и передай их "
                "в full_name." % ctx.patient.first_name)
@@ -535,6 +559,51 @@ def ensure_chat_patient(clinic, phone, name=""):
             set_current_clinic(prev)
     WaMessage.all_clinics.filter(clinic=clinic, channel="wa", phone=phone, patient__isnull=True).update(patient=p)
     return p
+
+
+def _lead_source(name):
+    from apps.patients.models import LeadSource
+    return LeadSource.objects.filter(name__iexact=name).first() or LeadSource.objects.create(name=name)
+
+
+def ensure_tg_patient(clinic, chat_id, from_user=None):
+    """Карточка для человека, который пишет Telegram-боту, не поделившись номером.
+    Без неё переписку не видно в «Мессенджерах» и ассистент не отвечает.
+    Телефона нет, фамилия пустая — ассистент для записи спросит ФИО и номер,
+    а «Поделиться номером» сольёт карточку с существующей (merge_tg_card)."""
+    from apps.patients.models import Patient
+    from apps.users.models import Branch
+    p = Patient.objects.filter(telegram_chat_id=chat_id).first()
+    if p is not None:
+        return p
+    u = from_user or {}
+    name = " ".join(x for x in (u.get("first_name"), u.get("last_name")) if x).strip() or \
+        (("@" + u["username"]) if u.get("username") else "Клиент Telegram")
+    branch = (Branch.objects.filter(clinic=clinic, is_active=True, is_main=True).first()
+              or Branch.objects.filter(clinic=clinic, is_active=True).first())
+    p = Patient(first_name=name[:100], last_name="", phone="", telegram_chat_id=chat_id, branch=branch,
+                clinic=clinic, source=_lead_source("Telegram"))
+    p.save()
+    return p
+
+
+def merge_tg_card(auto, target):
+    """Автокарточка Telegram (без телефона) → существующая карточка пациента:
+    переписка и записи переезжают, автокарточка уходит в корзину."""
+    from apps.appointments.models import Appointment
+    from .models import WaMessage
+    if auto is None or target is None or auto.pk == target.pk:
+        return target
+    WaMessage.all_clinics.filter(patient=auto).update(patient=target)
+    Appointment.objects.filter(patient=auto).update(patient=target)
+    chat_id = auto.telegram_chat_id
+    type(auto).all_objects.filter(pk=auto.pk).update(telegram_chat_id=None)
+    auto.refresh_from_db()
+    auto.soft_delete()
+    if chat_id and not target.telegram_chat_id:
+        target.telegram_chat_id = chat_id
+        target.save(update_fields=["telegram_chat_id"])
+    return target
 
 
 def assign_orphans(hours=2):

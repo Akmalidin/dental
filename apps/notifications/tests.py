@@ -167,6 +167,32 @@ class TgInboxLoggingTestCase(TestCase):
         m = WaMessage.objects.get()
         self.assertEqual(m.patient_id, self.patient.pk)
 
+    def test_unlinked_text_gets_card_then_contact_share_merges(self):
+        from apps.notifications.models import WaMessage
+        from apps.patients.models import Patient
+        self._send({"chat": {"id": 777}, "from": {"first_name": "Зафар"}, "text": "Тиш олиш нечи пул"})
+        auto = Patient.objects.get(telegram_chat_id=777)
+        self.assertEqual((auto.first_name, auto.last_name, auto.phone, auto.source.name),
+                         ("Зафар", "", "", "Telegram"))
+        m = WaMessage.objects.get()
+        self.assertEqual((m.patient_id, m.clinic_id), (auto.pk, self.clinic.pk))
+        # поделился номером, который уже есть в базе — переписка переезжает, дубля нет
+        self._send({"chat": {"id": 777}, "contact": {"phone_number": "+996553565674"}})
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.telegram_chat_id, 777)
+        self.assertFalse(Patient.objects.filter(pk=auto.pk).exists())
+        self.assertEqual(set(WaMessage.objects.values_list("patient_id", flat=True)), {self.patient.pk})
+
+    def test_unlinked_card_then_unknown_phone_and_name_fill_same_card(self):
+        from apps.patients.models import Patient
+        self._send({"chat": {"id": 778}, "from": {"first_name": "Zoir"}, "text": "Салом"})
+        auto = Patient.objects.get(telegram_chat_id=778)
+        self._send({"chat": {"id": 778}, "contact": {"phone_number": "+996700123456"}})
+        self._send({"chat": {"id": 778}, "text": "Иминов Зоир"})
+        auto.refresh_from_db()
+        self.assertEqual((auto.last_name, auto.first_name, auto.phone), ("Иминов", "Зоир", "+996700123456"))
+        self.assertEqual(Patient.objects.filter(telegram_chat_id=778).count(), 1)
+
     def test_regular_text_message_still_logged_as_before(self):
         self.patient.telegram_chat_id = 555
         self.patient.save(update_fields=["telegram_chat_id"])
