@@ -480,13 +480,14 @@ def wa_webhook(request):
                               media_type=media_type, channel=channel, read=False)
                 if patient is not None:
                     m.clinic = patient.clinic
-                elif inst:
-                    # Новый номер, но инстанс клиники свой — переписка этой клиники
-                    # (иначе ИИ-ассистент не увидел бы новых пациентов).
-                    from apps.settings_clinic.models import ClinicSettings
-                    cs_inst = ClinicSettings.objects.filter(wa_id_instance=inst).exclude(clinic=None).first()
-                    if cs_inst is not None:
-                        m.clinic = cs_inst.clinic
+                elif channel == "wa":
+                    # Нового номера нет среди пациентов: без клиники сообщение никто
+                    # не видит и ИИ-ассистент не отвечает новым пациентам.
+                    try:
+                        from apps.notifications.patient_assistant import clinic_for_unknown_number
+                        m.clinic = clinic_for_unknown_number(phone, inst)
+                    except Exception:  # noqa: BLE001
+                        pass
                 if media_file is not None:
                     m.media_file = media_file
                 m.save()

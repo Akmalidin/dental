@@ -395,6 +395,74 @@ def _message_text(m):
     return m.body or "(%s)" % (m.get_media_type_display() or "сообщение")
 
 
+def _shared_number():
+    """Номер WhatsApp общего (системного) инстанса Green-API — кэш на сутки."""
+    from django.conf import settings
+    from django.core.cache import cache
+    if not (getattr(settings, "GREENAPI_ID_INSTANCE", "") and getattr(settings, "GREENAPI_TOKEN", "")):
+        return ""
+    num = cache.get("wa_shared_number")
+    if num is None:
+        num = ""
+        try:
+            import urllib.request
+            base = (getattr(settings, "GREENAPI_API_URL", "") or "https://api.greenapi.com").rstrip("/")
+            url = "%s/waInstance%s/getWaSettings/%s" % (base, settings.GREENAPI_ID_INSTANCE, settings.GREENAPI_TOKEN)
+            with urllib.request.urlopen(url, timeout=10) as r:
+                num = str(json.loads(r.read().decode("utf-8")).get("phone") or "")
+        except Exception:  # noqa: BLE001
+            log.warning("patient_assistant: не удалось узнать номер общего инстанса")
+        cache.set("wa_shared_number", num, 86400 if num else 600)
+    return num
+
+
+def clinic_for_unknown_number(phone, id_instance=""):
+    """Клиника для входящего с номера, которого нет среди пациентов.
+    Без клиники сообщение никто не видит и ассистент на него не отвечает.
+    1) свой инстанс клиники; 2) клиника, которая недавно писала на этот номер;
+    3) сотрудник клиники с этим номером; 4) владелец общего номера WhatsApp
+    (ClinicSettings.wa_phone), а если не указан — единственная клиника на общих
+    ключах с включённым ассистентом."""
+    from apps.patients.models import normalize_phone
+    from apps.settings_clinic.models import ClinicSettings
+    from apps.users.models import Clinic, User
+    from .models import WaMessage
+    if id_instance:
+        cs = ClinicSettings.objects.filter(wa_id_instance=str(id_instance)).exclude(clinic=None).first()
+        if cs:
+            return cs.clinic
+    norm = normalize_phone(phone)
+    if not norm:
+        return None
+    last = (WaMessage.all_clinics.filter(channel="wa", phone__endswith=norm, direction="out", clinic__isnull=False,
+                                         created_at__gte=timezone.now() - timedelta(days=60))
+            .order_by("-created_at").first())
+    if last:
+        return last.clinic
+    staff = [u for u in User.objects.filter(is_active=True, clinic__isnull=False).exclude(phone="")
+             .only("phone", "clinic") if normalize_phone(u.phone) == norm]
+    if staff:
+        return Clinic.objects.filter(pk=staff[0].clinic_id).first()
+    shared = ClinicSettings.objects.exclude(clinic=None).filter(wa_id_instance="")
+    own = normalize_phone(_shared_number())
+    if own:
+        for cs in shared.exclude(wa_phone=""):
+            if normalize_phone(cs.wa_phone) == own:
+                return cs.clinic
+    with_bot = list(shared.filter(ai_patient_bot=True)[:2])
+    return with_bot[0].clinic if len(with_bot) == 1 else None
+
+
+def assign_orphans(hours=2):
+    """Недавние входящие без клиники — привязать (по clinic_for_unknown_number)."""
+    from .models import WaMessage
+    for m in WaMessage.all_clinics.filter(direction="in", channel="wa", clinic__isnull=True, ai_status="",
+                                          created_at__gte=timezone.now() - timedelta(hours=hours)):
+        clinic = clinic_for_unknown_number(m.phone)
+        if clinic is not None:
+            WaMessage.all_clinics.filter(pk=m.pk).update(clinic=clinic)
+
+
 FAST_WAIT_SECONDS = 5   # ночью / в разговоре, который ведёт ассистент: пауза, чтобы собрать 2–3 сообщения подряд
 
 

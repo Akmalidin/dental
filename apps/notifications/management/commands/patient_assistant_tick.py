@@ -19,8 +19,12 @@ class Command(BaseCommand):
     def _pass(self):
         from apps.settings_clinic.models import ClinicSettings
         from apps.tenancy import clear_current_clinic
-        from apps.notifications.patient_assistant import tick_clinic
+        from apps.notifications.patient_assistant import assign_orphans, tick_clinic
         total = 0
+        try:
+            assign_orphans()
+        except Exception as e:  # noqa: BLE001
+            self.stderr.write("assign_orphans: %s" % e)
         for cs in ClinicSettings.objects.filter(ai_patient_bot=True).exclude(clinic=None).select_related("clinic"):
             try:
                 total += tick_clinic(cs.clinic, out=self.stdout.write)
