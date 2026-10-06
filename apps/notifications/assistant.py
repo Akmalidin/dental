@@ -185,6 +185,18 @@ def _fn(name, description, props=None, required=()):
         "parameters": {"type": "object", "properties": props or {}, "required": list(required)}}}
 
 
+# Страницы нового интерфейса, которые ассистент может открыть по просьбе
+# («открой кассу»). Права доступа проверяет сама страница.
+SIMPLE_PAGES = {
+    "patients": "/new/patients/", "cashdesk": "/new/cashdesk/", "finance": "/new/finance/",
+    "accounting": "/new/accounting/", "messages": "/new/messages/", "dashboard": "/new/",
+    "visits": "/new/visits/", "treatplans": "/new/treatplans/", "services": "/new/services/",
+    "staff": "/new/staff/", "reports": "/new/reports/", "salary": "/new/salary/",
+    "warehouse": "/new/warehouse/", "lab": "/new/lab/", "tasks": "/new/tasks/",
+    "notifications": "/new/notifications/", "settings": "/new/settings/",
+}
+
+
 TOOLS = [
     _fn("search_patients", "Найти пациентов клиники по имени, фамилии или телефону.",
         {"query": {"type": "string"}}, ["query"]),
@@ -234,8 +246,16 @@ TOOLS = [
         "appointment_id сегодняшней записи пациента (из doctor_day или patient_details), а если записи "
         "нет — patient_id. После открытия ты продолжишь разговор уже в карте приёма.",
         {"appointment_id": {"type": "integer"}, "patient_id": {"type": "integer"}}),
-    _fn("open_page", "Открыть страницу CRM: карточку пациента или расписание на дату.",
-        {"page": {"type": "string", "enum": ["patient", "schedule", "patients"]},
+    _fn("finish_visit", "Сохранить и завершить приём в ОТКРЫТОЙ карте приёма (то же, что кнопка "
+        "«Сохранить»/«Завершить приём»): лечение фиксируется, долг уходит в кассу, открывается расписание. "
+        "Вызывай, когда врач говорит «сохрани приём», «заверши приём», «закончили». Переспрашивать не нужно — "
+        "команда врача и есть подтверждение."),
+    _fn("open_page", "Открыть страницу CRM. page: patient (карточка, нужен patient_id), schedule "
+        "(расписание, можно date), patients, cashdesk (касса), finance, accounting (бухгалтерия), "
+        "messages (мессенджеры), dashboard (главная), visits (приёмы), treatplans (планы лечения), "
+        "services (услуги и прайс), staff (персонал), reports (отчёты), salary (зарплата), warehouse "
+        "(склад), lab (лаборатория), tasks (задачи), notifications, settings (настройки).",
+        {"page": {"type": "string", "enum": ["patient", "schedule"] + sorted(SIMPLE_PAGES)},
          "patient_id": {"type": "integer"}, "date": {"type": "string", "description": "YYYY-MM-DD"}},
         ["page"]),
 ]
@@ -515,6 +535,14 @@ def _tool_visit_note(ctx, field="", text="", **_):
     return {"ok": True, "field": field}
 
 
+def _tool_finish_visit(ctx, **_):
+    if ctx.page.get("type") != "visit":
+        return {"error": "Карта приёма не открыта. Скажи об этом; если врач хочет завершить приём пациента — "
+                         "сначала открой его карту (start_visit), потом заверши"}
+    ctx.actions.append({"type": "visit_commit"})
+    return {"ok": True, "note": "Приём сохраняется и завершается, затем откроется расписание"}
+
+
 def _tool_start_visit(ctx, appointment_id=None, patient_id=None, **_):
     from apps.appointments.models import Appointment
     from apps.patients.models import Patient
@@ -547,8 +575,8 @@ def _tool_open_page(ctx, page="", patient_id=None, date=None, **_):
     elif page == "schedule":
         day = _parse_date(date)
         url = "/new/schedule/" + ("?date=%s" % day.isoformat() if day else "")
-    elif page == "patients":
-        url = "/new/patients/"
+    elif page in SIMPLE_PAGES:
+        url = SIMPLE_PAGES[page]
     else:
         return {"error": "Неизвестная страница"}
     ctx.actions.append({"type": "open", "url": url})
@@ -556,6 +584,7 @@ def _tool_open_page(ctx, page="", patient_id=None, date=None, **_):
 
 
 HANDLERS = {
+    "finish_visit": _tool_finish_visit,
     "search_patients": _tool_search_patients, "patient_details": _tool_patient_details,
     "list_doctors": _tool_list_doctors, "doctor_day": _tool_doctor_day, "free_slots": _tool_free_slots,
     "search_services": _tool_search_services, "clinic_finance": _tool_clinic_finance,
@@ -627,6 +656,11 @@ def system_prompt(ctx, assistant_name=""):
         "- «Сегодня», «завтра», «в пятницу» переводи в даты сам от текущей даты.\n"
         "- «Начни приём …» — найди сегодняшнюю запись пациента и вызови start_visit; ответь: «Открыл "
         "приём: <пациент>, <время>. Слушаю вас» — дальше врач диктует уже в карте приёма.\n"
+        "- «Сохрани / заверши приём», «закончили» — вызови finish_visit сразу, без переспроса.\n"
+        "- «Открой кассу / финансы / мессенджеры / …» — open_page с нужной страницей; расписание "
+        "открывай только когда просят расписание.\n"
+        "- НИКОГДА не говори, что действие выполнено (записал, сохранил, завершил, открыл), если "
+        "инструмент для него не вызван или вернул ошибку — тогда скажи, что не получилось и почему.\n"
         "- Номера зубов — система FDI: «тридцать шесть» = 36, «верхний правый шестой» = 16.\n"
         "- Отвечай на языке пользователя (русский или узбекский), коротко, 1–3 предложения: ответ "
         "озвучивается вслух — без списков, таблиц и markdown. Время пиши как 14:30, суммы — числом.\n"
