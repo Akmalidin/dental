@@ -7,9 +7,13 @@
 * привязка: сотрудник пишет боту /start и делится СВОИМ контактом; если номер
   совпадает с телефоном сотрудника в CRM — в User.telegram_id сохраняется его
   Telegram ID, и вместо меню пациента он получает меню сотрудника;
-* меню: «Приёмы сегодня», «Выбрать дату» (календарь из инлайн-кнопок, можно и
-  напечатать дату «25.09»), «Напомнить пациентам» (выбор даты → подтверждение
-  → рассылка напоминаний пациентам этих записей);
+* меню: «Приёмы сегодня», «Завтра», «Выбрать дату» (календарь из
+  инлайн-кнопок, можно и напечатать дату «25.09»), «Напомнить пациентам»
+  (выбор даты → подтверждение → рассылка напоминаний пациентам этих записей),
+  «Уведомления» (личные настройки ниже);
+* личные уведомления врачу (wa_reminders, каждые ~15 минут): напоминание
+  примерно за 30 минут до приёма и утренняя сводка приёмов на сегодня —
+  каждое врач может выключить в «⚙️ Уведомления»;
 * группы: бота добавляют в группу персонала, администратор пишет там /group —
   туда начинают приходить новые записи/заявки/отмены (всё, что уходит в
   WhatsApp-группы через notify_groups) и вечерняя сводка записей на завтра.
@@ -26,12 +30,19 @@ from django.utils import timezone
 log = logging.getLogger("apps")
 
 BTN_TODAY = "📅 Приёмы сегодня"
+BTN_TOMORROW = "📅 Завтра"
 BTN_PICK_DATE = "📆 Выбрать дату"
 BTN_REMIND = "🔔 Напомнить пациентам"
+BTN_SETTINGS = "⚙️ Уведомления"
 STAFF_KEYBOARD = {
-    "keyboard": [[{"text": BTN_TODAY}, {"text": BTN_PICK_DATE}], [{"text": BTN_REMIND}]],
+    "keyboard": [[{"text": BTN_TODAY}, {"text": BTN_TOMORROW}],
+                 [{"text": BTN_PICK_DATE}, {"text": BTN_REMIND}],
+                 [{"text": BTN_SETTINGS}]],
     "resize_keyboard": True,
 }
+SOON_MINUTES = 30        # напоминание врачу «через ~30 минут»
+SOON_WINDOW = 40         # окно поиска: крон раз в 15 минут → приходит за 25–40 минут
+DIGEST_HOURS = (8, 11)   # утренняя сводка: с 8:00 до 11:00 местного, раз в день
 
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 STATUS_ICONS = {
@@ -176,9 +187,11 @@ def send_staff_menu(chat_id, user, token, text=None):
         scope = "все записи клиники" if sees_all(user) else "ваши записи"
         text = ("👋 %s, это меню сотрудника.\n\n"
                 "📅 <b>Приёмы сегодня</b> — %s на сегодня\n"
+                "📅 <b>Завтра</b> — %s на завтра\n"
                 "📆 <b>Выбрать дату</b> — приёмы на любой день (можно просто написать дату, например 25.09)\n"
-                "🔔 <b>Напомнить пациентам</b> — отправить напоминание пациентам записей на выбранный день"
-                % (_esc(user.name), scope))
+                "🔔 <b>Напомнить пациентам</b> — отправить напоминание пациентам записей на выбранный день\n"
+                "⚙️ <b>Уведомления</b> — напоминание за 30 минут до приёма и утренняя сводка"
+                % (_esc(user.name), scope, scope))
     return _send(chat_id, text, token, keyboard=STAFF_KEYBOARD)
 
 
@@ -427,6 +440,14 @@ def handle_private(clinic, msg, token):
         for part in day_report(staff, timezone.localdate()):
             _send(chat_id, part, token)
         return True
+    if text == BTN_TOMORROW or cmd == "tomorrow":
+        for part in day_report(staff, timezone.localdate() + timedelta(days=1)):
+            _send(chat_id, part, token)
+        return True
+    if text == BTN_SETTINGS or cmd == "settings":
+        t, rows = notify_settings(staff)
+        _send(chat_id, t, token, buttons=rows)
+        return True
     if text == BTN_PICK_DATE or cmd == "date":
         t, rows = date_picker("l")
         _send(chat_id, t, token, buttons=rows)
@@ -449,7 +470,7 @@ def handle_callback(clinic, cq, token):
     """Инлайн-кнопки меню сотрудника (sdp/sdd/sdr). True — обработано."""
     from .telegram import tg_answer_callback, tg_edit_message
     data = cq.get("data", "") or ""
-    if not data.startswith(("sdp:", "sdd:", "sdr:")):
+    if not data.startswith(("sdp:", "sdd:", "sdr:", "sns:")):
         return False
     cq_id = cq.get("id")
     msg = cq.get("message") or {}
@@ -462,7 +483,14 @@ def handle_callback(clinic, cq, token):
 
     parts = data.split(":")
     try:
-        if parts[0] == "sdp":
+        if parts[0] == "sns":
+            field = {"soon": "tg_remind_soon", "digest": "tg_daily_digest"}.get(parts[1])
+            if field:
+                setattr(staff, field, not getattr(staff, field))
+                staff.save(update_fields=[field])
+            t, rows = notify_settings(staff)
+            tg_edit_message(chat_id, message_id, t, buttons=rows, token=token)
+        elif parts[0] == "sdp":
             mode, page = parts[1], int(parts[2])
             t, rows = date_picker(mode, page)
             tg_edit_message(chat_id, message_id, t, buttons=rows, token=token)
@@ -553,6 +581,91 @@ def handle_group(clinic, msg, token):
 
 
 # ── Уведомления персоналу ────────────────────────────────────────────────
+
+def notify_settings(user):
+    """Сообщение «⚙️ Уведомления» с переключателями (callback sns:*)."""
+    on = lambda v: "✅ включено" if v else "⛔ выключено"  # noqa: E731
+    text = ("⚙️ <b>Ваши уведомления в Telegram</b>\n\n"
+            "⏰ Напоминание за %s минут до приёма — %s\n"
+            "☀️ Утренняя сводка приёмов на сегодня (около 8:00) — %s\n\n"
+            "Новые записи к вам и отмены приходят всегда."
+            % (SOON_MINUTES, on(user.tg_remind_soon), on(user.tg_daily_digest)))
+    rows = [[("%s напоминание за %s мин" % ("Выключить" if user.tg_remind_soon else "Включить", SOON_MINUTES),
+              "sns:soon")],
+            [("%s утреннюю сводку" % ("Выключить" if user.tg_daily_digest else "Включить"), "sns:digest")]]
+    return text, rows
+
+
+def _soon_text(a, now):
+    st = timezone.localtime(a.start_at)
+    mins = max(1, int(round((a.start_at - now).total_seconds() / 60)))
+    p = a.patient
+    lines = ["⏰ <b>Через %s мин — приём в %s</b>" % (mins, st.strftime("%H:%M")),
+             "👤 %s" % (_esc(p.full_name) if p else "—")]
+    services = [s.name for s in a.services.all()] or ([a.service.name] if a.service_id else [])
+    if services:
+        lines.append("🦷 %s" % _esc(", ".join(services)))
+    if p and p.phone:
+        lines.append("📞 %s" % _esc(p.phone))
+    if a.status == "confirmed":
+        lines.append("✅ Пациент подтвердил запись")
+    elif a.status == "arrived":
+        lines.append("🚪 Пациент уже пришёл")
+    return "\n".join(lines)
+
+
+def send_doctor_soon_reminders(clinic, now=None, dry=False):
+    """Врачу — напоминание примерно за 30 минут до каждого его приёма.
+    Повторно о том же времени не напоминаем (doctor_reminded_for), а при
+    переносе записи напоминание придёт снова на новое время."""
+    from django.db.models import F, Q
+    from apps.appointments.models import Appointment
+    from .telegram import tg_enabled, tg_send_chat
+    now = now or timezone.now()
+    if not tg_enabled():
+        return 0
+    qs = (Appointment.objects.filter(
+            doctor__telegram_id__isnull=False, doctor__tg_remind_soon=True, doctor__is_active=True,
+            status__in=["scheduled", "confirmed", "arrived"],
+            start_at__gt=now, start_at__lte=now + timedelta(minutes=SOON_WINDOW))
+          .filter(Q(doctor_reminded_for__isnull=True) | ~Q(doctor_reminded_for=F("start_at")))
+          .select_related("patient", "doctor", "service").prefetch_related("services"))
+    sent = 0
+    for a in qs:
+        if not dry:
+            if not tg_send_chat(a.doctor.telegram_id, _soon_text(a, now)):
+                continue
+            Appointment.all_objects.filter(pk=a.pk).update(doctor_reminded_for=a.start_at)
+        sent += 1
+    return sent
+
+
+def send_doctor_morning_digests(clinic, now=None, dry=False):
+    """Утренняя сводка каждому врачу: его приёмы на сегодня. Раз в день,
+    с 8:00 до 11:00 по времени клиники; если приёмов нет — не беспокоим."""
+    from apps.users.models import User
+    from .telegram import tg_enabled, tg_send_chat
+    now = now or timezone.now()
+    local = timezone.localtime(now)
+    if not (DIGEST_HOURS[0] <= local.hour < DIGEST_HOURS[1]) or not tg_enabled():
+        return 0
+    today = local.date()
+    doctors = (User.objects.filter(clinic=clinic, is_active=True, telegram_id__isnull=False, tg_daily_digest=True)
+               .exclude(tg_digest_sent_on=today))
+    sent = 0
+    for u in doctors:
+        if not u.is_doctor:
+            continue
+        has = _day_qs(u, today).exclude(status__in=["cancelled", "no_show"]).exists()
+        if has and not dry:
+            parts = day_report(u, today, title="☀️ <b>Доброе утро! Ваши приёмы сегодня</b> (%s)"
+                                                % today.strftime("%d.%m"))
+            if not all(tg_send_chat(u.telegram_id, part) for part in parts):
+                continue
+        if not dry:
+            User.objects.filter(pk=u.pk).update(tg_digest_sent_on=today)
+        sent += int(has)
+    return sent
 
 def notify_user(user, text_wa):
     """Личное уведомление сотруднику в Telegram (если он подключён к боту)."""

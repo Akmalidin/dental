@@ -293,6 +293,10 @@ class User(AbstractUser):
         verbose_name="Доп. роли",
     )
     telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID")
+    # Личные уведомления в Telegram-боте (врач включает/выключает сам: «⚙️ Уведомления»)
+    tg_remind_soon = models.BooleanField(default=True, verbose_name="Telegram: напоминать за 30 минут до приёма")
+    tg_daily_digest = models.BooleanField(default=True, verbose_name="Telegram: утренняя сводка приёмов")
+    tg_digest_sent_on = models.DateField(null=True, blank=True, verbose_name="Telegram: сводка отправлена за")
     can_view_all_appointments = models.BooleanField(
         default=True, verbose_name="Видит записи всех врачей",
         help_text="Если выключено — врач видит только свои записи",
