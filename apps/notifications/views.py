@@ -327,11 +327,25 @@ def wa_webhook(request):
         try:
             out_phone = ((data.get("senderData") or {}).get("chatId") or "").split("@")[0]
             if out_phone:
+                from datetime import timedelta
+                from django.utils import timezone
                 from apps.notifications.models import WaMessage
+                from apps.notifications.patient_assistant import manager_joined, MANAGER_HOLD_HOURS
+                from apps.settings_clinic.models import ClinicSettings
                 from apps.tenancy import unscoped
+                from apps.users.models import Clinic
                 with unscoped():
                     WaMessage.objects.filter(channel=channel, phone=out_phone, direction="in",
                                              ai_status="").update(ai_status="skip")
+                    # Менеджер подключился к чату — ассистент в нём замолкает.
+                    own = ClinicSettings.objects.filter(wa_id_instance=inst).values_list("clinic_id", flat=True) \
+                        if inst else []
+                    clinic_ids = set(own) or set(WaMessage.objects.filter(
+                        channel=channel, phone=out_phone,
+                        created_at__gte=timezone.now() - timedelta(hours=MANAGER_HOLD_HOURS),
+                    ).values_list("clinic_id", flat=True))
+                    for clinic in Clinic.objects.filter(pk__in=[c for c in clinic_ids if c]):
+                        manager_joined(clinic, channel, out_phone)
         except Exception:  # noqa: BLE001
             pass
         return JsonResponse({"ok": True})

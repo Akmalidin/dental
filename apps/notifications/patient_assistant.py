@@ -268,9 +268,41 @@ def run(ctx, history):
 
 # ── Состояние чатов и отправка ───────────────────────────────────────────
 
-def is_paused(clinic, channel, address):
+MANAGER_REASON = "Менеджер ведёт чат"
+MANAGER_HOLD_HOURS = 12   # после последнего ответа менеджера ассистент молчит в этом чате столько часов
+
+
+def is_paused(clinic, channel, address, now=None):
     from .models import ChatBotState
-    return ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=True).exists()
+    st = ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=True).first()
+    if not st:
+        return False
+    if st.reason == MANAGER_REASON:   # пауза «менеджер подключился» сама снимается через MANAGER_HOLD_HOURS
+        return (now or timezone.now()) - st.updated_at < timedelta(hours=MANAGER_HOLD_HOURS)
+    return True
+
+
+def manager_joined(clinic, channel, address):
+    """Менеджер ответил пациенту (из CRM или с телефона клиники) — ассистент в этом чате замолкает."""
+    set_paused(clinic, channel, address, True, reason=MANAGER_REASON)
+
+
+def _manager_replied_in_crm(clinic, channel, address, now):
+    """Ответ менеджера из CRM после последнего ручного включения ассистента в этом чате."""
+    from .models import ChatBotState, WaMessage
+    after = now - timedelta(hours=MANAGER_HOLD_HOURS)
+    st = ChatBotState.all_clinics.filter(clinic=clinic, channel=channel, address=address, paused=False).first()
+    if st and st.updated_at > after:
+        after = st.updated_at
+    return WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=False,
+                                    sent_by__isnull=False, created_at__gt=after).exists()
+
+
+def _ai_leads_chat(channel, address, now):
+    """Ассистент уже ведёт этот разговор (недавно отвечал сам) — следующие ответы без задержки."""
+    from .models import WaMessage
+    return WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=True,
+                                    created_at__gte=now - timedelta(hours=WINDOW_HOURS)).exists()
 
 
 def set_paused(clinic, channel, address, paused, reason=""):
@@ -340,15 +372,17 @@ def tick_clinic(clinic, now=None):
         if channel == "tg" and not msgs[-1].patient_id:
             WaMessage.objects.filter(pk__in=ids).update(ai_status="skip")   # Telegram без привязки — ведёт бот с кнопками
             continue
-        if is_paused(clinic, channel, address):
+        if is_paused(clinic, channel, address, now):
             WaMessage.objects.filter(pk__in=ids).update(ai_status="skip")
             continue
-        # администратор уже ответил после первого из ждущих сообщений — молчим
-        if WaMessage.objects.filter(channel=channel, phone=address, direction="out", by_ai=False,
-                                    sent_by__isnull=False, created_at__gt=msgs[0].created_at).exists():
+        # менеджер подключился к чату из CRM — ассистент замолкает
+        if _manager_replied_in_crm(clinic, channel, address, now):
+            manager_joined(clinic, channel, address)
             WaMessage.objects.filter(pk__in=ids).update(ai_status="skip")
             continue
-        wait = timedelta(seconds=20) if night else delay
+        # ночью или если разговор уже ведёт ассистент — отвечаем сразу, иначе ждём менеджера
+        fast = night or _ai_leads_chat(channel, address, now)
+        wait = timedelta(seconds=20) if fast else delay
         if now - msgs[-1].created_at < wait:
             continue
         patient = next((m.patient for m in reversed(msgs) if m.patient_id), None)
