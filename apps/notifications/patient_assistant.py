@@ -335,6 +335,48 @@ def manager_joined(clinic, channel, address):
     set_paused(clinic, channel, address, True, reason=MANAGER_REASON)
 
 
+def _norm_text(t):
+    return " ".join((t or "").replace("*", "").replace("_", "").split()).lower()
+
+
+def sent_by_system(channel, address, text, minutes=3):
+    """Исходящее с номера клиники — это сообщение, которое только что отправила
+    сама система (напоминание, уведомление, ответ ассистента или из CRM)?"""
+    from apps.patients.models import normalize_phone
+    from apps.tenancy import unscoped
+    from .models import WaMessage
+    norm = normalize_phone(address)
+    if not norm:
+        return False
+    with unscoped():
+        recent = list(WaMessage.objects.filter(channel=channel, phone__endswith=norm, direction="out",
+                                               created_at__gte=timezone.now() - timedelta(minutes=minutes))
+                      .values_list("body", flat=True)[:20])
+    if not recent:
+        return False
+    t = _norm_text(text)
+    if not t:
+        return True     # медиа/пустой текст сразу после нашей отправки — считаем своим
+    return any(t[:60] in _norm_text(b) or _norm_text(b)[:60] in t for b in recent if b)
+
+
+def resume_chat(clinic, channel, address, hours=1):
+    """Ассистента в чате снова включили: сообщения пациента за последний час,
+    пропущенные на паузе (и после которых менеджер не отвечал), — ответить."""
+    from apps.patients.models import normalize_phone
+    from .models import WaMessage
+    norm = normalize_phone(address)
+    if not norm:
+        return 0
+    qs = WaMessage.all_clinics.filter(clinic=clinic, channel=channel, phone__endswith=norm)
+    since = timezone.now() - timedelta(hours=hours)
+    last_human = (qs.filter(direction="out", by_ai=False, sent_by__isnull=False)
+                  .order_by("-created_at").values_list("created_at", flat=True).first())
+    if last_human and last_human > since:
+        since = last_human
+    return qs.filter(direction="in", ai_status="skip", created_at__gt=since).update(ai_status="")
+
+
 def _manager_replied_in_crm(clinic, channel, address, now):
     """Ответ менеджера из CRM после последнего ручного включения ассистента в этом чате."""
     from .models import ChatBotState, WaMessage

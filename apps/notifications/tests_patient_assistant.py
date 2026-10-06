@@ -262,6 +262,31 @@ class PatientAssistantTestCase(TestCase):
         self.assertIn('"dry_run": true', buf.getvalue())
         self.assertFalse(Appointment.objects.exists())
 
+    def test_system_reminder_echo_does_not_pause_and_resume_answers(self):
+        from apps.notifications.models import WaMessage
+        from apps.notifications.patient_assistant import is_paused
+        phone = "996553676710"
+        self.patient.phone = "+" + phone
+        self.patient.save()
+        WaMessage.objects.create(direction="out", channel="wa", phone=phone, clinic=self.clinic,
+                                 body="⏰ *SADAF*\n\nЗдравствуйте, *Нилуфар*! Напоминаем: ваш приём сегодня в 16:00")
+        payload = {"typeWebhook": "outgoingMessageReceived", "instanceData": {"idInstance": 1},
+                   "senderData": {"chatId": phone + "@c.us"},
+                   "messageData": {"typeMessage": "extendedTextMessage", "extendedTextMessageData": {
+                       "text": "⏰ *SADAF*\n\nЗдравствуйте, *Нилуфар*! Напоминаем: ваш приём сегодня в 16:00"}}}
+        with override_settings(GREENAPI_WEBHOOK_KEY="k"):
+            Client().post("/notifications/wa-webhook/?key=k", json.dumps(payload), content_type="application/json")
+        self.assertFalse(is_paused(self.clinic, "wa", phone))
+        # ассистента выключили, сообщение пропущено; включили — ответит
+        c = Client()
+        c.force_login(self.admin)
+        c.post("/patients/%s/ai-bot/" % self.patient.pk, {"paused": "1"})
+        m = self._in("Салом", phone=phone, patient=self.patient, ago=0)
+        WaMessage.objects.filter(pk=m.pk).update(ai_status="skip", created_at=timezone.now() - timedelta(minutes=3))
+        c.post("/patients/%s/ai-bot/" % self.patient.pk, {"paused": "0"})
+        m.refresh_from_db()
+        self.assertEqual(m.ai_status, "")
+
     def test_reschedule_and_cancel_only_own_appointments(self):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
