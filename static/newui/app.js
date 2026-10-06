@@ -7557,7 +7557,7 @@ function startWakeWordListening(){
         if(res.isFinal){
           wakeAwaitingCommand=false;
           if(!voiceChatPanelOpen) openVoiceChatPanel();
-          processAssistantMessage(transcript);
+          processAssistantMessage(transcript, true);
         }
         continue;
       }
@@ -7573,7 +7573,7 @@ function startWakeWordListening(){
       const after=transcript.slice(idx+matchedLen).replace(/^[,\s:—-]+/, '').trim();
       if(!voiceChatPanelOpen) openVoiceChatPanel();
       if(res.isFinal){
-        if(after) processAssistantMessage(after);
+        if(after) processAssistantMessage(after, true);
         else { wakeAwaitingCommand=true; showToast(t('w_wake_listening')); }
       }
       break; // не обрабатывать остальные результаты этого события повторно
@@ -7621,7 +7621,8 @@ document.addEventListener('focusin', (e)=>{
 });
 function isSchedulePage(){ return location.pathname.indexOf('/new/schedule')===0; }
 function isVisitPage(){ return location.pathname.indexOf('/new/visitcard/')===0; }
-async function voiceRecordToggle(btnEl, mode, onResult){
+async function voiceRecordToggle(btnEl, mode, onResult, opts){
+  opts=opts||{};
   if(voiceActive){ voiceRecorder.stop(); return; } // второй клик — остановить запись
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     showToast(t('w_voice_not_supported'), 'error'); return;
@@ -7636,13 +7637,36 @@ async function voiceRecordToggle(btnEl, mode, onResult){
   const wasWakeListening=wakeListening;
   if(wasWakeListening) stopWakeWordListening();
   voiceChunks=[];
+  // Автостоп по тишине (opts.autoStop): врач договорил — запись сама
+  // останавливается и уходит ассистенту, кнопку нажимать не нужно. Если
+  // за opts.noSpeechMs так и не заговорили — запись отменяется без отправки.
+  let vadCtx=null, vadTimer=null, heard=false, quietSince=0, cancelUpload=false;
+  if(opts.autoStop && (window.AudioContext || window.webkitAudioContext)){
+    try{
+      vadCtx=new (window.AudioContext || window.webkitAudioContext)();
+      const an=vadCtx.createAnalyser(); an.fftSize=1024;
+      vadCtx.createMediaStreamSource(stream).connect(an);
+      const buf=new Float32Array(an.fftSize), t0=Date.now();
+      vadTimer=setInterval(()=>{
+        an.getFloatTimeDomainData(buf);
+        let sum=0; for(let k=0;k<buf.length;k++) sum+=buf[k]*buf[k];
+        const rms=Math.sqrt(sum/buf.length), now=Date.now();
+        if(rms>0.02){ heard=true; quietSince=0; }
+        else if(heard){ quietSince=quietSince||now; if(now-quietSince>1500 && voiceRecorder.state==='recording') voiceRecorder.stop(); }
+        else if(now-t0>(opts.noSpeechMs||8000) && voiceRecorder.state==='recording'){ cancelUpload=true; voiceRecorder.stop(); }
+      }, 100);
+    }catch(e){ vadCtx=null; }
+  }
   voiceRecorder=new MediaRecorder(stream);
   voiceRecorder.ondataavailable=e=>{ if(e.data.size>0) voiceChunks.push(e.data); };
   voiceRecorder.onstop=async()=>{
     voiceActive=false;
     btnEl.classList.remove('voice-recording');
     stream.getTracks().forEach(tr=>tr.stop());
+    if(vadTimer) clearInterval(vadTimer);
+    if(vadCtx) try{ vadCtx.close(); }catch(e){}
     if(wasWakeListening && isWakeWordEnabled()) startWakeWordListening();
+    if(cancelUpload){ if(opts.onCancel) opts.onCancel(); return; }
     btnEl.classList.add('voice-busy');
     try{
       const blob=new Blob(voiceChunks, {type:'audio/webm'});
@@ -7690,6 +7714,7 @@ function openVoiceChatPanel(){
   const panel=document.getElementById('voiceChatPanel');
   if(!panel) return;
   voiceChatPanelOpen=true;
+  assistantLs('open', '1');
   panel.classList.remove('hidden');
   renderVoiceChatPanel();
   const input=document.getElementById('voiceChatTextInput');
@@ -7697,6 +7722,8 @@ function openVoiceChatPanel(){
 }
 function closeVoiceChatPanel(){
   voiceChatPanelOpen=false;
+  assistantLs('open', null);
+  assistantVoiceMode=false;
   const panel=document.getElementById('voiceChatPanel');
   if(panel) panel.classList.add('hidden');
 }
@@ -7739,6 +7766,7 @@ function saveAssistantSettings(){
 function renderVoiceChatPanel(){
   const el=document.getElementById('voiceChatMessages');
   if(!el) return;
+  if(assistantShowingHistory){ el.innerHTML=assistantHistoryHtml(); return; }
   el.innerHTML = voiceChatHistory.length
     ? voiceChatHistory.map((m,i)=>`<div class="chat-bubble ${m.role==='user'?'out':'in'}">${navEsc(m.text)}${m.confirm ? assistantConfirmHtml(m.confirm, i) : ''}</div>`).join('')
     : `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">${t('w_voice_chat_hint')}</div>`;
@@ -7764,12 +7792,12 @@ async function sendVoiceChatText(){
   const text=(input.value||'').trim();
   if(!text) return;
   input.value='';
-  await processAssistantMessage(text);
+  await processAssistantMessage(text, false);
 }
 function voiceChatMicToggle(btnEl){
-  voiceRecordToggle(btnEl, 'dictate', (data)=>{
-    if(data.transcript) processAssistantMessage(data.transcript);
-  });
+  voiceRecordToggle(btnEl||document.getElementById('voiceChatMicBtn'), 'dictate', (data)=>{
+    if(data.transcript) processAssistantMessage(data.transcript, true);
+  }, {autoStop:AGENT_ENABLED, onCancel:()=>{ assistantVoiceMode=false; }});
 }
 // Текстовый запрос к тому же /notifications/voice/, что и у голоса — просто
 // вместо аудиофайла передаём уже готовый текст (транскрипт из голосового
@@ -7794,10 +7822,11 @@ async function callAssistantBackend(text, mode, withHistory){
 //    нужные данные не загружены на текущей странице — тогда честно об этом
 //    и говорим, не гадаем);
 // 3) иначе — свободный вопрос ИИ-помощнику, с памятью разговора, + озвучка.
-async function processAssistantMessage(text){
+async function processAssistantMessage(text, viaVoice){
   voiceChatHistory.push({role:'user', text});
+  assistantShowingHistory=false;
   renderVoiceChatPanel();
-  if(AGENT_ENABLED) return processAgentMessage(text);
+  if(AGENT_ENABLED) return processAgentMessage(text, !!viaVoice);
   voiceChatSetBusy(true);
   let answer=null;
 
@@ -7842,6 +7871,80 @@ function assistantPageContext(){
   if(isSchedulePage()){ ctx.type='schedule'; ctx.date=new URLSearchParams(location.search).get('date')||''; }
   return ctx;
 }
+/* История разговоров хранится на сервере (AssistantChat). Текущий разговор,
+   открытая панель и «слушать дальше» запоминаются в localStorage — после
+   перехода на другую страницу (например, ассистент открыл карту приёма)
+   разговор продолжается с того же места. */
+let assistantChatId=null, assistantVoiceMode=false, assistantShowingHistory=false, assistantChatsCache=[];
+function assistantLs(key, val){
+  const k='newui_assistant_'+key+'_'+(CURRENT_USER_ID||'');
+  try{
+    if(val===undefined) return localStorage.getItem(k);
+    if(val===null) localStorage.removeItem(k); else localStorage.setItem(k, String(val));
+  }catch(e){}
+  return null;
+}
+function assistantMsgFromServer(m){
+  const out={role:m.role, text:m.text, id:m.id};
+  if(m.confirm) out.confirm={summary:m.confirm.summary, state:m.confirm.state, message_id:m.confirm.message_id};
+  return out;
+}
+async function assistantLoadChat(id){
+  try{
+    const res=await fetch('/notifications/assistant/chats/'+id+'/', {credentials:'same-origin'});
+    if(!res.ok) return false;
+    const data=await res.json();
+    assistantChatId=data.id; assistantLs('chat', data.id);
+    voiceChatHistory=(data.messages||[]).map(assistantMsgFromServer);
+    return true;
+  }catch(e){ return false; }
+}
+function assistantNewChat(){
+  assistantChatId=null; assistantLs('chat', null);
+  voiceChatHistory=[]; assistantShowingHistory=false; assistantVoiceMode=false;
+  renderVoiceChatPanel();
+  const input=document.getElementById('voiceChatTextInput'); if(input) input.focus();
+}
+async function assistantToggleHistory(){
+  assistantShowingHistory=!assistantShowingHistory;
+  if(assistantShowingHistory){
+    try{
+      const res=await fetch('/notifications/assistant/chats/', {credentials:'same-origin'});
+      assistantChatsCache=res.ok ? ((await res.json()).chats||[]) : [];
+    }catch(e){ assistantChatsCache=[]; }
+  }
+  renderVoiceChatPanel();
+}
+function assistantHistoryHtml(){
+  if(!assistantChatsCache.length) return `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">${navEsc(t('w_assistant_no_history','Разговоров пока нет'))}</div>`;
+  return `<div class="vcp-hist-title">${navEsc(t('w_assistant_history','История разговоров'))}</div>`
+    + assistantChatsCache.map(c=>`<div class="vcp-hist${c.id===assistantChatId?' on':''}"><button type="button" onclick="assistantOpenChat(${c.id})"><b>${navEsc(c.title)}</b><span>${navEsc(c.updated)}</span></button><button type="button" class="vcp-hist-del" title="${navEsc(t('w_delete','Удалить'))}" onclick="assistantDeleteChat(${c.id})">🗑</button></div>`).join('');
+}
+async function assistantOpenChat(id){
+  if(await assistantLoadChat(id)){ assistantShowingHistory=false; renderVoiceChatPanel(); }
+}
+async function assistantDeleteChat(id){
+  if(!confirm(t('w_assistant_delete_chat','Удалить этот разговор?'))) return;
+  const fd=new FormData(); fd.append('action','delete');
+  try{ await postForm('/notifications/assistant/chats/'+id+'/', fd); }catch(e){}
+  if(id===assistantChatId) assistantNewChat();
+  assistantChatsCache=assistantChatsCache.filter(c=>c.id!==id);
+  assistantShowingHistory=true; renderVoiceChatPanel();
+}
+// Восстановить разговор после загрузки страницы (вызывается после того, как
+// стали известны AGENT_ENABLED и CURRENT_USER_ID).
+async function assistantRestore(){
+  ['vcpHistoryBtn','vcpNewBtn'].forEach(id=>{ const b=document.getElementById(id); if(b) b.classList.toggle('hidden', !AGENT_ENABLED); });
+  if(!AGENT_ENABLED) return;
+  const id=assistantLs('chat');
+  if(id) await assistantLoadChat(id);
+  if(assistantLs('open')==='1') openVoiceChatPanel();
+  if(assistantLs('listen')==='1'){
+    assistantLs('listen', null);
+    assistantVoiceMode=true;
+    setTimeout(()=>{ if(voiceChatPanelOpen && !voiceActive) voiceChatMicToggle(); }, 700);
+  }
+}
 function assistantPendingConfirm(){
   for(let i=voiceChatHistory.length-1;i>=0;i--){
     const c=voiceChatHistory[i].confirm;
@@ -7859,7 +7962,9 @@ function assistantConfirmHtml(c, i){
 }
 function assistantCancel(i){
   const c=voiceChatHistory[i] && voiceChatHistory[i].confirm;
-  if(c && c.state==='pending'){ c.state='cancelled'; renderVoiceChatPanel(); }
+  if(!c || c.state!=='pending') return;
+  c.state='cancelled'; renderVoiceChatPanel();
+  if(c.message_id) postForm('/notifications/assistant/message/'+c.message_id+'/cancel/', new FormData()).catch(()=>{});
 }
 async function assistantConfirm(i){
   const c=voiceChatHistory[i] && voiceChatHistory[i].confirm;
@@ -7867,34 +7972,48 @@ async function assistantConfirm(i){
   c.state='busy'; renderVoiceChatPanel();
   let msg;
   try{
-    const fd=new FormData(); fd.append('token', c.token);
+    const fd=new FormData();
+    if(c.message_id) fd.append('message_id', c.message_id);
+    if(c.token) fd.append('token', c.token);
     const res=await postForm('/notifications/assistant/confirm/', fd);
     const data=await res.json().catch(()=>({}));
-    if(res.ok){ c.state='done'; c.result=data.message||''; msg=data.message; }
+    if(res.ok){ c.state='done'; msg=data.message; }
     else { c.state='pending'; msg='⚠️ '+(data.error||t('w_voice_failed')); }
   }catch(e){ c.state='pending'; msg='⚠️ '+t('w_voice_failed'); }
   voiceChatHistory.push({role:'assistant', text:msg});
   renderVoiceChatPanel();
-  speakText(msg);
+  assistantAfterAnswer(msg, null);
+}
+// Озвучить ответ; потом — перейти на страницу (если ассистент её открыл) или,
+// если с ним говорят голосом, снова слушать врача.
+async function assistantAfterAnswer(text, openUrl){
+  if(openUrl){
+    assistantLs('open', '1');
+    if(assistantVoiceMode) assistantLs('listen', '1');
+    await Promise.race([speakText(text), new Promise(r=>setTimeout(r, 6000))]);
+    location.href=openUrl;
+    return;
+  }
+  await speakText(text);
+  if(assistantVoiceMode && voiceChatPanelOpen && !voiceActive) voiceChatMicToggle();
 }
 function applyAssistantActions(actions){
-  let confirm=null;
+  let openUrl=null;
   (actions||[]).forEach(a=>{
-    if(a.type==='confirm_appointment'){
-      confirm={token:a.token, summary:a.summary, state:'pending'};
-    } else if(a.type==='visit_add' && typeof window.vwToothServicePick==='function'){
+    if(a.type==='visit_add' && typeof window.vwToothServicePick==='function'){
       (a.items||[]).forEach(it=>(it.teeth||[]).forEach(num=>{
         try{ toggleToothSelect((num>=51?'baby-':'adult-')+num, true); }catch(e){}
         window.vwToothServicePick(num, it.service_id);
         if(it.discount_pct && typeof window.vwSetDiscountForTooth==='function') window.vwSetDiscountForTooth(num, it.service_id, it.discount_pct);
       }));
     } else if(a.type==='open' && a.url){
-      setTimeout(()=>{ location.href=a.url; }, 1500);
+      openUrl=a.url;
     }
   });
-  return confirm;
+  return openUrl;
 }
-async function processAgentMessage(text){
+async function processAgentMessage(text, viaVoice){
+  assistantVoiceMode=viaVoice;
   const pending=assistantPendingConfirm();
   if(pending && ASSISTANT_YES.test(text.trim())){
     return assistantConfirm(voiceChatHistory.findIndex(m=>m.confirm===pending));
@@ -7904,20 +8023,29 @@ async function processAgentMessage(text){
   fd.append('mode', 'agent');
   fd.append('question', text);
   fd.append('assistant_name', getAssistantName());
-  fd.append('history', JSON.stringify(voiceChatHistory.slice(0,-1).slice(-12).map(m=>({role:m.role, text:m.text}))));
+  if(assistantChatId) fd.append('chat_id', assistantChatId);
+  if(viaVoice) fd.append('voice', '1');
   fd.append('page', JSON.stringify(assistantPageContext()));
-  let answer, confirm=null;
+  let answer, openUrl=null, msg=null;
   try{
     const res=await postForm('/notifications/voice/', fd);
     const data=await res.json().catch(()=>({}));
-    if(res.ok){ answer=data.answer||''; confirm=applyAssistantActions(data.actions); }
-    else answer=data.error||t('w_voice_failed');
+    if(res.ok){
+      answer=data.answer||'';
+      if(data.chat_id){ assistantChatId=data.chat_id; assistantLs('chat', data.chat_id); }
+      openUrl=applyAssistantActions(data.actions);
+      msg={role:'assistant', text:answer, id:data.message_id};
+      const conf=(data.actions||[]).find(a=>a.type==='confirm_appointment');
+      if(conf){
+        voiceChatHistory.forEach(m=>{ if(m.confirm && m.confirm.state==='pending') m.confirm.state='cancelled'; });
+        msg.confirm={summary:conf.summary, token:conf.token, state:'pending', message_id:data.message_id};
+      }
+    } else answer=data.error||t('w_voice_failed');
   }catch(e){ answer=t('w_voice_failed'); }
-  if(confirm) voiceChatHistory.forEach(m=>{ if(m.confirm && m.confirm.state==='pending') m.confirm.state='cancelled'; });
   voiceChatSetBusy(false);
-  voiceChatHistory.push(confirm ? {role:'assistant', text:answer, confirm} : {role:'assistant', text:answer});
+  voiceChatHistory.push(msg || {role:'assistant', text:answer});
   renderVoiceChatPanel();
-  speakText(answer);
+  assistantAfterAnswer(answer, openUrl);
 }
 // Озвучка ответа (Yandex SpeechKit) — необязательное дополнение к тексту,
 // который уже показан в панели; молча ничего не делает при ошибке/выключенном
@@ -7925,22 +8053,25 @@ async function processAgentMessage(text){
 // прослушивание имени (wake word) — на время воспроизведения останавливаем
 // его, иначе ассистент рискует «услышать» своё же имя в собственном ответе
 // и снова активироваться (обратная связь).
-async function speakText(text){
-  if(!AI_ENABLED || !text) return;
-  try{
-    const fd=new FormData();
-    fd.append('text', text);
-    const res=await postForm('/notifications/voice/speak/', fd);
-    if(!res.ok) return;
-    const blob=await res.blob();
-    const url=URL.createObjectURL(blob);
-    const audio=new Audio(url);
-    const wasListening=isWakeWordEnabled() && wakeListening;
-    if(wasListening) stopWakeWordListening();
-    const resumeWake=()=>{ if(wasListening && isWakeWordEnabled()) startWakeWordListening(); };
-    audio.onended=()=>{ URL.revokeObjectURL(url); resumeWake(); };
-    audio.play().catch(()=>{ resumeWake(); });
-  }catch(e){}
+function speakText(text){
+  return new Promise(async (done)=>{
+    if(!AI_ENABLED || !text) return done();
+    try{
+      const fd=new FormData();
+      fd.append('text', text);
+      const res=await postForm('/notifications/voice/speak/', fd);
+      if(!res.ok) return done();
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      const audio=new Audio(url);
+      const wasListening=isWakeWordEnabled() && wakeListening;
+      if(wasListening) stopWakeWordListening();
+      const resumeWake=()=>{ if(wasListening && isWakeWordEnabled()) startWakeWordListening(); };
+      audio.onended=()=>{ URL.revokeObjectURL(url); resumeWake(); done(); };
+      audio.onerror=()=>{ resumeWake(); done(); };
+      audio.play().catch(()=>{ resumeWake(); done(); });
+    }catch(e){ done(); }
+  });
 }
 
 /* ---- Карта приёма: «зуб 26, композитная пломба, скидка 10%» → выбор зуба
@@ -8251,6 +8382,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
     AGENT_ENABLED=!!data.agentEnabled;
+    setTimeout(assistantRestore, 0);
     const voiceFabEl=document.getElementById('voiceFab');
     if(voiceFabEl) voiceFabEl.classList.toggle('hidden', !VOICE_ENABLED);
     // Постоянное прослушивание имени — если пользователь уже включил его

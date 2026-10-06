@@ -65,6 +65,8 @@ window.addEventListener('load',function(){
   <div class="vcp-head">
     <span id="vcpTitle" data-i18n="w_voice_assistant_title">Ассистент</span>
     <div style="display:flex;align-items:center;gap:2px;">
+      <button type="button" class="vcp-close hidden" id="vcpHistoryBtn" onclick="assistantToggleHistory()" aria-label="История" title="История разговоров" style="font-size:14px;">🕘</button>
+      <button type="button" class="vcp-close hidden" id="vcpNewBtn" onclick="assistantNewChat()" aria-label="Новый разговор" title="Новый разговор" style="font-size:16px;">＋</button>
       <button type="button" class="vcp-close" onclick="toggleAssistantSettings()" aria-label="Настройки" title="Настройки" style="font-size:14px;">⚙</button>
       <button type="button" class="vcp-close" onclick="closeVoiceChatPanel()" aria-label="Закрыть">✕</button>
     </div>

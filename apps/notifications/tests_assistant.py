@@ -201,3 +201,61 @@ class AssistantTestCase(TestCase):
         with self.settings(OPENAI_API_KEY=""):
             resp = self.client.post("/notifications/voice/", {"mode": "agent", "question": "привет"})
         self.assertEqual(resp.status_code, 503)
+
+    def test_chat_history_saved_and_continued(self):
+        from apps.notifications.models import AssistantChat
+        resp, _ = self._ask("Привет", [_final("Здравствуйте!")])
+        chat_id = resp.json()["chat_id"]
+        calls = []
+
+        def fake(path, data, **kw):
+            calls.append(json.loads(json.dumps(data)))
+            return _final("Помню."), None
+        with patch("apps.notifications.assistant._request", side_effect=fake):
+            r2 = self.client.post("/notifications/voice/", {"mode": "agent", "question": "Что я сказал?",
+                                                             "chat_id": chat_id, "voice": "1"})
+        self.assertEqual(r2.json()["chat_id"], chat_id)
+        # прошлые реплики ушли модели из базы, не от клиента
+        contents = [m["content"] for m in calls[0]["messages"]]
+        self.assertIn("Привет", contents)
+        self.assertIn("Здравствуйте!", contents)
+        chat = AssistantChat.objects.get(pk=chat_id)
+        self.assertEqual(chat.messages.count(), 4)
+        self.assertEqual(chat.title, "Привет")
+        lst = self.client.get("/notifications/assistant/chats/").json()["chats"]
+        self.assertEqual(lst[0]["id"], chat_id)
+        det = self.client.get("/notifications/assistant/chats/%s/" % chat_id).json()
+        self.assertEqual([m["text"] for m in det["messages"]], ["Привет", "Здравствуйте!", "Что я сказал?", "Помню."])
+        # чужой разговор не открыть
+        self.client.force_login(self.doctor)
+        self.assertEqual(self.client.get("/notifications/assistant/chats/%s/" % chat_id).status_code, 404)
+        self.client.force_login(self.director)
+        self.client.post("/notifications/assistant/chats/%s/" % chat_id, {"action": "delete"})
+        self.assertFalse(AssistantChat.objects.filter(pk=chat_id).exists())
+
+    def test_confirm_by_message_id_updates_history(self):
+        from apps.notifications.models import AssistantMessage
+        start = "%sT10:00" % self.tomorrow.isoformat()
+        resp, _ = self._ask("Запиши", [
+            _tool_call("propose_appointment", {"patient_id": self.patient.pk, "doctor_id": self.doctor.pk, "start": start}),
+            _final("Подтвердите.")])
+        mid = resp.json()["message_id"]
+        with patch("apps.appointments.views.notify_appointment_created"):
+            r = self.client.post("/notifications/assistant/confirm/", {"message_id": mid})
+        self.assertEqual(r.status_code, 200, r.content)
+        msg = AssistantMessage.objects.get(pk=mid)
+        self.assertEqual(msg.data["confirm"]["state"], "done")
+        self.assertIn("Записал", msg.chat.messages.last().text)
+        det = self.client.get("/notifications/assistant/chats/%s/" % msg.chat_id).json()
+        self.assertNotIn("token", json.dumps(det))   # токен не отдаём в историю
+
+    def test_start_visit_opens_visit_card(self):
+        from apps.appointments.models import Appointment
+        now = timezone.localtime()
+        st = now.replace(hour=max(now.hour, 9), minute=0, second=0, microsecond=0)
+        a = Appointment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch,
+                                       start_at=st, end_at=st + timedelta(hours=1), clinic=self.clinic)
+        resp, calls = self._ask("Начни приём Сатторовой", [
+            _tool_call("start_visit", {"appointment_id": a.pk}), _final("Открыл приём: Сатторова, 09:00. Слушаю вас.")])
+        self.assertEqual(resp.json()["actions"], [{"type": "open", "url": "/new/visit/start/?appointment=%s" % a.pk}])
+        self.assertIn("Сатторова", calls[1][1]["messages"][-1]["content"])

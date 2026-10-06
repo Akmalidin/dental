@@ -883,3 +883,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .vcp-confirm{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.08);display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .vcp-confirm-sum{width:100%;font-weight:600;font-size:12.5px;}
 .vcp-confirm.done{font-size:12.5px;color:var(--ink-soft);}
+.vcp-hist-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);padding:4px 4px 8px;}
+.vcp-hist{display:flex;align-items:stretch;gap:4px;margin-bottom:6px;}
+.vcp-hist>button:first-child{flex:1;min-width:0;text-align:left;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:10px;padding:9px 11px;cursor:pointer;}
+.vcp-hist.on>button:first-child{border-color:var(--cobalt,#2f4bff);}
+.vcp-hist b{display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vcp-hist span{font-size:11.5px;color:var(--ink-soft);}
+.vcp-hist-del{border:0;background:transparent;cursor:pointer;opacity:.5;padding:0 6px;}
+.vcp-hist-del:hover{opacity:1;}

@@ -1509,10 +1509,35 @@ def voice_command(request):
                 page = {}
         except (ValueError, TypeError):
             page = {}
+        # Разговор хранится на сервере (AssistantChat) — история берётся
+        # отсюда, а не от клиента: так она переживает переходы между
+        # страницами и её можно открыть позже из «Истории».
+        from .models import AssistantChat, AssistantMessage
+        chat = AssistantChat.objects.filter(user=request.user, pk=request.POST.get("chat_id") or 0).first()
+        if chat is None:
+            chat = AssistantChat.objects.create(user=request.user, title=transcript[:80])
+        history = [{"role": m.role, "text": m.text}
+                   for m in reversed(list(chat.messages.order_by("-created_at", "-pk")[:12]))]
+        voice = request.POST.get("voice") == "1"
+        um = AssistantMessage.objects.create(chat=chat, role="user", text=transcript,
+                                             data={"voice": True} if voice else {})
         res = run_assistant(request, transcript, history=history, page=page,
                             assistant_name=(request.POST.get("assistant_name") or "").strip())
         res["transcript"] = transcript
-        return JsonResponse(res, status=502 if res.get("error") else 200)
+        if res.get("error"):
+            return JsonResponse(res, status=502)
+        data = {}
+        confirm = next((a for a in res.get("actions") or [] if a.get("type") == "confirm_appointment"), None)
+        if confirm:
+            # прошлые неподтверждённые записи в этом разговоре больше не актуальны
+            for m in chat.messages.filter(role="assistant", data__confirm__state="pending"):
+                m.data["confirm"]["state"] = "cancelled"
+                m.save(update_fields=["data"])
+            data["confirm"] = {"token": confirm["token"], "summary": confirm["summary"], "state": "pending"}
+        am = AssistantMessage.objects.create(chat=chat, role="assistant", text=res.get("answer") or "", data=data)
+        chat.save(update_fields=["updated_at"])
+        res.update({"chat_id": chat.pk, "message_id": am.pk, "user_message_id": um.pk})
+        return JsonResponse(res)
 
     if mode == "chat":
         if not ai_enabled():
@@ -1544,10 +1569,67 @@ def assistant_confirm(request):
     или ответ «да»). Данные записи — в подписанном токене из ответа
     ассистента; все проверки (занятость врача, график) повторяются."""
     from .assistant import confirm_appointment
-    result, err = confirm_appointment(request, (request.POST.get("token") or "").strip())
+    from .models import AssistantMessage
+    msg = AssistantMessage.objects.filter(pk=request.POST.get("message_id") or 0,
+                                          chat__user=request.user).select_related("chat").first()
+    token = (request.POST.get("token") or "").strip() or (msg.data.get("confirm", {}).get("token", "") if msg else "")
+    result, err = confirm_appointment(request, token)
     if err:
         return JsonResponse({"error": err}, status=400)
+    if msg is not None:
+        msg.data.setdefault("confirm", {})["state"] = "done"
+        msg.save(update_fields=["data"])
+        AssistantMessage.objects.create(chat=msg.chat, role="assistant", text=result["message"])
+        msg.chat.save(update_fields=["updated_at"])
     return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def assistant_cancel(request, pk):
+    """«Отмена» у подготовленной записи — запоминаем в истории разговора."""
+    from .models import AssistantMessage
+    msg = AssistantMessage.objects.filter(pk=pk, chat__user=request.user).first()
+    if msg is not None and msg.data.get("confirm", {}).get("state") == "pending":
+        msg.data["confirm"]["state"] = "cancelled"
+        msg.save(update_fields=["data"])
+    return JsonResponse({"ok": True})
+
+
+def _assistant_msg_json(m):
+    out = {"id": m.pk, "role": m.role, "text": m.text}
+    c = m.data.get("confirm")
+    if c:
+        out["confirm"] = {"summary": c.get("summary", ""), "state": c.get("state", ""), "message_id": m.pk}
+    return out
+
+
+@login_required
+def assistant_chats(request):
+    """История разговоров с ассистентом (только свои)."""
+    from .models import AssistantChat
+    chats = AssistantChat.objects.filter(user=request.user)[:50]
+    return JsonResponse({"chats": [{"id": c.pk, "title": c.title or "Разговор",
+                                    "updated": timezone_local_label(c.updated_at)} for c in chats]})
+
+
+def timezone_local_label(dt):
+    from django.utils import timezone as _tz
+    loc = _tz.localtime(dt)
+    return loc.strftime("%H:%M") if loc.date() == _tz.localdate() else loc.strftime("%d.%m.%Y %H:%M")
+
+
+@login_required
+def assistant_chat_detail(request, pk):
+    from .models import AssistantChat
+    chat = AssistantChat.objects.filter(user=request.user, pk=pk).first()
+    if chat is None:
+        return JsonResponse({"error": "Разговор не найден"}, status=404)
+    if request.method == "POST" and request.POST.get("action") == "delete":
+        chat.delete()
+        return JsonResponse({"ok": True})
+    return JsonResponse({"id": chat.pk, "title": chat.title,
+                         "messages": [_assistant_msg_json(m) for m in chat.messages.all()]})
 
 
 @login_required

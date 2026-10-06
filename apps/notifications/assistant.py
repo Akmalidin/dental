@@ -184,6 +184,10 @@ TOOLS = [
             "service_id": {"type": "integer"},
             "discount_pct": {"type": "number"}}, "required": ["teeth", "service_id"]}}},
         ["items"]),
+    _fn("start_visit", "Начать (или продолжить) приём пациента — откроет карту приёма. Укажи "
+        "appointment_id сегодняшней записи пациента (из doctor_day или patient_details), а если записи "
+        "нет — patient_id. После открытия ты продолжишь разговор уже в карте приёма.",
+        {"appointment_id": {"type": "integer"}, "patient_id": {"type": "integer"}}),
     _fn("open_page", "Открыть страницу CRM: карточку пациента или расписание на дату.",
         {"page": {"type": "string", "enum": ["patient", "schedule", "patients"]},
          "patient_id": {"type": "integer"}, "date": {"type": "string", "description": "YYYY-MM-DD"}},
@@ -451,6 +455,32 @@ def _tool_add_to_visit(ctx, items=None, **_):
     return {"added": [{"teeth": a["teeth"], "service": a["service"]} for a in added], "problems": problems}
 
 
+def _tool_start_visit(ctx, appointment_id=None, patient_id=None, **_):
+    from apps.appointments.models import Appointment
+    from apps.patients.models import Patient
+    appt = (Appointment.objects.select_related("patient", "doctor").filter(pk=appointment_id).first()
+            if appointment_id else None)
+    if appt is not None and appt.status in ("cancelled", "no_show"):
+        return {"error": "Эта запись отменена или пациент не пришёл"}
+    if appt is None and patient_id:
+        p = Patient.objects.filter(pk=patient_id).first()
+        if p is None:
+            return {"error": "Пациент не найден"}
+        today = timezone.localdate()
+        appt = (Appointment.objects.select_related("patient", "doctor")
+                .filter(patient=p, start_at__date=today).exclude(status__in=["cancelled", "no_show"])
+                .order_by("start_at").first())
+        if appt is None:
+            ctx.actions.append({"type": "open", "url": "/new/visit/start/?patient=%s" % p.pk})
+            return {"opened": True, "patient": p.full_name, "note": "Записи на сегодня нет — открыт новый приём"}
+    if appt is None:
+        return {"error": "Укажи запись или пациента"}
+    ctx.actions.append({"type": "open", "url": "/new/visit/start/?appointment=%s" % appt.pk})
+    st = timezone.localtime(appt.start_at)
+    return {"opened": True, "patient": appt.patient.full_name if appt.patient_id else "—",
+            "time": st.strftime("%H:%M"), "doctor": appt.doctor.name if appt.doctor_id else "—"}
+
+
 def _tool_open_page(ctx, page="", patient_id=None, date=None, **_):
     if page == "patient" and patient_id:
         url = "/new/patients/%s/" % int(patient_id)
@@ -470,7 +500,7 @@ HANDLERS = {
     "list_doctors": _tool_list_doctors, "doctor_day": _tool_doctor_day, "free_slots": _tool_free_slots,
     "search_services": _tool_search_services, "clinic_finance": _tool_clinic_finance,
     "propose_appointment": _tool_propose_appointment, "add_to_visit": _tool_add_to_visit,
-    "open_page": _tool_open_page,
+    "open_page": _tool_open_page, "start_visit": _tool_start_visit,
 }
 
 
@@ -511,6 +541,8 @@ def system_prompt(ctx, assistant_name=""):
         "не хватает данных (кто, к кому, когда) — коротко уточни. Нового пациента записывай только с "
         "именем и телефоном. После propose_appointment скажи, что подготовил запись и ждёшь подтверждения.\n"
         "- «Сегодня», «завтра», «в пятницу» переводи в даты сам от текущей даты.\n"
+        "- «Начни приём …» — найди сегодняшнюю запись пациента и вызови start_visit; ответь: «Открыл "
+        "приём: <пациент>, <время>. Слушаю вас» — дальше врач диктует уже в карте приёма.\n"
         "- Номера зубов — система FDI: «тридцать шесть» = 36, «верхний правый шестой» = 16.\n"
         "- Отвечай на языке пользователя (русский или узбекский), коротко, 1–3 предложения: ответ "
         "озвучивается вслух — без списков, таблиц и markdown. Время пиши как 14:30, суммы — числом.\n"
