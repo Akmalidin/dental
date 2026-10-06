@@ -40,6 +40,26 @@ CONFIRM_MAX_AGE = 30 * 60
 WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 
 
+def ensure_clinic(request):
+    """Ассистент всегда работает в одной клинике — той же, что видна в
+    интерфейсе (apps.users.newui_views._render: текущая клиника или клиника
+    пользователя). У супер-админа без выбранной клиники текущей клиники нет,
+    и менеджеры моделей отдавали бы данные ВСЕХ клиник платформы (баг: «в
+    клинике 21 врач», хотя в SADAF их двое). Сбрасывает CurrentClinicMiddleware
+    в конце запроса."""
+    from apps.tenancy import get_current_clinic, set_current_clinic
+    clinic = get_current_clinic()
+    if clinic is None and getattr(request.user, "clinic", None) is not None:
+        clinic = request.user.clinic
+        set_current_clinic(clinic)
+    return clinic
+
+
+def _clinic():
+    from apps.tenancy import get_current_clinic
+    return get_current_clinic()
+
+
 def openai_enabled():
     return bool(getattr(settings, "OPENAI_API_KEY", ""))
 
@@ -82,7 +102,7 @@ def transcription_prompt():
     try:
         from apps.users.models import clinic_doctors
         from apps.services.models import Service
-        words += [d.name for d in clinic_doctors()[:20]]
+        words += [d.name for d in clinic_doctors(_clinic())[:20]]
         words += list(Service.objects.filter(is_active=True).values_list("name", flat=True)[:60])
     except Exception:  # noqa: BLE001
         pass
@@ -226,7 +246,7 @@ def _patient_brief(p):
 
 def _doctor(doctor_id):
     from apps.users.models import clinic_doctors
-    return clinic_doctors().filter(pk=doctor_id).first() if doctor_id else None
+    return clinic_doctors(_clinic()).filter(pk=doctor_id).first() if doctor_id else None
 
 
 def _appt_brief(a):
@@ -334,7 +354,7 @@ def _tool_patient_details(ctx, patient_id=None, **_):
 def _tool_list_doctors(ctx, **_):
     from apps.users.models import clinic_doctors
     return [{"id": d.pk, "name": d.name, "specialty": getattr(d, "doctor_types_display", "")}
-            for d in clinic_doctors().order_by("name")]
+            for d in clinic_doctors(_clinic()).order_by("name")]
 
 
 def _tool_doctor_day(ctx, date=None, doctor_id=None, **_):
@@ -571,6 +591,7 @@ def _chat(messages, tools=True):
 def run(request, text, history=None, page=None, assistant_name=""):
     """Один ход разговора. Возвращает {"answer": str, "actions": [...]}
     или {"error": str}."""
+    ensure_clinic(request)
     ctx = Ctx(request, page)
     messages = [{"role": "system", "content": system_prompt(ctx, assistant_name)}]
     for turn in (history or [])[-12:]:
@@ -626,6 +647,7 @@ def confirm_appointment(request, token):
         _default_visit_service, _quick_appt_branch, gcal_push, notify_appointment_created)
     from apps.patients.models import Patient, normalize_phone
     from apps.services.models import Service
+    ensure_clinic(request)
     try:
         data = signing.loads(token, salt=CONFIRM_SALT, max_age=CONFIRM_MAX_AGE)
     except signing.SignatureExpired:
