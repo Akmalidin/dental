@@ -317,3 +317,15 @@ class AssistantTestCase(TestCase):
             resp = self.client.post("/notifications/voice/", {
                 "mode": "dictate", "audio": SimpleUploadedFile("v.webm", b"123", "audio/webm")})
         self.assertEqual(resp.status_code, 422)   # «Речь не распознана», а не список услуг
+
+    def test_visit_note_goes_to_visit_card_fields(self):
+        from apps.treatments.models import Treatment
+        tr = Treatment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch, clinic=self.clinic)
+        resp, _ = self._ask("Жалобы: боль при холодном справа внизу", [
+            _tool_call("visit_note", {"field": "complaints", "text": "Боль от холодного, нижняя челюсть справа"}),
+            _final("Записал жалобы.")], page={"type": "visit", "treatment_id": tr.pk})
+        self.assertEqual(resp.json()["actions"], [{"type": "visit_field", "field": "complaints",
+                                                   "text": "Боль от холодного, нижняя челюсть справа"}])
+        resp, calls = self._ask("Диагноз кариес", [_tool_call("visit_note", {"field": "diagnosis", "text": "Кариес"}),
+                                                    _final("Откройте приём.")])
+        self.assertEqual(resp.json()["actions"], [])

@@ -895,3 +895,4 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .cd-today{font-size:14px;} .cd-today b{font-size:16px;} .cd-today span{color:var(--ink-soft);font-size:12.5px;}
 .chat-ai{display:block;font-size:11px;font-weight:700;opacity:.8;margin-bottom:3px;}
 .chat-transcript{font-size:12.5px;font-style:italic;opacity:.85;margin-top:4px;}
+.vw-ai-filled{box-shadow:0 0 0 3px rgba(47,75,255,.35)!important;transition:box-shadow .3s;}
