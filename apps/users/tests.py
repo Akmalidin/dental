@@ -5593,3 +5593,63 @@ class NewUIStaffRolesAndLoginAsTestCase(TestCase):
         data = _extract_newui_real_data(c.get("/new/").content.decode())
         c.post(f"/users/{self.director.pk}/login-as/")
         self.assertNotIn("режим просмотра", c.get("/new/").content.decode())
+
+
+class LoginAttemptsLimitTestCase(TestCase):
+    """5 неверных попыток для логина — вход по нему закрыт на 15 минут;
+    кнопка «показать пароль» на странице входа."""
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(name="Клиника LIM", slug="clinic-login-limit")
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.user = User.objects.create(login="lim_user", name="Юзер LIM", role=role, clinic=self.clinic)
+        self.user.set_password("pass1234")
+        self.user.save()
+
+    def _post(self, password, login="lim_user", ip="10.0.0.1"):
+        return self.client.post("/login/", {"login": login, "password": password}, REMOTE_ADDR=ip)
+
+    def test_five_wrong_attempts_lock_login(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.users.models import ClinicLoginEvent
+        r = self._post("bad")
+        self.assertContains(r, "Неверный логин или пароль")
+        self.assertNotContains(r, "Осталось попыток")
+        self._post("bad")
+        r = self._post("bad")
+        self.assertContains(r, "Осталось попыток: 2")
+        self._post("bad")
+        r = self._post("bad")
+        self.assertContains(r, "заблокирован на 15")
+        # даже верный пароль не пускает, пока идёт блокировка
+        r = self._post("pass1234")
+        self.assertContains(r, "Слишком много неверных попыток")
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertEqual(ClinicLoginEvent.objects.filter(attempted_login="lim_user").count(), 5)
+        # через 15 минут — снова можно
+        ClinicLoginEvent.objects.update(created_at=timezone.now() - timedelta(minutes=16))
+        r = self._post("pass1234")
+        self.assertEqual(r.status_code, 302)
+
+    def test_success_resets_counter_and_other_login_unaffected(self):
+        for _ in range(4):
+            self._post("bad")
+        self.assertEqual(self._post("pass1234").status_code, 302)
+        self.client.logout()
+        r = self._post("bad")
+        self.assertNotContains(r, "Осталось попыток")
+        r = self._post("bad", login="other_login")
+        self.assertNotContains(r, "Слишком много")
+
+    def test_ip_limit_across_logins(self):
+        for k in range(20):
+            self._post("bad", login="guess%s" % k, ip="10.9.9.9")
+        r = self._post("pass1234", ip="10.9.9.9")
+        self.assertContains(r, "с этого устройства")
+        self.assertEqual(self._post("pass1234", ip="10.0.0.2").status_code, 302)
+
+    def test_password_eye_button_and_login_kept(self):
+        r = self._post("bad")
+        self.assertContains(r, 'class="pw-eye"')
+        self.assertContains(r, 'value="lim_user"')
