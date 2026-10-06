@@ -20,6 +20,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from apps.notifications.voice import voice_enabled, _get_whisper_model
 
+        from apps.notifications.assistant import openai_enabled
+        if openai_enabled():
+            self.stdout.write("Речь распознаёт OpenAI — локальная модель Whisper не нужна, пропускаю прогрев.")
+            return
         if not voice_enabled():
             self.stdout.write("Голосовой ввод выключен (OPENAI_ENABLED != 1) — пропускаю прогрев.")
             return

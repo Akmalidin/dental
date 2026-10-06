@@ -7482,6 +7482,7 @@ window.addEventListener('message', e=>{
 // существующие защищённые правами функции (visitSetStatus/schedJumpToDate).
 let VOICE_ENABLED=false;
 let AI_ENABLED=false; // YandexGPT настроен на сервере — свободный вопрос-ответ доступен
+let AGENT_ENABLED=false; // ИИ-помощник на OpenAI с доступом к данным клиники (apps/notifications/assistant.py)
 let voiceRecorder=null, voiceChunks=[], voiceActive=false;
 let lastFocusedTextField=null;
 // Имя ассистента — задаётся пользователем ("могут дать ему имя пользователи"),
@@ -7739,7 +7740,7 @@ function renderVoiceChatPanel(){
   const el=document.getElementById('voiceChatMessages');
   if(!el) return;
   el.innerHTML = voiceChatHistory.length
-    ? voiceChatHistory.map(m=>`<div class="chat-bubble ${m.role==='user'?'out':'in'}">${m.text}</div>`).join('')
+    ? voiceChatHistory.map((m,i)=>`<div class="chat-bubble ${m.role==='user'?'out':'in'}">${navEsc(m.text)}${m.confirm ? assistantConfirmHtml(m.confirm, i) : ''}</div>`).join('')
     : `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">${t('w_voice_chat_hint')}</div>`;
   el.scrollTop=el.scrollHeight;
 }
@@ -7796,6 +7797,7 @@ async function callAssistantBackend(text, mode, withHistory){
 async function processAssistantMessage(text){
   voiceChatHistory.push({role:'user', text});
   renderVoiceChatPanel();
+  if(AGENT_ENABLED) return processAgentMessage(text);
   voiceChatSetBusy(true);
   let answer=null;
 
@@ -7822,6 +7824,98 @@ async function processAssistantMessage(text){
 
   voiceChatSetBusy(false);
   voiceChatHistory.push({role:'assistant', text:answer});
+  renderVoiceChatPanel();
+  speakText(answer);
+}
+/* ===== ИИ-помощник на OpenAI (AGENT_ENABLED) =====
+   Сервер (mode=agent) сам ищет пациентов, свободное время и услуги, отвечает
+   на вопросы и возвращает действия: confirm_appointment — запись ждёт
+   подтверждения (кнопка «Записать» или ответ «да»), visit_add — зубы и
+   услуги в план карты приёма (те же функции, что и клик), open — переход. */
+const ASSISTANT_YES=/^(да|даа|ага|ок|окей|ok|конечно|подтверждаю|записывай|запиши|давай|верно|ha|xa|ҳа|xо|ha mayli|mayli|tasdiqlayman|yozing)[\s.,!]*$/i;
+function assistantPageContext(){
+  const path=location.pathname, ctx={path};
+  let m=path.match(/^\/new\/visitcard\/(\d+)/);
+  if(m){ ctx.type='visit'; ctx.treatment_id=+m[1]; return ctx; }
+  m=path.match(/^\/new\/patients\/(\d+)/);
+  if(m){ ctx.type='patient'; ctx.patient_id=+m[1]; return ctx; }
+  if(isSchedulePage()){ ctx.type='schedule'; ctx.date=new URLSearchParams(location.search).get('date')||''; }
+  return ctx;
+}
+function assistantPendingConfirm(){
+  for(let i=voiceChatHistory.length-1;i>=0;i--){
+    const c=voiceChatHistory[i].confirm;
+    if(c && c.state==='pending') return c;
+  }
+  return null;
+}
+function assistantConfirmHtml(c, i){
+  if(c.state==='done') return `<div class="vcp-confirm done">✔ ${navEsc(t('w_assistant_booked','Записано'))}</div>`;
+  if(c.state==='cancelled') return `<div class="vcp-confirm done">✖ ${navEsc(t('w_assistant_cancelled','Отменено'))}</div>`;
+  if(c.state==='busy') return `<div class="vcp-confirm">⏳</div>`;
+  return `<div class="vcp-confirm"><div class="vcp-confirm-sum">${navEsc(c.summary)}</div>`
+    + `<button type="button" class="btn btn-primary btn-sm" onclick="assistantConfirm(${i})">✅ ${navEsc(t('w_assistant_book','Записать'))}</button> `
+    + `<button type="button" class="btn btn-ghost btn-sm" onclick="assistantCancel(${i})">${navEsc(t('w_assistant_cancel','Отмена'))}</button></div>`;
+}
+function assistantCancel(i){
+  const c=voiceChatHistory[i] && voiceChatHistory[i].confirm;
+  if(c && c.state==='pending'){ c.state='cancelled'; renderVoiceChatPanel(); }
+}
+async function assistantConfirm(i){
+  const c=voiceChatHistory[i] && voiceChatHistory[i].confirm;
+  if(!c || c.state!=='pending') return;
+  c.state='busy'; renderVoiceChatPanel();
+  let msg;
+  try{
+    const fd=new FormData(); fd.append('token', c.token);
+    const res=await postForm('/notifications/assistant/confirm/', fd);
+    const data=await res.json().catch(()=>({}));
+    if(res.ok){ c.state='done'; c.result=data.message||''; msg=data.message; }
+    else { c.state='pending'; msg='⚠️ '+(data.error||t('w_voice_failed')); }
+  }catch(e){ c.state='pending'; msg='⚠️ '+t('w_voice_failed'); }
+  voiceChatHistory.push({role:'assistant', text:msg});
+  renderVoiceChatPanel();
+  speakText(msg);
+}
+function applyAssistantActions(actions){
+  let confirm=null;
+  (actions||[]).forEach(a=>{
+    if(a.type==='confirm_appointment'){
+      confirm={token:a.token, summary:a.summary, state:'pending'};
+    } else if(a.type==='visit_add' && typeof window.vwToothServicePick==='function'){
+      (a.items||[]).forEach(it=>(it.teeth||[]).forEach(num=>{
+        try{ toggleToothSelect((num>=51?'baby-':'adult-')+num, true); }catch(e){}
+        window.vwToothServicePick(num, it.service_id);
+        if(it.discount_pct && typeof window.vwSetDiscountForTooth==='function') window.vwSetDiscountForTooth(num, it.service_id, it.discount_pct);
+      }));
+    } else if(a.type==='open' && a.url){
+      setTimeout(()=>{ location.href=a.url; }, 1500);
+    }
+  });
+  return confirm;
+}
+async function processAgentMessage(text){
+  const pending=assistantPendingConfirm();
+  if(pending && ASSISTANT_YES.test(text.trim())){
+    return assistantConfirm(voiceChatHistory.findIndex(m=>m.confirm===pending));
+  }
+  voiceChatSetBusy(true);
+  const fd=new FormData();
+  fd.append('mode', 'agent');
+  fd.append('question', text);
+  fd.append('assistant_name', getAssistantName());
+  fd.append('history', JSON.stringify(voiceChatHistory.slice(0,-1).slice(-12).map(m=>({role:m.role, text:m.text}))));
+  fd.append('page', JSON.stringify(assistantPageContext()));
+  let answer, confirm=null;
+  try{
+    const res=await postForm('/notifications/voice/', fd);
+    const data=await res.json().catch(()=>({}));
+    if(res.ok){ answer=data.answer||''; confirm=applyAssistantActions(data.actions); }
+    else answer=data.error||t('w_voice_failed');
+  }catch(e){ answer=t('w_voice_failed'); }
+  if(confirm) voiceChatHistory.forEach(m=>{ if(m.confirm && m.confirm.state==='pending') m.confirm.state='cancelled'; });
+  voiceChatSetBusy(false);
+  voiceChatHistory.push(confirm ? {role:'assistant', text:answer, confirm} : {role:'assistant', text:answer});
   renderVoiceChatPanel();
   speakText(answer);
 }
@@ -8156,6 +8250,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
     if(setNavTreatCardEl) setNavTreatCardEl.classList.toggle('hidden', !(IS_SUPERADMIN || IS_ADMIN_MAIN));
     VOICE_ENABLED=!!data.voiceEnabled;
     AI_ENABLED=!!data.aiEnabled;
+    AGENT_ENABLED=!!data.agentEnabled;
     const voiceFabEl=document.getElementById('voiceFab');
     if(voiceFabEl) voiceFabEl.classList.toggle('hidden', !VOICE_ENABLED);
     // Постоянное прослушивание имени — если пользователь уже включил его

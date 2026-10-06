@@ -55,6 +55,7 @@ def _shared_options(request, clinic):
     from apps.appointments.models import CancellationReason
     from apps.settings_clinic.models import ClinicSettings
     from apps.notifications.voice import voice_enabled, ai_enabled
+    from apps.notifications.assistant import openai_enabled
     cs = ClinicSettings.get()
     return {
         # Язык интерфейса — личный (User.interface_language, любой сотрудник
@@ -190,6 +191,9 @@ def _shared_options(request, clinic):
         # («спроси что угодно» в плавающем виджете), и реальный ответ в
         # текстовом чате «ИИ-помощник» на странице Отчётов.
         "aiEnabled": ai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
+        # ИИ-помощник с доступом к данным клиники (OpenAI) — запись пациентов,
+        # вопросы, зубы и услуги в карте приёма (apps/notifications/assistant.py).
+        "agentEnabled": openai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
         # тот же персональный механизм allowed_sections, что и в старом интерфейсе
         # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.

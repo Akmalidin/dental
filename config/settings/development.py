@@ -222,7 +222,15 @@ TELEGRAM_GA_API_URL = os.environ.get("TELEGRAM_GA_API_URL", "")
 # (apps/notifications/voice.py), OPENAI_ENABLED остался общим тумблером
 # «голосовой ввод включён», чтобы не просить менять .env на сервере ещё раз.
 OPENAI_ENABLED = os.environ.get("OPENAI_ENABLED", "") == "1"
+# С переездом сервера в Германию OpenAI снова доступен: если ключ задан,
+# голосовой ИИ-помощник (apps/notifications/assistant.py) распознаёт речь,
+# понимает команды (запись пациентов, вопросы, зубы и услуги в карте приёма)
+# и озвучивает ответы через OpenAI. Модели можно сменить без правки кода.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+OPENAI_TRANSCRIBE_MODEL = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
+OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "nova")
 
 # ─── YandexGPT (свободный вопрос-ответ «ИИ-помощник») — ключ только из env ───
 # Доступен из РФ без ограничений (в отличие от OpenAI). YANDEX_MODEL — по
