@@ -41,4 +41,15 @@ jobs:
                       "by_ai=%s" % m.by_ai, "sent_by=%s" % m.sent_by_id, (m.body or "")[:40].replace("\n", " "))
             print("paused:", list(ChatBotState.all_clinics.filter(paused=True).values_list("clinic_id", "channel", "address", "reason")))
             print("now:", timezone.now())
+            last_in = WaMessage.all_clinics.filter(direction="in", channel="wa").order_by("-created_at")[:3]
+            print("последние входящие WA:", [(m.pk, m.created_at.strftime("%d.%m %H:%M"), m.clinic_id) for m in last_in])
             PY
+            echo ">>> nginx: обращения к wa-webhook (сегодня)"
+            for f in /var/log/nginx/access.log /var/log/nginx/access.log.1; do grep -h "wa-webhook" "$f" 2>/dev/null | tail -n 5 | cut -c1-160; done
+            echo ">>> Green-API: настройки вебхука (getSettings)"
+            BASE=${GREENAPI_API_URL:-https://api.greenapi.com}
+            curl -s --max-time 20 "$BASE/waInstance${GREENAPI_ID_INSTANCE}/getSettings/${GREENAPI_TOKEN}" | python3 -c "import json,sys,re; d=json.load(sys.stdin); u=d.get('webhookUrl',''); print('webhookUrl:', re.sub(r'key=[^&]+','key=***',u)); print({k:d.get(k) for k in ('incomingWebhook','outgoingWebhook','outgoingMessageWebhook','outgoingAPIMessageWebhook','stateWebhook')})" || echo "getSettings не удался"
+            curl -s --max-time 20 "$BASE/waInstance${GREENAPI_ID_INSTANCE}/getStateInstance/${GREENAPI_TOKEN}"; echo
+            echo ">>> внешний IP сервера и куда указывает app.sadaf.kg"
+            curl -s --max-time 10 https://api.ipify.org; echo
+            getent hosts app.sadaf.kg || true
