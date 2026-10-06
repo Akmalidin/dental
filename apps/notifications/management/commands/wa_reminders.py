@@ -27,7 +27,7 @@ class Command(BaseCommand):
         from apps.tenancy import set_current_clinic
 
         now = timezone.now()
-        stat = {"hour": 0, "day": 0, "debt": 0, "summary": 0}
+        stat = {"hour": 0, "day": 0, "debt": 0, "summary": 0, "doc_soon": 0, "doc_digest": 0}
 
         for clinic in Clinic.objects.filter(is_active=True):
             set_current_clinic(clinic)  # + часовой пояс клиники (для {время} и «около 10:00»)
@@ -112,6 +112,16 @@ class Command(BaseCommand):
                             Patient.all_objects.filter(pk=p.pk).update(last_debt_reminder=now)
                         stat["debt"] += 1
 
+            # — врачам лично в Telegram: за ~30 минут до приёма и утренняя сводка —
+            if tg_on:
+                try:
+                    from apps.notifications.tg_staff import (
+                        send_doctor_soon_reminders, send_doctor_morning_digests)
+                    stat["doc_soon"] += send_doctor_soon_reminders(clinic, now=now, dry=dry)
+                    stat["doc_digest"] += send_doctor_morning_digests(clinic, now=now, dry=dry)
+                except Exception as e:  # noqa: BLE001
+                    self.stderr.write("Уведомления врачам в Telegram (%s): %s" % (clinic.slug, e))
+
             # — вечерняя сводка на завтра в Telegram-группы персонала —
             if tg_on:
                 try:
@@ -121,4 +131,5 @@ class Command(BaseCommand):
                     self.stderr.write("Сводка в Telegram-группы (%s): %s" % (clinic.slug, e))
 
         self.stdout.write(self.style.SUCCESS(
-            "Готово: за час %(hour)s, за день %(day)s, должникам %(debt)s, сводок в группы %(summary)s" % stat))
+            "Готово: за час %(hour)s, за день %(day)s, должникам %(debt)s, сводок в группы %(summary)s, "
+            "врачам за 30 мин %(doc_soon)s, утренних сводок врачам %(doc_digest)s" % stat))

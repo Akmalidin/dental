@@ -650,6 +650,87 @@ class TgStaffBotTestCase(TestCase):
         self.assertIsNone(parse_date("99.99"))
         self.assertIsNone(parse_date("привет"))
 
+    # ── личные уведомления врачу: «Завтра», настройки, за 30 минут, утренняя сводка ──
+    def _appt_at(self, start, doctor=None, **kw):
+        from datetime import timedelta
+        from apps.appointments.models import Appointment
+        return Appointment.objects.create(
+            patient=self.patient, doctor=doctor or self.doctor, branch=self.branch, start_at=start,
+            end_at=start + timedelta(minutes=30), clinic=self.clinic, **kw)
+
+    def test_tomorrow_button(self):
+        from datetime import datetime, time, timedelta
+        from django.utils import timezone
+        from apps.notifications.tg_staff import BTN_TOMORROW
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        self._appt_at(timezone.make_aware(datetime.combine(tomorrow, time(9, 0))))
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42}, "text": BTN_TOMORROW}})
+        txt = self._texts()
+        self.assertIn("завтра", txt)
+        self.assertIn("Пациентов", txt)
+
+    def test_settings_toggle(self):
+        from apps.notifications.tg_staff import BTN_SETTINGS
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42}, "text": BTN_SETTINGS}})
+        self.assertIn("Напоминание за 30 минут", self._texts())
+        self._update({"callback_query": {"id": "q", "from": {"id": 42}, "data": "sns:soon",
+                                         "message": {"chat": {"id": 42}, "message_id": 7}}})
+        self.doctor.refresh_from_db()
+        self.assertFalse(self.doctor.tg_remind_soon)
+        self.assertTrue(self.doctor.tg_daily_digest)
+        self._update({"callback_query": {"id": "q", "from": {"id": 42}, "data": "sns:digest",
+                                         "message": {"chat": {"id": 42}, "message_id": 7}}})
+        self.doctor.refresh_from_db()
+        self.assertFalse(self.doctor.tg_daily_digest)
+
+    def test_soon_reminder_once_and_again_after_reschedule(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.notifications.tg_staff import send_doctor_soon_reminders
+        now = timezone.now()
+        self._link(self.doctor, 42)
+        a = self._appt_at(now + timedelta(minutes=30))
+        self._appt_at(now + timedelta(minutes=90))           # ещё рано
+        self._appt_at(now + timedelta(minutes=30), doctor=self.doctor2)  # врач не в боте
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_doctor_soon_reminders(self.clinic, now=now), 1)
+            self.assertEqual(send_doctor_soon_reminders(self.clinic, now=now), 0)   # повторно не шлём
+        self.assertEqual(self.calls[-1][1]["chat_id"], 42)
+        self.assertIn("Через 30 мин", self.calls[-1][1]["text"])
+        self.assertIn("Пациентов", self.calls[-1][1]["text"])
+        # перенесли на 10 минут позже — напомним снова
+        a.start_at = a.start_at + timedelta(minutes=10); a.end_at = a.end_at + timedelta(minutes=10); a.save()
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_doctor_soon_reminders(self.clinic, now=now), 1)
+        # выключил — не шлём
+        self.doctor.tg_remind_soon = False; self.doctor.save()
+        self._appt_at(now + timedelta(minutes=35))
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_doctor_soon_reminders(self.clinic, now=now), 0)
+
+    def test_morning_digest_once_a_day_only_with_appointments(self):
+        from datetime import datetime, time
+        from django.utils import timezone
+        from apps.notifications.tg_staff import send_doctor_morning_digests
+        today = timezone.localdate()
+        morning = timezone.make_aware(datetime.combine(today, time(8, 30)))
+        self._link(self.doctor, 42)
+        self._link(self.doctor2, 43)   # у второго врача сегодня приёмов нет
+        self._appt_at(timezone.make_aware(datetime.combine(today, time(12, 0))))
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_doctor_morning_digests(self.clinic, now=morning), 1)
+            self.assertEqual(send_doctor_morning_digests(self.clinic, now=morning), 0)
+        sent = [p for m, p in self.calls if m == "sendMessage"]
+        self.assertEqual([p["chat_id"] for p in sent], [42])
+        self.assertIn("Доброе утро", sent[0]["text"])
+        # вне окна 8–11 — ничего
+        self.doctor.tg_digest_sent_on = None; self.doctor.save()
+        evening = timezone.make_aware(datetime.combine(today, time(15, 0)))
+        with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
+            self.assertEqual(send_doctor_morning_digests(self.clinic, now=evening), 0)
+
 
 class TgPatientBookingTestCase(TestCase):
     """Бот для пациентов: выбор языка (ru / uz), привязка по номеру,

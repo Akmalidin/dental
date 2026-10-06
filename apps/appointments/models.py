@@ -108,6 +108,9 @@ class Appointment(ClinicSoftDeleteModel):
     cancel_note = models.CharField(max_length=300, blank=True, verbose_name="Комментарий к отмене")
     notes = models.TextField(blank=True, verbose_name="Заметки")
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="manual", verbose_name="Источник")
+    # Время приёма, о котором врачу уже напомнили в Telegram (за ~30 минут).
+    # Храним само время, а не флаг: при переносе записи напоминание придёт снова.
+    doctor_reminded_for = models.DateTimeField(null=True, blank=True, editable=False)
     reminded_day = models.BooleanField(default=False)   # отправлено напоминание за день
     reminded_hour = models.BooleanField(default=False)  # отправлено напоминание за час
     overdue_notified = models.BooleanField(default=False)  # уведомление о просроченном визите отправлено
