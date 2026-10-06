@@ -616,6 +616,24 @@ def assign_orphans(hours=2):
         clinic = clinic_for_unknown_number(m.phone)
         if clinic is not None:
             WaMessage.all_clinics.filter(pk=m.pk).update(clinic=clinic)
+    # Telegram-бот: писали, не поделившись номером (раньше такие сообщения
+    # пропускались) — карточка и ответ ассистента.
+    from apps.users.models import Clinic
+    for clinic_id, chat in set(WaMessage.all_clinics.filter(direction="in", channel="tg", clinic__isnull=False,
+                                                            patient__isnull=True, created_at__gte=since)
+                               .values_list("clinic_id", "phone")):
+        clinic = Clinic.objects.filter(pk=clinic_id).first()
+        if clinic is None or not str(chat).lstrip("-").isdigit() or str(chat).startswith("-"):
+            continue
+        from apps.tenancy import get_current_clinic, set_current_clinic
+        prev = get_current_clinic()
+        set_current_clinic(clinic)
+        try:
+            p = ensure_tg_patient(clinic, int(chat))
+        finally:
+            set_current_clinic(prev)
+        WaMessage.all_clinics.filter(clinic=clinic, channel="tg", phone=chat, patient__isnull=True,
+                                     created_at__gte=since).update(patient=p, ai_status="")
     seen = set()
     for clinic_id, phone in (WaMessage.all_clinics.filter(direction="in", channel="wa", clinic__isnull=False,
                                                           patient__isnull=True, created_at__gte=since)

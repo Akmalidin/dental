@@ -297,6 +297,16 @@ class PatientAssistantTestCase(TestCase):
         self.assertTrue(Appointment.objects.filter(patient=auto).exists())
         self.assertEqual(self.sent[0][:2], ("tg", "4242"))
 
+    def test_skipped_unlinked_telegram_message_is_picked_up(self):
+        from apps.notifications.models import WaMessage
+        from apps.notifications.patient_assistant import assign_orphans
+        m = self._in("Тиш олиш нечи пул", phone="5551590", channel="tg")
+        WaMessage.objects.filter(pk=m.pk).update(ai_status="skip", created_at=timezone.now() - timedelta(minutes=30))
+        assign_orphans()
+        m.refresh_from_db()
+        self.assertEqual(m.ai_status, "")
+        self.assertEqual(m.patient.telegram_chat_id, 5551590)
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command
