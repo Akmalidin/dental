@@ -153,6 +153,7 @@ BTN_TODAY, BTN_TOMORROW = S["btn_today"]["ru"], S["btn_tomorrow"]["ru"]
 BTN_PICK_DATE, BTN_REMIND = S["btn_pick"]["ru"], S["btn_remind"]["ru"]
 BTN_SETTINGS = S["btn_settings"]["ru"]
 STAFF_KEYBOARD = staff_keyboard("ru")
+BTN_TEST = "🧪 Тест-режим"
 
 
 def staff_lang(user, clinic=None):
@@ -244,7 +245,96 @@ def staff_for_chat(clinic, from_id):
     from apps.users.models import User
     if not from_id:
         return None
-    return User.objects.filter(clinic=clinic, is_active=True, telegram_id=from_id).first()
+    u = User.objects.filter(clinic=clinic, is_active=True, telegram_id=from_id).first()
+    if u is None:
+        u = test_user_for_chat(clinic, from_id)
+    return u
+
+
+# ── Тест-режим супер-админа ──────────────────────────────────────────────
+# Супер-админ (подтверждённый в боте через /admin) пишет /test и смотрит бота
+# глазами любого директора или врача этой клиники, либо как пациент. Личный
+# чат с ботом = from_id, выбранный сотрудник хранится в TgChat.data["test_as"].
+# В тест-режиме ничего не меняем у настоящих людей: напоминания пациентам не
+# отправляются, настройки уведомлений врача не переключаются.
+
+def _test_chat(clinic, from_id):
+    from .models import TgChat
+    return TgChat.all_clinics.filter(clinic=clinic, chat_id=from_id).first()
+
+
+def test_user_for_chat(clinic, from_id):
+    from apps.users.models import User
+    chat = _test_chat(clinic, from_id)
+    pk = (chat.data or {}).get("test_as") if chat else None
+    if not pk or superadmin_for_chat(from_id) is None:
+        return None
+    u = User.objects.filter(clinic=clinic, is_active=True, pk=pk).first()
+    if u is not None:
+        u.tg_test_mode = True
+        u.telegram_id = from_id   # уведомления-примеры — в чат супер-админа
+    return u
+
+
+def _set_test_as(clinic, chat_id, pk):
+    from .tg_patient import get_chat
+    chat = get_chat(clinic, chat_id)
+    data = dict(chat.data or {})
+    if pk:
+        data["test_as"] = pk
+    else:
+        data.pop("test_as", None)
+    chat.data = data
+    chat.state = ""
+    chat.save(update_fields=["data", "state", "updated_at"])
+
+
+def test_menu(clinic, current=None):
+    text = ("🧪 <b>Тест-режим</b>\n\n"
+            "Посмотрите бота глазами сотрудника этой клиники или пациента.\n"
+            "Настоящим пациентам и сотрудникам ничего не отправляется и не меняется.")
+    if current is not None:
+        text += "\n\nСейчас вы: <b>%s</b> (%s)" % (_esc(current.name), _role_label(current))
+    rows = [[("👔 Как директор / админ", "stt:dir")], [("🧑‍⚕️ Как врач", "stt:doc")],
+            [("🙂 Как пациент", "stt:pat")]]
+    if current is not None:
+        rows.append([("📨 Прислать пример уведомлений", "stt:ntf")])
+    return text, rows
+
+
+def _test_people(clinic, kind):
+    from apps.users.models import User
+    users = list(User.objects.filter(clinic=clinic, is_active=True).order_by("name"))
+    if kind == "doc":
+        users = [u for u in users if u.is_doctor]
+    else:
+        users = [u for u in users if (u.is_admin or u.is_admin_main) and not u.is_superadmin]
+    return users[:30]
+
+
+def send_test_samples(clinic, user, chat_id, token, lang):
+    """Примеры уведомлений выбранного сотрудника — в чат супер-админа."""
+    from apps.appointments.models import Appointment
+    now = timezone.now()
+    qs = Appointment.objects.filter(start_at__gt=now, status__in=["scheduled", "confirmed", "arrived"])
+    if user.is_doctor:
+        qs = qs.filter(doctor=user)
+    a = qs.select_related("patient", "doctor", "service").order_by("start_at").first()
+    if a is not None:
+        _send(chat_id, _soon_text(a, a.start_at - timedelta(minutes=SOON_MINUTES), lang), token)
+        st_ = timezone.localtime(a.start_at)
+        pname = a.patient.full_name if a.patient_id else "—"
+        dname = a.doctor.name if a.doctor_id else "—"
+        if lang == "uz":
+            new = "🆕 <b>Yangi yozuv</b>\n\nBemor: <b>%s</b>\n📅 %s 🕐 %s\n👨‍⚕️ Shifokor: %s"
+        else:
+            new = "🆕 <b>Новая запись</b>\n\nПациент: <b>%s</b>\n📅 %s 🕐 %s\n👨‍⚕️ Врач: %s"
+        _send(chat_id, new % (_esc(pname), st_.strftime("%d.%m.%Y"), st_.strftime("%H:%M"), _esc(dname)), token)
+    else:
+        _send(chat_id, "🧪 Предстоящих записей нет — пример напоминания за 30 минут показать не на чем.", token)
+    today = timezone.localdate()
+    for part in day_report(user, today, lang=lang, title=st("digest_title", lang, d=today.strftime("%d.%m"))):
+        _send(chat_id, part, token)
 
 
 def find_staff_by_phone(clinic, phone):
@@ -311,7 +401,12 @@ def send_staff_menu(chat_id, user, token, text=None, lang=None):
     if text is None:
         scope = st("scope_all" if sees_all(user) else "scope_own", lang)
         text = st("menu", lang, name=_esc(user.name), scope=scope)
-    return _send(chat_id, text, token, keyboard=staff_keyboard(lang))
+    kb = staff_keyboard(lang)
+    if getattr(user, "tg_test_mode", False):
+        text = "🧪 <b>Тест-режим:</b> вы — %s (%s). Сменить роль — /test, выйти — /stop\n\n%s" % (
+            _esc(user.name), _role_label(user), text)
+        kb["keyboard"].append([{"text": BTN_TEST}])
+    return _send(chat_id, text, token, keyboard=kb)
 
 
 # ── Списки приёмов ───────────────────────────────────────────────────────
@@ -495,6 +590,15 @@ def handle_private(clinic, msg, token):
     # пациентом (его номер может быть и пациентом клиники), поэтому
     # автоматически по контакту суперадмина не переключаем.
     from .tg_patient import get_chat
+    if _cmd(text) == "test" or text == BTN_TEST:
+        if superadmin_for_chat(from_id) is None:
+            if staff is None:
+                return False   # обычный пациент — пусть ответит пациентское меню
+            _send(chat_id, "Тест-режим доступен только супер-админу (подтвердите номер: /admin).", token)
+            return True
+        t, rows = test_menu(clinic, staff if getattr(staff, "tg_test_mode", False) else None)
+        _send(chat_id, t, token, buttons=rows)
+        return True
     if staff is None and _cmd(text) == "admin":
         chat = get_chat(clinic, chat_id)
         chat.state, chat.data = "await_admin", {}
@@ -518,7 +622,8 @@ def handle_private(clinic, msg, token):
             su.save(update_fields=["telegram_id"])
             _send(chat_id, "✅ Вы подтверждены как супер-админ: <b>%s</b>.\n\n"
                            "Теперь добавьте бота клиники в группу и напишите там /group — "
-                           "это работает в группах ботов всех клиник." % _esc(su.name), token,
+                           "это работает в группах ботов всех клиник.\n\n"
+                           "🧪 Проверить бота как директор, врач или пациент — /test" % _esc(su.name), token,
                   keyboard={"remove_keyboard": True})
             return True
 
@@ -550,6 +655,11 @@ def handle_private(clinic, msg, token):
                         text=st("lang_set", lang) + "\n\n" + st(
                             "menu", lang, name=_esc(staff.name),
                             scope=st("scope_all" if sees_all(staff) else "scope_own", lang)))
+        return True
+    if cmd == "stop" and getattr(staff, "tg_test_mode", False):
+        _set_test_as(clinic, chat_id, None)
+        _send(chat_id, "🧪 Тест-режим выключен. Вы снова пациент — /start", token,
+              keyboard={"remove_keyboard": True})
         return True
     if cmd == "stop":
         staff.telegram_id = None
@@ -595,13 +705,17 @@ def handle_callback(clinic, cq, token):
     """Инлайн-кнопки меню сотрудника (sdp/sdd/sdr). True — обработано."""
     from .telegram import tg_answer_callback, tg_edit_message
     data = cq.get("data", "") or ""
-    if not data.startswith(("sdp:", "sdd:", "sdr:", "sns:")):
+    if not data.startswith(("sdp:", "sdd:", "sdr:", "sns:", "stt:", "stu:")):
         return False
     cq_id = cq.get("id")
     msg = cq.get("message") or {}
     chat_id = msg.get("chat", {}).get("id")
     message_id = msg.get("message_id")
-    staff = staff_for_chat(clinic, (cq.get("from") or {}).get("id"))
+    from_id = (cq.get("from") or {}).get("id")
+    if data.startswith(("stt:", "stu:")):
+        return _handle_test_callback(clinic, cq_id, data, chat_id, message_id, from_id, token)
+    staff = staff_for_chat(clinic, from_id)
+    test_mode = getattr(staff, "tg_test_mode", False)
     if staff is None:
         tg_answer_callback(cq_id, "Доступно только сотрудникам клиники", token=token)
         return True
@@ -611,6 +725,9 @@ def handle_callback(clinic, cq, token):
     try:
         if parts[0] == "sns":
             field = {"soon": "tg_remind_soon", "digest": "tg_daily_digest"}.get(parts[1])
+            if test_mode:
+                tg_answer_callback(cq_id, "🧪 В тест-режиме настройки врача не меняются", token=token)
+                return True
             if field:
                 setattr(staff, field, not getattr(staff, field))
                 staff.save(update_fields=[field])
@@ -647,6 +764,12 @@ def handle_callback(clinic, cq, token):
         elif parts[0] == "sdr":
             day = date.fromisoformat(parts[1])
             targets = _remind_targets(staff, day)
+            if test_mode:
+                tg_edit_message(chat_id, message_id,
+                                "🧪 Тест-режим: напоминания <b>не отправлены</b>. "
+                                "В рабочем режиме ушли бы %s пациентам." % len(targets), token=token)
+                tg_answer_callback(cq_id, token=token)
+                return True
             tg_edit_message(chat_id, message_id, st("sending", lang), token=token)
             sent = sum(1 for a in targets if send_patient_reminder(a))
             tg_edit_message(chat_id, message_id,
@@ -655,6 +778,48 @@ def handle_callback(clinic, cq, token):
                             token=token)
     except (ValueError, IndexError):
         pass
+    tg_answer_callback(cq_id, token=token)
+    return True
+
+
+def _handle_test_callback(clinic, cq_id, data, chat_id, message_id, from_id, token):
+    from apps.users.models import User
+    from .telegram import tg_answer_callback, tg_edit_message
+    if superadmin_for_chat(from_id) is None:
+        tg_answer_callback(cq_id, "Только для супер-админа", token=token)
+        return True
+    kind = data.split(":", 1)[1]
+    if data.startswith("stt:"):
+        if kind == "pat":
+            _set_test_as(clinic, chat_id, None)
+            tg_edit_message(chat_id, message_id, "🙂 Теперь вы — <b>пациент</b>. Нажмите /start, "
+                                                 "чтобы увидеть бота как пациент. Вернуться к ролям — /test",
+                            token=token)
+        elif kind == "ntf":
+            u = test_user_for_chat(clinic, from_id)
+            if u is not None:
+                send_test_samples(clinic, u, chat_id, token, staff_lang(u, clinic))
+        elif kind == "back":
+            t, rows = test_menu(clinic, test_user_for_chat(clinic, from_id))
+            tg_edit_message(chat_id, message_id, t, buttons=rows, token=token)
+        else:
+            people = _test_people(clinic, kind)
+            if not people:
+                tg_answer_callback(cq_id, "В этой клинике таких сотрудников нет", token=token)
+                return True
+            rows = [[("%s (%s)" % (u.name, _role_label(u)), "stu:%s" % u.pk)] for u in people]
+            rows.append([("◀ Назад", "stt:back")])
+            tg_edit_message(chat_id, message_id, "🧪 Кем войти?", buttons=rows, token=token)
+    else:
+        try:
+            u = User.objects.filter(clinic=clinic, is_active=True, pk=int(kind)).first()
+        except ValueError:
+            u = None
+        if u is not None:
+            _set_test_as(clinic, chat_id, u.pk)
+            u = test_user_for_chat(clinic, from_id)
+            tg_edit_message(chat_id, message_id, "✅ Вы вошли как <b>%s</b>." % _esc(u.name), token=token)
+            send_staff_menu(chat_id, u, token, lang=staff_lang(u, clinic))
     tg_answer_callback(cq_id, token=token)
     return True
 

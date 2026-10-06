@@ -731,6 +731,70 @@ class TgStaffBotTestCase(TestCase):
         with patch("apps.notifications.telegram._call", side_effect=self._fake_call):
             self.assertEqual(send_doctor_morning_digests(self.clinic, now=evening), 0)
 
+    # ── тест-режим супер-админа: директор / врач / пациент ──
+    def test_superadmin_test_mode_switches_roles_without_touching_real_people(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.appointments.models import Appointment
+        su_role, _ = Role.objects.get_or_create(name=Role.SUPERADMIN)
+        User.objects.create(login="st_su2", name="Супер", phone="+996553565674", role=su_role,
+                            clinic=None, telegram_id=61)
+        self._link(self.doctor, 42)
+        cb = lambda d: self._update({"callback_query": {"id": "q", "from": {"id": 61}, "data": d,  # noqa: E731
+                                                         "message": {"chat": {"id": 61}, "message_id": 5}}})
+        msg = lambda t: self._update({"message": {"chat": {"id": 61, "type": "private"},  # noqa: E731
+                                                  "from": {"id": 61}, "text": t}})
+        msg("/test")
+        self.assertIn("Тест-режим", self._texts())
+        cb("stt:doc")
+        self.assertIn("stu:%s" % self.doctor.pk, self.json.dumps(self.calls))
+        cb("stu:%s" % self.doctor.pk)
+        self.assertIn("вы — Доктор Один", self._texts())
+        # врач видит только свои записи
+        self.calls.clear()
+        msg(self.day.strftime("%d.%m.%Y"))
+        self.assertIn("Пациентов", self._texts())
+        self.assertNotIn("Чужой", self._texts())
+        # напоминания пациентам и настройки — не трогаем
+        self.calls.clear()
+        cb("sdr:%s" % self.day.isoformat())
+        self.assertIn("не отправлены", self._texts())
+        self.assertNotIn(999, [p.get("chat_id") for m, p in self.calls])
+        cb("sns:soon")
+        self.doctor.refresh_from_db()
+        self.assertTrue(self.doctor.tg_remind_soon)
+        self.assertEqual(self.doctor.telegram_id, 42)
+        # пример уведомлений приходит в чат супер-админа
+        self.calls.clear()
+        cb("stt:ntf")
+        sent = [p for m, p in self.calls if m == "sendMessage"]
+        self.assertTrue(sent and all(p["chat_id"] == 61 for p in sent))
+        # директор/админ видит все записи
+        cb("stu:%s" % self.admin.pk)
+        self.calls.clear()
+        msg(self.day.strftime("%d.%m.%Y"))
+        self.assertIn("Чужой", self._texts())
+        # /stop выключает тест, не отвязывая настоящих сотрудников
+        msg("/stop")
+        self.admin.refresh_from_db()
+        self.assertIsNone(self.admin.telegram_id)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.telegram_id, 42)
+        from apps.notifications.tg_staff import staff_for_chat
+        self.assertIsNone(staff_for_chat(self.clinic, 61))
+        self.assertEqual(Appointment.objects.count(), 2)
+        _ = timezone, timedelta
+
+    def test_test_mode_only_for_superadmin(self):
+        self._link(self.doctor, 42)
+        self._update({"message": {"chat": {"id": 42, "type": "private"}, "from": {"id": 42}, "text": "/test"}})
+        self.assertIn("только супер-админу", self._texts())
+        self.calls.clear()
+        self._update({"callback_query": {"id": "q", "from": {"id": 42}, "data": "stu:%s" % self.admin.pk,
+                                         "message": {"chat": {"id": 42}, "message_id": 5}}})
+        from apps.notifications.tg_staff import staff_for_chat
+        self.assertEqual(staff_for_chat(self.clinic, 42), self.doctor)
+
     # ── язык бота сотрудника: русский / узбекский ──
     def test_language_button_switches_staff_menu_to_uzbek_and_back(self):
         from apps.notifications.models import TgChat
