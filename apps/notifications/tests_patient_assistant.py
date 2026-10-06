@@ -310,6 +310,24 @@ class PatientAssistantTestCase(TestCase):
         self.assertEqual(m.ai_status, "")
         self.assertEqual(m.patient.telegram_chat_id, 5551590)
 
+    def test_confirmation_hint_after_voice_yes(self):
+        from apps.notifications.patient_assistant import _confirmation_hint
+        ask = {"role": "assistant", "text": "Вы хотите запись к Одине на завтра в 09:15? Подтверждаете запись?"}
+        for said in ("🎤 Да, подтверждаю", "Ха, майли", "Подтверждаю", "запишите", "ok"):
+            self.assertTrue(_confirmation_hint([ask, {"role": "user", "text": said}]), said)
+        self.assertIsNone(_confirmation_hint([ask, {"role": "user", "text": "Нет, лучше в 10"}]))
+        self.assertIsNone(_confirmation_hint([{"role": "assistant", "text": "Чем помочь?"},
+                                              {"role": "user", "text": "Да"}]))
+        # подсказка уходит модели последним системным сообщением
+        self._in("Да", phone="998901112233", patient=self.patient, ago=10)
+        from apps.notifications.models import WaMessage
+        out = WaMessage.objects.create(direction="out", channel="wa", phone="998901112233", by_ai=True,
+                                       body=ask["text"], clinic=self.clinic, patient=self.patient)
+        WaMessage.objects.filter(pk=out.pk).update(created_at=self.noon - timedelta(minutes=11))
+        n, calls = self._tick([_final("Записал.")])
+        self.assertEqual(calls[0]["messages"][-1]["role"], "system")
+        self.assertIn("ПОДТВЕРДИЛ", calls[0]["messages"][-1]["content"])
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command

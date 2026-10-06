@@ -38,7 +38,8 @@ jobs:
             for m in reversed(list(WaMessage.all_clinics.filter(created_at__gte=since).order_by("-created_at")[:40])):
                 print("msg", m.pk, m.created_at.strftime("%H:%M:%S"), "clinic=%s" % m.clinic_id, m.channel, m.direction,
                       "phone=..%s" % (m.phone or "")[-6:], "patient=%s" % m.patient_id, "ai=%r" % m.ai_status,
-                      "by_ai=%s" % m.by_ai, "sent_by=%s" % m.sent_by_id, (m.body or "")[:40].replace("\n", " "))
+                      "by_ai=%s" % m.by_ai, "sent_by=%s" % m.sent_by_id, (m.body or "")[:40].replace("\n", " "),
+                      ("🎤 %r" % (m.transcript or "")[:60]) if m.media_type in ("voice", "audio") else "")
             print("chat states:", list(ChatBotState.all_clinics.values_list("clinic_id", "channel", "address", "paused", "reason", "updated_at")))
             print("now:", timezone.now())
             last_in = WaMessage.all_clinics.filter(direction="in", channel="wa").order_by("-created_at")[:3]
