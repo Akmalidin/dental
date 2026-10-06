@@ -173,6 +173,34 @@ class PatientAssistantTestCase(TestCase):
                           content_type="application/json")
         self.assertTrue(is_paused(self.clinic, "wa", phone))
 
+    def test_known_phone_books_without_asking_name(self):
+        from apps.appointments.models import Appointment
+        # пациент есть в базе, но сообщение к нему не привязано
+        self._in("Да, запишите", phone="998901112233", ago=10)
+        start = "%sT16:00" % self.tomorrow.isoformat()
+        n, calls = self._tick([
+            _tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start}),
+            _final("Записал вас на 16:00."),
+        ])
+        self.assertEqual(n, 1)
+        self.assertTrue(Appointment.objects.filter(patient=self.patient).exists())
+        self.assertIn("Нилуфар", calls[0]["messages"][0]["content"])   # модель знает, кто пишет
+
+    def test_command_single_pass_logs_tool_calls(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.notifications.models import WaMessage
+        m = self._in("Привет", phone="998901112233")
+        # команда берёт настоящее «сейчас»: сообщение пришло 10 минут назад (дольше задержки)
+        WaMessage.objects.filter(pk=m.pk).update(created_at=timezone.now() - timedelta(minutes=10))
+        buf = StringIO()
+        with patch("apps.notifications.assistant._request",
+                   side_effect=[(_tool_call("clinic_info", {}), None), (_final("Здравствуйте!"), None)]), \
+                patch("apps.notifications.whatsapp.wa_send_text", return_value=True):
+            call_command("patient_assistant_tick", "--loop", "0", stdout=buf)
+        self.assertIn("clinic_info(", buf.getvalue())
+        self.assertIn("ответ: Здравствуйте!", buf.getvalue())
+
     def test_reschedule_and_cancel_only_own_appointments(self):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient

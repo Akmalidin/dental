@@ -10,7 +10,8 @@
 переписку в «Мессенджерах» (сообщения ассистента помечены 🤖), может
 выключить ассистента в чате или ответить сам — тогда ассистент молчит.
 
-Запускается раз в минуту командой patient_assistant_tick (cron).
+Команда patient_assistant_tick (cron раз в минуту) проверяет чаты каждые
+несколько секунд в течение минуты — ответ приходит через ~10–15 секунд.
 """
 import html
 import json
@@ -61,6 +62,7 @@ class PCtx:
     def __init__(self, clinic, channel, address, patient):
         self.clinic, self.channel, self.address, self.patient = clinic, channel, address, patient
         self.events = []      # что сделал ассистент — для уведомления администраторам
+        self.trace = []       # вызовы инструментов — в журнал команды (разбор «почему не записал»)
         self.paused = False
 
 
@@ -124,10 +126,10 @@ def _ensure_patient(ctx, full_name):
     if ctx.channel != "wa":
         return None, "Сначала нужно подтвердить номер телефона в Telegram-боте клиники (/start)."
     name = (full_name or "").strip()
-    if len(name) < 2:
-        return None, "Спроси у пациента имя и фамилию"
     p = Patient.objects.filter(phone_norm=normalize_phone(ctx.address)).first()
     if p is None:
+        if len(name) < 2:
+            return None, "Пациент новый: спроси имя и фамилию одним вопросом, потом сразу запиши"
         parts = name.split(None, 1)
         p = Patient(last_name=parts[0], first_name=parts[1] if len(parts) > 1 else "", phone="+" + ctx.address.lstrip("+"))
         p.save()
@@ -225,7 +227,13 @@ def system_prompt(ctx):
         "Ты помогаешь записаться, перенести или отменить СВОЮ запись, рассказываешь об услугах, ценах, "
         "адресе и часах работы. Правила:\n"
         "- Все данные бери только из инструментов, ничего не выдумывай (время, цены, врачей).\n"
-        "- Перед записью/переносом/отменой назови врача, дату и время и дождись явного «да» пациента.\n"
+        "- Перед записью/переносом/отменой один раз назови врача, дату и время и спроси подтверждение. "
+        "Если пациент согласился (да, ха, хоп, ок, давайте, запишите, сойдёт, mayli, bo'ladi, yozing…) — "
+        "СРАЗУ вызывай book_appointment / reschedule_appointment / cancel_appointment. НИКОГДА не "
+        "переспрашивай подтверждение второй раз и не перечисляй время заново.\n"
+        "- Если инструмент вернул ошибку — честно скажи пациенту причину простыми словами и предложи, "
+        "что делать (другое время или имя и фамилию для новой карточки).\n"
+        "- Запись создаётся только вызовом book_appointment: не говори «записал», пока он не вернул ok.\n"
         "- Предлагай 2–4 ближайших свободных времени, а не весь список.\n"
         "- Не ставь диагнозы и не назначай лечение — предложи консультацию врача. При боли, отёке, "
         "температуре — посоветуй прийти как можно скорее и предложи ближайшее время.\n"
@@ -261,6 +269,8 @@ def run(ctx, history):
             except Exception as e:  # noqa: BLE001
                 log.exception("patient_assistant: tool %s failed", fn.get("name"))
                 result = {"error": "Ошибка: %s" % e}
+            ctx.trace.append("%s(%s) -> %s" % (fn.get("name"), fn.get("arguments") or "",
+                                               json.dumps(result, ensure_ascii=False, default=str)[:300]))
             messages.append({"role": "tool", "tool_call_id": call.get("id"),
                              "content": json.dumps(result, ensure_ascii=False, default=str)[:8000]})
     return None
@@ -347,8 +357,19 @@ def _message_text(m):
     return m.body or "(%s)" % (m.get_media_type_display() or "сообщение")
 
 
-def tick_clinic(clinic, now=None):
-    """Ответить в чатах этой клиники, где пациент ждёт. Возвращает число ответов."""
+FAST_WAIT_SECONDS = 5   # ночью / в разговоре, который ведёт ассистент: пауза, чтобы собрать 2–3 сообщения подряд
+
+
+def _find_patient(channel, address):
+    if channel != "wa":
+        return None
+    from apps.patients.models import Patient, normalize_phone
+    return Patient.objects.filter(phone_norm=normalize_phone(address)).first()
+
+
+def tick_clinic(clinic, now=None, out=None):
+    """Ответить в чатах этой клиники, где пациент ждёт. Возвращает число ответов.
+    out — функция для журнала (вызовы инструментов ассистента)."""
     from apps.settings_clinic.models import ClinicSettings
     from apps.tenancy import set_current_clinic
     from .models import WaMessage
@@ -382,15 +403,20 @@ def tick_clinic(clinic, now=None):
             continue
         # ночью или если разговор уже ведёт ассистент — отвечаем сразу, иначе ждём менеджера
         fast = night or _ai_leads_chat(channel, address, now)
-        wait = timedelta(seconds=20) if fast else delay
+        wait = timedelta(seconds=FAST_WAIT_SECONDS) if fast else delay
         if now - msgs[-1].created_at < wait:
             continue
-        patient = next((m.patient for m in reversed(msgs) if m.patient_id), None)
+        patient = next((m.patient for m in reversed(msgs) if m.patient_id), None) or _find_patient(channel, address)
         ctx = PCtx(clinic, channel, address, patient)
         hist_qs = WaMessage.objects.filter(channel=channel, phone=address).order_by("-created_at")[:HISTORY]
         history = [{"role": "user" if m.direction == "in" else "assistant", "text": _message_text(m)}
                    for m in reversed(list(hist_qs))]
         reply = run(ctx, history)
+        if out:
+            stamp = timezone.localtime(now).strftime("%d.%m %H:%M:%S")
+            for line in ctx.trace:
+                out("%s clinic=%s ..%s %s" % (stamp, clinic.pk, address[-4:], line))
+            out("%s clinic=%s ..%s ответ: %s" % (stamp, clinic.pk, address[-4:], (reply or "—")[:200].replace("\n", " ")))
         WaMessage.objects.filter(pk__in=ids).update(ai_status="done" if reply else "skip")
         if not reply:
             continue
