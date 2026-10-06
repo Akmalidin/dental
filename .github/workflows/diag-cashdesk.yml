@@ -1,0 +1,38 @@
+name: Diag cashdesk
+
+# Только чтение: открытые кассовые смены по клиникам и из чего складывается
+# сумма «Наличные» (платежи смены по дням и по клиникам).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export DJANGO_SETTINGS_MODULE=config.settings.server
+            ./venv/bin/python manage.py shell <<'PY'
+            from collections import defaultdict
+            from django.utils import timezone
+            from apps.finance.models import CashShift, Payment
+            for sh in CashShift.all_objects.filter(status="open").select_related("branch", "clinic"):
+                print("=== смена", sh.pk, "клиника:", sh.clinic_id, getattr(sh.clinic, "name", "?"), "| филиал:", sh.branch_id, sh.branch.name,
+                      "(клиника филиала:", sh.branch.clinic_id, ") | открыта:", timezone.localtime(sh.opened_at).strftime("%d.%m.%Y %H:%M"))
+                end = timezone.now()
+                qs = Payment.all_objects.filter(branch=sh.branch, created_at__gte=sh.opened_at, created_at__lte=end)
+                by_day = defaultdict(float); by_clinic = defaultdict(float)
+                for p in qs:
+                    v = float(p.amount) * (1 if p.type == "income" else -1)
+                    if p.method == "cash":
+                        by_day[timezone.localtime(p.created_at).date().isoformat()] += v
+                    by_clinic[p.clinic_id] += v
+                print("  наличные по дням:", dict(sorted(by_day.items())))
+                print("  все платежи смены по clinic_id платежа:", dict(by_clinic))
+            PY
