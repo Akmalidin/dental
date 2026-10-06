@@ -155,7 +155,7 @@ def schedule_violation(doctor, start, end):
     return None
 
 
-def notify_appointment_created(appt, created_by=None):
+def notify_appointment_created(appt, created_by=None, notify_patient=True):
     """Уведомить о новой записи (создана в календаре/CRM): пациента, врача и группы.
     Безопасно: при выключенном WhatsApp/ошибках ничего не падает."""
     try:
@@ -171,7 +171,9 @@ def notify_appointment_created(appt, created_by=None):
         # канал. Раньше здесь стоял ранний выход при выключенном WhatsApp, и
         # вместе с ним замолкал Telegram, хотя это независимый канал и бот
         # работал: пациент терял и уведомление, и кнопки «Подтвердить/Отменить».
-        if appt.patient_id:
+        # notify_patient=False — запись сделал ИИ-ассистент прямо в переписке
+        # с пациентом, он уже всё ответил сам.
+        if appt.patient_id and notify_patient:
             pname = appt.patient.first_name or appt.patient.full_name
             wa_text = ("✅ *%s*\n\nЗдравствуйте, *%s*!\n"
                        "Вы записаны на приём.\n\n"
@@ -238,7 +240,7 @@ def notify_appointment_created(appt, created_by=None):
         pass
 
 
-def notify_appointment_cancelled(appt):
+def notify_appointment_cancelled(appt, notify_patient=True):
     """Уведомить об отмене записи: пациента, врача и WhatsApp-группы клиники.
     Безопасно: при выключенном WhatsApp/ошибках ничего не падает."""
     try:
@@ -251,7 +253,7 @@ def notify_appointment_cancelled(appt):
         pname = (appt.patient.first_name or appt.patient.full_name) if appt.patient_id else ""
         date_s, time_s = st.strftime("%d.%m.%Y"), st.strftime("%H:%M")
         # пациенту
-        if appt.patient_id and appt.patient.phone:
+        if notify_patient and appt.patient_id and appt.patient.phone:
             wa_send_text(appt.patient.phone,
                          "❌ *%s*\n\nЗдравствуйте, *%s*!\n"
                          "Ваша запись *отменена*.\n\n"

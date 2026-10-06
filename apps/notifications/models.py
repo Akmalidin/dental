@@ -57,6 +57,12 @@ class WaMessage(ClinicScopedModel):
     ])
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="+")
+    # ИИ-ассистент для пациентов: by_ai — исходящее написал ассистент;
+    # ai_status у входящих: "" — ещё не разобрано, done — ассистент ответил,
+    # skip — ответил администратор/бот выключен; transcript — текст голосового.
+    by_ai = models.BooleanField(default=False)
+    ai_status = models.CharField(max_length=8, blank=True, default="", db_index=True)
+    transcript = models.TextField(blank=True, default="")
     ok = models.BooleanField(default=True)
     read = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -285,3 +291,16 @@ class AssistantMessage(models.Model):
 
     class Meta:
         ordering = ["created_at", "pk"]
+
+
+class ChatBotState(ClinicScopedModel):
+    """Ассистент выключен в конкретном чате с пациентом (администратор ведёт
+    разговор сам или ассистент позвал администратора)."""
+    channel = models.CharField(max_length=3)
+    address = models.CharField(max_length=40)   # телефон (WhatsApp) или chat_id (Telegram)
+    paused = models.BooleanField(default=False)
+    reason = models.CharField(max_length=200, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [["clinic", "channel", "address"]]

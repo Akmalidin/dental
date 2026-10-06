@@ -1838,6 +1838,11 @@ def _booking_url_or_empty(clinic):
     return booking_url_for(clinic)
 
 
+def _openai_enabled():
+    from apps.notifications.assistant import openai_enabled
+    return openai_enabled()
+
+
 def _newui_settings_data(clinic):
     """Настройки клиники — те же реальные поля ClinicSettings/Clinic.timezone,
     что и старый /settings/ (apps.settings_clinic.views.settings_view), просто
@@ -1888,6 +1893,9 @@ def _newui_settings_data(clinic):
         "waRemindDay": cs.wa_remind_day,
         "waRemindHour": cs.wa_remind_hour,
         "waRemindDebtDays": cs.wa_remind_debt_days,
+        "aiPatientBot": cs.ai_patient_bot,
+        "aiPatientDelay": cs.ai_patient_delay_min,
+        "aiAvailable": _openai_enabled(),
         "telegramEnabled": cs.telegram_enabled,
         "telegramBotUsername": cs.telegram_bot_username,
         # «Кабинеты и график» (вкладка настроек) — реальные данные, сохранение

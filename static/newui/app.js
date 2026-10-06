@@ -1462,8 +1462,18 @@ function renderChatHeader(){
   const chLabel = c.channel==='whatsapp' ? '🟢 WhatsApp' : '🔵 Telegram';
   el.innerHTML=`<button type="button" class="btn btn-ghost btn-sm msg-back" onclick="msgBackToList()" aria-label="Назад">←</button>
     <div style="flex:1;min-width:0;"><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
+    ${(chatAiBot && chatAiBot.on) ? `<button type="button" class="btn btn-ghost btn-sm" onclick="toggleChatAiBot()" title="${t('w_ai_bot_toggle_hint','ИИ-ассистент отвечает пациенту, если администратор молчит')}">${chatAiBot.paused ? '🤖 '+t('w_ai_bot_off','Ассистент выкл.') : '🤖 '+t('w_ai_bot_on','Ассистент вкл.')}</button>` : ''}
     <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>
     ${window.newuiCanDeleteChats ? `<button type="button" class="btn btn-ghost btn-sm" title="${t('w_delete_chat')}" aria-label="${t('w_delete_chat')}" onclick="deleteCurrentChat()" style="color:var(--coral);">🗑</button>` : ''}`;
+}
+let chatAiBot=null;
+async function toggleChatAiBot(){
+  if(!currentClientId || !chatAiBot) return;
+  const fd=new FormData(); fd.append('paused', chatAiBot.paused ? '0' : '1');
+  try{
+    const res=await postForm('/patients/'+currentClientId+'/ai-bot/', fd);
+    if(res.ok){ chatAiBot=await res.json(); renderChatHeader(); }
+  }catch(e){}
 }
 // Удалить беседу с пациентом (все сообщения и вложения; карточка остаётся).
 async function deleteCurrentChat(){
@@ -1496,6 +1506,8 @@ async function loadChatThread(patientId){
     const res=await fetch('/patients/'+patientId+'/wa-messages/');
     const data=await res.json();
     chatThreadMsgs=data.messages||[];
+    chatAiBot=data.aiBot||null;
+    renderChatHeader();
     renderChatThread(chatThreadMsgs);
   }catch(e){
     el.innerHTML=`<div style="margin:auto;font-size:12.5px;color:var(--coral);">${t('w_chat_load_failed')}</div>`;
@@ -1602,7 +1614,9 @@ function renderChatThread(msgs){
     const failed = (m.dir==='out' && !m.ok) ? ` <span style="color:var(--coral);">(${t('w_not_delivered')})</span>` : '';
     // При наличии разделителя в пузыре достаточно часов: дата уже над ним.
     const stamp = m.hm || m.time;
-    return `${sep}<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${media}${chatEscape(m.body)}${failed}<span class="time">${chatChannelIcon(m.channel)}${stamp}</span></div>`;
+    const ai = m.ai ? `<span class="chat-ai">🤖 ${t('w_ai_assistant','Ассистент')}</span>` : '';
+    const tr = m.transcript ? `<div class="chat-transcript">«${chatEscape(m.transcript)}»</div>` : '';
+    return `${sep}<div class="chat-bubble ${m.dir==='in'?'in':'out'}">${ai}${media}${chatEscape(m.body)}${tr}${failed}<span class="time">${chatChannelIcon(m.channel)}${stamp}</span></div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
 }

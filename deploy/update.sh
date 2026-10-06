@@ -79,6 +79,12 @@ echo ">>> резервные копии: папка + ночной cron (00:00 �
   fi
   CRON_CMD="cd $APP && DJANGO_SETTINGS_MODULE=config.settings.server $APP/venv/bin/python manage.py backup_database >> $APP/backups/cron.log 2>&1"
   ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py backup_database" || true; echo "0 18 * * * $CRON_CMD" ) | crontab -u www-data -
+  # ИИ-ассистент для пациентов (WhatsApp/Telegram): раз в минуту отвечает в
+  # чатах, где администратор не ответил вовремя. .env подгружаем сами —
+  # cron его не видит; flock не даёт запускам наложиться.
+  TICK_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_patient_ai.lock $APP/venv/bin/python manage.py patient_assistant_tick >> $APP/backups/patient_ai.log 2>&1"
+  ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py patient_assistant_tick" || true; echo "* * * * * $TICK_CMD" ) | crontab -u www-data -
+  echo ">>> cron ИИ-ассистента для пациентов установлен"
   echo ">>> cron бэкапа установлен"
 ) || echo "!!! не удалось установить cron бэкапа (см. вывод выше) — деплой продолжается, это не критично для работы сайта"
 echo ">>> pg_dump: $(command -v pg_dump || echo 'НЕ НАЙДЕН — бэкап Postgres не сработает, поставьте пакет postgresql-client на сервере')"
