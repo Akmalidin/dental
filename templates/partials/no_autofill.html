@@ -1,0 +1,37 @@
+<script>
+/* Автозаполнение браузера (Chrome/Google) отключено во всех полях программы:
+   браузер подставлял сохранённые логин, пароль и телефон в формы пациентов,
+   сотрудников, поиска и т.п. («это очень неудобно»). autocomplete="off"
+   Chrome для полей логина/пароля игнорирует, поэтому паролям ставим
+   "new-password", остальным — "off". Поля, которые появляются позже
+   (модальные окна, динамические формы), обрабатывает MutationObserver.
+   Страница входа — отдельный шаблон, там автозаполнение остаётся. */
+(function(){
+  function fix(el){
+    if(!el || !el.tagName) return;
+    var tag = el.tagName;
+    if(tag === 'FORM'){ el.setAttribute('autocomplete', 'off'); return; }
+    if(tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+    if(el.dataset && el.dataset.keepAutocomplete) return;
+    var type = (el.getAttribute('type') || '').toLowerCase();
+    if(['hidden','checkbox','radio','submit','button','file','range','color'].indexOf(type) >= 0) return;
+    el.setAttribute('autocomplete', type === 'password' ? 'new-password' : 'off');
+  }
+  function scan(root){
+    if(!root || !root.querySelectorAll) return;
+    fix(root);
+    var els = root.querySelectorAll('form,input,textarea,select');
+    for(var i = 0; i < els.length; i++) fix(els[i]);
+  }
+  function start(){
+    scan(document.body);
+    new MutationObserver(function(muts){
+      for(var i = 0; i < muts.length; i++){
+        var m = muts[i];
+        for(var j = 0; j < m.addedNodes.length; j++) if(m.addedNodes[j].nodeType === 1) scan(m.addedNodes[j]);
+      }
+    }).observe(document.body, {childList: true, subtree: true});
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+</script>
