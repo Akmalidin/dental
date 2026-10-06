@@ -316,6 +316,10 @@ class PatientAssistantTestCase(TestCase):
         for said in ("🎤 Да, подтверждаю", "Ха, майли", "Подтверждаю", "запишите", "ok"):
             self.assertTrue(_confirmation_hint([ask, {"role": "user", "text": said}]), said)
         self.assertIsNone(_confirmation_hint([ask, {"role": "user", "text": "Нет, лучше в 10"}]))
+        # голосом повторил время: «на тогуз он беш» → распознано «На току за 15»
+        self.assertTrue(_confirmation_hint([ask, {"role": "user", "text": "🎤 На току за 15"}]))
+        self.assertTrue(_confirmation_hint([ask, {"role": "user", "text": "🎤 Ооба, макул"}]))
+        self.assertIsNone(_confirmation_hint([ask, {"role": "user", "text": "Нет, не 15, давайте 16:30"}]))
         self.assertIsNone(_confirmation_hint([{"role": "assistant", "text": "Чем помочь?"},
                                               {"role": "user", "text": "Да"}]))
         # подсказка уходит модели последним системным сообщением
