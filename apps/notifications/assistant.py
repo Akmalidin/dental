@@ -113,6 +113,11 @@ def transcribe(file_obj, filename="voice.webm"):
     """Аудио → текст через OpenAI. Возвращает (text, error)."""
     boundary = uuid.uuid4().hex
     audio = file_obj.read()
+    # Голосовые WhatsApp/Telegram приходят как .oga/.opus — это ogg, но OpenAI
+    # принимает только расширение .ogg («Unsupported file format oga»).
+    base, _dot, ext = (filename or "voice.ogg").rpartition(".")
+    if ext.lower() in ("oga", "opus"):
+        filename = (base or "voice") + ".ogg"
     model = getattr(settings, "OPENAI_TRANSCRIBE_MODEL", "") or "gpt-4o-mini-transcribe"
 
     def body_for(m):
