@@ -303,3 +303,17 @@ class AssistantTestCase(TestCase):
         m = AssistantMessage.objects.get(pk=resp.json()["message_id"])
         self.assertEqual(m.data["tools"][0]["tool"], "doctor_day")
         self.assertNotIn("trace", resp.json())
+
+    def test_transcription_prompt_echo_is_dropped(self):
+        from apps.notifications.assistant import looks_like_prompt_echo, transcription_prompt
+        prompt = transcription_prompt()
+        self.assertIn("Пломба композитная", prompt)
+        self.assertTrue(looks_like_prompt_echo("Пломба композитная, Удаление зуба простое, Каримов Алишер, пломба", prompt))
+        self.assertFalse(looks_like_prompt_echo("Запиши Сатторову на завтра в 10", prompt))
+        self.assertFalse(looks_like_prompt_echo("36 пломба композитная, 47 удаление зуба, 26 чистка", prompt))
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        echo = {"text": "Пломба композитная, Удаление зуба простое, зуб, пломба, композит"}
+        with patch("apps.notifications.assistant._request", return_value=(echo, None)):
+            resp = self.client.post("/notifications/voice/", {
+                "mode": "dictate", "audio": SimpleUploadedFile("v.webm", b"123", "audio/webm")})
+        self.assertEqual(resp.status_code, 422)   # «Речь не распознана», а не список услуг
