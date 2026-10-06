@@ -69,6 +69,7 @@ MIDDLEWARE = [
     "apps.tenancy.StomAsiaRoutingMiddleware",
     "apps.tenancy.SuperadminHostMiddleware",
     "apps.tenancy.CurrentClinicMiddleware",
+    "apps.tenancy.BranchAccessMiddleware",
     "apps.tenancy.TariffGuardMiddleware",
     "apps.tenancy.PublicSiteMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

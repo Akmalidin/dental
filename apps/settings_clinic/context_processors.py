@@ -116,7 +116,11 @@ def clinic_settings(request):
         try:
             from apps.users.models import Branch
             branches = list(Branch.objects.filter(is_active=True))
+            allowed = getattr(request, "allowed_branch_ids", None)
+            if allowed:
+                branches = [b for b in branches if b.pk in allowed]
             ctx["nav_branches"] = branches
+            ctx["nav_branches_restricted"] = bool(allowed)
             active_id = request.session.get("active_branch")
             active = next((b for b in branches if b.pk == active_id), None)
             if active is None:

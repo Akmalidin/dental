@@ -5672,3 +5672,41 @@ class LoginAttemptsLimitTestCase(TestCase):
         r = self._post("bad")
         self.assertContains(r, 'class="pw-eye"')
         self.assertContains(r, 'value="lim_user"')
+
+
+class BranchAccessTestCase(TestCase):
+    """Сотрудник работает только в филиалах из своей карточки: переключатель
+    не даёт выбрать чужой, а касса/оплаты по умолчанию — в его филиале."""
+
+    def setUp(self):
+        from apps.patients.models import Patient
+        self.clinic = Clinic.objects.create(name="Клиника BR", slug="clinic-branch-access")
+        self.main = Branch.objects.create(name="Основной", address="-", phone="0", is_main=True, clinic=self.clinic)
+        self.b2 = Branch.objects.create(name="Филиал #2", address="-", phone="0", clinic=self.clinic)
+        admin_role = Role.objects.get(name="admin", clinic__isnull=True)
+        self.admin = User.objects.create(login="br_adm", name="Нафиса", role=admin_role, clinic=self.clinic)
+        self.admin.branches.add(self.b2)
+        self.patient = Patient.objects.create(first_name="П", last_name="Пациент", phone="+998901110000",
+                                              branch=self.main, clinic=self.clinic)
+        self.client.force_login(self.admin)
+
+    def test_switcher_and_default_branch_restricted(self):
+        r = self.client.get("/new/cashdesk/")
+        self.assertEqual(self.client.session["active_branch"], self.b2.pk)
+        html = r.content.decode()
+        self.assertNotIn(">Все филиалы<", html)
+        self.client.post("/users/set-branch/", {"branch": self.main.pk})
+        self.assertEqual(self.client.session["active_branch"], self.b2.pk)
+        self.client.post("/users/set-branch/", {"branch": "all"})
+        self.assertEqual(self.client.session["active_branch"], self.b2.pk)
+        data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
+        self.assertIsNone(data["cashdeskData"]["shift"])   # смена основного филиала не видна
+
+    def test_unrestricted_director_can_switch(self):
+        director = User.objects.create(login="br_dir", name="Директор",
+                                       role=Role.objects.get(name="admin_main", clinic__isnull=True), clinic=self.clinic)
+        self.client.force_login(director)
+        self.client.post("/users/set-branch/", {"branch": self.main.pk})
+        self.assertEqual(self.client.session["active_branch"], self.main.pk)
+        self.client.post("/users/set-branch/", {"branch": "all"})
+        self.assertNotIn("active_branch", self.client.session)

@@ -8043,6 +8043,7 @@ function applyAssistantActions(actions){
   let openUrl=null;
   (actions||[]).forEach(a=>{
     if(a.type==='visit_add' && typeof window.vwToothServicePick==='function'){
+      if(typeof vcTab==='function') try{ vcTab('teeth'); }catch(e){}
       (a.items||[]).forEach(it=>(it.teeth||[]).forEach(num=>{
         try{ toggleToothSelect((num>=51?'baby-':'adult-')+num, true); }catch(e){}
         window.vwToothServicePick(num, it.service_id);
@@ -8053,6 +8054,12 @@ function applyAssistantActions(actions){
       // автосохранением, что и при ручном вводе.
       const ids={complaints:'vw-field-complaints', diagnosis:'vw-diagnosis', recommendations:'vw-recommendations', notes:'vw-notes'};
       const el=document.getElementById(ids[a.field]);
+      // Поля жалоб/диагноза — на вкладке «Описание». В простом режиме её нет:
+      // текст всё равно сохраняется, но врач его не видит — подсказываем.
+      const descTab=document.getElementById('vcTabDesc');
+      if(descTab && descTab.classList.contains('hidden')){
+        showToast(t('w_ai_note_saved_hidden','Записано в «Описание» — выключите «Простой режим», чтобы увидеть'));
+      } else if(descTab && typeof vcTab==='function'){ try{ vcTab('desc'); }catch(e){} }
       if(el){
         el.value=(el.value.trim() ? el.value.trim()+'\n' : '')+a.text;
         el.classList.add('vw-ai-filled'); setTimeout(()=>el.classList.remove('vw-ai-filled'), 2500);
@@ -8093,8 +8100,8 @@ async function processAgentMessage(text, viaVoice){
         voiceChatHistory.forEach(m=>{ if(m.confirm && m.confirm.state==='pending') m.confirm.state='cancelled'; });
         msg.confirm={summary:conf.summary, token:conf.token, state:'pending', message_id:data.message_id};
       }
-    } else answer=data.error||t('w_voice_failed');
-  }catch(e){ answer=t('w_voice_failed'); }
+    } else answer=data.error||t('w_assistant_failed','Ассистент не смог ответить — попробуйте ещё раз');
+  }catch(e){ answer=t('w_assistant_failed','Ассистент не смог ответить — попробуйте ещё раз'); }
   voiceChatSetBusy(false);
   voiceChatHistory.push(msg || {role:'assistant', text:answer});
   renderVoiceChatPanel();

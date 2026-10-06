@@ -667,6 +667,9 @@ def payment_create(request):
             payment.via_cashier = False
         else:
             payment.via_cashier = not getattr(request.user, "is_doctor", False)
+        allowed = getattr(request, "allowed_branch_ids", None)
+        if allowed and payment.branch_id not in allowed:
+            payment.branch_id = None   # сотрудник принимает оплату только в своём филиале
         if not payment.branch_id:   # по умолчанию — активный/основной филиал
             from apps.users.models import Branch
             payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
