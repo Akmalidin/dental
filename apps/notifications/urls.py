@@ -31,4 +31,5 @@ urlpatterns = [
     path("tg-connect/", views.tg_connect, name="tg_connect"),
     path("voice/", views.voice_command, name="voice_command"),
     path("voice/speak/", views.voice_speak, name="voice_speak"),
+    path("assistant/confirm/", views.assistant_confirm, name="assistant_confirm"),
 ]

@@ -33,7 +33,8 @@ log = logging.getLogger("apps")
 
 
 def voice_enabled():
-    return bool(getattr(settings, "OPENAI_ENABLED", False))
+    from .assistant import openai_enabled
+    return bool(getattr(settings, "OPENAI_ENABLED", False)) or openai_enabled()
 
 
 # ---- Свободный вопрос-ответ (ИИ-помощник) — YandexGPT ----
@@ -46,6 +47,11 @@ def voice_enabled():
 # Простой urllib, как и apps/notifications/whatsapp.py — без лишней
 # HTTP-библиотеки в зависимостях ради одного эндпоинта.
 def ai_enabled():
+    from .assistant import openai_enabled
+    return openai_enabled() or yandex_enabled()
+
+
+def yandex_enabled():
     return bool(getattr(settings, "YANDEX_API_KEY", "") and getattr(settings, "YANDEX_FOLDER_ID", ""))
 
 
@@ -77,7 +83,10 @@ def ask_ai(question, history=None, assistant_name=None):
     import json as _json
     import urllib.request
     import urllib.error
+    from .assistant import openai_enabled, simple_answer
 
+    if openai_enabled():
+        return simple_answer(question, history=history, assistant_name=assistant_name)
     name = (assistant_name or "").strip() or DEFAULT_ASSISTANT_NAME
     folder_id = settings.YANDEX_FOLDER_ID
     model = getattr(settings, "YANDEX_MODEL", "") or "yandexgpt-lite"
@@ -140,7 +149,10 @@ def synthesize_speech(text):
     import urllib.request
     import urllib.error
     import urllib.parse
+    from .assistant import openai_enabled, speak
 
+    if openai_enabled():
+        return speak(text)
     folder_id = settings.YANDEX_FOLDER_ID
     voice = getattr(settings, "YANDEX_TTS_VOICE", "") or "alena"
     text = (text or "").strip()[:2000]
@@ -213,7 +225,15 @@ def _get_whisper_model():
 
 def transcribe_audio(file_obj, filename="voice.webm"):
     """file_obj — Django UploadedFile (request.FILES['audio']). Возвращает
-    (text, error) — error=None при успехе, иначе text=''."""
+    (text, error) — error=None при успехе, иначе text=''.
+
+    Если задан OPENAI_API_KEY — распознаёт OpenAI (точнее, понимает и
+    узбекский, и не держит модель в памяти сервера: на 2 ГБ RAM локальный
+    Whisper в каждом воркере gunicorn мог съесть всю память)."""
+    from .assistant import openai_enabled, transcribe
+    if openai_enabled():
+        text, err = transcribe(file_obj, filename)
+        return (text or ""), err
     try:
         content = file_obj.read()
         model = _get_whisper_model()

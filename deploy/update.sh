@@ -35,6 +35,15 @@ echo ">>> прогрев кэша Whisper (один раз, до старта в
 echo ">>> ретрофит секрета вебхука Telegram для уже подключённых клиник (аудит безопасности)"
 ./venv/bin/python manage.py backfill_telegram_webhook_secrets || true
 
+# Ответ ИИ-помощника (OpenAI) идёт 3–15 с — на 3 обычных воркерах gunicorn
+# несколько одновременных вопросов подвешивали бы сайт остальным. Потоки
+# (gthread) дают 12 одновременных запросов почти без лишней памяти. gunicorn
+# сам читает GUNICORN_CMD_ARGS из окружения (EnvironmentFile=.env).
+if ! grep -q '^GUNICORN_CMD_ARGS=' .env; then
+  echo ">>> gunicorn: 4 потока на воркер"
+  printf '\nGUNICORN_CMD_ARGS="--threads 4"\n' >> .env
+fi
+
 echo ">>> chown + restart"
 chown -R www-data:www-data "$APP"
 systemctl restart sadaf.service

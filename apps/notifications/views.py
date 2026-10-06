@@ -1496,6 +1496,24 @@ def voice_command(request):
         if not transcript:
             return JsonResponse({"error": "Речь не распознана"}, status=422)
 
+    if mode == "agent":
+        # ИИ-помощник с доступом к данным клиники (OpenAI, apps/notifications/
+        # assistant.py): сам ищет пациентов/время/услуги, готовит запись
+        # (создаётся только после подтверждения) и действия в карте приёма.
+        from .assistant import openai_enabled, run as run_assistant
+        if not openai_enabled():
+            return JsonResponse({"error": "ИИ-помощник не настроен", "transcript": transcript}, status=503)
+        try:
+            page = json.loads(request.POST.get("page") or "{}")
+            if not isinstance(page, dict):
+                page = {}
+        except (ValueError, TypeError):
+            page = {}
+        res = run_assistant(request, transcript, history=history, page=page,
+                            assistant_name=(request.POST.get("assistant_name") or "").strip())
+        res["transcript"] = transcript
+        return JsonResponse(res, status=502 if res.get("error") else 200)
+
     if mode == "chat":
         if not ai_enabled():
             return JsonResponse({"error": "ИИ-помощник не настроен", "transcript": transcript}, status=503)
@@ -1516,6 +1534,19 @@ def voice_command(request):
         _enrich_schedule_intent(result, request)
     elif mode == "visit":
         result.update(parse_visit_command(transcript))
+    return JsonResponse(result)
+
+
+@login_required
+@require_POST
+def assistant_confirm(request):
+    """Подтверждение записи, подготовленной ИИ-помощником (кнопка «Записать»
+    или ответ «да»). Данные записи — в подписанном токене из ответа
+    ассистента; все проверки (занятость врача, график) повторяются."""
+    from .assistant import confirm_appointment
+    result, err = confirm_appointment(request, (request.POST.get("token") or "").strip())
+    if err:
+        return JsonResponse({"error": err}, status=400)
     return JsonResponse(result)
 
 
