@@ -1,0 +1,38 @@
+name: Diag patient AI replay
+
+# Только чтение: прогнать ИИ-ассистента пациентов на истории чата без записи
+# и отправки — какие инструменты он вызывает и что они отвечают. Плюс журнал.
+on:
+  workflow_dispatch:
+    inputs:
+      clinic:
+        description: "id клиники"
+        default: "1"
+      phone:
+        description: "последние цифры номера"
+        required: true
+      upto:
+        description: "id последнего сообщения (0 — все)"
+        default: "0"
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          CLINIC: ${{ github.event.inputs.clinic }}
+          PHONE: ${{ github.event.inputs.phone }}
+          UPTO: ${{ github.event.inputs.upto }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: CLINIC,PHONE,UPTO
+          script: |
+            cd /var/www/sadaf
+            echo ">>> backups/patient_ai.log"
+            tail -n 40 backups/patient_ai.log 2>/dev/null
+            set -a; . ./.env; set +a
+            export DJANGO_SETTINGS_MODULE=config.settings.server
+            ./venv/bin/python manage.py patient_ai_replay --clinic "${CLINIC//[^0-9]/}" --phone "${PHONE//[^0-9]/}" --upto "${UPTO//[^0-9]/}"

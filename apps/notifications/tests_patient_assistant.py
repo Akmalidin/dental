@@ -201,6 +201,20 @@ class PatientAssistantTestCase(TestCase):
         self.assertIn("clinic_info(", buf.getvalue())
         self.assertIn("ответ: Здравствуйте!", buf.getvalue())
 
+    def test_replay_command_is_dry_run(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.appointments.models import Appointment
+        self._in("Да, запишите", phone="998901112233")
+        start = "%sT10:00" % self.tomorrow.isoformat()
+        buf = StringIO()
+        with patch("apps.notifications.assistant._request", side_effect=[
+                (_tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start}), None),
+                (_final("Записал."), None)]):
+            call_command("patient_ai_replay", "--clinic", str(self.clinic.pk), "--phone", "2233", stdout=buf)
+        self.assertIn('"dry_run": true', buf.getvalue())
+        self.assertFalse(Appointment.objects.exists())
+
     def test_reschedule_and_cancel_only_own_appointments(self):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
