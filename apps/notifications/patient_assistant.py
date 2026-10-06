@@ -149,11 +149,18 @@ def _t_my_appointments(ctx, **_):
 
 def _ensure_patient(ctx, full_name):
     from apps.patients.models import Patient, normalize_phone
+    name = (full_name or "").strip()
+    if ctx.patient is not None and not ctx.patient.last_name:
+        # карточку завели автоматически по номеру WhatsApp — имя ещё не спрашивали
+        if len(name.split()) < 2:
+            return None, "Спроси у пациента имя и фамилию одним вопросом, потом сразу запиши (full_name)"
+        parts = name.split(None, 1)
+        ctx.patient.last_name, ctx.patient.first_name = parts[0][:100], parts[1][:100]
+        ctx.patient.save(update_fields=["last_name", "first_name"])
     if ctx.patient is not None:
         return ctx.patient, None
     if ctx.channel != "wa":
         return None, "Сначала нужно подтвердить номер телефона в Telegram-боте клиники (/start)."
-    name = (full_name or "").strip()
     p = Patient.objects.filter(phone_norm=normalize_phone(ctx.address)).first()
     if p is None:
         if len(name) < 2:
@@ -248,8 +255,13 @@ HANDLERS = {"clinic_info": _t_clinic_info, "list_doctors": _t_list_doctors, "sea
 def system_prompt(ctx):
     from apps.settings_clinic.models import ClinicSettings
     now = timezone.localtime()
-    who = ("Пациент: %s (patient_id=%s)." % (ctx.patient.full_name, ctx.patient.pk) if ctx.patient
-           else "Пациент ещё не найден в базе клиники — для записи спроси имя и фамилию.")
+    if ctx.patient and ctx.patient.last_name:
+        who = "Пациент: %s (patient_id=%s)." % (ctx.patient.full_name, ctx.patient.pk)
+    elif ctx.patient:
+        who = ("Новый пациент (имя в WhatsApp: %s) — для записи спроси имя и фамилию и передай их "
+               "в full_name." % ctx.patient.first_name)
+    else:
+        who = "Пациент ещё не найден в базе клиники — для записи спроси имя и фамилию."
     doctors = "; ".join("id=%s %s" % (d.pk, d.name) for d in _clinic_doctors()) or "нет"
     cs = ClinicSettings.get()
     return (
@@ -499,14 +511,50 @@ def clinic_for_unknown_number(phone, id_instance=""):
     return with_bot[0].clinic if len(with_bot) == 1 else None
 
 
-def assign_orphans(hours=2):
-    """Недавние входящие без клиники — привязать (по clinic_for_unknown_number)."""
+def ensure_chat_patient(clinic, phone, name=""):
+    """Карточка пациента для переписки с нового номера WhatsApp.
+    «Мессенджеры» строятся по карточкам: без неё чат нового клиента не виден
+    и ответить ему из CRM нельзя. Имя — из профиля WhatsApp, фамилия пустая:
+    так ассистент понимает, что настоящее имя ещё не спрашивали."""
+    from apps.patients.models import LeadSource, Patient, normalize_phone
+    from apps.tenancy import get_current_clinic, set_current_clinic
     from .models import WaMessage
+    norm = normalize_phone(phone)
+    if clinic is None or not norm:
+        return None
+    p = Patient.all_objects.filter(clinic=clinic, phone_norm=norm, is_deleted=False).order_by("-id").first()
+    if p is None:
+        prev = get_current_clinic()
+        set_current_clinic(clinic)
+        try:
+            src = LeadSource.objects.filter(name__iexact="WhatsApp").first() or LeadSource.objects.create(name="WhatsApp")
+            p = Patient(first_name=(name or "").strip()[:100] or "Новый клиент", last_name="",
+                        phone="+" + "".join(ch for ch in str(phone) if ch.isdigit()), clinic=clinic, source=src)
+            p.save()
+        finally:
+            set_current_clinic(prev)
+    WaMessage.all_clinics.filter(clinic=clinic, channel="wa", phone=phone, patient__isnull=True).update(patient=p)
+    return p
+
+
+def assign_orphans(hours=2):
+    """Недавние входящие WhatsApp без клиники или без карточки — привязать
+    к клинике (clinic_for_unknown_number) и завести карточку (ensure_chat_patient)."""
+    from .models import WaMessage
+    since = timezone.now() - timedelta(hours=hours)
     for m in WaMessage.all_clinics.filter(direction="in", channel="wa", clinic__isnull=True, ai_status="",
-                                          created_at__gte=timezone.now() - timedelta(hours=hours)):
+                                          created_at__gte=since):
         clinic = clinic_for_unknown_number(m.phone)
         if clinic is not None:
             WaMessage.all_clinics.filter(pk=m.pk).update(clinic=clinic)
+    seen = set()
+    for clinic_id, phone in (WaMessage.all_clinics.filter(direction="in", channel="wa", clinic__isnull=False,
+                                                          patient__isnull=True, created_at__gte=since)
+                             .values_list("clinic_id", "phone")):
+        if (clinic_id, phone) not in seen:
+            seen.add((clinic_id, phone))
+            from apps.users.models import Clinic
+            ensure_chat_patient(Clinic.objects.filter(pk=clinic_id).first(), phone)
 
 
 FAST_WAIT_SECONDS = 5   # ночью / в разговоре, который ведёт ассистент: пауза, чтобы собрать 2–3 сообщения подряд

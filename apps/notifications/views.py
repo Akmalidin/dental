@@ -490,8 +490,12 @@ def wa_webhook(request):
                     # Нового номера нет среди пациентов: без клиники сообщение никто
                     # не видит и ИИ-ассистент не отвечает новым пациентам.
                     try:
-                        from apps.notifications.patient_assistant import clinic_for_unknown_number
+                        from apps.notifications.patient_assistant import (
+                            clinic_for_unknown_number, ensure_chat_patient)
                         m.clinic = clinic_for_unknown_number(phone, inst)
+                        # карточка, чтобы чат был виден в «Мессенджерах»
+                        patient = ensure_chat_patient(m.clinic, phone, (data.get("senderData") or {}).get("senderName", ""))
+                        m.patient = patient
                     except Exception:  # noqa: BLE001
                         pass
                 if media_file is not None:

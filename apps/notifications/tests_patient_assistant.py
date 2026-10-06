@@ -248,6 +248,35 @@ class PatientAssistantTestCase(TestCase):
         with patch("apps.notifications.patient_assistant._shared_number", return_value="996555000111"):
             self.assertEqual(clinic_for_unknown_number("996700999777"), other)
 
+    def test_new_number_gets_patient_card_and_appears_in_messengers(self):
+        from apps.appointments.models import Appointment
+        from apps.patients.models import Patient
+        from apps.users.views import _newui_messages_data
+        payload = {"typeWebhook": "incomingMessageReceived", "instanceData": {"idInstance": 1},
+                   "senderData": {"chatId": "996551514445@c.us", "senderName": "zoniminov"},
+                   "messageData": {"typeMessage": "textMessage", "textMessageData": {"textMessage": "Салом"}}}
+        with override_settings(GREENAPI_WEBHOOK_KEY="k"), \
+                patch("apps.notifications.patient_assistant._shared_number", return_value=""):
+            Client().post("/notifications/wa-webhook/?key=k", json.dumps(payload), content_type="application/json")
+        p = Patient.objects.get(phone_norm="551514445")
+        self.assertEqual((p.first_name, p.last_name, p.source.name), ("zoniminov", "", "WhatsApp"))
+        self.assertIn(p.pk, [c["id"] for c in _newui_messages_data(self.clinic)["clients"]])
+        # запись: ассистент сначала спрашивает имя, с именем — записывает и обновляет карточку
+        from apps.notifications.models import WaMessage
+        WaMessage.objects.filter(patient=p).update(created_at=self.noon - timedelta(minutes=10))
+        start = "%sT10:00" % self.tomorrow.isoformat()
+        n, calls = self._tick([
+            _tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start}),
+            _tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start,
+                                            "full_name": "Иминов Зафар"}, "c2"),
+            _final("Записал."),
+        ])
+        self.assertIn("имя в WhatsApp: zoniminov", calls[0]["messages"][0]["content"])
+        self.assertIn("имя и фамилию", calls[1]["messages"][-1]["content"])
+        p.refresh_from_db()
+        self.assertEqual((p.last_name, p.first_name), ("Иминов", "Зафар"))
+        self.assertTrue(Appointment.objects.filter(patient=p).exists())
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command
