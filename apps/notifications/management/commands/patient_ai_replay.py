@@ -35,9 +35,10 @@ class Command(BaseCommand):
         for m in msgs:
             self.stdout.write("  %s %s %s" % (m.pk, "→" if m.direction == "out" else "←", (m.body or "")[:120]))
 
-        def dry_book(ctx, doctor_id=None, start=None, duration_min=None, service_ids=None, full_name="", **_):
+        def dry_book(ctx, doctor_id=None, doctor_name="", start=None, duration_min=None, service_ids=None,
+                     full_name="", **_):
             from apps.services.models import Service
-            doc, st = core._doctor(doctor_id), core._parse_start(start)
+            doc, st = pa._pdoctor(doctor_id, doctor_name), core._parse_start(start)
             if doc is None or st is None:
                 return {"error": "Неверный врач или время"}
             services = list(Service.objects.filter(pk__in=service_ids or [], is_active=True))

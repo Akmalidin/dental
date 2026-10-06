@@ -186,6 +186,17 @@ class PatientAssistantTestCase(TestCase):
         self.assertTrue(Appointment.objects.filter(patient=self.patient).exists())
         self.assertIn("Нилуфар", calls[0]["messages"][0]["content"])   # модель знает, кто пишет
 
+    def test_wrong_doctor_id_falls_back_to_name(self):
+        from apps.appointments.models import Appointment
+        self._in("Да, запишите", phone="998901112233", patient=self.patient)
+        start = "%sT10:00" % self.tomorrow.isoformat()
+        n, calls = self._tick([
+            _tool_call("book_appointment", {"doctor_id": 99999, "doctor_name": "Хожибек", "start": start}),
+            _final("Записал."),
+        ])
+        self.assertEqual(Appointment.objects.get(patient=self.patient).doctor, self.doctor)
+        self.assertIn("id=%s Хожибек" % self.doctor.pk, calls[0]["messages"][0]["content"])
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command

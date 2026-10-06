@@ -38,15 +38,19 @@ TOOLS = [
     _fn("search_services", "Услуги и цены по ключевым словам (пломба, удаление, чистка, имплант…).",
         {"query": {"type": "string"}}, ["query"]),
     _fn("free_slots", "Свободное время врача на дату.",
-        {"doctor_id": {"type": "integer"}, "date": {"type": "string", "description": "YYYY-MM-DD"},
-         "duration_min": {"type": "integer"}}, ["doctor_id", "date"]),
+        {"doctor_id": {"type": "integer", "description": "id врача из списка в инструкции"},
+         "doctor_name": {"type": "string", "description": "имя врача, если не уверен в id"},
+         "date": {"type": "string", "description": "YYYY-MM-DD"},
+         "duration_min": {"type": "integer"}}, ["date"]),
     _fn("my_appointments", "Предстоящие записи этого пациента (id, дата, время, врач)."),
     _fn("book_appointment",
         "Записать пациента. Вызывай ТОЛЬКО после того, как пациент явно согласился на конкретные "
         "врача, дату и время. Если пациент новый — нужно его имя и фамилия (full_name).",
-        {"doctor_id": {"type": "integer"}, "start": {"type": "string", "description": "YYYY-MM-DDTHH:MM"},
+        {"doctor_id": {"type": "integer", "description": "id врача из списка в инструкции"},
+         "doctor_name": {"type": "string", "description": "имя врача, если не уверен в id"},
+         "start": {"type": "string", "description": "YYYY-MM-DDTHH:MM"},
          "duration_min": {"type": "integer"}, "service_ids": {"type": "array", "items": {"type": "integer"}},
-         "full_name": {"type": "string"}}, ["doctor_id", "start"]),
+         "full_name": {"type": "string"}}, ["start"]),
     _fn("reschedule_appointment", "Перенести запись пациента (после его согласия на новое время).",
         {"appointment_id": {"type": "integer"}, "new_start": {"type": "string", "description": "YYYY-MM-DDTHH:MM"}},
         ["appointment_id", "new_start"]),
@@ -100,8 +104,32 @@ def _t_search_services(ctx, query="", **_):
     return core._search_services(query)
 
 
-def _t_free_slots(ctx, doctor_id=None, date=None, duration_min=60, **_):
-    return core._tool_free_slots(None, doctor_id=doctor_id, date=date, duration_min=duration_min)
+def _clinic_doctors():
+    from apps.users.models import clinic_doctors
+    return list(clinic_doctors(core._clinic()).order_by("name"))
+
+
+def _pdoctor(doctor_id=None, doctor_name=""):
+    """Врач по id, а если id неверный — по имени. Модель не помнит id между
+    сообщениями (в истории только тексты), поэтому имя — надёжная подстраховка."""
+    doc = core._doctor(doctor_id)
+    if doc is None and (doctor_name or "").strip():
+        words = [w for w in doctor_name.lower().replace("ё", "е").split() if len(w) >= 3]
+        found = [d for d in _clinic_doctors()
+                 if words and all(w[:max(4, len(w) - 2)] in d.name.lower().replace("ё", "е") for w in words)]
+        if len(found) == 1:
+            doc = found[0]
+    return doc
+
+
+DOCTOR_ERR = {"error": "Врач не найден: возьми id из списка врачей в инструкции или укажи doctor_name"}
+
+
+def _t_free_slots(ctx, doctor_id=None, doctor_name="", date=None, duration_min=60, **_):
+    doc = _pdoctor(doctor_id, doctor_name)
+    if doc is None:
+        return DOCTOR_ERR
+    return core._tool_free_slots(None, doctor_id=doc.pk, date=date, duration_min=duration_min)
 
 
 def _own_appts(ctx):
@@ -139,14 +167,16 @@ def _ensure_patient(ctx, full_name):
     return p, None
 
 
-def _t_book(ctx, doctor_id=None, start=None, duration_min=None, service_ids=None, full_name="", **_):
+def _t_book(ctx, doctor_id=None, doctor_name="", start=None, duration_min=None, service_ids=None, full_name="", **_):
     from apps.appointments.models import Appointment
     from apps.appointments.views import _default_visit_service, notify_appointment_created
     from apps.services.models import Service
     from apps.users.models import Branch
-    doc, st = core._doctor(doctor_id), core._parse_start(start)
-    if doc is None or st is None:
-        return {"error": "Неверный врач или время"}
+    doc, st = _pdoctor(doctor_id, doctor_name), core._parse_start(start)
+    if doc is None:
+        return DOCTOR_ERR
+    if st is None:
+        return {"error": "Неверное время: нужен формат YYYY-MM-DDTHH:MM"}
     services = list(Service.objects.filter(pk__in=service_ids or [], is_active=True))
     duration = int(duration_min or sum(s.duration for s in services) or 60)
     err = core.validate_appointment(doc, st, duration)
@@ -220,10 +250,12 @@ def system_prompt(ctx):
     now = timezone.localtime()
     who = ("Пациент: %s (patient_id=%s)." % (ctx.patient.full_name, ctx.patient.pk) if ctx.patient
            else "Пациент ещё не найден в базе клиники — для записи спроси имя и фамилию.")
+    doctors = "; ".join("id=%s %s" % (d.pk, d.name) for d in _clinic_doctors()) or "нет"
     return (
         f"Ты — вежливый ассистент стоматологической клиники «{ClinicSettings.get().name}» в "
         f"{'WhatsApp' if ctx.channel == 'wa' else 'Telegram'}. Сейчас {now.strftime('%Y-%m-%d %H:%M')}, "
         f"{core.WEEKDAYS[now.weekday()]} (время клиники). {who}\n"
+        f"Врачи клиники: {doctors}. Используй именно эти id.\n"
         "Ты помогаешь записаться, перенести или отменить СВОЮ запись, рассказываешь об услугах, ценах, "
         "адресе и часах работы. Правила:\n"
         "- Все данные бери только из инструментов, ничего не выдумывай (время, цены, врачей).\n"
