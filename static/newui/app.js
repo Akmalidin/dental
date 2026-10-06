@@ -2391,6 +2391,9 @@ const PINNED_VIEWS=['settings']; // всегда виден (плюс отдел
    — для Vue-компонентов: vue-i18n, $t('nav.dashboard'), файлы локалей ru.json / ky.json / en.json
    Здесь — облегчённый JS-аналог для статичного демо-макета: строки вынесены в словарь по ключам data-i18n. */
 const translations={
+  navgrp_work:        {ru:'Приём пациентов',    ky:'Бейтаптарды кабыл алуу', en:'Patient care', uz:'Bemorlarni qabul qilish'},
+  navgrp_money:       {ru:'Деньги и учёт',      ky:'Акча жана эсеп',   en:'Money & records',   uz:'Pul va hisob'},
+  navgrp_manage:      {ru:'Управление',         ky:'Башкаруу',         en:'Management',        uz:'Boshqaruv'},
   nav_дашборд:        {ru:'Дашборд',            ky:'Башкы бет',        en:'Dashboard',        uz:'Boshqaruv paneli'},
   nav_заявки_crm:     {ru:'Заявки · CRM',       ky:'Кайрылуулар · CRM',en:'Leads · CRM',       uz:'Murojaatlar · CRM'},
   nav_маркетинг:      {ru:'Маркетинг',          ky:'Маркетинг',        en:'Marketing',         uz:'Marketing'},
@@ -4775,6 +4778,15 @@ const DEFAULT_NAV_SECTIONS = [
   {id:'settings', label:'Настройки', labelKey:'nav_настройки', icon:'settings', tabs:['settings','staff','services','recycle']},
   {id:'superadmin', label:'Супер-админ', labelKey:'nav_superadmin', icon:'superadmin', tabs:['superadmin']},
 ];
+/* Категории бокового меню: раздел попадает в категорию по своему id;
+   свой (созданный пользователем) раздел — в категорию раздела над ним. */
+const NAV_GROUPS = {
+  work:   {label:'Приём пациентов', key:'navgrp_work',   color:'#4F7BFF'},
+  money:  {label:'Деньги и учёт',   key:'navgrp_money',  color:'#12B886'},
+  manage: {label:'Управление',      key:'navgrp_manage', color:'#F5A524'},
+};
+const NAV_SECTION_GROUP = {dashboard:'work', schedule:'work', patients:'work', messages:'work',
+  money:'money', stock:'money', reports:'money', settings:'manage', superadmin:'manage'};
 function navEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function navSourceItems(){
   const items={};
@@ -4833,14 +4845,21 @@ function renderNavSections(){
   const activeView=(Object.values(items).find(it=>it.active)||{}).view;
   let html='', activeTabs=null;
   const bottom=[];
+  let grp=null, lastGrp=null;
   effectiveNavSections(prefs, Object.keys(items)).forEach(sec=>{
+    grp=NAV_SECTION_GROUP[sec.id] || grp || 'work';
     const tabs=sec.tabs.filter(v=>items[v] && items[v].available && !hiddenTabs.has(v));
     if(tabs.includes(activeView)) activeTabs=tabs;
     const pinned=sec.tabs.some(v=>PINNED_VIEWS.includes(v));
     if(!tabs.length || (hiddenSecs.has(sec.id) && !pinned)) return;
     const isActive=tabs.includes(activeView);
     const icon=(sec.icon && NAV_ICON_PATHS[sec.icon]) ? navIconSvg(sec.icon) : (items[tabs[0]].svg || navIconSvg('folder'));
-    html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span></a>`;
+    const g=NAV_GROUPS[grp];
+    if(grp!==lastGrp){
+      html+=`<div class="nav-grp" style="--grp:${g.color}">${navEsc(t(g.key, g.label))}</div>`;
+      lastGrp=grp;
+    }
+    html+=`<a class="nav-item nav-sec${isActive?' active':''}" data-grp="${grp}" style="--grp-c:${g.color}" data-section="${navEsc(sec.id)}" data-sec-first="${navEsc(tabs[0])}" href="${navEsc(items[tabs[0]].href)}" title="${navEsc(tabs.map(v=>items[v].label).join(' · '))}">${icon}<span>${navEsc(navSectionLabel(sec))}</span></a>`;
     bottom.push({icon, label:navSectionLabel(sec), href:items[tabs[0]].href, active:isActive, msg:tabs.includes('messages'), msgOnly:tabs.length===1 && tabs[0]==='messages'});
     if(sec.tabs.includes('messages') && tabs.includes('messages')) html=html.replace(/<\/a>$/, '<i data-msg-badge></i></a>');
   });

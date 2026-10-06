@@ -9,6 +9,17 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{% static 'newui/app.css' %}?v={{ asset_v }}">
+<script>
+/* Старое плоское меню (#navSource) — только источник ссылок для разделов.
+   Прячем его сразу, ещё до загрузки app.js: на медленном интернете иначе
+   на пару секунд мелькают все 24 пункта. Если app.js так и не отработал —
+   после загрузки страницы возвращаем старое меню, чтобы оно не пропало. */
+document.documentElement.classList.add('js-nav');
+window.addEventListener('load',function(){
+  var b=document.getElementById('navSections');
+  if(b && b.classList.contains('hidden')) document.documentElement.classList.remove('js-nav');
+});
+</script>
 {% block extra_head %}{% endblock %}
 {% if request.GET.embed == '1' %}<base target="_top">{% endif %}
 </head>
@@ -122,9 +133,9 @@
 
     <!-- Меню разделами с вкладками (renderNavSections в app.js) собирается из
          пунктов ниже: они остаются источником ссылок, иконок и прав доступа
-         (скрываются как раньше классом hidden). Пока скрипт не отработал или
-         упал — виден старый плоский список, меню не пропадает. -->
-    <div id="navSections" class="hidden"></div>
+         (скрываются как раньше классом hidden). Пока скрипт грузится — серые
+         заглушки; если он упал — после загрузки страницы виден старый список. -->
+    <div id="navSections" class="hidden"><div class="nav-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
     <div id="navSource">
     <div class="nav-label">Продажи</div>
     <a class="nav-item{% if active == 'dashboard' %} active{% endif %}" data-view="dashboard" href="{% url 'newui_dashboard' %}">

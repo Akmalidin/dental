@@ -118,6 +118,22 @@ body.embed .msg-grid{height:calc(100vh - 110px) !important;grid-template-columns
 .nav-item:hover svg{color:#9DAEFF;opacity:1;}
 .nav-item.active:hover svg{color:inherit;}
 .nav-sec .nav-badge{margin-left:6px;}
+/* Пока app.js не собрал разделы: старый список скрыт, вместо него заглушки */
+.js-nav #navSource{display:none;}
+.js-nav #navSections.hidden{display:block;}
+#navSections:not(.hidden) .nav-skel, html:not(.js-nav) .nav-skel{display:none;}
+.nav-skel i{display:block;height:34px;margin:0 0 4px;border-radius:8px;background:rgba(255,255,255,.05);animation:navSkel 1.2s ease-in-out infinite alternate;}
+.nav-skel i:nth-child(odd){width:86%;}
+@keyframes navSkel{to{background:rgba(255,255,255,.1);}}
+/* Категории меню: заголовок с цветной меткой; цвет категории — у полоски
+   активного пункта и у иконки при наведении. Сами иконки — одного цвета. */
+.nav-grp{display:flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#7C8496;font-weight:700;padding:16px 10px 6px;}
+.nav-grp:first-child{padding-top:4px;}
+.nav-grp::before{content:'';width:8px;height:8px;border-radius:3px;background:var(--grp,#7C8496);flex-shrink:0;}
+.nav-sec{--grp-c:var(--coral);}
+.nav-sec[data-grp]:hover svg{color:var(--grp-c);}
+.nav-item.nav-sec.active::before{background:var(--grp-c);}
+.nav-sec.active svg{color:var(--grp-c);}
 /* Нижняя панель на телефоне */
 .bottom-nav{display:none;}
 @media(max-width:900px){
