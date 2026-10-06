@@ -277,6 +277,26 @@ class PatientAssistantTestCase(TestCase):
         self.assertEqual((p.last_name, p.first_name), ("Иминов", "Зафар"))
         self.assertTrue(Appointment.objects.filter(patient=p).exists())
 
+    def test_telegram_without_phone_assistant_asks_phone_then_books(self):
+        from apps.appointments.models import Appointment
+        from apps.notifications.patient_assistant import ensure_tg_patient
+        auto = ensure_tg_patient(self.clinic, 4242, {"first_name": "Зафар"})
+        self._in("Хочу записаться на чистку завтра в 10", phone="4242", channel="tg", patient=auto)
+        start = "%sT10:00" % self.tomorrow.isoformat()
+        n, calls = self._tick([
+            _tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start, "full_name": "Иминов Зафар"}),
+            _tool_call("book_appointment", {"doctor_id": self.doctor.pk, "start": start,
+                                            "full_name": "Иминов Зафар", "phone": "+996 700 111 222"}, "c2"),
+            _final("Записал."),
+        ])
+        self.assertEqual(n, 1)
+        self.assertIn("номер не известен", calls[0]["messages"][0]["content"])
+        self.assertIn("номер телефона", calls[1]["messages"][-1]["content"])
+        auto.refresh_from_db()
+        self.assertEqual((auto.last_name, auto.first_name, auto.phone), ("Иминов", "Зафар", "+996700111222"))
+        self.assertTrue(Appointment.objects.filter(patient=auto).exists())
+        self.assertEqual(self.sent[0][:2], ("tg", "4242"))
+
     def test_command_single_pass_logs_tool_calls(self):
         from io import StringIO
         from django.core.management import call_command

@@ -1036,6 +1036,14 @@ def _tg_handle_update(body, clinic_slug):
         if text or media_file:
             from apps.patients.models import Patient
             patient = Patient.objects.filter(telegram_chat_id=chat_id).first()
+            if patient is None:
+                # Пишет боту, не поделившись номером: карточка, чтобы переписка была
+                # в «Мессенджерах» и отвечал ИИ-ассистент.
+                try:
+                    from .patient_assistant import ensure_tg_patient
+                    patient = ensure_tg_patient(clinic, chat_id, msg.get("from"))
+                except Exception:  # noqa: BLE001
+                    patient = None
             _tg_log_inbound(patient, chat_id, text, media_file=media_file, media_type=media_type, snippet=snippet)
     finally:
         close_old_connections()
