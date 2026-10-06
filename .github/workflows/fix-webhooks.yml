@@ -1,0 +1,35 @@
+name: Fix webhooks
+
+# Перевести вебхуки WhatsApp/Telegram со старого домена на новый
+# (manage.py fix_webhooks). apply=false — только показать.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Применить (true) или только показать (false)"
+        default: "false"
+      old:
+        default: "app.denta.tw1.ru"
+      new:
+        default: "app.sadaf.kg"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          APPLY: ${{ github.event.inputs.apply }}
+          OLD: ${{ github.event.inputs.old }}
+          NEW: ${{ github.event.inputs.new }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: APPLY,OLD,NEW
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export DJANGO_SETTINGS_MODULE=config.settings.server
+            FLAG=""; [ "$APPLY" = "true" ] && FLAG="--apply"
+            ./venv/bin/python manage.py fix_webhooks --old "$OLD" --new "$NEW" $FLAG
