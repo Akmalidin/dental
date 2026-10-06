@@ -7649,8 +7649,11 @@ async function voiceRecordToggle(btnEl, mode, onResult, opts){
   // Автостоп по тишине (opts.autoStop): врач договорил — запись сама
   // останавливается и уходит ассистенту, кнопку нажимать не нужно. Если
   // за opts.noSpeechMs так и не заговорили — запись отменяется без отправки.
+  // Уровень звука слушаем всегда: если за всю запись не прозвучало ни слова,
+  // не отправляем её — распознавание на тишине «додумывает» текст (выдавало
+  // список услуг из подсказки, жалоба с прода).
   let vadCtx=null, vadTimer=null, heard=false, quietSince=0, cancelUpload=false;
-  if(opts.autoStop && (window.AudioContext || window.webkitAudioContext)){
+  if(window.AudioContext || window.webkitAudioContext){
     try{
       vadCtx=new (window.AudioContext || window.webkitAudioContext)();
       const an=vadCtx.createAnalyser(); an.fftSize=1024;
@@ -7660,7 +7663,8 @@ async function voiceRecordToggle(btnEl, mode, onResult, opts){
         an.getFloatTimeDomainData(buf);
         let sum=0; for(let k=0;k<buf.length;k++) sum+=buf[k]*buf[k];
         const rms=Math.sqrt(sum/buf.length), now=Date.now();
-        if(rms>0.02){ heard=true; quietSince=0; }
+        if(rms>0.015){ heard=true; quietSince=0; }
+        else if(!opts.autoStop){ /* только отмечаем, была ли речь */ }
         else if(heard){ quietSince=quietSince||now; if(now-quietSince>1500 && voiceRecorder.state==='recording') voiceRecorder.stop(); }
         else if(now-t0>(opts.noSpeechMs||8000) && voiceRecorder.state==='recording'){ cancelUpload=true; voiceRecorder.stop(); }
       }, 100);
@@ -7675,6 +7679,7 @@ async function voiceRecordToggle(btnEl, mode, onResult, opts){
     if(vadTimer) clearInterval(vadTimer);
     if(vadCtx) try{ vadCtx.close(); }catch(e){}
     if(wasWakeListening && isWakeWordEnabled()) startWakeWordListening();
+    if(vadCtx && !heard){ cancelUpload=true; showToast(t('w_voice_no_speech','Речь не услышана — скажите ещё раз')); }
     if(cancelUpload){ if(opts.onCancel) opts.onCancel(); return; }
     btnEl.classList.add('voice-busy');
     try{

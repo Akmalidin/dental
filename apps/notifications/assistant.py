@@ -132,7 +132,23 @@ def transcribe(file_obj, filename="voice.webm"):
         data, err = _request("/audio/transcriptions", body_for("whisper-1"), content_type=ctype, timeout=60)
     if err:
         return None, "Не удалось распознать речь"
-    return (data.get("text") or "").strip(), None
+    text = (data.get("text") or "").strip()
+    if looks_like_prompt_echo(text, transcription_prompt()):
+        return "", None
+    return text, None
+
+
+def looks_like_prompt_echo(text, prompt):
+    """На тишине модель распознавания иногда возвращает саму подсказку
+    (список услуг и врачей) вместо пустого текста. Если почти все слова
+    ответа есть в подсказке и это перечень через запятую — считаем, что
+    речи не было."""
+    words = re.findall(r"\w+", (text or "").lower())
+    if len(words) < 4:
+        return False
+    vocab = set(re.findall(r"\w+", (prompt or "").lower()))
+    share = sum(1 for w in words if w in vocab) / len(words)
+    return share >= 0.85 and text.count(",") >= 2
 
 
 def speak(text):
