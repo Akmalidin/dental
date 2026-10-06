@@ -1253,6 +1253,25 @@ class NewUICashdeskTestCase(TestCase):
         self.assertEqual(s["incomeTotal"], 7000.0)
         self.assertEqual(s["expectedCash"], 6000.0)  # 1000 opening + 5000 cash
 
+    def test_old_shift_shows_days_and_today_separately(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.finance.models import CashShift
+        shift = CashShift.objects.create(branch=self.branch, opened_by=self.director, opening_cash=0, clinic=self.clinic)
+        CashShift.objects.filter(pk=shift.pk).update(opened_at=timezone.now() - timedelta(days=10))
+        old = self.Payment.objects.create(
+            patient=self.patient, amount=90000, branch=self.branch, received_by=self.director,
+            type=self.Payment.TYPE_INCOME, method=self.Payment.METHOD_CASH, clinic=self.clinic)
+        self.Payment.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=5))
+        self.Payment.objects.create(
+            patient=self.patient, amount=10000, branch=self.branch, received_by=self.director,
+            type=self.Payment.TYPE_INCOME, method=self.Payment.METHOD_CASH, clinic=self.clinic)
+        s = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())["cashdeskData"]["shift"]
+        self.assertEqual(s["byMethod"]["cash"], 100000.0)
+        self.assertEqual(s["days"], 10)
+        self.assertEqual(s["todayTotal"], 10000.0)
+        self.assertEqual(s["todayByMethod"]["cash"], 10000.0)
+
     def test_close_shift_via_reused_backend(self):
         from apps.finance.models import CashShift
         shift = CashShift.objects.create(branch=self.branch, opened_by=self.director, opening_cash=0, clinic=self.clinic)

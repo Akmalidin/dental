@@ -1890,8 +1890,14 @@ function renderCashShift(){
   + `<div class="card kpi b-teal"><span class="lbl">${t('w_income')}</span><b style="font-size:18px;color:var(--teal)">+${Math.round(s.incomeTotal).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`
   + `<div class="card kpi b-coral"><span class="lbl">${t('w_refunds')}</span><b style="font-size:18px;color:var(--coral)">−${Math.round(s.refundTotal).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`
   + `<div class="card kpi b-amber"><span class="lbl">${t('w_expected_cash')}</span><b style="font-size:18px">${Math.round(s.expectedCash).toLocaleString('ru-RU')} ${CUR_SYM}</b></div>`;
+  const tb=s.todayByMethod||{};
+  const todayLine=`<div class="cd-today">${t('w_cd_today','Сегодня')}: <b>${Math.round(s.todayTotal||0).toLocaleString('ru-RU')} ${CUR_SYM}</b>`
+    + ` <span>(${t('w_cash')}: ${Math.round(tb.cash||0).toLocaleString('ru-RU')} · ${t('w_card')}: ${Math.round(tb.card||0).toLocaleString('ru-RU')} · ${t('w_transfer')}: ${Math.round(tb.transfer||0).toLocaleString('ru-RU')})</span></div>`;
+  const oldWarn=(s.days||0)>=1 ? `<div class="cd-warn">⚠️ ${t('w_cd_shift_days','Смена открыта уже {n} дн. — суммы ниже накоплены за всё это время. Закройте смену в конце дня, чтобы считать каждый день отдельно.').replace('{n}', s.days)}</div>` : '';
   el.innerHTML=`<div class="card-head"><h3 data-i18n="w_shift_open">Смена открыта</h3><span style="font-size:11px;color:var(--ink-soft);">с ${s.openedAt} · ${s.openedBy}</span></div>
     <div class="card-body">
+      ${oldWarn}${todayLine}
+      <div style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 6px;">${t('w_cd_since_open','За всю смену (с момента открытия)')}</div>
       <div class="kpi-grid" style="margin-bottom:4px;">${kpis}</div>
       <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input autocomplete="off" type="number" id="shiftClosingCash" value="${Math.round(s.expectedCash)}" min="0"></div>
       <button class="btn btn-ghost btn-sm" onclick="cashCloseShift(${s.id})">Закрыть смену</button>
@@ -2536,6 +2542,9 @@ const translations={
   title_m_role: {ru:'Новая роль', ky:'Жаңы роль', en:'New role', uz:'Yangi rol'},
   title_m_crmsettings: {ru:'Настройки воронки заявок', ky:'Кайрылуулар воронкасынын жөндөөлөрү', en:'Lead funnel settings', uz:'Murojaatlar voronkasi sozlamalari'},
   w_shift_not_open: {ru:'Смена не открыта', ky:'Смена ачылган эмес', en:'Shift not open', uz:'Smena ochilmagan'},
+  w_cd_today: {ru:'Сегодня', ky:'Бүгүн', en:'Today', uz:'Bugun'},
+  w_cd_since_open: {ru:'За всю смену (с момента открытия)', ky:'Бүт смена үчүн (ачылгандан бери)', en:'Whole shift (since opening)', uz:'Butun smena uchun (ochilgandan beri)'},
+  w_cd_shift_days: {ru:'Смена открыта уже {n} дн. — суммы ниже накоплены за всё это время. Закройте смену в конце дня, чтобы считать каждый день отдельно.', ky:'Смена {n} күндөн бери ачык — төмөнкү суммалар ушул убакыттын баарында топтолгон. Ар бир күндү өзүнчө эсептөө үчүн сменаны күндүн аягында жабыңыз.', en:'The shift has been open for {n} days — the totals below cover all that time. Close the shift at the end of each day to count days separately.', uz:'Smena {n} kundan beri ochiq — quyidagi summalar shu vaqt davomida yig\'ilgan. Har bir kunni alohida hisoblash uchun smenani kun oxirida yoping.'},
   w_shift_open: {ru:'Смена открыта', ky:'Смена ачык', en:'Shift open', uz:'Smena ochiq'},
   w_visit_history: {ru:'История приёмов', ky:'Кабыл алуулар тарыхы', en:'Visit history', uz:'Qabullar tarixi'},
   w_treatment_plan_one: {ru:'План лечения', ky:'Дарылоо планы', en:'Treatment plan', uz:'Davolash rejasi'},

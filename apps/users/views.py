@@ -2014,6 +2014,18 @@ def _newui_cashdesk_data(request, clinic):
             "refundTotal": float(z["refundTotal"]),
             "expectedCash": float(z["expectedCash"]),
         }
+        # Сколько дней открыта смена и сколько пришло именно сегодня: суммы
+        # выше копятся с момента открытия смены — если её неделями не
+        # закрывать, «Наличные» выглядят как непонятно откуда взявшиеся.
+        from decimal import Decimal
+        today = timezone.localdate()
+        shift_data["days"] = (today - timezone.localtime(shift.opened_at).date()).days
+        start_today = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
+        today_by = {}
+        for p in shift.payments_qs().filter(created_at__gte=start_today).only("amount", "method", "type"):
+            today_by[p.method] = today_by.get(p.method, Decimal(0)) + (p.amount if p.type == Payment.TYPE_INCOME else -p.amount)
+        shift_data["todayByMethod"] = {k: float(v) for k, v in today_by.items()}
+        shift_data["todayTotal"] = float(sum(today_by.values(), Decimal(0)))
 
     # send_to_cashier рассылает одно Notification на КАЖДОГО админа клиники
     # (fan-out) — раньше очередь фильтровалась строго по user=request.user,
