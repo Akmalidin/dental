@@ -336,6 +336,34 @@ def system_prompt(ctx):
     )
 
 
+import re as _re
+
+# «Да» пациента на вопрос-подтверждение ассистента. Модель (особенно на
+# голосовых) иногда повторяла фразу пациента от себя («Подтверждаю запись…
+# Записываю?») и спрашивала снова — подсказываем ей явно.
+_YES = _re.compile(
+    r"^\W*(да|ага|угу|ха+|хоп|ок|окей|ok|okay|конечно|верно|правильно|согласе?н\w*|подтвержда\w*|"
+    r"давайте|давай|запиш\w*|записыва\w*|сойд[её]т|устраивает|подходит|mayli|ha+|xa+|xo'?p|"
+    r"bo'?ladi|tasdiq\w*|ооба|макул|майли|бўлади|болот)\b", _re.I)
+_ASKED_CONFIRM = _re.compile(r"(подтвержда|подтвердит|записываю\?|записать\?|записываем\?|верно\?|"
+                             r"удобно\?|tasdiq|yozaymi|ёзайми)", _re.I)
+
+
+def _confirmation_hint(history):
+    turns = [t for t in history if t.get("text")]
+    if len(turns) < 2:
+        return None
+    last, prev = turns[-1], turns[-2]
+    if last["role"] != "user" or prev["role"] != "assistant":
+        return None
+    said = (last["text"] or "").replace("🎤", "").strip()
+    if _YES.search(said) and _ASKED_CONFIRM.search(prev["text"] or ""):
+        return ("Пациент ПОДТВЕРДИЛ то, что ты только что предложил. Сейчас же выполни это инструментом "
+                "(book_appointment / reschedule_appointment / cancel_appointment) с теми же врачом, датой и "
+                "временем из своего последнего сообщения. Не переспрашивай и не повторяй вопрос.")
+    return None
+
+
 def run(ctx, history):
     """history — [{"role": user|assistant, "text": ...}] последних сообщений чата.
     Возвращает текст ответа или None (ошибка — тогда не отвечаем)."""
@@ -343,6 +371,9 @@ def run(ctx, history):
     for turn in history[-HISTORY:]:
         if turn["text"]:
             messages.append({"role": turn["role"], "content": turn["text"][:2000]})
+    hint = _confirmation_hint(history[-HISTORY:])
+    if hint:
+        messages.append({"role": "system", "content": hint})
     for _round in range(core.MAX_TOOL_ROUNDS):
         data, err = core._chat(messages, tools=TOOLS)
         if err:
