@@ -7694,10 +7694,23 @@ async function voiceRecordToggle(btnEl, mode, onResult, opts){
   // защита от "забыл остановить" — жёсткий потолок в 60с
   setTimeout(()=>{ if(voiceActive && voiceRecorder && voiceRecorder.state==='recording') voiceRecorder.stop(); }, 60000);
 }
+// Какое текстовое поле было в фокусе В МОМЕНТ нажатия на 🤖 (запоминается
+// в onDown у initVoiceFabDrag). Раньше бралось последнее поле, в которое
+// когда-либо кликали (lastFocusedTextField), и оно не сбрасывалось — кнопка
+// то диктовала в давно забытое поле поиска, то открывала чат (жалоба:
+// «иногда срабатывает голосовой, а иногда открывается чат»).
+let fabFocusAtDown=null;
+function isDictationField(el){
+  return !!(el && !el.disabled && !el.readOnly && el.id!=='voiceChatTextInput'
+    && (el.tagName==='TEXTAREA' || (el.tagName==='INPUT' && (el.type==='text' || el.type==='search' || !el.type))));
+}
 function voiceFabClick(btnEl){
-  const target = lastFocusedTextField && document.contains(lastFocusedTextField) ? lastFocusedTextField : null;
+  const target = fabFocusAtDown && document.contains(fabFocusAtDown) ? fabFocusAtDown : null;
+  fabFocusAtDown=null;
+  if(voiceActive && voiceRecorder && voiceRecorder.state==='recording'){ voiceRecorder.stop(); return; }
   if(target){
-    // Поле в фокусе — обычная диктовка прямо в него, без панели (как и раньше).
+    // Курсор сейчас стоит в текстовом поле — диктовка прямо в него.
+    showToast(t('w_fab_dictating','🎤 Диктовка в поле — говорите, нажмите 🤖 ещё раз, чтобы закончить'));
     voiceRecordToggle(btnEl, 'dictate', (data)=>{
       if(!data.transcript) return;
       target.value = (target.value.trim() ? target.value.trim()+' ' : '') + data.transcript;
@@ -7705,9 +7718,10 @@ function voiceFabClick(btnEl){
       target.blur();   // настоящее blur-событие — существующий onblur-автосейв поля (если есть) сработает сам
       target.focus();   // возвращаем курсор, чтобы можно было продолжить диктовать/печатать
     });
+  } else if(voiceChatPanelOpen){
+    closeVoiceChatPanel();
   } else {
-    // Ничего не в фокусе — открываем панель ассистента (текст + голос,
-    // помнит разговор, отвечает и текстом, и голосом).
+    // Курсор не в поле — панель ассистента (текст + голос, история).
     openVoiceChatPanel();
   }
 }
@@ -8258,6 +8272,7 @@ function applyAssistantIntent(data){
     if(saved) applyPos(saved.x, saved.y);
   }catch(e){}
   function onDown(clientX, clientY){
+    fabFocusAtDown=isDictationField(document.activeElement) ? document.activeElement : null;
     dragging=true; moved=false;
     const rect=fab.getBoundingClientRect();
     startX=clientX; startY=clientY; origX=rect.left; origY=rect.top;
