@@ -247,6 +247,43 @@ class CurrentClinicMiddleware:
             clear_current_clinic()
 
 
+def allowed_branch_ids(user):
+    """Филиалы, в которых сотрудник может работать: те, к которым он привязан
+    в карточке («Персонал» → филиалы). None — без ограничений: супер-админ и
+    сотрудник без привязки к филиалам (как было раньше)."""
+    if user is None or not getattr(user, "is_authenticated", False) or getattr(user, "is_superadmin", False):
+        return None
+    try:
+        ids = set(user.branches.filter(is_active=True).values_list("pk", flat=True))
+    except Exception:
+        return None
+    return ids or None
+
+
+class BranchAccessMiddleware:
+    """Сотрудник работает только в своих филиалах. Раньше переключатель
+    филиала в сайдбаре давал выбрать любой, а без выбора касса, оплаты и
+    новые записи по умолчанию шли в основной филиал: администратор Филиала
+    #2 принимала оплату в кассу основного (жалоба с прода). Теперь активный
+    филиал в сессии всегда из разрешённых — и все места, что берут филиал
+    по умолчанию из session["active_branch"], получают правильный."""
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        allowed = allowed_branch_ids(user)
+        request.allowed_branch_ids = allowed
+        if allowed:
+            cur = request.session.get("active_branch")
+            if cur not in allowed:
+                from apps.users.models import Branch
+                main = (Branch.objects.filter(pk__in=allowed, is_main=True).values_list("pk", flat=True).first()
+                        or min(allowed))
+                request.session["active_branch"] = main
+        return self.get_response(request)
+
+
 class TariffGuardMiddleware:
     """Блокирует доступ, если тариф клиники истёк, или клиника заблокирована
     супер-админом (Clinic.is_active=False) — кроме суперадмина.

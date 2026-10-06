@@ -125,7 +125,7 @@ window.addEventListener('load',function(){
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <select name="branch" onchange="this.form.submit()">
-        <option value="all" {% if not active_branch %}selected{% endif %}>Все филиалы</option>
+        {% if not nav_branches_restricted %}<option value="all" {% if not active_branch %}selected{% endif %}>Все филиалы</option>{% endif %}
         {% for b in nav_branches %}
         <option value="{{ b.pk }}" {% if active_branch and active_branch.pk == b.pk %}selected{% endif %}>{{ b.name }}{% if b.is_main %} (осн.){% endif %}</option>
         {% endfor %}

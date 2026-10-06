@@ -2624,12 +2624,17 @@ def set_active_clinic(request):
 @require_POST
 def set_active_branch(request):
     """Переключатель филиала в navbar — сохраняет выбор в сессии."""
+    from apps.tenancy import allowed_branch_ids
+    allowed = allowed_branch_ids(request.user)
     bid = request.POST.get("branch")
     if bid in (None, "", "all"):
-        request.session.pop("active_branch", None)
+        if not allowed:                      # «Все филиалы» — только без ограничения
+            request.session.pop("active_branch", None)
     else:
         try:
-            request.session["active_branch"] = int(bid)
+            bid = int(bid)
+            if not allowed or bid in allowed:
+                request.session["active_branch"] = bid
         except (TypeError, ValueError):
             pass
     return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
