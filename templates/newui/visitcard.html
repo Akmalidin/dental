@@ -857,7 +857,7 @@ function vwOpenPlan(){
   // в карточку пациента (как раньше), кнопка «Сохранить» внизу — в
   // расписание (врач жмёт «Сохранить» и сразу возвращается к календарю,
   // а не остаётся на карточке приёма).
-  window.vwCommitVisit = async function(redirectTo){
+  window.vwCommitVisit = async function(redirectTo, skipConfirm){
     redirectTo = redirectTo || ('/new/patients/'+vw.patientId+'/');
     if(commitLocked){
       // Приём уже завершён — просто сохраняем правки в ЭМК (она остаётся
@@ -866,7 +866,7 @@ function vwOpenPlan(){
       location.href = redirectTo;
       return;
     }
-    if(!confirm(t('w_confirm_finish_visit'))) return;
+    if(!skipConfirm && !confirm(t('w_confirm_finish_visit'))) return;
     await vwAutosave();
     const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan: vwPlan});
     const data = await res.json();

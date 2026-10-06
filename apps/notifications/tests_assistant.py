@@ -318,6 +318,20 @@ class AssistantTestCase(TestCase):
                 "mode": "dictate", "audio": SimpleUploadedFile("v.webm", b"123", "audio/webm")})
         self.assertEqual(resp.status_code, 422)   # «Речь не распознана», а не список услуг
 
+    def test_finish_visit_and_open_cashdesk(self):
+        from apps.treatments.models import Treatment
+        tr = Treatment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch, clinic=self.clinic)
+        resp, calls = self._ask("Сохрани приём", [_tool_call("finish_visit", {}), _final("Сохраняю приём.")],
+                                page={"type": "visit", "treatment_id": tr.pk})
+        self.assertEqual(resp.json()["actions"], [{"type": "visit_commit"}])
+        self.assertIn("finish_visit", calls[0][1]["messages"][0]["content"])
+        # вне карты приёма — не делает вид, что завершил
+        resp, calls = self._ask("Заверши приём", [_tool_call("finish_visit", {}), _final("Карта приёма не открыта.")])
+        self.assertEqual(resp.json()["actions"], [])
+        self.assertIn("не открыта", calls[1][1]["messages"][-1]["content"])
+        resp, _ = self._ask("Открой кассу", [_tool_call("open_page", {"page": "cashdesk"}), _final("Открываю кассу.")])
+        self.assertEqual(resp.json()["actions"], [{"type": "open", "url": "/new/cashdesk/"}])
+
     def test_visit_note_goes_to_visit_card_fields(self):
         from apps.treatments.models import Treatment
         tr = Treatment.objects.create(patient=self.patient, doctor=self.doctor, branch=self.branch, clinic=self.clinic)

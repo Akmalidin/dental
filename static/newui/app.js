@@ -8028,7 +8028,18 @@ async function assistantConfirm(i){
 }
 // Озвучить ответ; потом — перейти на страницу (если ассистент её открыл) или,
 // если с ним говорят голосом, снова слушать врача.
+let assistantCommitPending=false;
 async function assistantAfterAnswer(text, openUrl){
+  if(assistantCommitPending){
+    // «Сохрани приём»: сначала договариваем ответ, потом та же кнопка
+    // «Сохранить» (уходит в расписание); панель откроется там же.
+    assistantCommitPending=false;
+    assistantLs('open', '1');
+    if(assistantVoiceMode) assistantLs('listen', '1');
+    await Promise.race([speakText(text), new Promise(r=>setTimeout(r, 6000))]);
+    await window.vwCommitVisit('/new/schedule/', true);
+    return;
+  }
   if(openUrl){
     assistantLs('open', '1');
     if(assistantVoiceMode) assistantLs('listen', '1');
@@ -8066,6 +8077,10 @@ function applyAssistantActions(actions){
         el.scrollIntoView({behavior:'smooth', block:'center'});
         if(typeof window.vwAutosave==='function') window.vwAutosave();
       }
+    } else if(a.type==='visit_commit' && typeof window.vwCommitVisit==='function'){
+      // «Сохрани/заверши приём» голосом — та же кнопка «Сохранить» (уходит в
+      // расписание), без confirm(): команда врача и есть подтверждение.
+      assistantCommitPending=true;
     } else if(a.type==='open' && a.url){
       openUrl=a.url;
     }
