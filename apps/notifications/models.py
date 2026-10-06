@@ -253,3 +253,35 @@ class PushSubscription(models.Model):
 
     def __str__(self):
         return f"{self.user} · {self.endpoint[:40]}"
+
+
+class AssistantChat(ClinicScopedModel):
+    """Разговор с ИИ-ассистентом (как чат в истории): сохраняется на сервере,
+    его можно открыть позже и продолжить; переживает переходы между
+    страницами (apps/notifications/assistant.py, панель ассистента)."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="assistant_chats", verbose_name="Пользователь")
+    title = models.CharField(max_length=200, blank=True, verbose_name="Тема")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "Разговор с ассистентом"
+        verbose_name_plural = "Разговоры с ассистентом"
+
+    def __str__(self):
+        return self.title or "Разговор #%s" % self.pk
+
+
+class AssistantMessage(models.Model):
+    ROLE_CHOICES = [("user", "Пользователь"), ("assistant", "Ассистент")]
+    chat = models.ForeignKey(AssistantChat, on_delete=models.CASCADE, related_name="messages")
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    text = models.TextField()
+    # confirm: {token, summary, state: pending|done|cancelled}; voice: сказано голосом
+    data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]

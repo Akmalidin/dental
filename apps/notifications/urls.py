@@ -32,4 +32,7 @@ urlpatterns = [
     path("voice/", views.voice_command, name="voice_command"),
     path("voice/speak/", views.voice_speak, name="voice_speak"),
     path("assistant/confirm/", views.assistant_confirm, name="assistant_confirm"),
+    path("assistant/message/<int:pk>/cancel/", views.assistant_cancel, name="assistant_cancel"),
+    path("assistant/chats/", views.assistant_chats, name="assistant_chats"),
+    path("assistant/chats/<int:pk>/", views.assistant_chat_detail, name="assistant_chat_detail"),
 ]
