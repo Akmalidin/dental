@@ -8048,6 +8048,17 @@ function applyAssistantActions(actions){
         window.vwToothServicePick(num, it.service_id);
         if(it.discount_pct && typeof window.vwSetDiscountForTooth==='function') window.vwSetDiscountForTooth(num, it.service_id, it.discount_pct);
       }));
+    } else if(a.type==='visit_field'){
+      // Заметка в карту приёма: дописываем в поле и сохраняем тем же
+      // автосохранением, что и при ручном вводе.
+      const ids={complaints:'vw-field-complaints', diagnosis:'vw-diagnosis', recommendations:'vw-recommendations', notes:'vw-notes'};
+      const el=document.getElementById(ids[a.field]);
+      if(el){
+        el.value=(el.value.trim() ? el.value.trim()+'\n' : '')+a.text;
+        el.classList.add('vw-ai-filled'); setTimeout(()=>el.classList.remove('vw-ai-filled'), 2500);
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        if(typeof window.vwAutosave==='function') window.vwAutosave();
+      }
     } else if(a.type==='open' && a.url){
       openUrl=a.url;
     }

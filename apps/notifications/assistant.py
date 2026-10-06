@@ -220,6 +220,11 @@ TOOLS = [
             "service_id": {"type": "integer"},
             "discount_pct": {"type": "number"}}, "required": ["teeth", "service_id"]}}},
         ["items"]),
+    _fn("visit_note", "Только на открытой карте приёма: записать текст в поле карты — жалобы (complaints), "
+        "диагноз (diagnosis), рекомендации (recommendations) или комментарий к визиту (notes). "
+        "Пиши грамотно, кратко, медицинским языком, но без выдумок — только то, что сказал врач.",
+        {"field": {"type": "string", "enum": ["complaints", "diagnosis", "recommendations", "notes"]},
+         "text": {"type": "string"}}, ["field", "text"]),
     _fn("start_visit", "Начать (или продолжить) приём пациента — откроет карту приёма. Укажи "
         "appointment_id сегодняшней записи пациента (из doctor_day или patient_details), а если записи "
         "нет — patient_id. После открытия ты продолжишь разговор уже в карте приёма.",
@@ -493,6 +498,15 @@ def _tool_add_to_visit(ctx, items=None, **_):
     return {"added": [{"teeth": a["teeth"], "service": a["service"]} for a in added], "problems": problems}
 
 
+def _tool_visit_note(ctx, field="", text="", **_):
+    if ctx.page.get("type") != "visit":
+        return {"error": "Карта приёма не открыта — попроси врача открыть приём пациента"}
+    if field not in ("complaints", "diagnosis", "recommendations", "notes") or not (text or "").strip():
+        return {"error": "Укажи поле и текст"}
+    ctx.actions.append({"type": "visit_field", "field": field, "text": text.strip()[:2000]})
+    return {"ok": True, "field": field}
+
+
 def _tool_start_visit(ctx, appointment_id=None, patient_id=None, **_):
     from apps.appointments.models import Appointment
     from apps.patients.models import Patient
@@ -538,7 +552,7 @@ HANDLERS = {
     "list_doctors": _tool_list_doctors, "doctor_day": _tool_doctor_day, "free_slots": _tool_free_slots,
     "search_services": _tool_search_services, "clinic_finance": _tool_clinic_finance,
     "propose_appointment": _tool_propose_appointment, "add_to_visit": _tool_add_to_visit,
-    "open_page": _tool_open_page, "start_visit": _tool_start_visit,
+    "open_page": _tool_open_page, "start_visit": _tool_start_visit, "visit_note": _tool_visit_note,
 }
 
 
@@ -552,7 +566,8 @@ def _page_context(page):
         if tr is not None:
             return ("Открыта КАРТА ПРИЁМА пациента %s (patient_id=%s), врач %s. Если врач называет зубы и "
                     "лечение — найди услуги (search_services) и добавь их add_to_visit, не переспрашивая "
-                    "по мелочам; если услуга неоднозначна — уточни коротко."
+                    "по мелочам; если услуга неоднозначна — уточни коротко. Жалобы, диагноз, рекомендации и "
+                    "комментарии врача записывай в карту через visit_note."
                     % (tr.patient.full_name, tr.patient_id, tr.doctor.name if tr.doctor_id else "—"))
     if page.get("type") == "patient" and page.get("patient_id"):
         return "Открыта карточка пациента patient_id=%s." % page["patient_id"]
