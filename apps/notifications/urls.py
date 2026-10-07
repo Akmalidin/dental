@@ -31,6 +31,7 @@ urlpatterns = [
     path("tg-connect/", views.tg_connect, name="tg_connect"),
     path("voice/", views.voice_command, name="voice_command"),
     path("voice/speak/", views.voice_speak, name="voice_speak"),
+    path("assistant/report-insights/", views.report_insights, name="report_insights"),
     path("assistant/confirm/", views.assistant_confirm, name="assistant_confirm"),
     path("assistant/message/<int:pk>/cancel/", views.assistant_cancel, name="assistant_cancel"),
     path("assistant/chats/", views.assistant_chats, name="assistant_chats"),

@@ -414,7 +414,7 @@ class CashdeskConsistencyTestCase(TestCase):
         self.assertTrue(b.get("duplicate"))
         self.assertEqual(Payment.objects.count(), 1)
 
-    def test_shift_gets_branch_clinic_and_close_reports_shortage(self):
+    def test_shift_gets_branch_clinic_and_close_uses_expected_cash(self):
         from apps.finance.models import CashShift
         clear_current_clinic()
         s = CashShift.all_clinics.create(branch=self.branch, opened_by=self.admin, opening_cash=1000)
@@ -422,8 +422,42 @@ class CashdeskConsistencyTestCase(TestCase):
         set_current_clinic(self.clinic)
         self._treatment(self.D(500))
         self._pay(500)
-        r = self.client.post("/finance/cashshift/%s/close/" % s.pk, {"closing_cash_actual": "1300"})
-        self.assertEqual(r.json()["diff"], -200.0)
+        r = self.client.post("/finance/cashshift/%s/close/" % s.pk)
+        self.assertEqual(r.json()["expected"], 1500.0)
+
+    def test_auto_close_at_2_and_open_at_8_local_time(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from apps.finance.models import CashShift
+        from apps.finance.shift_auto import run
+        tz = ZoneInfo("Asia/Tashkent")
+        self.clinic.timezone = "Asia/Tashkent"
+        self.clinic.save()
+        at = lambda d, h, m=0: datetime(2026, 10, d, h, m, tzinfo=tz)
+        s = CashShift.objects.create(branch=self.branch, opened_by=self.admin, opening_cash=0, clinic=self.clinic)
+        CashShift.objects.filter(pk=s.pk).update(opened_at=at(6, 8, 30))
+        self.assertEqual(run(now=at(7, 1, 55)), {"closed": 0, "opened": 0})   # до 02:00 — ещё работает
+        self.assertEqual(run(now=at(7, 2, 0)), {"closed": 1, "opened": 0})
+        self.assertEqual(run(now=at(7, 7, 55)), {"closed": 0, "opened": 0})   # до 08:00 сама не открывается
+        self.assertEqual(run(now=at(7, 8, 0)), {"closed": 0, "opened": 1})
+        self.assertEqual(run(now=at(7, 8, 5)), {"closed": 0, "opened": 0})    # вторая не появляется
+        # закрыли вручную днём — до утра сама не откроется
+        CashShift.objects.filter(status="open").update(status="closed", closed_at=at(7, 15))
+        self.assertEqual(run(now=at(7, 18)), {"closed": 0, "opened": 0})
+        self.assertEqual(run(now=at(8, 8, 1))["opened"], 1)
+
+    def test_manual_open_at_7_prevents_auto_open(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from apps.finance.models import CashShift
+        from apps.finance.shift_auto import run
+        tz = ZoneInfo(self.clinic.timezone)
+        old = CashShift.objects.create(branch=self.branch, opened_by=self.admin, opening_cash=0, clinic=self.clinic,
+                                       status="closed")
+        CashShift.objects.filter(pk=old.pk).update(opened_at=datetime(2026, 10, 6, 8, tzinfo=tz))
+        early = CashShift.objects.create(branch=self.branch, opened_by=self.admin, opening_cash=0, clinic=self.clinic)
+        CashShift.objects.filter(pk=early.pk).update(opened_at=datetime(2026, 10, 7, 7, tzinfo=tz))
+        self.assertEqual(run(now=datetime(2026, 10, 7, 8, 5, tzinfo=tz)), {"closed": 0, "opened": 0})
 
     def test_payment_closes_cashier_requests(self):
         from apps.notifications.models import Notification

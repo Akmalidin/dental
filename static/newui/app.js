@@ -1925,7 +1925,7 @@ function renderCashShift(){
       ${oldWarn}${todayLine}
       <div style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 6px;">${t('w_cd_since_open','За всю смену (с момента открытия)')}</div>
       <div class="kpi-grid" style="margin-bottom:4px;">${kpis}</div>
-      <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input autocomplete="off" type="number" id="shiftClosingCash" value="" min="0" placeholder="${t('w_cd_count_cash','Пересчитайте наличные в кассе')}"></div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin:12px 0 8px;">${t('w_cd_auto_shift','Смена закрывается сама в 02:00 и открывается в 08:00. Открыть раньше или закрыть вручную можно кнопкой.')}</div>
       <button class="btn btn-ghost btn-sm" onclick="cashCloseShift(${s.id})">Закрыть смену</button>
     </div>`;
 }
@@ -1940,22 +1940,9 @@ async function cashOpenShift(){
 }
 async function cashCloseShift(shiftId){
   if(!confirm(t('w_confirm_close_shift','Закрыть смену? После закрытия Z-отчёт зафиксируется.'))) return;
-  // Поле «по факту» раньше было заранее заполнено ожидаемой суммой — кассир
-  // жал «Закрыть», не пересчитывая, и недостачу никто не видел.
-  const el=document.getElementById('shiftClosingCash');
-  if(!el || el.value===''){ showToast(t('w_cd_enter_counted','Введите, сколько наличных по факту в кассе'), 'error'); if(el) el.focus(); return; }
-  const fd=new FormData();
-  fd.append('closing_cash_actual', el.value);
-  const res=await postForm('/finance/cashshift/'+shiftId+'/close/', fd);
+  const res=await postForm('/finance/cashshift/'+shiftId+'/close/', new FormData());
   const data=await res.json();
-  if(res.ok && data.ok){
-    const diff=Math.round(data.diff||0);
-    const msg=diff===0 ? t('w_shift_closed','Смена закрыта')+' — '+t('w_cd_cash_matches','наличные сходятся')
-      : t('w_shift_closed','Смена закрыта')+' — '+(diff<0 ? t('w_cd_shortage','недостача') : t('w_cd_surplus','излишек'))
-        +' '+Math.abs(diff).toLocaleString('ru-RU')+' '+CUR_SYM;
-    sessionStorage.setItem('newui_flash', JSON.stringify({msg, type: diff===0?'success':'error'}));
-    location.reload();
-  }
+  if(res.ok && data.ok){ flashAndReload(t('w_shift_closed','Смена закрыта')); }
   else { showToast(apiErrorMessage(data, t('w_shift_close_failed','Не удалось закрыть смену')), 'error'); }
 }
 function renderCashQueue(){
@@ -2142,12 +2129,14 @@ function renderReportsDoctors(){
   if(!d) return;
   const stats=d.doctorStats||[];
   document.getElementById('doctorsChart').innerHTML = buildDonutChart(
-    stats.map((s,i)=>({label:s.doctor, value:s.revenue, color:['cobalt','teal','amber','coral'][i%4]})), ' '+CUR_SYM
+    stats.filter(s=>s.revenue>0).map((s,i)=>({label:s.isAdvance?t('w_advance_no_visit','Аванс / без приёма'):s.doctor, value:s.revenue, color:['cobalt','teal','amber','coral'][i%4]})), ' '+CUR_SYM
   );
   const body=document.getElementById('doctorStatsTableBody');
   body.innerHTML = stats.length===0
-    ? `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
-    : stats.map(s=>`<tr><td>${s.doctor}</td><td class="mono">${s.count}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td><span class="pill ${s.fillRatePct>=70?'teal':(s.fillRatePct>=40?'amber':'coral')}">${s.fillRatePct}%</span></td></tr>`).join('');
+    ? `<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : stats.map(s=>s.isAdvance
+      ? `<tr><td style="color:var(--ink-soft)">${t('w_advance_no_visit','Аванс / без приёма')}</td><td></td><td></td><td class="mono">${fmtSom(s.revenue)}</td><td></td><td></td></tr>`
+      : `<tr><td>${s.doctor}</td><td class="mono">${s.count}</td><td class="mono">${fmtSom(s.billed)}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td><span class="pill ${s.fillRatePct>=70?'teal':(s.fillRatePct>=40?'amber':'coral')}">${s.fillRatePct}%</span></td></tr>`).join('');
 }
 function renderReportsBranches(){
   const d=reportsRealData;
@@ -2158,8 +2147,8 @@ function renderReportsBranches(){
   );
   const body=document.getElementById('branchStatsTableBody');
   body.innerHTML = stats.length===0
-    ? `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
-    : stats.map(s=>`<tr><td>${s.branch}</td><td class="mono">${s.completed}</td><td class="mono">${s.cancelled}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td class="mono">${fmtSom(s.expenses)}</td><td class="mono" style="color:${s.debt>0?'var(--coral)':'inherit'}">${fmtSom(s.debt)}</td></tr>`).join('');
+    ? `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:20px;">${t('w_no_data')}</td></tr>`
+    : stats.map(s=>`<tr><td>${s.branch}</td><td class="mono">${s.completed}</td><td class="mono">${s.cancelled}</td><td class="mono">${fmtSom(s.billed||0)}</td><td class="mono">${fmtSom(s.revenue)}</td><td class="mono">${fmtSom(s.avgCheck)}</td><td class="mono">${fmtSom(s.expenses)}</td><td class="mono" style="color:${s.debt>0?'var(--coral)':'inherit'}">${fmtSom(s.debt)}</td></tr>`).join('');
 }
 function renderReportsRooms(){
   const d=reportsRealData;
@@ -2325,7 +2314,7 @@ function renderReportConstructor(){
   const raw = ds[metric] || [];
   const palette=['cobalt','teal','amber','coral'];
   const data = raw.map((d,i)=>({label:d.label, value:d.value, color:palette[i%4]}));
-  const suffix = metric==='utilization' ? '%' : (metric==='revenue'||metric==='avgcheck' ? ' '+CUR_SYM : '');
+  const suffix = metric==='utilization' ? '%' : (metric==='revenue'||metric==='billed'||metric==='avgcheck' ? ' '+CUR_SYM : '');
   const el=document.getElementById('rcChartArea');
   if(!el) return;
   el.innerHTML = type==='donut' ? buildDonutChart(data, suffix) : buildBarChart(data, suffix);
@@ -2360,26 +2349,43 @@ function renderOverviewCharts(){
   if(weekEl) weekEl.innerHTML = buildBarChart(weekly.map((w,i)=>({label:w.label, value:w.value, color:palette[i%4]})), ' '+CUR_SYM);
 }
 
-const aiInsights=[
-  {type:'warn', icon:'⚠️', title:'Загрузка Джумабековой А. упала до 31%', text:'За последние 2 недели у гигиениста заметно меньше записей, чем у остальных врачов. Свободные окна простаивают.', action:'Открыть расписание →', onclick:"location.href='/new/schedule/'"},
-  {type:'warn', icon:'📉', title:'Конверсия заявок в визит снизилась до 61%', text:'Раньше было в среднем 71%. Больше всего теряем на заявках из WhatsApp/Telegram — среднее время ответа выросло.', action:'Открыть заявки →', onclick:"location.href='/new/funnel/'"},
-  {type:'good', icon:'💰', title:'Пятница — самый прибыльный день недели', text:'Стабильно на 30–40% выше среднего. Стоит рассмотреть добавление ещё одного врача в пятничную смену.', action:'Открыть расписание →', onclick:"location.href='/new/schedule/'"},
-  {type:'warn', icon:'🕐', title:'14 пациентов не были в клинике более 6 месяцев', text:'Хороший кандидат для реактивационной рассылки — обычно возвращает 10–15% от базы.', action:'Открыть шаблоны рассылок →', onclick:"location.href='/new/marketing/'"},
-  {type:'warn', icon:'💳', title:'Дебиторская задолженность выросла до 198 300 сом', text:'11 пациентов с непогашенным долгом. Рекомендуем отправить напоминание об оплате через WhatsApp.', action:'Открыть мессенджеры →', onclick:"location.href='/new/messages/'"},
-  {type:'good', icon:'✅', title:'Средний чек у Нурбековой С. — самый высокий', text:'10 200 сом против среднего 6 700 сом по клинике. Хороший кейс для внутреннего обучения других врачей.', action:'Открыть статистику по врачам →', onclick:"reportsTab('doctors')"},
-];
-function renderAIInsights(){
+// «Рекомендации ИИ на сегодня» — по реальным цифрам клиники
+// (apps/notifications/report_ai.py), раз в день; раньше здесь был
+// захардкоженный демо-текст с выдуманными врачами и суммами.
+let aiInsightsLoaded=false;
+function aiInsightAction(i){
+  if(!i.target) return '';
+  const label=t('w_ai_open','Открыть →');
+  const go=i.target.startsWith('/') ? `location.href='${i.target}'` : `reportsTab('${i.target}')`;
+  return `<span class="ai-action" onclick="${go}">${label}</span>`;
+}
+async function renderAIInsights(refresh){
   const el=document.getElementById('aiInsightsList');
   if(!el) return;
-  el.innerHTML=aiInsights.map(i=>`
+  if(aiInsightsLoaded && !refresh) return;
+  el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_ai_thinking','ИИ анализирует данные клиники…')}</div>`;
+  let data={};
+  try{
+    const res=await fetch('/notifications/assistant/report-insights/'+(refresh?'?refresh=1':''), {credentials:'same-origin'});
+    data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'');
+  }catch(e){
+    el.innerHTML=`<div style="font-size:12.5px;color:var(--ink-soft);">${(e&&e.message)||t('w_voice_failed')}</div>`;
+    return;
+  }
+  aiInsightsLoaded=true;
+  const upd=document.getElementById('aiInsightsUpdated');
+  if(upd) upd.innerHTML=`${t('w_updated','Обновлено')} ${data.updated||''} · <a href="#" onclick="renderAIInsights(true);return false;">${t('w_refresh','обновить')}</a>`;
+  const esc=x=>String(x||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  el.innerHTML=(data.items||[]).map(i=>`
     <div class="ai-insight ${i.type}">
-      <div class="ai-insight-icon">${i.icon}</div>
+      <div class="ai-insight-icon">${esc(i.icon)}</div>
       <div>
-        <b>${i.title}</b>
-        <p>${i.text}</p>
-        <span class="ai-action" onclick="${i.onclick}">${i.action}</span>
+        <b>${esc(i.title)}</b>
+        <p>${esc(i.text)}</p>
+        ${aiInsightAction(i)}
       </div>
-    </div>`).join('');
+    </div>`).join('') || `<div style="font-size:12.5px;color:var(--ink-soft);">${t('w_no_data')}</div>`;
 }
 
 // Раньше aiAnswer() был локальным подбором ответа по ключевым словам с
@@ -2398,23 +2404,29 @@ function renderAIChat(){
   el.innerHTML=aiChatHistory.map(m=>`<div class="chat-bubble ${m.from}">${m.text}</div>`).join('');
   el.scrollTop=el.scrollHeight;
 }
+let reportsAiChatId=null;
 async function askAIPreset(q){
   aiChatHistory.push({from:'out', text:q});
   aiChatHistory.push({from:'in', text:'…', pending:true});
   renderAIChat();
   let answerText;
   try{
+    // Чат отчётов — тот же ИИ-помощник с доступом к данным клиники (mode=agent,
+    // инструмент clinic_report), а не общий «болталка»-режим без цифр.
     const fd=new FormData();
-    fd.append('mode', 'chat');
+    fd.append('mode', 'agent');
     fd.append('question', q);
+    fd.append('page', JSON.stringify({type:'reports', path: location.pathname}));
+    if(reportsAiChatId) fd.append('chat_id', reportsAiChatId);
     const res=await postForm('/notifications/voice/', fd);
     const data=await res.json().catch(()=>({}));
+    if(data.chat_id) reportsAiChatId=data.chat_id;
     answerText = (res.ok && data.answer) ? data.answer : (data.error || t('w_voice_failed'));
   }catch(e){
     answerText = t('w_voice_failed');
   }
   aiChatHistory.pop(); // убрать "…"
-  aiChatHistory.push({from:'in', text:answerText});
+  aiChatHistory.push({from:'in', text:String(answerText).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\n/g,'<br>')});
   renderAIChat();
 }
 function sendAIQuestion(){
@@ -3280,7 +3292,7 @@ const translations={
   w_conversion: {ru:'Конверсия в визит', ky:'Визитке конверсия', en:'Visit conversion', uz:'Tashrifga konversiya'},
   w_acquisition_cost: {ru:'Стоимость привлечения', ky:'Тартуу наркы', en:'Acquisition cost', uz:'Jalb qilish narxi'},
   w_excel: {ru:'Excel', ky:'Excel', en:'Excel', uz:'Excel'},
-  w_reports_hint: {ru:'Всё, включая Конструктор сравнения, — реальные данные. Чат «Спросить у ИИ» отвечает по-настоящему (если ИИ-помощник настроен на сервере), а вот блок «Рекомендации ИИ на сегодня» выше — пока демонстрационный.', ky:'Баары, анын ичинде Салыштыруу конструктору да, — реалдуу маалыматтар. «ИИдэн сурануу» чаты чындап жооп берет (сервердэ ИИ-жардамчы жөндөлсө), ал эми жогорудагы «Бүгүнкү ИИ сунуштары» блогу азырынча демонстрациялык.', en:'Everything, including the comparison builder, is real data. The "Ask AI" chat gives real answers (if the AI assistant is configured on the server), but the "AI recommendations for today" block above is still demo-only.', uz:'Hammasi, jumladan Solishtirish konstruktori ham, — haqiqiy ma\'lumotlar. "AI dan so\'rash" chati chindan javob beradi (agar server sozlangan bo\'lsa), lekin yuqoridagi "Bugungi AI tavsiyalari" bloki hali namoyish uchun.'},
+  w_reports_hint: {ru:'Все цифры — реальные данные. «Оплачено» — деньги, полученные за месяц; «Оказано услуг» — счета приёмов за вычетом скидок. ИИ-помощник отвечает по этим же данным.', ky:'Бардык сандар — реалдуу маалыматтар. «Төлөндү» — ай ичинде алынган акча; «Көрсөтүлгөн кызматтар» — арзандатуудан кийинки эсептер. ИИ-жардамчы ушул маалыматтар боюнча жооп берет.', en:'All figures are real data. "Paid" is money received this month; "Services billed" is visit bills minus discounts. The AI assistant answers from the same data.', uz:'Barcha raqamlar — haqiqiy ma\'lumotlar. «To\'langan» — oy davomida olingan pul; «Ko\'rsatilgan xizmatlar» — chegirmadan keyingi hisoblar. AI yordamchi shu ma\'lumotlar asosida javob beradi.'},
   w_cancel_reason: {ru:'Причина', ky:'Себеби', en:'Reason', uz:'Sababi'},
   w_repeat_visits_alltime: {ru:'Повторные визиты · за всё время', ky:'Кайталама визиттер · бүт убакыт', en:'Repeat visits · all time', uz:'Takroriy tashriflar · butun vaqt'},
   w_active_status: {ru:'Активный', ky:'Активдүү', en:'Active', uz:'Faol'},
@@ -3354,6 +3366,16 @@ const translations={
   w_charges_history: {ru:'История начислений', ky:'Эсептелгендердин таржымалы', en:'Charges history', uz:'Hisoblanganlar tarixi'},
   w_no_history_month: {ru:'За месяц ещё нет операций', ky:'Ай ичинде операциялар жок дагы', en:'No operations for the month yet', uz:'Oy uchun operatsiyalar hali yo\'q'},
   w_revenue_month: {ru:'Выручка за месяц', ky:'Айлык түшүм', en:'Revenue this month', uz:'Oylik tushum'},
+  w_paid_month: {ru:'Оплачено за месяц', ky:'Айда төлөндү', en:'Paid this month', uz:'Oy davomida to\'landi'},
+  w_billed_month: {ru:'Оказано услуг за месяц', ky:'Айда көрсөтүлгөн кызматтар', en:'Services billed this month', uz:'Oy davomida ko\'rsatilgan xizmatlar'},
+  w_billed_month_hint: {ru:'счета приёмов за вычетом скидок', ky:'арзандатуудан кийинки эсептер', en:'visit bills minus discounts', uz:'chegirmadan keyingi hisoblar'},
+  w_paid_money: {ru:'Оплачено', ky:'Төлөндү', en:'Paid', uz:'To\'langan'},
+  w_billed_services: {ru:'Оказано услуг', ky:'Көрсөтүлгөн кызматтар', en:'Services billed', uz:'Ko\'rsatilgan xizmatlar'},
+  w_paid_share_doctors: {ru:'Доля оплат по врачам', ky:'Дарыгерлер боюнча төлөмдөр', en:'Payments by doctor', uz:'Shifokorlar bo\'yicha to\'lovlar'},
+  w_paid_share_branches: {ru:'Доля оплат по филиалам', ky:'Филиалдар боюнча төлөмдөр', en:'Payments by branch', uz:'Filiallar bo\'yicha to\'lovlar'},
+  w_paid_by_week: {ru:'Оплачено по неделям', ky:'Апталар боюнча төлөндү', en:'Paid by week', uz:'Haftalar bo\'yicha to\'langan'},
+  w_advance_no_visit: {ru:'Аванс / без приёма', ky:'Аванс / кабыл алуусуз', en:'Advance / no visit', uz:'Avans / qabulsiz'},
+  w_cd_auto_shift: {ru:'Смена закрывается сама в 02:00 и открывается в 08:00. Открыть раньше или закрыть вручную можно кнопкой.', ky:'Смена саат 02:00дө өзү жабылып, 08:00дө ачылат. Эртерээк ачуу же кол менен жабуу — баскыч менен.', en:'The shift closes automatically at 02:00 and opens at 08:00. Use the button to open earlier or close manually.', uz:'Smena 02:00 da o\'zi yopiladi va 08:00 da ochiladi. Ertaroq ochish yoki qo\'lda yopish — tugma orqali.'},
   w_expenses_month: {ru:'Расходы за месяц', ky:'Айлык чыгашалар', en:'Expenses this month', uz:'Oylik xarajatlar'},
   w_expenses: {ru:'Расходы', ky:'Чыгашалар', en:'Expenses', uz:'Xarajatlar'},
   w_debtors: {ru:'Должники', ky:'Карызкорлор', en:'Debtors', uz:'Qarzdorlar'},
@@ -4393,6 +4415,8 @@ function renderReportsKpi(){
   if(!reportsRealData) return;
   const d=reportsRealData;
   document.getElementById('rp-revenue').textContent=fmtSom(d.revenueMonth);
+  const billedEl=document.getElementById('rp-billed');
+  if(billedEl) billedEl.textContent=fmtSom(d.billedMonth||0);
   document.getElementById('rp-completed').textContent=d.completed;
   document.getElementById('rp-cancelled').textContent=d.cancelled;
   document.getElementById('rp-cancelled-sub').textContent=d.cancelledPct+'% от всех';

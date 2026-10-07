@@ -1633,6 +1633,24 @@ def voice_command(request):
 
 
 @login_required
+def report_insights(request):
+    """«Рекомендации ИИ на сегодня» в «Отчётах» — по реальным цифрам клиники,
+    раз в день (кэш), ?refresh=1 — пересчитать."""
+    from .assistant import ensure_clinic, openai_enabled
+    from .report_ai import can_see, insights
+    from apps.tenancy import get_active_branch_id
+    if not can_see(request.user):
+        return JsonResponse({"error": "Нет доступа"}, status=403)
+    if not openai_enabled():
+        return JsonResponse({"error": "ИИ-помощник не настроен"}, status=503)
+    ensure_clinic(request)
+    result, err = insights(request, get_active_branch_id(request), refresh=request.GET.get("refresh") == "1")
+    if err:
+        return JsonResponse({"error": err}, status=502)
+    return JsonResponse(result)
+
+
+@login_required
 @require_POST
 def assistant_confirm(request):
     """Подтверждение записи, подготовленной ИИ-помощником (кнопка «Записать»

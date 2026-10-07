@@ -917,16 +917,29 @@ class NewUIReportsTestCase(TestCase):
         from apps.treatments.models import Treatment
 
         patient = Patient.objects.create(first_name="Лечится", last_name="У врача", phone="+996700555666", branch=self.branch, clinic=self.clinic)
-        Treatment.objects.create(
+        t = Treatment.objects.create(
             patient=patient, doctor=self.director, branch=self.branch,
-            status=Treatment.STATUS_COMPLETED, total_amount=5000, clinic=self.clinic,
+            status=Treatment.STATUS_COMPLETED, total_amount=5000, discount=500, clinic=self.clinic,
         )
         data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())
         stats = data["reportsData"]["doctorStats"]
         row = next(s for s in stats if s["doctor"] == self.director.name)
         self.assertEqual(row["count"], 1)
-        self.assertEqual(row["revenue"], 5000.0)
-        self.assertEqual(row["avgCheck"], 5000.0)
+        # «Оказано услуг» — счёт за вычетом скидки; «Оплачено» — только реальные деньги
+        self.assertEqual(row["billed"], 4500.0)
+        self.assertEqual(row["revenue"], 0.0)
+        self.assertEqual(row["avgCheck"], 4500.0)
+        from apps.finance.models import Payment
+        Payment.objects.create(patient=patient, treatment=t, amount=4500, branch=self.branch,
+                               received_by=self.director, clinic=self.clinic)
+        Payment.objects.create(patient=patient, amount=1000, branch=self.branch,
+                               received_by=self.director, clinic=self.clinic)   # аванс сверх счёта
+        data = _extract_newui_real_data(self.client.get("/new/reports/").content.decode())["reportsData"]
+        row = next(s for s in data["doctorStats"] if s["doctor"] == self.director.name)
+        self.assertEqual(row["revenue"], 4500.0)
+        # сумма «Оплачено» по врачам (с авансом) = «Оплачено за месяц» вверху
+        self.assertEqual(sum(s["revenue"] for s in data["doctorStats"]), data["revenueMonth"])
+        self.assertEqual(data["billedMonth"], 4500.0)
 
     def test_reports_lead_sources_reflects_real_lead_conversion(self):
         from apps.patients.models import Lead, LeadSource
@@ -1283,11 +1296,15 @@ class NewUICashdeskTestCase(TestCase):
     def test_close_shift_via_reused_backend(self):
         from apps.finance.models import CashShift
         shift = CashShift.objects.create(branch=self.branch, opened_by=self.director, opening_cash=0, clinic=self.clinic)
-        resp = self.client.post(f"/finance/cashshift/{shift.pk}/close/", {"closing_cash_actual": "1500"})
+        self.Payment.objects.create(
+            patient=self.patient, amount=1500, branch=self.branch, received_by=self.director,
+            type=self.Payment.TYPE_INCOME, method=self.Payment.METHOD_CASH, clinic=self.clinic)
+        resp = self.client.post(f"/finance/cashshift/{shift.pk}/close/")
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.json()["ok"])
         shift.refresh_from_db()
         self.assertEqual(shift.status, CashShift.STATUS_CLOSED)
+        # пересчёт руками больше не вводят — «по факту» = ожидаемые по Z-отчёту
         self.assertEqual(shift.closing_cash_actual, 1500)
         self.assertIsNotNone(shift.closed_at)
 
