@@ -1,0 +1,21 @@
+name: Diag cashdesk audit
+
+# Только чтение: сверка кассы и денег по всем клиникам — где суммы расходятся.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          command_timeout: 20m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export DJANGO_SETTINGS_MODULE=config.settings.server
+            ./venv/bin/python manage.py cashdesk_audit
