@@ -343,3 +343,72 @@ class AssistantTestCase(TestCase):
         resp, calls = self._ask("Диагноз кариес", [_tool_call("visit_note", {"field": "diagnosis", "text": "Кариес"}),
                                                     _final("Откройте приём.")])
         self.assertEqual(resp.json()["actions"], [])
+
+
+@override_settings(OPENAI_API_KEY="sk-test", OPENAI_MODEL="gpt-test")
+class ReportAiTestCase(TestCase):
+    """ИИ в «Отчётах»: рекомендации по реальным цифрам (раньше — демо-текст)
+    и чат с инструментом clinic_report."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        from apps.patients.models import Patient
+        from apps.treatments.models import Treatment
+        from apps.finance.models import Payment
+        from apps.tenancy import set_current_clinic
+        cache.clear()
+        self.clinic = Clinic.objects.create(name="Клиника Отчёт", slug="rep-ai")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Гл.", address="-", phone="0", is_main=True, clinic=self.clinic)
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.director = User.objects.create(login="rep_dir", name="Директор Отчёт", role=role, clinic=self.clinic)
+        p = Patient.objects.create(first_name="Пац", last_name="Отчёт", phone="+998901110000", clinic=self.clinic)
+        t = Treatment.objects.create(patient=p, doctor=self.director, branch=self.branch, clinic=self.clinic,
+                                     status=Treatment.STATUS_COMPLETED, total_amount=8000)
+        Payment.objects.create(patient=p, treatment=t, amount=5000, branch=self.branch,
+                               received_by=self.director, clinic=self.clinic)
+        self.client = Client()
+        self.client.force_login(self.director)
+
+    def test_insights_from_real_numbers_cached_per_day(self):
+        calls = []
+        reply = {"choices": [{"message": {"content": json.dumps({"insights": [
+            {"type": "warn", "icon": "💳", "title": "Долг 3 000", "text": "Напомните пациенту.", "action": "debtors"},
+            {"type": "good", "icon": "✅", "title": "Хорошо", "text": "…", "action": "нет-такого"}]})}}]}
+
+        def fake(path, data, **kw):
+            calls.append(data)
+            return reply, None
+        with patch("apps.notifications.assistant._request", side_effect=fake):
+            r1 = self.client.get("/notifications/assistant/report-insights/").json()
+            r2 = self.client.get("/notifications/assistant/report-insights/").json()
+        self.assertEqual(len(calls), 1)                       # второй раз — из кэша
+        prompt = calls[0]["messages"][0]["content"]
+        self.assertIn('"paid_month": 5000', prompt)
+        self.assertIn('"billed_month": 8000', prompt)
+        self.assertEqual(r1["items"][0]["target"], "debtors")
+        self.assertEqual(r1["items"][1]["action"], "")        # неизвестное действие отброшено
+        self.assertEqual(r1, r2)
+
+    def test_reports_chat_uses_clinic_report_tool(self):
+        calls = []
+        replies = [_tool_call("clinic_report", {}), _final("Оплачено 5 000, оказано 8 000.")]
+
+        def fake(path, data, **kw):
+            calls.append(json.loads(json.dumps(data, default=str)))
+            return replies.pop(0), None
+        with patch("apps.notifications.assistant._request", side_effect=fake):
+            r = self.client.post("/notifications/voice/", {"mode": "agent", "question": "Как выручка?",
+                                                           "page": json.dumps({"type": "reports"})}).json()
+        self.assertIn("Оплачено", r["answer"])
+        self.assertIn("Отчёты", calls[0]["messages"][0]["content"])
+        tool_result = json.loads(calls[1]["messages"][-1]["content"])
+        self.assertEqual(tool_result["paid_month"], 5000)
+        self.assertEqual(tool_result["doctors"][0]["billed"], 8000)
+
+    def test_insights_forbidden_without_finance_access(self):
+        nurse = User.objects.create(login="rep_nurse", name="Медсестра",
+                                    role=Role.objects.get(name="nurse", clinic__isnull=True), clinic=self.clinic)
+        c = Client()
+        c.force_login(nurse)
+        self.assertEqual(c.get("/notifications/assistant/report-insights/").status_code, 403)

@@ -232,6 +232,10 @@ TOOLS = [
         "Ищи по ключевым словам: «пломба композит», «удаление», «чистка».",
         {"query": {"type": "string"}}, ["query"]),
     _fn("clinic_finance", "Финансы клиники за текущий месяц: выручка, расходы, прибыль, долги пациентов."),
+    _fn("clinic_report", "Отчёт клиники за текущий месяц (как страница «Отчёты»): оплачено и оказано услуг, "
+        "по врачам (оплачено, оказано, приёмы, средний чек, заполняемость), по неделям, отмены и неявки с "
+        "причинами, расходы по категориям, должники, источники заявок, филиалы, давно не приходившие пациенты. "
+        "Для вопросов «как дела», «где теряем деньги», «кого догрузить», «почему отменяют»."),
     _fn("propose_appointment",
         "Подготовить запись пациента к врачу. Запись НЕ создаётся сразу — пользователь увидит "
         "кнопку «Записать» и подтвердит. Укажи patient_id найденного пациента, либо new_patient_name "
@@ -449,6 +453,14 @@ def _tool_search_services(ctx, query="", **_):
     return _search_services(query)
 
 
+def _tool_clinic_report(ctx, **_):
+    from .report_ai import can_see, report_summary
+    if not can_see(ctx.user):
+        return {"error": "Нет доступа к отчётам — скажи пользователю, что эти данные ему недоступны"}
+    from apps.tenancy import get_active_branch_id
+    return report_summary(get_active_branch_id(ctx.request))
+
+
 def _tool_clinic_finance(ctx, **_):
     if not (ctx.user.can_access("finance") and (ctx.user.is_admin or ctx.user.is_superadmin)):
         return {"error": "Нет доступа к финансам — скажи пользователю, что эти данные ему недоступны"}
@@ -605,6 +617,7 @@ HANDLERS = {
     "search_patients": _tool_search_patients, "patient_details": _tool_patient_details,
     "list_doctors": _tool_list_doctors, "doctor_day": _tool_doctor_day, "free_slots": _tool_free_slots,
     "search_services": _tool_search_services, "clinic_finance": _tool_clinic_finance,
+    "clinic_report": _tool_clinic_report,
     "propose_appointment": _tool_propose_appointment, "add_to_visit": _tool_add_to_visit,
     "open_page": _tool_open_page, "start_visit": _tool_start_visit, "visit_note": _tool_visit_note,
 }
@@ -627,6 +640,10 @@ def _page_context(page):
         return "Открыта карточка пациента patient_id=%s." % page["patient_id"]
     if page.get("type") == "schedule":
         return "Открыто расписание%s." % (" на %s" % page["date"] if page.get("date") else "")
+    if page.get("type") == "reports":
+        return ("Открыт раздел «Отчёты». На вопросы о деньгах, врачах, отменах, долгах и загрузке отвечай по "
+                "clinic_report: называй конкретные цифры и врачей, а в конце дай 1–2 практических совета. "
+                "Здесь ответ читают, а не слушают — можно 3–6 предложений.")
     return "Пользователь на странице %s." % (page.get("path") or "CRM")
 
 

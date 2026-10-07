@@ -912,31 +912,27 @@ def _newui_reports_data(branch_id=None):
         "reason": a.cancellation_reason.name if a.cancellation_reason_id else "—",
     } for a in cancelled_qs[:200]]
 
-    # ── Статистика по врачам — завершённые/оплаченные приёмы за месяц ──
-    # У Treatment нет своего branch — фильтруем через связанный приём
-    # (Treatment.appointment.branch); лечения без привязки к приёму (напр.
-    # быстрая продажа) при выбранном филиале в статистику не попадают.
-    doctor_treatments_qs = Treatment.objects.filter(
-        created_at__date__gte=month_start, status__in=[Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID],
-    )
-    if branch_id:
-        doctor_treatments_qs = doctor_treatments_qs.filter(appointment__branch_id=branch_id)
-    doctor_treatments = (doctor_treatments_qs
-        .values("doctor__name").annotate(cnt=Count("id"), revenue=Sum("total_amount")).order_by("-revenue"))
+    # ── Статистика по врачам — «Оплачено» (деньги за месяц, распределённые на
+    # приёмы врача) и «Оказано услуг» (счета приёмов месяца за вычетом скидок),
+    # см. apps/finance/report_money.py. Раньше «выручкой» врача были счета без
+    # скидки, а вверху отчёта — полученные деньги, и цифры не сходились. ──
+    from apps.finance.report_money import money as _money, ADVANCE
+    money = _money(month_start, branch_id)
     doctor_appt_totals = dict(month_appts.values_list("doctor__name").annotate(cnt=Count("id")))
     doctor_appt_completed = dict(month_appts.filter(status=Appointment.STATUS_COMPLETED).values_list("doctor__name").annotate(cnt=Count("id")))
     doctor_stats = []
-    for row in doctor_treatments:
-        name = row["doctor__name"] or "—"
-        cnt = row["cnt"]
-        revenue = float(row["revenue"] or 0)
+    for name, row in money["doctors"].items():
+        cnt = row["count"]
+        billed, paid = float(row["billed"]), float(row["paid"])
         appt_total = doctor_appt_totals.get(name, 0)
         appt_done = doctor_appt_completed.get(name, 0)
         doctor_stats.append({
-            "doctor": name, "count": cnt, "revenue": revenue,
-            "avgCheck": round(revenue / cnt, 2) if cnt else 0,
+            "doctor": name, "count": cnt, "revenue": round(paid, 2), "billed": round(billed, 2),
+            "avgCheck": round(billed / cnt, 2) if cnt else 0,
             "fillRatePct": round(appt_done / appt_total * 100, 1) if appt_total else 0,
+            "isAdvance": name == ADVANCE,
         })
+    doctor_stats.sort(key=lambda d: (d["isAdvance"], -d["revenue"], -d["billed"]))
 
     # ── Источники заявок (Lead/LeadSource) — за месяц, конверсия = дошли/завершено
     # из всех заявок этого источника (грубая, но реальная метрика; стоимость
@@ -960,27 +956,23 @@ def _newui_reports_data(branch_id=None):
          for s in sources.values()],
         key=lambda x: -x["count"],
     )
-    source_revenue = {}
+    source_revenue, source_billed = {}, {}
     for key, pids in source_patient_ids.items():
-        rev = (Treatment.objects.filter(patient_id__in=pids, created_at__date__gte=month_start)
-               .exclude(status="cancelled").aggregate(s=Sum("total_amount"))["s"] or 0)
-        source_revenue[key] = float(rev)
+        inc = payments_qs.filter(patient_id__in=pids, created_at__date__gte=month_start)
+        paid = (inc.filter(type=Payment.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or 0) - \
+            (inc.filter(type=Payment.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or 0)
+        billed = sum(float((t.total_amount or 0) - (t.discount or 0)) for t in
+                     Treatment.objects.filter(patient_id__in=pids, created_at__date__gte=month_start)
+                     .exclude(status__in=["cancelled", "draft"]))
+        source_revenue[key] = float(paid)
+        source_billed[key] = round(billed, 2)
 
     # ── Услуги — выручка/количество за месяц (TreatmentCure.subtotal — цена со
     # скидкой, тот же расчёт, что и в самой карточке приёма). Для «Конструктора
     # сравнения» — своей отдельной вкладки в отчётах у услуг нет. ──
-    from apps.treatments.models import TreatmentCure
-    service_agg = {}
-    cures_qs = (TreatmentCure.objects.filter(treatment__created_at__date__gte=month_start)
-                .exclude(treatment__status="cancelled").select_related("service"))
-    if branch_id:
-        cures_qs = cures_qs.filter(treatment__appointment__branch_id=branch_id)
-    for cure in cures_qs:
-        key = cure.service.name if cure.service_id else "Без услуги"
-        row = service_agg.setdefault(key, {"count": 0, "revenue": 0.0})
-        row["count"] += cure.quantity
-        row["revenue"] += float(cure.subtotal)
-    top_services = sorted(service_agg.items(), key=lambda kv: -kv[1]["revenue"])[:10]
+    service_agg = {name: {"count": row["count"], "revenue": float(row["paid"]), "billed": float(row["billed"])}
+                   for name, row in money["services"].items()}
+    top_services = sorted(service_agg.items(), key=lambda kv: -max(kv[1]["revenue"], kv[1]["billed"]))[:10]
 
     # ── Выручка по неделям месяца (для «Общего отчёта» — раньше был статичный
     # захардкоженный график). Недели считаем простыми блоками по 7 дней от
@@ -1071,9 +1063,10 @@ def _newui_reports_data(branch_id=None):
                          .distinct()
                          .aggregate(s=Sum("balance"))["s"] or 0))
         b_revenue = float(b_income - b_refund)
+        b_billed = float(_money(month_start, b.pk)["billed_total"])
         branch_stats.append({
             "id": b.pk, "branch": b.name,
-            "revenue": b_revenue, "completed": b_completed, "cancelled": b_cancelled,
+            "revenue": b_revenue, "billed": b_billed, "completed": b_completed, "cancelled": b_cancelled,
             "expenses": b_expenses, "debt": b_debt,
             "avgCheck": round(b_revenue / b_completed, 2) if b_completed else 0,
         })
@@ -1089,9 +1082,10 @@ def _newui_reports_data(branch_id=None):
     comparison = {
         "doctors": {
             "revenue": [{"label": d["doctor"], "value": d["revenue"]} for d in doctor_stats],
-            "count": [{"label": d["doctor"], "value": d["count"]} for d in doctor_stats],
-            "avgcheck": [{"label": d["doctor"], "value": d["avgCheck"]} for d in doctor_stats],
-            "utilization": [{"label": d["doctor"], "value": d["fillRatePct"]} for d in doctor_stats],
+            "billed": [{"label": d["doctor"], "value": d["billed"]} for d in doctor_stats if not d["isAdvance"]],
+            "count": [{"label": d["doctor"], "value": d["count"]} for d in doctor_stats if not d["isAdvance"]],
+            "avgcheck": [{"label": d["doctor"], "value": d["avgCheck"]} for d in doctor_stats if not d["isAdvance"]],
+            "utilization": [{"label": d["doctor"], "value": d["fillRatePct"]} for d in doctor_stats if not d["isAdvance"]],
         },
         "rooms": {
             "count": [{"label": r["room"], "value": r["hours"]} for r in room_load],
@@ -1099,15 +1093,18 @@ def _newui_reports_data(branch_id=None):
         },
         "services": {
             "revenue": [{"label": name, "value": round(v["revenue"], 2)} for name, v in top_services],
+            "billed": [{"label": name, "value": round(v["billed"], 2)} for name, v in top_services],
             "count": [{"label": name, "value": v["count"]} for name, v in top_services],
-            "avgcheck": [{"label": name, "value": round(v["revenue"] / v["count"], 2) if v["count"] else 0} for name, v in top_services],
+            "avgcheck": [{"label": name, "value": round(v["billed"] / v["count"], 2) if v["count"] else 0} for name, v in top_services],
         },
         "sources": {
             "count": [{"label": s["source"], "value": s["count"]} for s in lead_sources],
             "revenue": [{"label": s["source"], "value": source_revenue.get(s["source"], 0)} for s in lead_sources],
+            "billed": [{"label": s["source"], "value": source_billed.get(s["source"], 0)} for s in lead_sources],
         },
         "branches": {
             "revenue": [{"label": b["branch"], "value": b["revenue"]} for b in branch_stats],
+            "billed": [{"label": b["branch"], "value": b["billed"]} for b in branch_stats],
             "count": [{"label": b["branch"], "value": b["completed"]} for b in branch_stats],
             "avgcheck": [{"label": b["branch"], "value": b["avgCheck"]} for b in branch_stats],
         },
@@ -1115,6 +1112,7 @@ def _newui_reports_data(branch_id=None):
 
     return {
         "revenueMonth": float(income - refund),
+        "billedMonth": float(money["billed_total"]),
         "completed": completed,
         "cancelled": cancelled,
         "cancelledPct": round(cancelled / total * 100, 1) if total else 0,

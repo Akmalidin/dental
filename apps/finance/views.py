@@ -406,21 +406,14 @@ def cashshift_open(request):
 @login_required
 @require_POST
 def cashshift_close(request, pk):
-    """Закрыть кассовую смену — фиксирует closed_at/closed_by и заявленный
-    остаток наличных по факту пересчёта (для сверки с ожидаемым по Z-отчёту)."""
+    """Закрыть кассовую смену вручную. Пересчёт наличных руками больше не
+    вводят: «по факту» = ожидаемые по Z-отчёту. Ночью в 02:00 смена
+    закрывается сама (apps.finance.shift_auto)."""
     from django.http import JsonResponse
+    from .shift_auto import close_shift
     shift = get_object_or_404(CashShift, pk=pk, status=CashShift.STATUS_OPEN)
-    try:
-        closing_cash_actual = Decimal(request.POST.get("closing_cash_actual") or "0")
-    except Exception:
-        return JsonResponse({"error": "Некорректная сумма", "error_key": "cashshift_invalid_amount"}, status=400)
-    shift.status = CashShift.STATUS_CLOSED
-    shift.closed_by = request.user
-    shift.closed_at = timezone.now()
-    shift.closing_cash_actual = closing_cash_actual
-    shift.save(update_fields=["status", "closed_by", "closed_at", "closing_cash_actual"])
-    expected = shift.z_report()["expectedCash"]
-    return JsonResponse({"ok": True, "expected": float(expected), "diff": float(closing_cash_actual - expected)})
+    close_shift(shift, user=request.user)
+    return JsonResponse({"ok": True, "expected": float(shift.closing_cash_actual or 0)})
 
 
 @login_required

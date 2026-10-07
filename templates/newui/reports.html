@@ -3,7 +3,7 @@
 {% block content %}
       <div class="topbar"><h1 data-i18n="title_reports">Отчёты</h1><div class="topbar-right"><button class="btn btn-ghost" onclick="exportReportsExcel()"><span data-i18n="w_excel">Excel</span></button><button class="btn btn-ghost" onclick="printReportsPage()"><span data-i18n="w_print">Печать</span></button></div></div>
       <div class="page">
-        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Всё, включая Конструктор сравнения, — реальные данные. Демонстрационный пока только «ИИ-помощник».</span></div>
+        <div style="background:var(--cloud);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);"><span data-i18n="w_reports_hint">Все цифры — реальные данные. «Оплачено» — деньги, полученные за месяц; «Оказано услуг» — счета приёмов за вычетом скидок.</span></div>
         <div class="toolbar-left" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="chip active" id="rtOverview" onclick="reportsTab('overview')"><span data-i18n="w_overview_report">Общий отчёт</span></button>
           <button class="chip" id="rtExpenses" onclick="reportsTab('expenses')"><span data-i18n="w_expenses">Расходы</span></button>
@@ -70,7 +70,8 @@
                 </div>
                 <div class="form-group"><label data-i18n="w_metric">Показатель</label>
                   <select id="rcMetric" onchange="renderReportConstructor()">
-                    <option value="revenue" data-i18n="w_revenue">Выручка</option>
+                    <option value="revenue" data-i18n="w_paid_money">Оплачено</option>
+                    <option value="billed" data-i18n="w_billed_services">Оказано услуг</option>
                     <option value="count" data-i18n="w_count">Количество</option>
                     <option value="avgcheck" data-i18n="w_avg_check">Средний чек</option>
                     <option value="utilization" data-i18n="w_utilization">Загрузка, %</option>
@@ -88,7 +89,8 @@
           </div>
 
           <div class="kpi-grid">
-            <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_revenue_month">Выручка за месяц</span><b style="font-size:22px" id="rp-revenue">—</b></div>
+            <div class="card kpi b-cobalt"><span class="lbl" data-i18n="w_paid_month">Оплачено за месяц</span><b style="font-size:22px" id="rp-revenue">—</b></div>
+            <div class="card kpi b-teal"><span class="lbl" data-i18n="w_billed_month">Оказано услуг за месяц</span><b style="font-size:22px" id="rp-billed">—</b><span class="lbl" data-i18n="w_billed_month_hint">счета приёмов за вычетом скидок</span></div>
             <div class="card kpi b-teal"><span class="lbl" data-i18n="w_visits_completed">Приёмов завершено</span><b style="font-size:22px" id="rp-completed">—</b></div>
             <div class="card kpi b-coral"><span class="lbl" data-i18n="w_visits_cancelled">Отменено визитов</span><b style="font-size:22px" id="rp-cancelled">—</b><span class="lbl" id="rp-cancelled-sub"></span></div>
             <div class="card kpi b-amber"><span class="lbl" data-i18n="w_noshow">Не пришли (no-show)</span><b style="font-size:22px" id="rp-noshow">—</b></div>
@@ -96,7 +98,7 @@
 
           <div class="grid-2">
             <div class="card">
-              <div class="card-head"><h3 data-i18n="w_revenue_by_week">Выручка по неделям</h3></div>
+              <div class="card-head"><h3 data-i18n="w_paid_by_week">Оплачено по неделям</h3></div>
               <div class="card-body" id="ovWeeklyRevenueChart"></div>
             </div>
             <div class="card">
@@ -120,7 +122,7 @@
         <!-- ---- ИИ-ПОМОЩНИК ---- -->
         <div id="rpAI" class="hidden">
           <div class="card" style="margin-bottom:16px;">
-            <div class="card-head"><h3 data-i18n="w_ai_today">✦ Рекомендации ИИ на сегодня</h3><span style="font-size:11px;color:var(--ink-soft);">Обновлено 31.07.2026, 09:00</span></div>
+            <div class="card-head"><h3 data-i18n="w_ai_today">✦ Рекомендации ИИ на сегодня</h3><span id="aiInsightsUpdated" style="font-size:11px;color:var(--ink-soft);"></span></div>
             <div class="card-body" id="aiInsightsList"></div>
           </div>
           <div class="card">
@@ -154,13 +156,13 @@
 
         <div id="rpDoctors" class="hidden">
           <div class="card" style="margin-bottom:14px;">
-            <div class="card-head"><h3 data-i18n="w_revenue_share_doctors">Доля выручки по врачам</h3></div>
+            <div class="card-head"><h3 data-i18n="w_paid_share_doctors">Доля оплат по врачам</h3></div>
             <div class="card-body" id="doctorsChart"></div>
           </div>
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_doctor_stats_month">Статистика по врачам · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_fill_rate">Заполняемость</th></tr></thead>
+              <thead><tr><th data-i18n="w_doctor">Врач</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_billed_services">Оказано услуг</th><th data-i18n="w_paid_money">Оплачено</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_fill_rate">Заполняемость</th></tr></thead>
               <tbody id="doctorStatsTableBody"></tbody>
             </table>
           </div>
@@ -168,13 +170,13 @@
 
         <div id="rpBranches" class="hidden">
           <div class="card" style="margin-bottom:14px;">
-            <div class="card-head"><h3 data-i18n="w_revenue_share_branches">Доля выручки по филиалам</h3></div>
+            <div class="card-head"><h3 data-i18n="w_paid_share_branches">Доля оплат по филиалам</h3></div>
             <div class="card-body" id="branchesChart"></div>
           </div>
           <div class="card">
             <div class="card-head"><h3 data-i18n="w_branch_stats_month">По филиалам · этот месяц</h3></div>
             <table>
-              <thead><tr><th data-i18n="w_branch">Филиал</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_visits_cancelled">Отменено</th><th data-i18n="w_revenue">Выручка</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_expenses">Расходы</th><th data-i18n="w_debt">Долг</th></tr></thead>
+              <thead><tr><th data-i18n="w_branch">Филиал</th><th data-i18n="w_visits">Приёмов</th><th data-i18n="w_visits_cancelled">Отменено</th><th data-i18n="w_billed_services">Оказано услуг</th><th data-i18n="w_paid_money">Оплачено</th><th data-i18n="w_avg_check">Средний чек</th><th data-i18n="w_expenses">Расходы</th><th data-i18n="w_debt">Долг</th></tr></thead>
               <tbody id="branchStatsTableBody"></tbody>
             </table>
           </div>

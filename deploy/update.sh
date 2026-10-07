@@ -85,6 +85,10 @@ echo ">>> резервные копии: папка + ночной cron (00:00 �
   TICK_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_patient_ai.lock $APP/venv/bin/python manage.py patient_assistant_tick >> $APP/backups/patient_ai.log 2>&1"
   ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py patient_assistant_tick" || true; echo "* * * * * $TICK_CMD" ) | crontab -u www-data -
   echo ">>> cron ИИ-ассистента для пациентов установлен"
+  # Кассовая смена: закрытие в 02:00 и открытие в 08:00 по времени клиники.
+  SHIFT_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_cashshift.lock $APP/venv/bin/python manage.py cashshift_auto >> $APP/backups/cashshift.log 2>&1"
+  ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py cashshift_auto" || true; echo "*/5 * * * * $SHIFT_CMD" ) | crontab -u www-data -
+  echo ">>> cron кассовой смены установлен"
   echo ">>> cron бэкапа установлен"
 ) || echo "!!! не удалось установить cron бэкапа (см. вывод выше) — деплой продолжается, это не критично для работы сайта"
 echo ">>> pg_dump: $(command -v pg_dump || echo 'НЕ НАЙДЕН — бэкап Postgres не сработает, поставьте пакет postgresql-client на сервере')"
