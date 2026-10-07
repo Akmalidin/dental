@@ -74,38 +74,27 @@ class Payment(ClinicScopedModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        # Баланс пациента; заодно reconcile_patient (из recalc_balance) раскладывает
+        # оплату по приёмам и пересчитывает paid_amount по единой формуле.
         self._update_patient_balance()
-        if self.treatment:
-            self._update_treatment_paid()
+        if self.treatment_id:
+            from .allocation import recompute_treatment_paid
+            recompute_treatment_paid(self.treatment_id)
 
     def delete(self, *args, **kwargs):
         # Запоминаем связанные объекты до удаления, затем пересчитываем баланс/оплату.
         patient = self.patient
-        treatment_id = self.treatment_id
+        treatment_ids = set(self.allocations.values_list("treatment_id", flat=True)) | {self.treatment_id}
         super().delete(*args, **kwargs)
+        from .allocation import recompute_treatment_paid
+        for tid in treatment_ids:
+            recompute_treatment_paid(tid)
         if patient is not None:
             patient.recalc_balance()
-        if treatment_id:
-            from django.db.models import Sum
-            from decimal import Decimal
-            from apps.treatments.models import Treatment
-            t = Treatment.all_objects.filter(pk=treatment_id).first()
-            if t is not None:
-                paid = t.payments.filter(type=self.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-                refund = t.payments.filter(type=self.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-                Treatment.objects.filter(pk=treatment_id).update(paid_amount=paid - refund)
 
     def _update_patient_balance(self):
         if self.patient_id:
             self.patient.recalc_balance()
-
-    def _update_treatment_paid(self):
-        from django.db.models import Sum
-        from decimal import Decimal
-        paid = self.treatment.payments.filter(type=self.TYPE_INCOME).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-        refund = self.treatment.payments.filter(type=self.TYPE_REFUND).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-        from apps.treatments.models import Treatment
-        Treatment.objects.filter(pk=self.treatment_id).update(paid_amount=paid - refund)
 
 
 class PaymentAllocation(models.Model):
@@ -157,6 +146,14 @@ class CashShift(ClinicScopedModel):
 
     def __str__(self):
         return f"Смена {self.branch} — {self.opened_at:%d.%m.%Y %H:%M}"
+
+    def save(self, *args, **kwargs):
+        # Клиника смены = клиника филиала. Смену, открытую суперадмином без
+        # выбранной клиники, касса клиники не видела («смена не открыта»), а
+        # открыть новую не давал constraint «одна открытая смена на филиал».
+        if self.branch_id and self.branch.clinic_id:
+            self.clinic_id = self.branch.clinic_id
+        super().save(*args, **kwargs)
 
     def payments_qs(self):
         end = self.closed_at or timezone.now()

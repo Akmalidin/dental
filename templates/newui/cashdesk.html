@@ -283,10 +283,7 @@ async function submitCashAccept(){
   // X-Requested-With — payment_create() в ответ на него отдаёт JSON с id
   // платежа вместо redirect на список платежей старого интерфейса, чтобы
   // «Выдать чек» открывал именно этот чек, а не старую версию сайта.
-  const res=await fetch('/finance/payments/create/', {
-    method:'POST', body:fd, credentials:'same-origin',
-    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
-  });
+  const res=await fetchPayment(fd);
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){
@@ -404,10 +401,7 @@ async function submitCashAcceptGeneral(){
   const alloc=allocCollect('agAlloc');
   if(alloc===null){ errEl.textContent='Проверьте распределение по приёмам: сумма больше оплаты или долга приёма'; errEl.classList.remove('hidden'); return; }
   if(alloc) fd.append('allocations', alloc);
-  const res=await fetch('/finance/payments/create/', {
-    method:'POST', body:fd, credentials:'same-origin',
-    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
-  });
+  const res=await fetchPayment(fd);
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){
@@ -557,10 +551,7 @@ async function submitCashVisitPayment(){
   if(discount) fd.append('discount', discount);
   fd.append('type', 'income');
   fd.append('channel', 'cashier');
-  const res=await fetch('/finance/payments/create/', {
-    method:'POST', body:fd, credentials:'same-origin',
-    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
-  });
+  const res=await fetchPayment(fd);
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){
@@ -755,10 +746,7 @@ async function submitQuickSale(){
     fd.append('channel', 'cashier');
     // X-Requested-With — как и в submitCashAccept/submitCashVisitPayment выше,
     // без него payment_create() отдаёт redirect вместо JSON с payment_id.
-    const res2=await fetch('/finance/payments/create/', {
-      method:'POST', body:fd, credentials:'same-origin',
-      headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
-    });
+    const res2=await fetchPayment(fd);
     let payload2=null;
     try{ payload2=await res2.json(); }catch(e){}
     if(!res2.ok || !payload2 || !payload2.ok){
