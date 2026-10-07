@@ -488,8 +488,9 @@ class NewUIScheduleTestCase(TestCase):
         appt_row = next(a for a in data["schedule"]["appointments"] if a["id"] == self.appt.pk)
         self.assertEqual(appt_row["status"], "coral")
 
-        unpaid.paid_amount = 1000
-        unpaid.save(update_fields=["paid_amount"])
+        from apps.finance.models import Payment
+        Payment.objects.create(patient=self.patient, treatment=unpaid, amount=1000, branch=self.branch,
+                               received_by=self.doctor, clinic=self.clinic)
         data = _extract_newui_real_data(self.client.get("/new/schedule/").content.decode())
         appt_row = next(a for a in data["schedule"]["appointments"] if a["id"] == self.appt.pk)
         self.assertEqual(appt_row["status"], "teal")
@@ -1212,6 +1213,13 @@ class NewUICashdeskTestCase(TestCase):
         self.patient = Patient.objects.create(first_name="Касса", last_name="Тест", phone="+996700666777", branch=self.branch, clinic=self.clinic)
         self.Payment = Payment
 
+    def _give_debt(self, amount=3000):
+        """Заявки «В кассу» по пациенту без долга касса теперь гасит сама —
+        для тестов очереди пациенту нужен настоящий долг."""
+        from apps.treatments.models import Treatment
+        Treatment.objects.create(patient=self.patient, doctor=self.director, branch=self.branch,
+                                 status=Treatment.STATUS_COMPLETED, total_amount=amount, clinic=self.clinic)
+
     def test_cashdesk_page_shows_no_open_shift_initially(self):
         resp = self.client.get("/new/cashdesk/")
         data = _extract_newui_real_data(resp.content.decode())
@@ -1322,10 +1330,13 @@ class NewUICashdeskTestCase(TestCase):
         from apps.treatments.models import Treatment
 
         appt = self._make_today_appointment()
-        Treatment.objects.create(
+        t = Treatment.objects.create(
             patient=self.patient, doctor=self.director, branch=self.branch, appointment=appt,
-            status=Treatment.STATUS_PAID, total_amount=3000, paid_amount=3000, clinic=self.clinic,
+            status=Treatment.STATUS_PAID, total_amount=3000, clinic=self.clinic,
         )
+        # «оплачено» за приём берётся только из настоящих платежей
+        self.Payment.objects.create(patient=self.patient, treatment=t, amount=3000, branch=self.branch,
+                                    received_by=self.director, clinic=self.clinic)
         data = _extract_newui_real_data(self.client.get("/new/cashdesk/").content.decode())
         row = next(r for r in data["cashdeskData"]["todayPatients"] if r["patientId"] == self.patient.pk)
         self.assertTrue(row["paid"])
@@ -1351,6 +1362,7 @@ class NewUICashdeskTestCase(TestCase):
         self.assertEqual(rows[0]["time"], "09:00")  # earliest of the two
 
     def test_cashdesk_queue_reflects_real_send_to_cashier_notification(self):
+        self._give_debt()
         resp = self.client.post(f"/finance/payments/send-to-cashier/{self.patient.pk}/", {"amount": "3000"})
         self.assertEqual(resp.status_code, 302)
         resp = self.client.get("/new/cashdesk/")
@@ -1402,6 +1414,7 @@ class NewUICashdeskTestCase(TestCase):
         сотрудник без права принимать деньги (роль nurse — по умолчанию без
         finance.accept_payments) мог тихо скрыть заявку из общей очереди кассы,
         не оплатив её ни через кассу, ни через кого-либо ещё."""
+        self._give_debt()
         resp = self.client.post(f"/finance/payments/send-to-cashier/{self.patient.pk}/", {"amount": "3000"})
         self.assertEqual(resp.status_code, 302)
         resp = self.client.get("/new/cashdesk/")
@@ -1429,6 +1442,7 @@ class NewUICashdeskTestCase(TestCase):
         того как ЛЮБОЙ из них нажмёт «Принято» — она должна пропасть у обоих.
         Раньше очередь фильтровалась строго по user=request.user, и второй
         администратор видел пустую кассу, хотя заявка была отправлена."""
+        self._give_debt()
         second_admin = User.objects.create(
             login="cd_admin2", name="Второй админ CD", email="cdd2@test.local",
             role=self.admin_role, clinic=self.clinic,

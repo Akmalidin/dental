@@ -112,11 +112,10 @@ def payment_list(request):
 
 
 def _recompute_treatment_paid(treatment):
-    """paid_amount приёма = сумма распределений всех платежей на него."""
-    from .models import PaymentAllocation
-    from apps.treatments.models import Treatment
-    total = PaymentAllocation.objects.filter(treatment=treatment).aggregate(s=Sum("amount"))["s"] or Decimal(0)
-    Treatment.all_objects.filter(pk=treatment.pk).update(paid_amount=total)
+    """paid_amount приёма = распределения платежей на него − возвраты по нему
+    (единая формула, apps.finance.allocation)."""
+    from .allocation import recompute_treatment_paid
+    recompute_treatment_paid(treatment.pk)
 
 
 def _open_treatments(patient):
@@ -214,12 +213,8 @@ def _allocate_income(payment, manual=None):
         PaymentAllocation.objects.create(payment=payment, treatment=t, amount=alloc)
         left -= alloc
         affected.append(t)
-    # если остался нераспределённый остаток (переплата) и есть привязанный приём — на него
-    if left > 0 and payment.treatment_id:
-        t = Treatment.all_objects.filter(pk=payment.treatment_id).first()
-        if t:
-            PaymentAllocation.objects.create(payment=payment, treatment=t, amount=left)
-            affected.append(t)
+    # Остаток (переплата) не «доливаем» на приём сверх его счёта — он остаётся
+    # авансом пациента и сам ляжет на следующий приём (allocation.reconcile_patient).
     for t in set(affected):
         _recompute_treatment_paid(t)
 
@@ -424,7 +419,8 @@ def cashshift_close(request, pk):
     shift.closed_at = timezone.now()
     shift.closing_cash_actual = closing_cash_actual
     shift.save(update_fields=["status", "closed_by", "closed_at", "closing_cash_actual"])
-    return JsonResponse({"ok": True})
+    expected = shift.z_report()["expectedCash"]
+    return JsonResponse({"ok": True, "expected": float(expected), "diff": float(closing_cash_actual - expected)})
 
 
 @login_required
@@ -483,6 +479,14 @@ def send_to_cashier(request, patient_id):
     else:
         messages.warning(request, _("В клинике нет администратора-кассира для приёма оплаты"))
     return redirect("patient_detail", pk=patient_id)
+
+
+def _close_cashier_requests(patient):
+    """Погасить все заявки «В кассу» по пациенту (во всех копиях fan-out)."""
+    from apps.notifications.models import Notification
+    Notification.objects.filter(type="payment", is_read=False,
+                                link__startswith="/finance/payments/?patient=%s" % patient.pk) \
+        .filter(link__regex=r"^/finance/payments/\?patient=%s(&|$)" % patient.pk).update(is_read=True)
 
 
 @login_required
@@ -657,6 +661,23 @@ def payment_create(request):
                 return JsonResponse({"ok": False, "error": str(e)}, status=400)
             form.add_error(None, str(e))
     if request.method == "POST" and form.is_valid():
+        # Двойное нажатие «Принять»: тот же сотрудник, пациент, сумма, тип и способ
+        # оплаты за последние 90 секунд — это повтор, а не новый платёж (сверка
+        # нашла десятки таких пар; из-за них приёмы «оплачены» вдвое).
+        from datetime import timedelta as _td
+        cd = form.cleaned_data
+        dup = (Payment.objects.filter(patient=cd["patient"], amount=cd["amount"],
+                                      type=cd.get("type") or Payment.TYPE_INCOME,
+                                      method=cd.get("method") or Payment.METHOD_CASH,
+                                      treatment=cd.get("treatment"),
+                                      received_by=request.user,
+                                      created_at__gte=timezone.now() - _td(seconds=90))
+               .order_by("-created_at").first())
+        if dup is not None:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "payment_id": dup.pk, "duplicate": True})
+            messages.info(request, _("Этот платёж уже принят"))
+            return redirect("patient_detail", pk=dup.patient_id) if dup.patient_id else redirect("payment_list")
         payment = form.save(commit=False)
         payment.received_by = request.user
         # Канал: касса (channel=cashier) или врач напрямую. Если не указан — определяем по роли.
@@ -699,6 +720,11 @@ def payment_create(request):
         _recalc_patient_balance(payment.patient)
         # уведомление администраторам о принятой оплате
         _notify_cashier_payment(request, payment)
+        # Долг погашен — заявки «В кассу» по этому пациенту больше не нужны
+        # (раньше висели неделями: в одной клинике 268 заявок без долга).
+        payment.patient.refresh_from_db(fields=["balance"])
+        if payment.patient.debt <= 0:
+            _close_cashier_requests(payment.patient)
         messages.success(request, _("Платёж зафиксирован"))
         # Новый интерфейс шлёт этот заголовок из fetch() и ждёт id платежа
         # обратно, чтобы сразу открыть его чек (finance/payments/<id>/receipt/),

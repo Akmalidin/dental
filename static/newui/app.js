@@ -1744,6 +1744,18 @@ function openChatWithPatient(patientId){
 /* ================= REPORTS: tabs + charts + AI assistant ================= */
 /* ================= CASHIER QUEUE ("Отправить в кассу") ================= */
 let cashQueue=[];
+// Приём оплаты: второй клик по «Принять», пока первый запрос ещё идёт,
+// раньше создавал второй платёж (сверка нашла десятки таких пар). Пока
+// запрос в пути — повторный ждёт тот же ответ, а не создаёт платёж заново.
+let paymentInFlight=null;
+function fetchPayment(fd){
+  if(paymentInFlight) return paymentInFlight.then(r=>r.clone());
+  paymentInFlight=fetch('/finance/payments/create/', {
+    method:'POST', body:fd, credentials:'same-origin',
+    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
+  }).finally(()=>{ setTimeout(()=>{ paymentInFlight=null; }, 300); });
+  return paymentInFlight.then(r=>r.clone());
+}
 function sendToCashier(description, amount, patientName, btnEl, statusElId){
   cashQueue.push({id:Date.now(), description, amount, patient:patientName||'—', time: (new Date()).toTimeString().slice(0,5), statusElId});
   renderCashQueue();
@@ -1913,7 +1925,7 @@ function renderCashShift(){
       ${oldWarn}${todayLine}
       <div style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 6px;">${t('w_cd_since_open','За всю смену (с момента открытия)')}</div>
       <div class="kpi-grid" style="margin-bottom:4px;">${kpis}</div>
-      <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input autocomplete="off" type="number" id="shiftClosingCash" value="${Math.round(s.expectedCash)}" min="0"></div>
+      <div class="form-group" style="max-width:260px;margin-top:12px;"><label data-i18n="w_actual_cash">Наличные по факту пересчёта</label><input autocomplete="off" type="number" id="shiftClosingCash" value="" min="0" placeholder="${t('w_cd_count_cash','Пересчитайте наличные в кассе')}"></div>
       <button class="btn btn-ghost btn-sm" onclick="cashCloseShift(${s.id})">Закрыть смену</button>
     </div>`;
 }
@@ -1928,12 +1940,22 @@ async function cashOpenShift(){
 }
 async function cashCloseShift(shiftId){
   if(!confirm(t('w_confirm_close_shift','Закрыть смену? После закрытия Z-отчёт зафиксируется.'))) return;
+  // Поле «по факту» раньше было заранее заполнено ожидаемой суммой — кассир
+  // жал «Закрыть», не пересчитывая, и недостачу никто не видел.
   const el=document.getElementById('shiftClosingCash');
+  if(!el || el.value===''){ showToast(t('w_cd_enter_counted','Введите, сколько наличных по факту в кассе'), 'error'); if(el) el.focus(); return; }
   const fd=new FormData();
-  fd.append('closing_cash_actual', (el?el.value:'0')||'0');
+  fd.append('closing_cash_actual', el.value);
   const res=await postForm('/finance/cashshift/'+shiftId+'/close/', fd);
   const data=await res.json();
-  if(res.ok && data.ok){ flashAndReload(t('w_shift_closed','Смена закрыта')); }
+  if(res.ok && data.ok){
+    const diff=Math.round(data.diff||0);
+    const msg=diff===0 ? t('w_shift_closed','Смена закрыта')+' — '+t('w_cd_cash_matches','наличные сходятся')
+      : t('w_shift_closed','Смена закрыта')+' — '+(diff<0 ? t('w_cd_shortage','недостача') : t('w_cd_surplus','излишек'))
+        +' '+Math.abs(diff).toLocaleString('ru-RU')+' '+CUR_SYM;
+    sessionStorage.setItem('newui_flash', JSON.stringify({msg, type: diff===0?'success':'error'}));
+    location.reload();
+  }
   else { showToast(apiErrorMessage(data, t('w_shift_close_failed','Не удалось закрыть смену')), 'error'); }
 }
 function renderCashQueue(){
@@ -8910,10 +8932,7 @@ async function submitPatientPayment(){
   const alloc=allocCollect('pmAlloc');
   if(alloc===null){ errEl.textContent='Проверьте распределение по приёмам: сумма больше оплаты или долга приёма'; errEl.classList.remove('hidden'); return; }
   if(alloc) fd.append('allocations', alloc);
-  const res=await fetch('/finance/payments/create/', {
-    method:'POST', body:fd, credentials:'same-origin',
-    headers:{'X-CSRFToken':getCookie('csrftoken'), 'X-Requested-With':'XMLHttpRequest'},
-  });
+  const res=await fetchPayment(fd);
   let payload=null;
   try{ payload=await res.json(); }catch(e){}
   if(!res.ok || !payload || !payload.ok){

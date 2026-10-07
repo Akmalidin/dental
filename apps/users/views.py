@@ -2079,9 +2079,14 @@ def _newui_cashdesk_data(request, clinic):
     pat_map = {p.pk: p for p in Patient.objects.filter(pk__in=pat_ids)} if pat_ids else {}
     from apps.treatments.models import Treatment as _Treatment
     treat_map = {t.pk: t for t in _Treatment.objects.filter(pk__in=treat_ids)} if treat_ids else {}
+    stale_ids = []
     for n, pid, tid, amount in parsed:
         pat = pat_map.get(pid)
         tr = treat_map.get(tid)
+        if pat is not None and pat.debt <= 0:
+            # уже оплачено (в том числе через карточку пациента) — заявку гасим
+            stale_ids.append(n.link)
+            continue
         queue.append({
             "id": n.pk,
             "patientId": pid,
@@ -2094,6 +2099,9 @@ def _newui_cashdesk_data(request, clinic):
             "time": timezone.localtime(n.created_at).strftime("%d.%m %H:%M"),
             "link": n.link,
         })
+
+    if stale_ids:
+        Notification.objects.filter(type="payment", is_read=False, link__in=stale_ids).update(is_read=True)
 
     # ── «Пациенты на сегодня» — реальные приёмы сегодня с непогашенным долгом
     # по приёму (Treatment.appointment), сгруппированные по пациенту (если у

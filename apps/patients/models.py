@@ -429,6 +429,14 @@ class Patient(ClinicSoftDeleteModel):
         discount_total = agg["disc"] or Decimal(0)
         balance = income - refund - (treatments_total - discount_total)
         Patient.all_objects.filter(pk=self.pk).update(balance=balance)
+        # Распределения оплат по приёмам — в порядок (аванс на новый приём,
+        # излишек с переплаченного), чтобы долг по приёмам = долгу пациента.
+        try:
+            from apps.finance.allocation import reconcile_patient
+            reconcile_patient(self.pk)
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger("apps").exception("reconcile_patient(%s) failed", self.pk)
         self.balance = balance
         return balance
 

@@ -1,0 +1,36 @@
+name: Fix cashdesk
+
+# Исправить расхождения кассы (apps/finance/management/commands/cashdesk_fix.py).
+# apply=false — пробный прогон. Платежи не меняются, только производные данные.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "true — исправить, false — только показать"
+        default: "false"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          APPLY: ${{ github.event.inputs.apply }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: APPLY
+          command_timeout: 20m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export DJANGO_SETTINGS_MODULE=config.settings.server
+            if [ "$APPLY" = "true" ]; then
+              ./venv/bin/python manage.py dbbackup 2>/dev/null || pg_dump "$DATABASE_URL" > backups/before_cashdesk_fix_$(date +%Y%m%d_%H%M).sql 2>/dev/null || true
+              ./venv/bin/python manage.py cashdesk_fix --apply
+              echo ">>> сверка после исправления"
+              ./venv/bin/python manage.py cashdesk_audit
+            else
+              ./venv/bin/python manage.py cashdesk_fix
+            fi

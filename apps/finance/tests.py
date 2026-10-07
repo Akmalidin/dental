@@ -351,3 +351,90 @@ class ManualPaymentAllocationTestCase(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("больше, чем сумма оплаты", r.json()["error"])
         self.assertFalse(Payment.all_clinics.exists())
+
+
+class CashdeskConsistencyTestCase(TestCase):
+    """Сверка кассы (жалобы кассиров): долг по приёмам = долгу пациента,
+    двойной клик не создаёт второй платёж, смена видна своей клинике,
+    недостача при закрытии видна, заявки «В кассу» гаснут после оплаты."""
+
+    def setUp(self):
+        from decimal import Decimal
+        self.D = Decimal
+        self.clinic = Clinic.objects.create(name="Клиника Касса", slug="clinic-cash-cons")
+        set_current_clinic(self.clinic)
+        self.branch = Branch.objects.create(name="Гл", address="-", phone="0", is_main=True, clinic=self.clinic)
+        role = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.admin = User.objects.create(login="cash_cons", name="Кассир", role=role, clinic=self.clinic)
+        self.admin.branches.add(self.branch)
+        self.patient = Patient.objects.create(first_name="Пац", last_name="Касса", phone="+996555000111",
+                                              clinic=self.clinic, branch=self.branch)
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def tearDown(self):
+        clear_current_clinic()
+
+    def _treatment(self, total):
+        from apps.treatments.models import Treatment
+        return Treatment.objects.create(patient=self.patient, doctor=self.admin, branch=self.branch,
+                                        clinic=self.clinic, status=Treatment.STATUS_COMPLETED, total_amount=total)
+
+    def _pay(self, amount, **extra):
+        data = {"patient": self.patient.pk, "amount": amount, "method": "cash", "type": "income",
+                "branch": self.branch.pk, "channel": "cashier"}
+        data.update(extra)
+        return self.client.post("/finance/payments/create/", data, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+    def test_advance_goes_to_visit_created_later(self):
+        r = self._pay(5000)
+        self.assertTrue(r.json()["ok"])
+        t = self._treatment(self.D(3000))
+        t.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual((t.paid_amount, t.debt), (3000, 0))
+        self.assertEqual(self.patient.balance, 2000)     # остаток — аванс
+
+    def test_discount_after_payment_does_not_overpay_visit(self):
+        t = self._treatment(self.D(10000))
+        self._pay(10000, treatment=t.pk)
+        t.discount = self.D(2000)
+        t.save()
+        t.refresh_from_db()
+        self.assertEqual(t.paid_amount, 8000)
+        t2 = self._treatment(self.D(1500))
+        t2.refresh_from_db()
+        self.assertEqual(t2.debt, 0)                     # излишек лёг на следующий приём
+
+    def test_double_click_creates_one_payment(self):
+        from apps.finance.models import Payment
+        self._treatment(self.D(4000))
+        a, b = self._pay(4000).json(), self._pay(4000).json()
+        self.assertEqual(a["payment_id"], b["payment_id"])
+        self.assertTrue(b.get("duplicate"))
+        self.assertEqual(Payment.objects.count(), 1)
+
+    def test_shift_gets_branch_clinic_and_close_reports_shortage(self):
+        from apps.finance.models import CashShift
+        clear_current_clinic()
+        s = CashShift.all_clinics.create(branch=self.branch, opened_by=self.admin, opening_cash=1000)
+        self.assertEqual(s.clinic_id, self.clinic.pk)
+        set_current_clinic(self.clinic)
+        self._treatment(self.D(500))
+        self._pay(500)
+        r = self.client.post("/finance/cashshift/%s/close/" % s.pk, {"closing_cash_actual": "1300"})
+        self.assertEqual(r.json()["diff"], -200.0)
+
+    def test_payment_closes_cashier_requests(self):
+        from apps.notifications.models import Notification
+        self._treatment(self.D(700))
+        other = Patient.objects.create(first_name="Др", last_name="Пац", phone="+996555000999",
+                                       clinic=self.clinic, branch=self.branch)
+        link = "/finance/payments/?patient=%s" % self.patient.pk
+        n = Notification.send(self.admin, "Принять оплату", "x", type="payment", link=link)
+        n2 = Notification.send(self.admin, "Принять оплату", "x", type="payment",
+                               link="/finance/payments/?patient=%s5" % self.patient.pk)
+        self._pay(700)
+        self.assertTrue(Notification.objects.get(pk=n.pk).is_read)
+        self.assertFalse(Notification.objects.get(pk=n2.pk).is_read)   # другой пациент с похожим id
+        self.assertIsNotNone(other)
