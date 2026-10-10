@@ -1,0 +1,74 @@
+name: Diag server load
+
+# Только чтение: нагрузка на сервер — процессор, память, диск, процессы,
+# база (настройки, размер, соединения, тяжёлые запросы), Redis, число запросов
+# к сайту по журналу gunicorn и время ответа страниц. Ничего не меняет.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          command_timeout: 10m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            echo "=== СИСТЕМА ==="
+            uptime; nproc; free -m; swapon --show 2>/dev/null
+            echo "--- vmstat (5 сек) ---"; vmstat 1 5
+            echo "--- диск ---"; df -h / /var 2>/dev/null | sort -u
+            echo "--- процессы по памяти ---"
+            ps -eo pid,rss,pcpu,etime,args --sort=-rss | head -15 | cut -c1-160
+            echo "--- процессы по процессору ---"
+            ps -eo pid,pcpu,rss,args --sort=-pcpu | head -8 | cut -c1-160
+            echo "--- gunicorn ---"
+            pgrep -af gunicorn | cut -c1-160; grep '^GUNICORN_CMD_ARGS' .env
+            echo "--- cron www-data ---"
+            crontab -l -u www-data 2>/dev/null | sed 's/&&.*manage.py/… manage.py/' | cut -c1-160
+
+            echo; echo "=== REDIS ==="
+            (command -v redis-cli >/dev/null && redis-cli ping && redis-cli info memory | grep used_memory_human) || echo "Redis не установлен"
+            ./venv/bin/python manage.py shell -c "from django.conf import settings; print('CACHE:', settings.CACHES['default']['BACKEND']); print('SESSIONS:', settings.SESSION_ENGINE)" 2>/dev/null
+
+            echo; echo "=== POSTGRES ==="
+            PSQL="sudo -u postgres psql -d ${DB_NAME:-sadaf_clinic} -At -F | "
+            $PSQL -c "select version()" | cut -c1-80
+            $PSQL -c "select name, setting, unit from pg_settings where name in ('shared_buffers','work_mem','effective_cache_size','max_connections','maintenance_work_mem','random_page_cost')"
+            $PSQL -c "select pg_size_pretty(pg_database_size(current_database()))"
+            echo "--- соединения ---"
+            $PSQL -c "select state, count(*) from pg_stat_activity where datname=current_database() group by state"
+            echo "--- крупные таблицы ---"
+            $PSQL -c "select relname, n_live_tup, pg_size_pretty(pg_total_relation_size(relid)) from pg_stat_user_tables order by pg_total_relation_size(relid) desc limit 12"
+            echo "--- таблицы, которые читают без индекса (seq scan) ---"
+            $PSQL -c "select relname, seq_scan, seq_tup_read, idx_scan, n_live_tup from pg_stat_user_tables where seq_scan > 1000 and n_live_tup > 500 order by seq_tup_read desc limit 10"
+            echo "--- тяжёлые запросы (pg_stat_statements) ---"
+            $PSQL -c "select calls, round(mean_exec_time::numeric,1) as ms_avg, round(total_exec_time::numeric/1000,1) as sec_total, left(regexp_replace(query, '\s+', ' ', 'g'), 140) from pg_stat_statements order by total_exec_time desc limit 12" 2>&1 | head -14
+            echo "--- кэш попаданий ---"
+            $PSQL -c "select round(100.0*sum(blks_hit)/nullif(sum(blks_hit)+sum(blks_read),0),1) from pg_stat_database where datname=current_database()"
+
+            echo; echo "=== ЗАПРОСЫ К САЙТУ (журнал gunicorn, 24 ч) ==="
+            journalctl -u sadaf --since "-24 hours" --no-pager -o cat 2>/dev/null | grep -E '"(GET|POST) ' > /tmp/sadaf_req.log || true
+            echo "всего запросов: $(wc -l < /tmp/sadaf_req.log)"
+            echo "--- по часам (UTC) ---"
+            journalctl -u sadaf --since "-24 hours" --no-pager -o short-iso 2>/dev/null | grep -E '"(GET|POST) ' | cut -c12-13 | sort | uniq -c | tr '\n' ' '; echo
+            echo "--- самые частые адреса ---"
+            sed -E 's/.*"(GET|POST) ([^ ?]*)[^"]*".*/\1 \2/' /tmp/sadaf_req.log | sed -E 's#/[0-9]+/#/<id>/#g' | sort | uniq -c | sort -rn | head -15
+            echo "--- ошибки 5xx ---"
+            grep -cE '" 5[0-9][0-9] ' /tmp/sadaf_req.log || true
+            echo "--- таймауты/перезапуски воркеров ---"
+            journalctl -u sadaf --since "-7 days" --no-pager -o cat 2>/dev/null | grep -ciE 'WORKER TIMEOUT|Booting worker' || true
+            journalctl -k --since "-7 days" --no-pager 2>/dev/null | grep -ci 'out of memory' | sed 's/^/OOM за 7 дней: /'
+            rm -f /tmp/sadaf_req.log
+
+            echo; echo "=== ВРЕМЯ ОТВЕТА (с сервера) ==="
+            for u in /login/ /static/newui/app.js; do
+              curl -s -o /dev/null -w "$u  %{http_code}  %{time_total}s  %{size_download}B\n" -H "Host: ${APP_HOST:-app.sadaf.kg}" "http://127.0.0.1:8021$u"
+            done
+            echo "--- размер app.js / base.html ---"
+            ls -la static/newui/app.js templates/newui/base.html | awk '{print $5, $9}'
