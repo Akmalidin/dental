@@ -57,7 +57,20 @@
   </tbody>
 </table>
 {% else %}
-<p class="rules">Расшифровка по оплатам доступна для схемы «% от услуги (по категориям)».</p>
+{% if simple %}
+<p class="rules">{% if simple.fixed %}Ставка {{ simple.fixed|money }} {{ cur }}{% endif %}{% if simple.fixed and simple.percent %} + {% endif %}{% if simple.percent %}{{ simple.percent|floatformat:"-2" }}% от {{ simple.baseLabel }} {{ simple.base|money }} {{ cur }} = {{ simple.fromPercent|money }} {{ cur }}{% endif %}</p>
+{% if simple.items %}
+<table>
+  <thead><tr><th>Дата</th><th>Пациент</th><th>Приём</th><th class="n">Сумма, {{ cur }}</th><th class="n">%</th><th class="n">Врачу, {{ cur }}</th></tr></thead>
+  <tbody>
+  {% for i in simple.items %}<tr><td>{{ i.date }}</td><td>{{ i.patient }}</td><td>{% if i.number %}№{{ i.number }}{% endif %}</td><td class="n">{{ i.amount|money }}</td><td class="n">{{ simple.percent|floatformat:"-2" }}%</td><td class="n">{{ i.earned|money }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+<p class="rules"><b>Итого начислено: {{ earned|money }} {{ cur }}</b></p>
+{% else %}
+<p class="rules">Схема зарплаты не задана.</p>
+{% endif %}
 {% endif %}
 
 {% if payouts %}
