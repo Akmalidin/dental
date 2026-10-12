@@ -1,0 +1,69 @@
+name: Diag patient balance
+
+# Только чтение: из чего сложился баланс пациента — все приёмы (статус,
+# сумма, скидка, оплачено), все платежи и их распределение по приёмам,
+# план лечения. Ничего не меняет.
+on:
+  workflow_dispatch:
+    inputs:
+      patient_id:
+        description: "ID пациента (как в карточке, например 3657)"
+        required: true
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          PATIENT_ID: ${{ github.event.inputs.patient_id }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: PATIENT_ID
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export PATIENT_ID
+            cat > /tmp/diag_balance.py <<'PY'
+            import os
+            from decimal import Decimal
+            from django.db.models import Sum
+            from apps.patients.models import Patient
+            from apps.treatments.models import Treatment, TreatmentCure
+            from apps.finance.models import Payment, PaymentAllocation
+            pid = int(os.environ["PATIENT_ID"])
+            p = Patient.all_objects.get(pk=pid)
+            print("ПАЦИЕНТ", p.pk, p.last_name, p.first_name, "| клиника", p.clinic_id, "| баланс в базе", p.balance)
+            print("\n=== ПРИЁМЫ ===")
+            billed = Decimal(0)
+            for t in Treatment.all_objects.filter(patient_id=pid).order_by("created_at"):
+                counted = not t.is_deleted and t.status not in ("cancelled", "draft")
+                net = (t.total_amount or 0) - (t.discount or 0)
+                if counted:
+                    billed += net
+                cures = TreatmentCure.objects.filter(treatment=t)
+                csum = sum((c.subtotal for c in cures), Decimal(0))
+                print(f"#{t.pk} №{t.number} {t.created_at:%d.%m.%Y} статус={t.status} удалён={t.is_deleted} "
+                      f"сумма={t.total_amount} скидка={t.discount} оплачено={t.paid_amount} "
+                      f"строк={cures.count()} сумма_строк={csum} {'В СЧЁТ' if counted else 'НЕ В СЧЁТ'} врач={t.doctor_id}")
+            print("\n=== ПЛАТЕЖИ ===")
+            for pay in Payment.all_clinics.filter(patient_id=pid).order_by("created_at"):
+                al = list(PaymentAllocation.objects.filter(payment=pay).values_list("treatment_id", "amount"))
+                print(f"#{pay.pk} {pay.created_at:%d.%m.%Y %H:%M} {pay.type} {pay.amount} {pay.method} "
+                      f"приём={pay.treatment_id} распределено={al} кто={pay.created_by_id if hasattr(pay, 'created_by_id') else ''} "
+                      f"комм={(getattr(pay, 'comment', '') or '')[:60]}")
+            inc = Payment.all_clinics.filter(patient_id=pid, type="income").aggregate(s=Sum("amount"))["s"] or 0
+            ref = Payment.all_clinics.filter(patient_id=pid, type="refund").aggregate(s=Sum("amount"))["s"] or 0
+            print(f"\nОПЛАЧЕНО {inc} − ВОЗВРАТЫ {ref} − ОКАЗАНО {billed} = {inc - ref - billed}")
+            try:
+                from apps.treatments.models import TreatmentPlan
+                print("\n=== ПЛАНЫ ЛЕЧЕНИЯ ===")
+                for tp in TreatmentPlan.objects.filter(patient_id=pid):
+                    print(tp.pk, getattr(tp, "title", ""), getattr(tp, "status", ""), getattr(tp, "total_amount", ""))
+            except Exception as e:
+                print("планы:", e)
+            PY
+            ./venv/bin/python manage.py shell < /tmp/diag_balance.py
+            rm -f /tmp/diag_balance.py

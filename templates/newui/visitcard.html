@@ -80,6 +80,7 @@
               <table>
                 <thead><tr><th data-i18n="w_service">Услуга</th><th data-i18n="w_tooth">Зуб</th><th data-i18n="w_qty">Кол-во</th><th data-i18n="w_price">Цена</th><th data-i18n="w_discount">Скидка</th><th data-i18n="w_total">Итого</th><th></th></tr></thead>
                 <tbody id="vwPlanBody"></tbody>
+                <tfoot id="vwPlanFoot"><tr><td colspan="5" style="text-align:right;font-weight:700;">Общая сумма:</td><td class="mono" style="white-space:nowrap;font-weight:700;" id="vwPlanTotal">0</td><td></td></tr></tfoot>
               </table>
               <div id="vwPlanEmpty" style="font-size:12.5px;color:var(--ink-soft);padding:10px 2px;"><span data-i18n="w_no_procedures">Процедуры не добавлены</span></div>
               <div style="display:flex;justify-content:flex-end;margin-top:10px;">
@@ -473,6 +474,8 @@ function vwOpenPlan(){
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
       </tr>`;
     }).join('');
+    document.getElementById('vwPlanFoot').style.display = vwPlan.length ? '' : 'none';
+    document.getElementById('vwPlanTotal').textContent = fmtSom(vwPlan.reduce((a, it) => a + (vwPlanRowTotal(it) || 0), 0));
     vwRefreshOdontogram(); // метки зубов идут за планом: добавили/убрали услугу — карта обновилась
   }
   window.vwAddPlanRow = function(){
