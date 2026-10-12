@@ -1,0 +1,64 @@
+name: Fix treatment discount
+
+# Исправить общую скидку приёма (Treatment.discount) и пересчитать баланс
+# пациента. Меняет только если текущая скидка = expected_old (защита от
+# повторного/ошибочного запуска). apply=false — только показать.
+on:
+  workflow_dispatch:
+    inputs:
+      treatment_id:
+        description: "ID приёма (внутренний, например 414)"
+        required: true
+      expected_old:
+        description: "Текущая скидка, которую ожидаем увидеть"
+        required: true
+      new_discount:
+        description: "Новая скидка"
+        required: true
+      apply:
+        description: "true — исправить, false — только показать"
+        default: "false"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          T_ID: ${{ github.event.inputs.treatment_id }}
+          OLD: ${{ github.event.inputs.expected_old }}
+          NEW: ${{ github.event.inputs.new_discount }}
+          APPLY: ${{ github.event.inputs.apply }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: T_ID,OLD,NEW,APPLY
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            export T_ID OLD NEW APPLY
+            cat > /tmp/fix_discount.py <<'PY'
+            import os
+            from decimal import Decimal
+            from apps.treatments.models import Treatment
+            from apps.patients.models import Patient
+            t = Treatment.all_objects.get(pk=int(os.environ["T_ID"]))
+            p = Patient.all_objects.get(pk=t.patient_id)
+            print(f"приём #{t.pk} №{t.number} пациент {p.pk} {p.last_name} {p.first_name}")
+            print(f"сумма={t.total_amount} скидка={t.discount} оплачено={t.paid_amount} баланс={p.balance}")
+            old, new = Decimal(os.environ["OLD"]), Decimal(os.environ["NEW"])
+            if t.discount != old:
+                print(f"СТОП: скидка {t.discount} != ожидаемой {old}, ничего не меняю")
+            elif not (0 <= new <= t.total_amount):
+                print("СТОП: новая скидка вне диапазона")
+            elif os.environ.get("APPLY") != "true":
+                print(f"ПРОБНЫЙ ЗАПУСК: скидка станет {new}, к оплате {t.total_amount - new}")
+            else:
+                Treatment.all_objects.filter(pk=t.pk).update(discount=new)
+                p.recalc_balance()
+                t.refresh_from_db(); p.refresh_from_db()
+                print(f"ГОТОВО: скидка={t.discount} оплачено={t.paid_amount} баланс={p.balance}")
+            PY
+            ./venv/bin/python manage.py shell < /tmp/fix_discount.py
+            rm -f /tmp/fix_discount.py
