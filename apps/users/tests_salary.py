@@ -198,6 +198,27 @@ class ServiceSalaryTestCase(TestCase):
         self.assertTrue(r.context["real_data"]["salaryDoctor"]["canManage"])
         self.assertNotContains(r, 'data-view="mysalary"')
 
+    def test_combined_scheme_breakdown_and_scheme_editor(self):
+        SalaryScheme.objects.filter(user=self.doc).update(
+            scheme_type=SalaryScheme.TYPE_COMBINED, fixed_amount=5000, percent=10)
+        self._treatment([(self.filling, self.doc, 10000)])
+        self._treatment([(self.crown, self.doc, 20000)])
+        c = self._client()
+        r = c.get(f"/new/salary/{self.doc.pk}/?from={self.month_start}&to={self.today}")
+        d = r.context["real_data"]["salaryDoctor"]
+        s = d["simple"]
+        self.assertEqual((s["fixed"], s["percent"], s["base"], s["fromPercent"]), (5000.0, 10.0, 30000.0, 3000.0))
+        self.assertEqual([i["earned"] for i in s["items"]], [1000.0, 2000.0])
+        self.assertEqual(d["earned"], 8000.0)
+        self.assertEqual(d["schemeEdit"]["fixed"], 5000.0)
+        self.assertContains(r, "Настроить схему")
+        r = c.get(f"/new/salary/{self.doc.pk}/explain/?from={self.month_start}&to={self.today}")
+        self.assertContains(r, "Ставка 5")
+        self.assertContains(r, "Итого начислено: 8")
+        # врачу редактор схемы не отдаётся
+        d2 = self._client(self.doc).get("/new/salary/me/").context["real_data"]["salaryDoctor"]
+        self.assertNotIn("schemeEdit", d2)
+
     def test_scheme_edit_saves_category_percents_and_scoped(self):
         c = self._client()
         r = c.post(f"/users/salary/{self.doc.pk}/scheme/", {

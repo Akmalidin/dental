@@ -72,6 +72,51 @@ def _f(v):
     return float(v or 0)
 
 
+def _simple_breakdown(doctor, scheme, date_from, date_to):
+    """Расшифровка для схем «Ставка», «% от выручки», «% от оплат», «Ставка + %»
+    — тот же расчёт, что в _salary_rows: выручка = сумма приёмов врача за
+    период (кроме отменённых), оплаты = приходы по приёмам врача."""
+    from apps.finance.models import Payment
+    from apps.treatments.models import Treatment
+    if scheme is None or scheme.scheme_type == SalaryScheme.TYPE_PERCENT_SERVICE:
+        return None
+    pct = scheme.percent or Decimal(0)
+    st = scheme.scheme_type
+    by_paid = st == SalaryScheme.TYPE_PERCENT_PAID
+    uses_pct = st != SalaryScheme.TYPE_FIXED
+    items = []
+    if uses_pct and by_paid:
+        for p in (Payment.objects.filter(treatment__doctor=doctor, type="income",
+                                         created_at__date__gte=date_from, created_at__date__lte=date_to)
+                  .select_related("patient", "treatment").order_by("created_at")):
+            items.append({
+                "date": timezone.localtime(p.created_at).strftime("%d.%m.%Y"),
+                "patient": p.patient.full_name if p.patient_id else "—", "patientId": p.patient_id,
+                "treatmentId": p.treatment_id,
+                "number": p.treatment.display_number if p.treatment_id else "",
+                "method": p.get_method_display(),
+                "amount": _f(p.amount), "earned": _f(p.amount * pct / 100),
+            })
+    elif uses_pct:
+        for t in (Treatment.objects.filter(doctor=doctor, created_at__date__gte=date_from,
+                                           created_at__date__lte=date_to)
+                  .exclude(status="cancelled").select_related("patient").order_by("created_at")):
+            items.append({
+                "date": timezone.localtime(t.created_at).strftime("%d.%m.%Y"),
+                "patient": t.patient.full_name if t.patient_id else "—", "patientId": t.patient_id,
+                "treatmentId": t.pk, "number": t.display_number, "status": t.get_status_display(),
+                "amount": _f(t.total_amount), "earned": _f((t.total_amount or 0) * pct / 100),
+            })
+    base = sum(i["amount"] for i in items)
+    fixed = scheme.fixed_amount if st in (SalaryScheme.TYPE_FIXED, SalaryScheme.TYPE_COMBINED) else Decimal(0)
+    return {
+        "fixed": _f(fixed), "percent": _f(pct) if uses_pct else 0,
+        "baseLabel": "оплат по приёмам врача" if by_paid else "выручки (сумма приёмов врача)",
+        "base": base, "fromPercent": round(base * float(pct) / 100, 2) if uses_pct else 0,
+        "byPaid": by_paid, "items": items,
+    }
+
+
 @login_required
 def newui_salary_me(request):
     """«Моя зарплата» — своя расшифровка для любого сотрудника."""
@@ -128,8 +173,21 @@ def newui_salary_doctor(request, pk):
         "discount": _f(calc["discount"]) if calc else 0,
         "discountShared": calc["discount_shared"] if calc else True,
         "payments": payments,
+        "simple": _simple_breakdown(doctor, scheme, date_from, date_to),
         "payouts": payouts,
     }
+    if manager:
+        from apps.services.models import ServiceCategory
+        data["schemeEdit"] = {
+            "types": [{"code": c, "label": lbl} for c, lbl in SalaryScheme.TYPE_CHOICES],
+            "fixed": _f(scheme.fixed_amount) if scheme else 0,
+            "percent": _f(scheme.percent) if scheme else 0,
+            "description": scheme.description if scheme else "",
+            "categoryPercents": ({str(cp.category_id): _f(cp.percent) for cp in scheme.category_percents.all()}
+                                 if scheme else {}),
+            "categories": [{"id": c.pk, "name": c.name}
+                           for c in ServiceCategory.objects.order_by("sort_order", "name")],
+        }
     return _render(request, "salary" if manager else "mysalary", "salary_doctor.html", {"salaryDoctor": data})
 
 
@@ -152,6 +210,7 @@ def newui_salary_explain(request, pk):
         "cur": cs.currency_label, "categories": categories,
         "generated": timezone.localtime(),
         "payouts": payouts_qs(doctor, date_from, date_to),
+        "simple": _simple_breakdown(doctor, scheme, date_from, date_to),
     })
 
 

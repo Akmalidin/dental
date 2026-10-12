@@ -27,7 +27,7 @@
 </style>
       <div class="topbar">
         <h1><span id="sdCrumb"><a href="/new/salary/" style="color:var(--ink-soft);text-decoration:none;">Зарплаты</a> / </span><span id="sdName">—</span></h1>
-        <div class="topbar-right"><a class="btn btn-ghost" id="sdPdf" target="_blank" rel="noopener">📄 Скачать PDF</a></div>
+        <div class="topbar-right"><button class="btn btn-ghost hidden" type="button" id="sdSchemeBtn" onclick="sdOpenScheme()">⚙ Настроить схему</button><a class="btn btn-ghost" id="sdPdf" target="_blank" rel="noopener">📄 Скачать PDF</a></div>
       </div>
       <div class="page">
         <div class="card" style="margin-bottom:14px;"><div class="card-body" style="padding:12px 18px;">
@@ -71,6 +71,22 @@
           </div>
         </div>
       </div>
+
+      <div class="modal-backdrop" id="m-sdScheme">
+        <div class="modal">
+          <div class="modal-head"><h3>Схема зарплаты</h3><button class="modal-close" type="button" onclick="closeModal('m-sdScheme')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Тип схемы</label><select id="sds-type" onchange="sdsTypeChanged()"></select></div>
+            <div class="form-group" id="sds-fixed-wrap"><label>Фиксированная ставка (в месяц)</label><input autocomplete="off" type="number" id="sds-fixed" min="0" step="1"></div>
+            <div class="form-group" id="sds-percent-wrap"><label id="sds-percent-label">Процент (%)</label><input autocomplete="off" type="number" id="sds-percent" min="0" max="100" step="0.5"></div>
+            <div class="form-group hidden" id="sds-cats-wrap"><label>Процент по категориям услуг</label>
+              <div class="sd-sub" style="margin-bottom:6px;">Пустое поле — действует процент по умолчанию.</div>
+              <div id="sds-cats" style="display:grid;grid-template-columns:1fr 90px;gap:6px 10px;align-items:center;max-height:300px;overflow:auto;"></div></div>
+            <div class="form-group"><label>Описание</label><input autocomplete="off" type="text" id="sds-description" placeholder="Примечание"></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-sdScheme')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="sdSaveScheme()">Сохранить</button></div>
+        </div>
+      </div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -101,7 +117,47 @@
     ? 'Схема: <b>' + esc(D.schemeLabel) + '</b>' + (D.isService
         ? ' · ' + (D.discountShared ? 'процент от оплаченной суммы (скидка уменьшает зарплату)' : 'процент от полной цены (скидку несёт клиника)') + ' · себестоимость техника/лаборатории вычитается'
         : '')
-    : (D.canManage ? 'Схема зарплаты не задана — настройте её на странице «Зарплаты».' : 'Схема зарплаты пока не задана — обратитесь к директору.');
+    : (D.canManage ? 'Схема зарплаты не задана — нажмите «⚙ Настроить схему».' : 'Схема зарплаты пока не задана — обратитесь к директору.');
+
+  const E = D.schemeEdit;
+  if(E){
+    document.getElementById('sdSchemeBtn').classList.remove('hidden');
+    window.sdOpenScheme = function(){
+      document.getElementById('sds-type').innerHTML = E.types.map(st =>
+        `<option value="${st.code}" ${st.code === (D.schemeType || 'fixed') ? 'selected' : ''}>${esc(st.label)}</option>`).join('');
+      document.getElementById('sds-fixed').value = E.fixed || 0;
+      document.getElementById('sds-percent').value = E.percent || 0;
+      document.getElementById('sds-description').value = E.description || '';
+      const cp = E.categoryPercents || {};
+      document.getElementById('sds-cats').innerHTML = E.categories.map(c =>
+        `<span style="font-size:13px;">${esc(c.name)}</span><input type="number" min="0" max="100" step="0.5" data-cat="${c.id}" value="${cp[c.id] != null ? cp[c.id] : ''}" placeholder="—">`
+      ).join('') || '<span class="sd-sub">Категорий услуг нет — действует общий процент.</span>';
+      sdsTypeChanged();
+      openModal('m-sdScheme');
+    };
+    window.sdsTypeChanged = function(){
+      const type = document.getElementById('sds-type').value;
+      document.getElementById('sds-fixed-wrap').classList.toggle('hidden', !(type === 'fixed' || type === 'combined'));
+      document.getElementById('sds-percent-wrap').classList.toggle('hidden', type === 'fixed');
+      document.getElementById('sds-cats-wrap').classList.toggle('hidden', type !== 'percent_service');
+      document.getElementById('sds-percent-label').textContent = type === 'percent_service' ? 'Процент по умолчанию (%)' : 'Процент (%)';
+    };
+    window.sdSaveScheme = async function(){
+      const type = document.getElementById('sds-type').value;
+      const fd = new FormData();
+      fd.append('scheme_type', type);
+      fd.append('fixed_amount', document.getElementById('sds-fixed').value || '0');
+      fd.append('percent', document.getElementById('sds-percent').value || '0');
+      fd.append('description', document.getElementById('sds-description').value);
+      if(type === 'percent_service'){
+        fd.append('has_cats', '1');
+        document.querySelectorAll('#sds-cats input[data-cat]').forEach(i => fd.append('cat_' + i.dataset.cat, i.value));
+      }
+      const res = await postForm('/users/salary/' + D.doctorId + '/scheme/', fd);
+      if(res.redirected || res.ok){ closeModal('m-sdScheme'); flashAndReload('Схема зарплаты сохранена'); }
+      else { showToast('Не удалось сохранить', 'error'); }
+    };
+  }
 
   document.getElementById('sdEarned').textContent = money(D.earned);
   document.getElementById('sdPaid').textContent = money(D.paidOut);
@@ -110,8 +166,25 @@
   document.getElementById('sdPayAmount').value = D.remaining > 0 ? Math.round(D.remaining*100)/100 : '';
 
   const box = document.getElementById('sdPayments');
-  if(!D.isService){
-    box.innerHTML = '<div class="sd-pay sd-sub">Расшифровка по оплатам доступна для схемы «% от услуги (по категориям)». Для текущей схемы сумма считается по общим итогам месяца.</div>';
+  if(!D.isService && D.simple){
+    const S = D.simple;
+    const parts = [];
+    if(S.fixed) parts.push('ставка <b>' + money(S.fixed) + '</b>');
+    if(S.percent) parts.push(pct(S.percent) + ' от ' + esc(S.baseLabel) + ' ' + money(S.base) + ' = <b>' + money(S.fromPercent) + '</b>');
+    const formula = `<div class="sd-pay"><div class="sd-pay-head"><div>${parts.join(' + ') || 'Ставка и процент не заданы'}</div>
+      <span class="sd-earn">${money(D.earned)}</span></div>
+      ${S.fixed ? '<div class="sd-sub">Ставка начисляется целиком за выбранный период, независимо от его длины.</div>' : ''}</div>`;
+    if(S.items.length) document.getElementById('sdCount').textContent = S.items.length + (S.byPaid ? ' оплат' : ' приёмов');
+    box.innerHTML = formula + (S.percent && !S.items.length
+      ? '<div class="sd-pay sd-sub">За период нет ' + (S.byPaid ? 'оплат' : 'приёмов') + ' этого врача.</div>'
+      : S.items.map(i => `
+        <div class="sd-tr" style="margin:0 18px 8px;" ${i.treatmentId ? `role="link" tabindex="0" title="Открыть приём" onclick="sdOpenVisit(${i.treatmentId})"` : ''}>
+          <div class="sd-tr-head"><span>${esc(i.date)} · ${i.patientId ? `<a class="sd-pat" href="/new/patients/${i.patientId}/" onclick="event.stopPropagation()">${esc(i.patient)}</a>` : esc(i.patient)}
+            ${i.number ? ' · приём №' + esc(i.number) : ''}${i.status ? ' <span class="sd-sub">· ' + esc(i.status) + '</span>' : ''}${i.method ? ' <span class="sd-sub">· ' + esc(i.method) + '</span>' : ''}
+            : ${money(i.amount)} × ${pct(S.percent)}</span><b>+${money(i.earned)}</b></div>
+        </div>`).join(''));
+  } else if(!D.isService){
+    box.innerHTML = '<div class="sd-pay sd-sub">Схема зарплаты не задана.</div>';
   } else if(!D.payments.length){
     box.innerHTML = '<div class="sd-pay sd-sub">За период нет оплат по услугам этого врача.</div>';
   } else {
