@@ -47,6 +47,12 @@ WEBHOOK_REQUIRE_SECRET = True
 # nginx терминирует TLS и редиректит http→https, поэтому в Django редирект выключен,
 # чтобы не было петли. Включается через env, когда сертификаты установлены.
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
+# Браузер запоминает: этот сайт — только по HTTPS (защита от перехвата и
+# подмены в публичном Wi-Fi). Без includeSubDomains — на сервере есть другие
+# сайты-поддомены, их не затрагиваем.
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=15552000, cast=int)   # 180 дней
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
 
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
