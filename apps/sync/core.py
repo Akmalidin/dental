@@ -60,6 +60,45 @@ EXPORT_PLAN = [
 ]
 
 
+# Что офлайн-копия НЕ может прислать в облако: учётные записи, роли, клиники,
+# филиалы и общие для всех клиник справочники — только скачиваются.
+PUSH_DENY_RULES = ("self", "all")
+PUSH_DENY_MODELS = {"users.User", "users.Branch", "users.Clinic", "users.Role"}
+PLAN_RULES = {f"{a}.{m}": rule for a, m, rule in EXPORT_PLAN}
+
+
+def _clinic_of(obj, rule):
+    """id клиники, которой принадлежит запись (по правилу из EXPORT_PLAN);
+    None — если не удалось определить (ссылка на несуществующего родителя)."""
+    try:
+        if rule == "direct":
+            return obj.clinic_id
+        if isinstance(rule, tuple) and rule[0] == "via":
+            parts = rule[1].split("__")
+            cur = obj
+            for name in parts[:-1]:
+                cur = getattr(cur, name, None)
+                if cur is None:
+                    return None
+            return getattr(cur, parts[-1] + "_id", None)
+    except Exception:  # noqa: BLE001 — битая ссылка = чужая/неизвестная запись
+        return None
+    return None
+
+
+def push_allowed(model_label, obj, existing, clinic):
+    """Можно ли применить присланную запись к облаку: модель разрешена к
+    отправке, и запись (новая версия и текущая в облаке) — этой клиники."""
+    rule = PLAN_RULES.get(model_label)
+    if rule is None or rule in PUSH_DENY_RULES or model_label in PUSH_DENY_MODELS:
+        return False
+    if _clinic_of(obj, rule) != clinic.pk:
+        return False
+    if existing is not None and _clinic_of(existing, rule) != clinic.pk:
+        return False
+    return True
+
+
 def _manager(model):
     """Менеджер без фильтра по клинике/удалению (видит всё)."""
     for name in ("all_objects", "all_clinics", "objects"):
@@ -107,7 +146,7 @@ def _object_repr(raw):
     return f"#{raw.get('pk')}"
 
 
-def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=False):
+def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=False, clinic=None):
     """Загрузить блоки (upsert по PK).
 
     prefer_newer=True — НЕ перезаписывать запись, если у получателя версия свежее
@@ -122,6 +161,10 @@ def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=Fals
 
     Конфликтные записи НЕ применяются автоматически — они возвращаются
     списком (см. sync_push), а текущая (облачная) версия остаётся как есть.
+
+    clinic — приём данных от офлайн-копии (sync_push): применяются только
+    записи этой клиники и только разрешённых к отправке моделей
+    (push_allowed), остальное считается отклонённым.
     """
     from django.db import transaction
 
@@ -176,6 +219,8 @@ def import_blocks(blocks, prefer_newer=False, since=None, collect_conflicts=Fals
             try:
                 with transaction.atomic():
                     for d in serializers.deserialize("python", [raw]):
+                        if clinic is not None and not push_allowed(model_label, d.object, existing, clinic):
+                            raise PermissionError(model_label)
                         d.save()
                 n += 1
             except Exception:

@@ -4,7 +4,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -29,6 +28,8 @@ def _sync_staff_ok(user):
 @login_required
 def sync_export(request):
     """Отдать все данные клиники пользователя (для первичной загрузки в оффлайн-копию)."""
+    if not _sync_staff_ok(request.user):
+        return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
     clinic = _user_clinic(request)
     if clinic is None:
         return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
@@ -97,7 +98,6 @@ def sync_run(request):
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
 
-@csrf_exempt
 @login_required
 def sync_push(request):
     """Принять локальные изменения и применить в облаке (upsert по PK).
@@ -109,15 +109,19 @@ def sync_push(request):
     """
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "POST only"}, status=405)
+    if not _sync_staff_ok(request.user):
+        return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
+    clinic = _user_clinic(request)
+    if clinic is None:
+        return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
     try:
         payload = json.loads(request.body)
         since_raw = payload.get("since") or ""
         since = parse_datetime(since_raw) if since_raw else None
 
         if since is not None:
-            res = import_blocks(payload.get("blocks", []), since=since, collect_conflicts=True)
-            clinic = _user_clinic(request)
-            if clinic is not None:
+            res = import_blocks(payload.get("blocks", []), since=since, collect_conflicts=True, clinic=clinic)
+            if True:
                 from .models import SyncConflict
                 for c in res.get("conflicts", []):
                     SyncConflict.objects.create(
@@ -134,7 +138,7 @@ def sync_push(request):
 
         # Нет отметки последней синхронизации (старый локальный клиент или
         # первый push) — прежнее поведение: не затираем то, что в облаке новее.
-        res = import_blocks(payload.get("blocks", []), prefer_newer=True)
+        res = import_blocks(payload.get("blocks", []), prefer_newer=True, clinic=clinic)
         return JsonResponse({
             "ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {}), "conflicts": 0,
             "errors": sum(res.get("errors", {}).values()),
@@ -164,11 +168,21 @@ def sync_conflict_resolve(request, pk):
     if not _sync_staff_ok(request.user):
         return redirect("/")
     from .models import SyncConflict
+    from .core import push_allowed
+    from django.apps import apps as django_apps
     from django.core import serializers as _serializers
-    c = get_object_or_404(SyncConflict, pk=pk)
+    clinic = _user_clinic(request)
+    if clinic is None:
+        return redirect("/")
+    c = get_object_or_404(SyncConflict, pk=pk, clinic=clinic)
     action = request.POST.get("action")
     if action == "local":
+        model = django_apps.get_model(c.model_label)
+        existing = model._base_manager.filter(pk=c.object_pk).first()
         for d in _serializers.deserialize("python", [c.local_data]):
+            if not push_allowed(c.model_label, d.object, existing, clinic):
+                messages.error(request, "Эту запись нельзя применить")
+                return redirect("sync_conflicts")
             d.save()
         c.resolution = SyncConflict.RESOLUTION_LOCAL
         messages.success(request, "Применена локальная версия записи")
