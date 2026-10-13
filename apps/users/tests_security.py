@@ -134,3 +134,15 @@ class StripNamesTestCase(TestCase):
         self.assertEqual(data["body"], "<ok>")
         sync = JsonNamesMiddleware(lambda r: JsonResponse({"name": "<x>"}))(RequestFactory().get("/sync/export/"))
         self.assertEqual(json.loads(sync.content)["name"], "<x>")
+
+
+class ClientIpTestCase(TestCase):
+    def test_forwarded_for_cannot_spoof_ip(self):
+        from django.test import RequestFactory, override_settings
+        from apps.tenancy import get_client_ip
+        req = RequestFactory().get("/", REMOTE_ADDR="127.0.0.1", HTTP_X_FORWARDED_FOR="6.6.6.6, 5.5.5.5",
+                                   HTTP_X_REAL_IP="5.5.5.5")
+        with override_settings(TRUST_X_REAL_IP=True):
+            self.assertEqual(get_client_ip(req), "5.5.5.5")   # от nginx
+        with override_settings(TRUST_X_REAL_IP=False):
+            self.assertEqual(get_client_ip(req), "127.0.0.1")  # без прокси заголовкам не верим

@@ -37,6 +37,8 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# IP посетителя — из X-Real-IP, который ставит nginx (см. apps.tenancy.get_client_ip)
+TRUST_X_REAL_IP = True
 # nginx терминирует TLS и редиректит http→https, поэтому в Django редирект выключен,
 # чтобы не было петли. Включается через env, когда сертификаты установлены.
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
