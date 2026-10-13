@@ -245,6 +245,8 @@ def _render(request, page, template, extra_data=None):
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)
     real_data = _shared_options(request, clinic)
     real_data.update(extra_data or {})
+    from .sanitize import strip_names
+    real_data = strip_names(real_data)
     return render(request, f"newui/{template}", {
         "active": page,
         "active_clinic": clinic,

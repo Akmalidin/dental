@@ -4,7 +4,8 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from django.contrib.auth.decorators import login_required
+from apps.appointments.api_views import CalendarEventsAPIView
 from apps.notifications.views import service_worker, web_manifest
 from apps.finance.views import payment_public
 from apps.treatments.views import treatment_public
@@ -15,9 +16,13 @@ def _app_robots(request):
     return HttpResponse("User-agent: *\nDisallow: /\n", content_type="text/plain; charset=utf-8")
 
 
+# Django-admin: свой вход отключён — неавторизованных уводим на общий /login/,
+# где есть блокировка после неудачных попыток и бан по IP.
+admin.site.login = login_required(admin.site.login)
+
 urlpatterns = [
     path("robots.txt", _app_robots, name="app_robots"),
-    path("django-admin/", admin.site.urls),
+    path("django-admin/", admin.site.urls),  # вход — только через общий /login/ (см. ниже)
     path("i18n/", include("django.conf.urls.i18n")),  # язык переключатель
 
     # Публичный чек по QR (без логина)
@@ -49,25 +54,10 @@ urlpatterns = [
     path("manifest.json", web_manifest, name="web_manifest"),
     path("sync/", include("apps.sync.urls")),
 
-    # REST API v1
-    path("api/v1/auth/", include("apps.users.api_urls")),
-    path("api/v1/patients/", include("apps.patients.api_urls")),
-    path("api/v1/treatments/", include("apps.treatments.api_urls")),
-    path("api/v1/appointments/", include("apps.appointments.api_urls")),
-    path("api/v1/services/", include("apps.services.api_urls")),
-    path("api/v1/finance/", include("apps.finance.api_urls")),
-    path("api/v1/warehouse/", include("apps.warehouse.api_urls")),
-    path("api/v1/medicines/", include("apps.medicines.api_urls")),
-    path("api/v1/tasks/", include("apps.tasks.api_urls")),
-    path("api/v1/technicians/", include("apps.technicians.api_urls")),
-    path("api/v1/reports/", include("apps.reports.api_urls")),
-    path("api/v1/notifications/", include("apps.notifications.api_urls")),
-    path("api/v1/settings/", include("apps.settings_clinic.api_urls")),
-
-    # API docs
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # REST API v1: остальные эндпоинты отключены (не использовались интерфейсом
+    # и не были привязаны к клинике — см. аудит безопасности). Нужен только
+    # календарь старого интерфейса.
+    path("api/v1/appointments/calendar/", CalendarEventsAPIView.as_view(), name="api_calendar_events"),
 ]
 
 if settings.DEBUG:

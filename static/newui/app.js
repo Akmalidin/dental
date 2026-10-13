@@ -1412,8 +1412,8 @@ function renderClientList(){
     const ini=c.name.split(' ').map(w=>w[0]).slice(0,2).join('');
     const chIcon = c.channel==='whatsapp' ? '🟢' : '🔵';
     return `<div class="client-row ${c.id===currentClientId?'active':''}" onclick="selectClient(${c.id})">
-      <div class="client-avatar-wrap"><div class="row-avatar">${ini}</div><span class="ch-icon">${chIcon}</span></div>
-      <div class="client-row-main"><b>${c.name}</b><span>${c.lastBody||t('w_no_messages')}</span></div>
+      <div class="client-avatar-wrap"><div class="row-avatar">${chatEscape(ini)}</div><span class="ch-icon">${chIcon}</span></div>
+      <div class="client-row-main"><b>${chatEscape(c.name)}</b><span>${c.lastBody?chatEscape(c.lastBody):t('w_no_messages')}</span></div>
       <div class="client-row-meta">
         <span class="time">${c.lastTime||''}</span>
         ${c.unread>0?`<span class="unread-badge">${c.unread}</span>`:''}
@@ -1424,8 +1424,8 @@ function renderClientList(){
     extra.map(p=>{
       const ini=p.fullName.split(' ').map(w=>w[0]).slice(0,2).join('');
       return `<div class="client-row" onclick="startNewChatWithPatient(${p.id})">
-        <div class="client-avatar-wrap"><div class="row-avatar">${ini}</div></div>
-        <div class="client-row-main"><b>${p.fullName}</b><span>${p.phone||''}</span></div>
+        <div class="client-avatar-wrap"><div class="row-avatar">${chatEscape(ini)}</div></div>
+        <div class="client-row-main"><b>${chatEscape(p.fullName)}</b><span>${chatEscape(p.phone)}</span></div>
       </div>`;
     }).join('') : '';
   wrap.innerHTML=existingHtml+extraHtml;
@@ -1461,7 +1461,7 @@ function renderChatHeader(){
   if(!el || !c){ if(el) el.innerHTML=''; return; }
   const chLabel = c.channel==='whatsapp' ? '🟢 WhatsApp' : '🔵 Telegram';
   el.innerHTML=`<button type="button" class="btn btn-ghost btn-sm msg-back" onclick="msgBackToList()" aria-label="Назад">←</button>
-    <div style="flex:1;min-width:0;"><b style="font-size:14px;">${c.name}</b><div style="font-size:11.5px;color:var(--ink-soft);">${c.phone||''} · ${chLabel}</div></div>
+    <div style="flex:1;min-width:0;"><b style="font-size:14px;">${chatEscape(c.name)}</b><div style="font-size:11.5px;color:var(--ink-soft);">${chatEscape(c.phone)} · ${chLabel}</div></div>
     ${(chatAiBot && chatAiBot.on) ? `<button type="button" class="btn btn-ghost btn-sm" onclick="toggleChatAiBot()" title="${t('w_ai_bot_toggle_hint','ИИ-ассистент отвечает пациенту, если администратор молчит')}">${chatAiBot.paused ? '🤖 '+t('w_ai_bot_off','Ассистент выкл.') : '🤖 '+t('w_ai_bot_on','Ассистент вкл.')}</button>` : ''}
     <a class="btn btn-ghost btn-sm" href="/new/patients/${c.id}/">${t('w_patient_card')}</a>
     ${window.newuiCanDeleteChats ? `<button type="button" class="btn btn-ghost btn-sm" title="${t('w_delete_chat')}" aria-label="${t('w_delete_chat')}" onclick="deleteCurrentChat()" style="color:var(--coral);">🗑</button>` : ''}`;
@@ -1723,7 +1723,7 @@ function renderVcMsgHistory(){
   const el=document.getElementById('vcMsgHistory');
   if(!el) return;
   if(vcDemoMessages.length===0){ el.innerHTML='<div style="font-size:12.5px;color:var(--ink-soft);">Переписки пока нет</div>'; return; }
-  el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;">'+vcDemoMessages.slice(-5).map(m=>`<div class="chat-bubble ${m.from}" style="max-width:100%;">${m.text}<span class="time">${m.time}</span></div>`).join('')+'</div>';
+  el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px;">'+vcDemoMessages.slice(-5).map(m=>`<div class="chat-bubble ${m.from}" style="max-width:100%;">${chatEscape(m.text)}<span class="time">${m.time}</span></div>`).join('')+'</div>';
 }
 // Переход из карточки пациента (см. patientcard.html → «Написать
 // сообщение») в раздел «Мессенджеры» сразу с выбранным пациентом — раньше
@@ -2401,7 +2401,7 @@ let aiChatHistory=[
 function renderAIChat(){
   const el=document.getElementById('aiChatMessages');
   if(!el) return;
-  el.innerHTML=aiChatHistory.map(m=>`<div class="chat-bubble ${m.from}">${m.text}</div>`).join('');
+  el.innerHTML=aiChatHistory.map(m=>`<div class="chat-bubble ${m.from}">${chatEscape(m.text).replace(/\n/g,'<br>')}</div>`).join('');
   el.scrollTop=el.scrollHeight;
 }
 let reportsAiChatId=null;
@@ -2426,7 +2426,7 @@ async function askAIPreset(q){
     answerText = t('w_voice_failed');
   }
   aiChatHistory.pop(); // убрать "…"
-  aiChatHistory.push({from:'in', text:String(answerText).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\n/g,'<br>')});
+  aiChatHistory.push({from:'in', text:String(answerText)});
   renderAIChat();
 }
 function sendAIQuestion(){
@@ -4618,7 +4618,7 @@ function renderNotifications(){
     const icon=NOTIF_TYPE_ICON[n.type]||'🔔';
     html+=`<div class="row clickable" style="cursor:pointer;${n.isRead?'':'background:var(--cobalt-tint);border-radius:8px;padding-left:8px;padding-right:8px;'}" onclick="notifOpen(${n.id})">
       <div class="row-avatar">${icon}</div>
-      <div class="row-main"><b>${n.title}</b><span>${n.body||''}${n.actor?' · '+n.actor:''}</span></div>
+      <div class="row-main"><b>${chatEscape(n.title)}</b><span>${chatEscape(n.body)}${n.actor?' · '+chatEscape(n.actor):''}</span></div>
       <span class="mono" style="font-size:11px;color:var(--ink-soft);flex-shrink:0;">${n.time.split(' ')[1]||n.time}</span>
     </div>`;
   });

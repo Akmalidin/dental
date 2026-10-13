@@ -4011,10 +4011,14 @@ def staff_stop_impersonate(request):
 
 
 def _is_protected_target(target, actor):
-    """Можно ли actor'у трогать target. Суперпользователя трогает только суперпользователь."""
-    if target.is_superadmin and not actor.is_superadmin:
+    """Нельзя ли actor'у трогать target: суперпользователя трогает только
+    суперпользователь, сотрудника чужой клиники — только суперпользователь
+    (иначе директор одной клиники мог сменить пароль/удалить сотрудника другой)."""
+    if actor.is_superadmin:
+        return False
+    if target.is_superadmin:
         return True
-    return False
+    return target.clinic_id is None or target.clinic_id != actor.clinic_id
 
 
 @login_required
@@ -4024,7 +4028,7 @@ def staff_set_password(request, pk):
     """Сбросить (задать новый) пароль сотруднику. Пароли не показываются — только смена."""
     user = get_object_or_404(User, pk=pk)
     if _is_protected_target(user, request.user):
-        messages.error(request, _("Доступ запрещён: нельзя менять пароль суперпользователя"))
+        messages.error(request, _("Доступ запрещён: это сотрудник другой клиники или суперпользователь"))
         return redirect("staff_list")
     new_pw = request.POST.get("new_password", "").strip()
     if len(new_pw) < 6:
@@ -4063,7 +4067,7 @@ def staff_edit(request, pk):
     user = get_object_or_404(User, pk=pk)
     # защита: суперпользователя редактирует только суперпользователь
     if _is_protected_target(user, request.user):
-        messages.error(request, _("Доступ запрещён: нельзя редактировать суперпользователя"))
+        messages.error(request, _("Доступ запрещён: это сотрудник другой клиники или суперпользователь"))
         return redirect("staff_list")
     form = UserForm(request.POST or None, request.FILES or None, instance=user)
     if form.is_valid():
@@ -4185,7 +4189,7 @@ def staff_delete(request, pk):
     from .models import clinic_doctors
     user = get_object_or_404(User, pk=pk)
     if _is_protected_target(user, request.user):
-        messages.error(request, _("Доступ запрещён: нельзя удалить суперпользователя"))
+        messages.error(request, _("Доступ запрещён: это сотрудник другой клиники или суперпользователь"))
         return redirect("staff_list")
     summary = _doctor_related_summary(user)
     has_data = any(summary.values())
@@ -4294,7 +4298,8 @@ def cabinet_create(request, branch_pk):
 def cabinet_delete(request, pk):
     """Удалить кабинет."""
     from apps.appointments.models import Cabinet
-    cab = get_object_or_404(Cabinet, pk=pk)
+    # только кабинет филиала своей клиники (Branch.objects — по текущей клинике)
+    cab = get_object_or_404(Cabinet, pk=pk, branch__in=Branch.objects.all())
     branch_pk = cab.branch_id
     cab.delete()
     messages.success(request, _("Кабинет удалён"))
@@ -4571,6 +4576,9 @@ def schedule_list(request):
 def schedule_edit(request, pk):
     from .models_salary import DoctorSchedule
     doctor = get_object_or_404(User, pk=pk)
+    if _is_protected_target(doctor, request.user):
+        from django.http import Http404
+        raise Http404
     branches = Branch.objects.all()
     if request.method == "POST":
         branch_id = request.POST.get("branch")

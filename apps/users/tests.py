@@ -2708,22 +2708,17 @@ class ClinicGrantedAccessTestCase(TestCase):
         })
         self.assertEqual(resp.status_code, 302)
 
-    def test_branch_api_create_blocked_without_access(self):
-        self.client.force_login(self.director)
-        resp = self.client.post("/api/v1/auth/branches/", {
-            "name": "API филиал", "address": "ул. Тестовая", "phone": "0",
-        })
-        self.assertEqual(resp.status_code, 403)
-        self.assertFalse(Branch.objects.filter(clinic=self.clinic, name="API филиал").exists())
-
-    def test_branch_api_create_allowed_with_access(self):
+    def test_branch_api_is_disabled(self):
+        # REST API создания филиалов отключён (аудит безопасности) —
+        # филиалы создаются только через /users/branches/create/
         self.clinic.granted_access = ["branches"]
         self.clinic.save(update_fields=["granted_access"])
         self.client.force_login(self.director)
         resp = self.client.post("/api/v1/auth/branches/", {
             "name": "API филиал", "address": "ул. Тестовая", "phone": "0",
         })
-        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(Branch.objects.filter(clinic=self.clinic, name="API филиал").exists())
 
     def test_clinic_set_access_only_superadmin(self):
         self.client.force_login(self.director)
