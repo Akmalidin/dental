@@ -18,14 +18,19 @@ _state = threading.local()
 
 
 def get_client_ip(request):
-    """Реальный IP посетителя за nginx-прокси. nginx уже прокидывает
-    X-Forwarded-For (см. deploy/nginx-sadaf.conf: proxy_set_header
-    X-Forwarded-For $proxy_add_x_forwarded_for;) — берём первый адрес в
-    цепочке (ближайший к клиенту), иначе REMOTE_ADDR (прямое подключение,
-    напр. локальная разработка)."""
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Реальный IP посетителя.
+
+    На сервере (settings.TRUST_X_REAL_IP) приложение доступно только через
+    nginx (gunicorn слушает 127.0.0.1), а nginx сам ставит X-Real-IP =
+    $remote_addr, перезаписывая присланный клиентом заголовок, — ему можно
+    верить. X-Forwarded-For НЕ используем: первый адрес в нём присылает сам
+    посетитель, и подменой обходились бан по IP и лимит попыток входа.
+    Без прокси (офлайн-копия, разработка) — только REMOTE_ADDR."""
+    from django.conf import settings
+    if getattr(settings, "TRUST_X_REAL_IP", False):
+        real = (request.META.get("HTTP_X_REAL_IP") or "").strip()
+        if real:
+            return real
     return request.META.get("REMOTE_ADDR")
 
 
