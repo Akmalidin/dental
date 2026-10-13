@@ -494,6 +494,21 @@ def schedule_print(request):
     })
 
 
+def _clinic_doctor(doctor_id):
+    """Врач только текущей клиники (не чужой по подставленному id)."""
+    from django.http import Http404
+    from apps.tenancy import get_current_clinic
+    from apps.users.models import User
+    qs = User.objects.filter(pk=doctor_id, is_active=True)
+    clinic = get_current_clinic()
+    if clinic is not None:
+        qs = qs.filter(clinic=clinic)
+    doctor = qs.first()
+    if doctor is None:
+        raise Http404
+    return doctor
+
+
 @login_required
 @require_POST
 def appointment_create_quick(request):
@@ -504,7 +519,7 @@ def appointment_create_quick(request):
         from django.utils import timezone as _tz
         data = json.loads(request.body)
         User = request.user.__class__
-        doctor = User.objects.get(pk=data["doctor_id"])
+        doctor = _clinic_doctor(data["doctor_id"])
         start = datetime.fromisoformat(data["start_at"])
         if _tz.is_naive(start):
             start = _tz.make_aware(start)
@@ -590,7 +605,7 @@ def appointment_update_quick(request, pk):
         from django.utils import timezone as _tz
         data = json.loads(request.body)
         User = request.user.__class__
-        doctor = User.objects.get(pk=data["doctor_id"])
+        doctor = _clinic_doctor(data["doctor_id"])
         start = datetime.fromisoformat(data["start_at"])
         if _tz.is_naive(start):
             start = _tz.make_aware(start)
@@ -850,7 +865,7 @@ def appointment_move(request, pk):
         doctor = appt.doctor
         doctor_id = data.get("doctor_id")
         if doctor_id and str(doctor_id) != str(appt.doctor_id):
-            doctor = get_object_or_404(User, pk=doctor_id)
+            doctor = _clinic_doctor(doctor_id)
         overlap = Appointment.objects.filter(
             doctor=doctor, start_at__lt=end, end_at__gt=start,
         ).exclude(pk=pk).exclude(status__in=[Appointment.STATUS_CANCELLED, Appointment.STATUS_NO_SHOW]).exists()

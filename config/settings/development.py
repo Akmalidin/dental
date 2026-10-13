@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 # ─── Middleware (без TenantMainMiddleware) ────────────────────────────────────
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.users.sanitize.JsonNamesMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -159,8 +160,10 @@ LOCALE_PATHS = [BASE_DIR / "locale"]
 # ─── DRF ─────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        # только сессия: CurrentClinicMiddleware определяет клинику по
+        # request.user; токен JWT DRF проверял бы уже после неё — запросы
+        # шли бы без фильтра по клинике
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
