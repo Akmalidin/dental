@@ -1,0 +1,46 @@
+name: Diag security
+
+# Только чтение: настройки nginx (какие заголовки IP передаются, как отдаётся
+# /media/), заданы ли секреты вебхуков (без вывода значений), ответы закрытых
+# адресов. Ничего не меняет.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          command_timeout: 5m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            echo "=== NGINX: server_name / proxy_pass / IP-заголовки / media ==="
+            for f in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+              [ -f "$f" ] || continue
+              echo "--- $f"
+              grep -nE "server_name|proxy_pass|X-Real-IP|X-Forwarded-For|location /media|location /|alias|internal|real_ip|set_real_ip_from" "$f" | cut -c1-150
+            done
+            echo; echo "=== кто слушает порты ==="
+            ss -ltnp 2>/dev/null | grep -E ":80 |:443 |:8021 |:5432 " | cut -c1-120
+            echo; echo "=== секреты (только задан/нет) ==="
+            for v in GREENAPI_WEBHOOK_KEY SECRET_KEY OPENAI_API_KEY; do
+              eval "x=\${$v:-}"; [ -n "$x" ] && echo "$v: задан" || echo "$v: НЕ задан"
+            done
+            ./venv/bin/python manage.py shell -c "
+            from apps.settings_clinic.models import ClinicSettings
+            qs = ClinicSettings.objects.all()
+            bots = [c for c in qs if (getattr(c,'telegram_bot_token','') or '')]
+            print('клиник с Telegram-ботом:', len(bots), '| без секрета вебхука:', sum(1 for c in bots if not (c.telegram_webhook_secret or '')))
+            " 2>&1 | tail -2
+            echo; echo "=== media ==="
+            du -sh media 2>/dev/null; ls media 2>/dev/null | head
+            echo; echo "=== ответы закрытых адресов (через nginx) ==="
+            H=${APP_HOST:-app.sadaf.kg}
+            for u in /api/v1/patients/ /api/v1/auth/users/ /api/docs/ /django-admin/login/ /sync/push/; do
+              curl -sk -o /dev/null -w "$u  %{http_code}\n" --resolve "$H:443:127.0.0.1" "https://$H$u"
+            done
