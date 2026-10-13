@@ -4841,7 +4841,7 @@ const DEFAULT_NAV_SECTIONS = [
   {id:'schedule', label:'Расписание', icon:'schedule', tabs:['schedule','waitlist','visits','visitsjournal']},
   {id:'patients', label:'Пациенты', labelKey:'nav_пациенты', icon:'patients', tabs:['patients','treatplans','funnel','marketing']},
   {id:'messages', label:'Мессенджеры', labelKey:'nav_мессенджеры', icon:'messages', tabs:['messages']},
-  {id:'money', label:'Деньги', icon:'money', tabs:['cashdesk','finance','accounting','salary','mysalary']},
+  {id:'money', label:'Деньги', icon:'money', tabs:['cashdesk','finance','installments','accounting','salary','mysalary']},
   {id:'stock', label:'Склад и лаборатория', icon:'stock', tabs:['warehouse','lab','medicines']},
   {id:'reports', label:'Отчёты', labelKey:'nav_отч_ты', icon:'reports', tabs:['reports','audit']},
   {id:'settings', label:'Настройки', labelKey:'nav_настройки', icon:'settings', tabs:['settings','staff','services','recycle']},
@@ -9094,7 +9094,11 @@ function renderPatientCardFinance(d){
     ? PATIENT_TAB_EMPTY(t('w_no_payments_yet'))
     : `<div class="card"><div class="card-head"><h3 data-i18n="w_payments">Платежи</h3></div><table><thead><tr><th data-i18n="w_date">Дата</th><th data-i18n="w_purpose">Назначение</th><th data-i18n="w_method">Способ</th><th data-i18n="w_sum">Сумма</th><th></th></tr></thead>
        <tbody>${d.payments.map(pm=>`<tr><td>${pm.date}</td><td>${pm.purpose}</td><td>${pm.method}</td><td class="mono" style="color:${pm.amount<0?'var(--coral)':'var(--teal)'}">${pm.amount<0?'':'+'}${Math.round(pm.amount).toLocaleString('ru-RU')} ${CUR_SYM}</td><td>${pm.id?`<button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${pm.id})">🖨</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
-  el.innerHTML=kpi+rows;
+  el.innerHTML=kpi+rows+'<div id="pcInstallments"></div>';
+  // Рассрочка (static/newui/installments.js) — только там, где скрипт подключён
+  if(window.instRenderPatientBlock && currentPatientCardId){
+    instRenderPatientBlock(document.getElementById('pcInstallments'), currentPatientCardId, p ? p.fullName : '');
+  }
 }
 const DOC_IMG_EXT=['jpg','jpeg','png','gif','webp','bmp','svg'];
 const DOC_VIDEO_EXT=['mp4','webm','mov','ogg','ogv','m4v'];

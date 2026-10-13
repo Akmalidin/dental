@@ -111,6 +111,8 @@ EXPORT_PLAN = [
     ("finance", "PaymentAllocation", ("via", "payment__clinic")),
     ("finance", "Expense", "direct"),
     ("finance", "PatientAdvance", ("via", "patient__clinic")),
+    ("finance", "InstallmentPlan", "direct"),
+    ("finance", "InstallmentItem", ("via", "plan__clinic")),
     ("medicines", "PatientMedicine", ("via", "patient__clinic")),
     ("technicians", "TechnicianWarrantyCase", "direct"),
 ]

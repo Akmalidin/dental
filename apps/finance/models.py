@@ -215,3 +215,49 @@ class PatientAdvance(models.Model):
 
     def __str__(self):
         return f"{self.patient} — аванс {self.amount} [{self.date}]"
+
+
+class InstallmentPlan(ClinicScopedModel):
+    """Рассрочка: график платежей пациента. Оплаты принимаются как обычно в
+    кассе; оплаты пациента, сделанные после оформления, засчитываются в
+    график по порядку дат (apps.finance.installments.state)."""
+
+    STATUS_ACTIVE = "active"
+    STATUS_DONE = "done"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Действует"),
+        (STATUS_DONE, "Погашена"),
+        (STATUS_CANCELLED, "Отменена"),
+    ]
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="installment_plans",
+                                verbose_name="Пациент")
+    total = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма рассрочки")
+    note = models.CharField(max_length=300, blank=True, verbose_name="Комментарий")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_ACTIVE, db_index=True)
+    # с какого момента оплаты пациента засчитываются в график
+    counted_from = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Рассрочка"
+        verbose_name_plural = "Рассрочки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.patient_id}: {self.total}"
+
+
+class InstallmentItem(models.Model):
+    plan = models.ForeignKey(InstallmentPlan, on_delete=models.CASCADE, related_name="items")
+    due_date = models.DateField(verbose_name="Срок")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма")
+    reminded_before = models.BooleanField(default=False)
+    reminded_overdue = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["due_date", "id"]

@@ -55,6 +55,14 @@ def _waitlist_count(clinic):
         return 0
 
 
+def _installments_overdue(clinic):
+    try:
+        from apps.finance.installment_views import overdue_count
+        return overdue_count(clinic)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
@@ -98,6 +106,7 @@ def _shared_options(request, clinic):
         # непрочитанные с привязанным пациентом.
         "messagesUnread": _messages_unread_count(clinic),
         "waitlistCount": _waitlist_count(clinic),
+        "installmentsOverdue": _installments_overdue(clinic),
         "roleOptions": [
             # roleKey — стабильный системный ключ роли (Role.DOCTOR и т.п., не
             # зависит от языка/переименования display_name) — нужен, чтобы

@@ -2,6 +2,7 @@ from django.urls import path
 from . import newui_views as v
 from . import salary_views as sv
 from apps.appointments import waitlist_views as wv
+from apps.finance import installment_views as iv
 
 urlpatterns = [
     path("", v.newui_dashboard, name="newui_dashboard"),
@@ -49,6 +50,10 @@ urlpatterns = [
     path("cashdesk/", v.newui_cashdesk, name="newui_cashdesk"),
     path("finance/", v.newui_finance, name="newui_finance"),
     path("accounting/", v.newui_accounting, name="newui_accounting"),
+    path("installments/", iv.newui_installments, name="newui_installments"),
+    path("installments/patient/<int:pk>/", iv.patient_installments, name="newui_patient_installments"),
+    path("installments/create/", iv.installment_create, name="newui_installment_create"),
+    path("installments/<int:pk>/cancel/", iv.installment_cancel, name="newui_installment_cancel"),
     path("reports/", v.newui_reports, name="newui_reports"),
     path("salary/", v.newui_salary, name="newui_salary"),
     path("salary/settings/", sv.newui_salary_settings, name="newui_salary_settings"),

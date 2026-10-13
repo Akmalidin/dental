@@ -518,6 +518,7 @@ class SectionAccessMiddleware:
         ("/new/finance", "finance"),
         ("/new/accounting", "finance"),
         ("/new/cashdesk", "finance"),
+        ("/new/installments", "finance"),
         ("/new/warehouse", "warehouse"),
         ("/new/lab", "technicians"),
         ("/new/reports", "reports"),
