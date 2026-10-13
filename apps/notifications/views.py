@@ -1,3 +1,4 @@
+import hmac
 import json
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
@@ -281,7 +282,10 @@ def wa_webhook(request):
     if request.method != "POST":
         return HttpResponse(status=405)
     key = getattr(dj, "GREENAPI_WEBHOOK_KEY", "")
-    if key and request.GET.get("key") != key:
+    # на сервере (WEBHOOK_REQUIRE_SECRET) без заданного секрета не принимаем
+    # ничего — иначе кто угодно слал бы поддельные «входящие» и тратил ИИ
+    if (not key and getattr(dj, "WEBHOOK_REQUIRE_SECRET", False)) or \
+            (key and not hmac.compare_digest(request.GET.get("key", ""), key)):
         return HttpResponse("forbidden", status=403)
     try:
         data = json.loads(request.body or b"{}")
@@ -955,7 +959,11 @@ def tg_webhook(request, clinic_slug):
         return HttpResponse(status=404)
     cs = ClinicSettings.objects.filter(clinic=clinic).first()
     expected_secret = (cs.telegram_webhook_secret if cs else "") or ""
-    if expected_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token", "") != expected_secret:
+    from django.conf import settings as dj
+    if not expected_secret and getattr(dj, "WEBHOOK_REQUIRE_SECRET", False):
+        return HttpResponse(status=403)
+    if expected_secret and not hmac.compare_digest(
+            request.headers.get("X-Telegram-Bot-Api-Secret-Token", ""), expected_secret):
         return HttpResponse(status=403)
     body = request.body
     import threading

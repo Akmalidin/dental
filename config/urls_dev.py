@@ -1,6 +1,6 @@
 """URL config для локальной разработки (без мультитенантности)."""
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
@@ -9,6 +9,7 @@ from apps.appointments.api_views import CalendarEventsAPIView
 from apps.notifications.views import service_worker, web_manifest
 from apps.finance.views import payment_public
 from apps.treatments.views import treatment_public
+from apps.users.media_views import protected_media
 
 
 def _app_robots(request):
@@ -21,6 +22,9 @@ def _app_robots(request):
 admin.site.login = login_required(admin.site.login)
 
 urlpatterns = [
+    # снимки/документы/вложения переписки — только после проверки входа и
+    # клиники (на сервере nginx передаёт эти папки сюда, см. media_views)
+    re_path(r"^media/(?P<path>(?:treatments|chat_media|tech_orders)/.+)$", protected_media, name="protected_media"),
     path("robots.txt", _app_robots, name="app_robots"),
     path("django-admin/", admin.site.urls),  # вход — только через общий /login/ (см. ниже)
     path("i18n/", include("django.conf.urls.i18n")),  # язык переключатель

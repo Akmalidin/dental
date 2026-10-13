@@ -1,0 +1,76 @@
+name: Fix nginx protected media
+
+# Защищённая выдача файлов пациентов (apps/users/media_views.py): папки
+# /media/treatments|chat_media|tech_orders/ nginx передаёт в Django (проверка
+# входа и клиники), сам файл отдаёт через внутренний /protected-media/.
+# Делает резервную копию, проверяет nginx -t, при ошибке — откат.
+# apply=false — только показать, что будет сделано.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "true — применить, false — только показать"
+        default: "false"
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          APPLY: ${{ github.event.inputs.apply }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: APPLY
+          command_timeout: 5m
+          script: |
+            set -e
+            S=""; [ "$(id -u)" -ne 0 ] && S="sudo"
+            F=/etc/nginx/snippets/sadaf-common.conf
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            H=${APP_HOST:-app.sadaf.kg}
+            SAMPLE=$(cd media && find treatments -type f 2>/dev/null | head -1)
+            echo "пример защищённого файла: ${SAMPLE:-нет}"
+            check() {
+              [ -n "$SAMPLE" ] && curl -sk -o /dev/null -w "аноним → /media/$SAMPLE: %{http_code}\n" --resolve "$H:443:127.0.0.1" "https://$H/media/$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$SAMPLE")"
+              LOGO=$(cd media && find clinic -type f 2>/dev/null | head -1)
+              [ -n "$LOGO" ] && curl -sk -o /dev/null -w "логотип /media/$LOGO: %{http_code}\n" --resolve "$H:443:127.0.0.1" "https://$H/media/$LOGO"
+              curl -sk -o /dev/null -w "главная /login/: %{http_code}\n" --resolve "$H:443:127.0.0.1" "https://$H/login/"
+            }
+            echo "=== ДО ==="; check
+            if grep -q "protected-media" "$F"; then echo "уже настроено"; exit 0; fi
+            if [ "$APPLY" != "true" ]; then echo "ПРОБНЫЙ ЗАПУСК: будет добавлен блок перед location /media/ в $F"; exit 0; fi
+            $S cp "$F" "$F.bak-$(date +%Y%m%d-%H%M%S)"
+            $S python3 - "$F" <<'PY'
+            import sys
+            p = sys.argv[1]
+            s = open(p).read()
+            block = """location ~ ^/media/(treatments|chat_media|tech_orders)/ {
+                proxy_pass http://127.0.0.1:8021;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_redirect off;
+            }
+            location /protected-media/ {
+                internal;
+                alias /var/www/sadaf/media/;
+            }
+            """
+            i = s.index("location /media/")
+            open(p, "w").write(s[:i] + block + s[i:])
+            PY
+            if $S nginx -t; then
+              $S systemctl reload nginx
+              echo "=== ПОСЛЕ ==="; sleep 1; check
+            else
+              echo "nginx -t не прошёл — откат"
+              $S cp "$(ls -t $F.bak-* | head -1)" "$F"
+              $S nginx -t && $S systemctl reload nginx
+              exit 1
+            fi
