@@ -146,3 +146,68 @@ class ClientIpTestCase(TestCase):
             self.assertEqual(get_client_ip(req), "5.5.5.5")   # от nginx
         with override_settings(TRUST_X_REAL_IP=False):
             self.assertEqual(get_client_ip(req), "127.0.0.1")  # без прокси заголовкам не верим
+
+
+class ProtectedMediaTestCase(TestCase):
+    def setUp(self):
+        import tempfile
+        from django.core.files.base import ContentFile
+        from django.test import override_settings
+        from apps.treatments.models import Treatment, TreatmentFile
+        self.tmp = tempfile.TemporaryDirectory()
+        self._ov = override_settings(MEDIA_ROOT=self.tmp.name)
+        self._ov.enable()
+        self.a = Clinic.objects.create(slug="med-a", name="A")
+        self.b = Clinic.objects.create(slug="med-b", name="B")
+        ba = Branch.objects.create(clinic=self.a, name="A1", address="-", phone="0", is_main=True)
+        director = Role.objects.get(name="admin_main", clinic__isnull=True)
+        self.ua = User.objects.create(login="med_a", name="A", clinic=self.a, role=director)
+        self.ub = User.objects.create(login="med_b", name="B", clinic=self.b, role=director)
+        p = Patient.all_objects.create(first_name="П", last_name="А", phone="+996700000901", branch=ba, clinic=self.a)
+        t = Treatment.all_objects.create(patient=p, doctor=self.ua, branch=ba, clinic=self.a, status="completed")
+        self.f = TreatmentFile(treatment=t, name="снимок")
+        self.f.file.save("рентген 1.jpg", ContentFile(b"\xff\xd8JPEGDATA"), save=True)
+        self.url = self.f.file.url
+
+    def tearDown(self):
+        self._ov.disable()
+        self.tmp.cleanup()
+
+    def test_anonymous_and_other_clinic_get_404(self):
+        self.assertEqual(Client().get(self.url).status_code, 404)
+        c = Client(); c.force_login(self.ub)
+        self.assertEqual(c.get(self.url).status_code, 404)
+
+    def test_own_clinic_gets_file(self):
+        c = Client(); c.force_login(self.ua)
+        r = c.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(b"".join(r.streaming_content), b"\xff\xd8JPEGDATA")
+
+    def test_signed_link_works_without_login_and_bad_signature_fails(self):
+        from apps.users.media_views import signed_url
+        su = signed_url(self.f.file.name)
+        self.assertEqual(Client().get(su).status_code, 200)
+        self.assertEqual(Client().get(self.url + "?s=forged").status_code, 404)
+
+    def test_accel_redirect_header_and_traversal(self):
+        from django.test import override_settings
+        c = Client(); c.force_login(self.ua)
+        with override_settings(MEDIA_ACCEL_REDIRECT=True):
+            r = c.get(self.url)
+        self.assertTrue(r["X-Accel-Redirect"].startswith("/protected-media/treatments/"))
+        self.assertEqual(c.get("/media/treatments/../../config/settings/server.py").status_code, 404)
+
+
+class WebhookSecretTestCase(TestCase):
+    def test_webhooks_rejected_without_secret_on_server(self):
+        from django.test import override_settings
+        c = Clinic.objects.create(slug="wh-a", name="A")
+        with override_settings(WEBHOOK_REQUIRE_SECRET=True, GREENAPI_WEBHOOK_KEY=""):
+            r = Client().post("/notifications/wa-webhook/", data="{}", content_type="application/json")
+            self.assertEqual(r.status_code, 403)
+            r = Client().post(f"/notifications/tg-webhook/{c.slug}/", data="{}", content_type="application/json")
+            self.assertEqual(r.status_code, 403)
+        with override_settings(WEBHOOK_REQUIRE_SECRET=True, GREENAPI_WEBHOOK_KEY="k"):
+            r = Client().post("/notifications/wa-webhook/?key=bad", data="{}", content_type="application/json")
+            self.assertEqual(r.status_code, 403)

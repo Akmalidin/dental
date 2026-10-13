@@ -39,6 +39,11 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # IP посетителя — из X-Real-IP, который ставит nginx (см. apps.tenancy.get_client_ip)
 TRUST_X_REAL_IP = True
+# защищённые файлы (apps.users.media_views) отдаёт nginx через внутренний
+# location /protected-media/ (см. deploy/nginx-sadaf.conf)
+MEDIA_ACCEL_REDIRECT = True
+# вебхуки WhatsApp/Telegram без секрета не принимаются (apps.notifications.views)
+WEBHOOK_REQUIRE_SECRET = True
 # nginx терминирует TLS и редиректит http→https, поэтому в Django редирект выключен,
 # чтобы не было петли. Включается через env, когда сертификаты установлены.
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)

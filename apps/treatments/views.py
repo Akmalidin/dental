@@ -930,7 +930,8 @@ def treatment_public(request, token):
     files = list(treatment.files.all())
     for f in files:
         try:
-            f.abs_url = request.build_absolute_uri(f.file.url)
+            from apps.users.media_views import signed_url
+            f.abs_url = request.build_absolute_uri(signed_url(f.file.name))
         except Exception:
             f.abs_url = ""
     from .models_teeth import ToothCondition
