@@ -2623,7 +2623,7 @@ def set_active_clinic(request):
                 )
         except (TypeError, ValueError):
             pass
-    return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
+    return redirect(_safe_next(request, request.POST.get("next") or request.META.get("HTTP_REFERER"), "dashboard"))
 
 
 @login_required
@@ -2643,7 +2643,7 @@ def set_active_branch(request):
                 request.session["active_branch"] = bid
         except (TypeError, ValueError):
             pass
-    return redirect(request.POST.get("next") or request.META.get("HTTP_REFERER") or "dashboard")
+    return redirect(_safe_next(request, request.POST.get("next") or request.META.get("HTTP_REFERER"), "dashboard"))
 
 
 # ─── Корзина (recycle bin) ───────────────────────────────────────────────────
@@ -3672,6 +3672,16 @@ def google_calendar_disconnect(request):
     return redirect("profile")
 
 
+def _safe_next(request, url, default):
+    """Адрес для перехода после действия — только на наш же сайт (иначе
+    ссылка вида /login/?next=https://чужой-сайт уводила бы на подделку)."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+    if url and url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()},
+                                               require_https=request.is_secure()):
+        return url
+    return default
+
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("/new/")
@@ -3687,8 +3697,7 @@ def login_view(request):
         # пользовался») больше не влияет на посадочную страницу входа —
         # ?next= (например ссылка из письма/уведомления на конкретную
         # страницу) по-прежнему в приоритете.
-        next_url = request.GET.get("next") or "/new/"
-        return redirect(next_url)
+        return redirect(_safe_next(request, request.GET.get("next"), "/new/"))
 
     # Ссылка вида /login/?clinic=<slug> — показывает лого/название этой клиники
     # на странице входа ещё до аутентификации (до логина текущая клиника неизвестна).

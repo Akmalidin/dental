@@ -56,3 +56,5 @@ jobs:
               echo "размер файла на диске: $(stat -c %s "media/$SAMPLE")B"
               rm -f /tmp/sec_sample
             fi
+            echo; echo "=== заголовки безопасности ==="
+            curl -skI --resolve "$H:443:127.0.0.1" "https://$H/login/" | grep -iE "strict-transport|x-frame|x-content-type|referrer-policy|cross-origin" | tr -d '\r'

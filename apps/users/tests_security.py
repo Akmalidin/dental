@@ -211,3 +211,17 @@ class WebhookSecretTestCase(TestCase):
         with override_settings(WEBHOOK_REQUIRE_SECRET=True, GREENAPI_WEBHOOK_KEY="k"):
             r = Client().post("/notifications/wa-webhook/?key=bad", data="{}", content_type="application/json")
             self.assertEqual(r.status_code, 403)
+
+
+class OpenRedirectTestCase(TestCase):
+    def test_login_next_only_same_site(self):
+        c = Clinic.objects.create(slug="or-a", name="A")
+        u = User.objects.create(login="or_user", name="U", clinic=c,
+                                role=Role.objects.get(name="admin_main", clinic__isnull=True))
+        u.set_password("Pass12345!")
+        u.save()
+        r = Client().post("/login/?next=https://evil.example/phish", {"login": "or_user", "password": "Pass12345!"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/new/")
+        r = Client().post("/login/?next=/new/patients/", {"login": "or_user", "password": "Pass12345!"})
+        self.assertEqual(r["Location"], "/new/patients/")
