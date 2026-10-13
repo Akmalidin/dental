@@ -53,3 +53,46 @@ class SyncConflict(models.Model):
             {"field": k, "local": local_f.get(k), "cloud": cloud_f.get(k)}
             for k in keys if local_f.get(k) != cloud_f.get(k)
         ]
+
+
+class SyncDevice(models.Model):
+    """Офлайн-копия клиники (компьютер-сервер в клинике), зарегистрированная
+    в облаке. Даёт:
+    - свой диапазон id для записей, созданных офлайн (core.device_range) —
+      чтобы они не совпадали с записями облака и других офлайн-копий;
+    - токен для синхронизации — пароль сотрудника на компьютере не хранится.
+    """
+
+    clinic = models.ForeignKey("users.Clinic", on_delete=models.CASCADE, related_name="sync_devices")
+    name = models.CharField(max_length=120, blank=True, verbose_name="Компьютер")
+    token_hash = models.CharField(max_length=64, editable=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Активно")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Офлайн-копия"
+        verbose_name_plural = "Офлайн-копии"
+
+    def __str__(self):
+        return f"{self.clinic_id}: {self.name or self.pk}"
+
+
+class SyncChange(models.Model):
+    """Журнал изменений ОФЛАЙН-копии (в облаке не используется): что
+    создали/изменили/удалили локально с последней синхронизации. Отправляется
+    в облако только это, а не вся база."""
+
+    OP_SAVE = "save"
+    OP_DELETE = "delete"
+
+    model_label = models.CharField(max_length=100)
+    object_pk = models.BigIntegerField()
+    op = models.CharField(max_length=10, default=OP_SAVE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["model_label", "object_pk"])]

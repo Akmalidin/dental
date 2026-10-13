@@ -95,6 +95,11 @@ def _first_run_setup():
         return False
     try:
         call_command("offline_pull", url=url, login=login, password=password)
+        # пароль больше не нужен (синхронизация идёт по токену устройства) —
+        # не оставляем его в файле на компьютере
+        cfg.pop("password", None)
+        with open(SETUP_CFG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=1)
     except Exception as e:
         _show_message(
             "SADAF — ошибка загрузки данных",
@@ -113,6 +118,11 @@ def _run_server():
     try:
         call_command("migrate", "--noinput")
         call_command("collectstatic", "--noinput", verbosity=0)
+    except Exception:
+        pass
+    try:
+        from apps.sync.core import backup_local_db
+        backup_local_db()
     except Exception:
         pass
     try:

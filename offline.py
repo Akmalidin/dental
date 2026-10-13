@@ -50,7 +50,7 @@ def setup():
         call_command("collectstatic", "--noinput", verbosity=0)
     except Exception:
         pass
-    url = input("\nАдрес облака [https://sadaf.denta.tw1.ru]: ").strip() or "https://sadaf.denta.tw1.ru"
+    url = input("\nАдрес облака [https://soft.stom.asia]: ").strip() or "https://soft.stom.asia"
     login = input("Ваш логин: ").strip()
     try:
         import getpass
@@ -69,6 +69,11 @@ def start():
     try:
         call_command("migrate", "--noinput")
         call_command("collectstatic", "--noinput", verbosity=0)
+    except Exception:
+        pass
+    try:
+        from apps.sync.core import backup_local_db
+        backup_local_db()
     except Exception:
         pass
     import threading

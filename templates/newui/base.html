@@ -264,6 +264,34 @@ window.addEventListener('load',function(){
       <span data-i18n="nav_настроить_меню">Настроить меню</span>
     </a>
 
+    {% if offline_mode %}
+    <div style="margin:8px 0;padding:10px;border:1px solid #F59E0B;border-radius:10px;font-size:12px;color:#B45309;">
+      <b>ОФЛАЙН-РЕЖИМ</b>
+      {% if offline_lan_url %}<div style="margin-top:4px;">Другие компьютеры: <span style="user-select:all;">{{ offline_lan_url }}</span></div>{% endif %}
+      <button type="button" class="btn btn-ghost btn-sm" id="offlineSyncBtn" style="width:100%;margin-top:6px;" onclick="offlineSync()">⟳ Синхронизация</button>
+    </div>
+    <script>
+      async function offlineSync(){
+        const btn = document.getElementById('offlineSyncBtn');
+        btn.disabled = true; btn.textContent = 'Синхронизация…';
+        try{
+          const r = await postForm('/sync/run/', new FormData());
+          const d = await r.json();
+          if(d.ok){
+            let msg = 'Отправлено ' + d.pushed + ', получено ' + d.pulled;
+            if(d.conflicts) msg += '. Конфликтов: ' + d.conflicts + ' — выберите версию в облаке: «Конфликты синхронизации»';
+            if(d.errors) msg += '. Не отправлено (повторится в следующий раз): ' + d.errors;
+            if(d.overlaps && d.overlaps.length) msg += '. Пересечения в расписании: ' + d.overlaps.join('; ');
+            const warn = d.conflicts || d.errors || (d.overlaps && d.overlaps.length);
+            showToast(msg, warn ? 'error' : 'success');
+            setTimeout(() => location.reload(), warn ? 6000 : 1500);
+          } else { showToast(d.error || 'Нет связи с облаком', 'error'); }
+        }catch(e){ showToast('Нет интернета — данные сохранены на этом компьютере, синхронизируйте позже', 'error'); }
+        btn.disabled = false; btn.textContent = '⟳ Синхронизация';
+      }
+    </script>
+    {% endif %}
+
     <a class="sidebar-user" href="{% url 'newui_profile' %}" style="text-decoration:none;cursor:pointer;">
       {% if request.user.avatar %}
       <img class="avatar" src="{{ request.user.avatar.url }}" style="object-fit:cover;" alt="">
