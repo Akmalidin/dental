@@ -896,3 +896,24 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .chat-ai{display:block;font-size:11px;font-weight:700;opacity:.8;margin-bottom:3px;}
 .chat-transcript{font-size:12.5px;font-style:italic;opacity:.85;margin-top:4px;}
 .vw-ai-filled{box-shadow:0 0 0 3px rgba(47,75,255,.35)!important;transition:box-shadow .3s;}
+
+/* Боковая панель уведомлений (колокольчик) */
+.notif-drawer-backdrop{position:fixed;inset:0;background:rgba(15,20,40,.18);opacity:0;pointer-events:none;transition:opacity .2s;z-index:1190;}
+.notif-drawer-backdrop.open{opacity:1;pointer-events:auto;}
+.notif-drawer{position:fixed;top:0;right:0;height:100vh;height:100dvh;width:400px;max-width:100vw;background:var(--paper,#fff);box-shadow:-12px 0 32px rgba(15,20,40,.14);transform:translateX(100%);transition:transform .22s ease;z-index:1200;display:flex;flex-direction:column;}
+.notif-drawer.open{transform:translateX(0);}
+.notif-drawer-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--mist-line,#e3e5ec);font-size:15px;}
+.notif-drawer-tabs{display:flex;gap:6px;padding:10px 16px 4px;}
+.notif-drawer-tabs button{border:1px solid var(--mist-line,#e3e5ec);background:none;border-radius:999px;padding:4px 12px;font-size:12.5px;cursor:pointer;color:var(--ink-soft);}
+.notif-drawer-tabs button.active{background:var(--cobalt,#2f4bff);border-color:var(--cobalt,#2f4bff);color:#fff;}
+.notif-drawer-list{flex:1;overflow-y:auto;padding:4px 10px 10px;}
+.notif-drawer-group{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;padding:12px 6px 4px;}
+.notif-drawer-item{display:flex;gap:10px;align-items:flex-start;padding:9px 8px;border-radius:10px;cursor:pointer;}
+.notif-drawer-item:hover{background:var(--cloud,#f5f6fa);}
+.notif-drawer-item.unread{background:var(--cobalt-tint,#e8ecff);}
+.notif-drawer-item .row-avatar{flex-shrink:0;}
+.notif-drawer-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px;}
+.notif-drawer-text span{color:var(--ink-soft);font-size:12.5px;overflow-wrap:anywhere;}
+.notif-drawer-text .notif-drawer-time{font-size:11px;font-family:var(--mono,monospace);}
+.notif-drawer-empty{text-align:center;color:var(--ink-soft);padding:40px 10px;font-size:13px;}
+.notif-drawer-foot{display:block;text-align:center;padding:12px;border-top:1px solid var(--mist-line,#e3e5ec);font-size:13px;color:var(--cobalt,#2f4bff);text-decoration:none;}

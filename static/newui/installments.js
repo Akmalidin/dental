@@ -32,7 +32,7 @@
           <div style="font-size:12px;color:var(--ink-soft);margin:4px 0 6px;">График (суммы и даты можно поправить):</div>
           <div style="max-height:260px;overflow:auto;"><table><thead><tr><th>№</th><th>Дата</th><th class="n">Сумма</th></tr></thead><tbody id="instRows"></tbody></table></div>
           <div id="instSumCheck" style="font-size:12.5px;margin-top:8px;"></div>
-          <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Оплаты принимаются как обычно в кассе — всё, что пациент заплатит после оформления, само засчитается в график по порядку дат. Пациенту придёт напоминание за день до платежа.</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Оплаты принимаются как обычно в кассе — всё, что пациент заплатит после оформления, само засчитается в график по порядку дат. Пациенту придут напоминания — по настройкам на странице «Рассрочки» (⚙).</div>
         </div>
         <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-inst')">Отмена</button><button class="btn btn-cobalt" type="button" id="instSaveBtn" onclick="instSave()">Оформить</button></div>
       </div>

@@ -1060,6 +1060,15 @@ def newui_notifications(request):
 
 
 @login_required
+def newui_notifications_json(request):
+    """Для боковой панели уведомлений (колокольчик): последние 60, без перехода
+    на отдельную страницу."""
+    from django.http import JsonResponse
+    items = _newui_notifications_data(request)
+    return JsonResponse({"items": items[:60], "unread": sum(1 for n in items if not n["isRead"])})
+
+
+@login_required
 def newui_audit(request):
     from apps.tenancy import get_current_clinic
     clinic = get_current_clinic() or getattr(request.user, "clinic", None)

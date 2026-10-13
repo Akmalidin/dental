@@ -35,6 +35,7 @@ def _plans_data():
         "overdueTotal": sum(p["overdue"] for p in active),
         "overdueCount": sum(1 for p in active if p["overdue"] > 0),
         "expectedMonth": expected,
+        "settings": inst.reminder_settings(),
     }
 
 
@@ -122,3 +123,25 @@ def overdue_count(clinic):
         if inst.state(p, today)["overdue"] > 0:
             n += 1
     return n
+
+
+@login_required
+@require_POST
+def installment_settings(request):
+    """⚙ на странице «Рассрочки»: когда и как часто напоминать пациентам."""
+    if not (request.user.is_superadmin or request.user.is_admin):
+        return JsonResponse({"ok": False, "error": "Менять настройки может администратор"}, status=403)
+    from apps.settings_clinic.models import ClinicSettings
+    P = request.POST
+    cfg = inst.clean_settings({
+        "enabled": P.get("enabled") in ("1", "true", "on"),
+        "before_days": P.getlist("before_days"),
+        "hour": P.get("hour"),
+        "overdue_after": P.get("overdue_after"),
+        "overdue_repeat": P.get("overdue_repeat"),
+        "overdue_max": P.get("overdue_max"),
+    })
+    cs = ClinicSettings.get()
+    cs.installment_reminders = cfg
+    cs.save(update_fields=["installment_reminders"])
+    return JsonResponse({"ok": True, "settings": cfg})
