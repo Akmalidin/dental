@@ -1,14 +1,30 @@
-"""Эндпоинты синхронизации (облако ↔ локальная копия)."""
+"""Эндпоинты синхронизации (облако ↔ офлайн-копия).
+
+Облако:
+  POST /sync/register/  — регистрация офлайн-копии (вход сотрудника по паролю
+                          один раз, при настройке) → номер устройства и токен;
+  GET  /sync/export/    — полный снимок клиники (токен устройства или
+                          директор/админ в браузере);
+  POST /sync/push/      — изменения офлайн-копии (только токен устройства);
+  /sync/conflicts/      — конфликты и их разрешение (браузер).
+Офлайн-копия:
+  POST /sync/run/       — кнопка «Синхронизация».
+"""
+import hashlib
+import hmac
 import json
-from django.contrib.auth.decorators import login_required
+import secrets
+
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.http import require_POST
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
-from .core import export_clinic, import_blocks
+from .core import export_clinic
 
 
 def _user_clinic(request):
@@ -22,129 +38,126 @@ def _user_clinic(request):
 
 
 def _sync_staff_ok(user):
-    return user.is_superadmin or user.is_admin_main or user.is_admin
+    return bool(user and user.is_authenticated and user.is_active and
+                (user.is_superadmin or user.is_admin_main or user.is_admin))
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _device_from_request(request):
+    """Устройство по заголовку «Authorization: Device <номер>:<токен>».
+    Токен действует, пока устройство активно и сотрудник, который его
+    зарегистрировал, активен и остаётся директором/админом этой клиники."""
+    from .models import SyncDevice
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Device "):
+        return None
+    try:
+        dev_id, token = auth[7:].strip().split(":", 1)
+        dev = SyncDevice.objects.select_related("clinic", "created_by").get(pk=int(dev_id), is_active=True)
+    except Exception:  # noqa: BLE001
+        return None
+    if not hmac.compare_digest(dev.token_hash, _token_hash(token)):
+        return None
+    user = dev.created_by
+    if not _sync_staff_ok(user):
+        return None
+    if not user.is_superadmin and user.clinic_id != dev.clinic_id:
+        return None
+    return dev
 
 
 @login_required
-def sync_export(request):
-    """Отдать все данные клиники пользователя (для первичной загрузки в оффлайн-копию)."""
+@require_POST
+def sync_register(request):
+    """Зарегистрировать офлайн-копию клиники: выдать номер устройства (свой
+    диапазон id для новых записей) и токен синхронизации."""
+    from .models import SyncDevice
     if not _sync_staff_ok(request.user):
         return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
     clinic = _user_clinic(request)
     if clinic is None:
         return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
+    token = secrets.token_urlsafe(32)
+    dev = SyncDevice.objects.create(
+        clinic=clinic, name=(request.POST.get("name") or "")[:120],
+        token_hash=_token_hash(token), created_by=request.user,
+    )
+    return JsonResponse({"ok": True, "device_id": dev.pk, "token": token,
+                         "clinic": {"id": clinic.pk, "name": clinic.name}})
+
+
+def sync_export(request):
+    """Полный снимок данных клиники (первичная загрузка и pull)."""
+    dev = _device_from_request(request)
+    if dev is not None:
+        clinic = dev.clinic
+    else:
+        if not _sync_staff_ok(request.user):
+            return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
+        clinic = _user_clinic(request)
+    if clinic is None:
+        return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
+    exported_at = timezone.now()
     blocks = export_clinic(clinic)
+    if dev is not None:
+        dev.last_sync_at = exported_at
+        dev.save(update_fields=["last_sync_at"])
     return JsonResponse({
         "ok": True,
         "clinic": {"id": clinic.pk, "name": clinic.name},
-        "exported_at": timezone.now().isoformat(),
+        "exported_at": exported_at.isoformat(),
         "blocks": blocks,
     })
 
 
+@csrf_exempt   # только токен устройства (cookie-сессия здесь не принимается)
+@require_POST
+def sync_push(request):
+    """Принять изменения офлайн-копии (см. core.apply_push)."""
+    from .core import apply_push
+    from .models import SyncConflict
+    dev = _device_from_request(request)
+    if dev is None:
+        return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
+    try:
+        payload = json.loads(request.body)
+    except ValueError:
+        return JsonResponse({"ok": False, "error": "Неверный формат"}, status=400)
+    since = parse_datetime(payload.get("since") or "")
+    if since is None:
+        return JsonResponse({"ok": False, "error": "Нет отметки прошлой синхронизации"}, status=400)
+    res = apply_push(payload.get("changes", []), payload.get("deletions", []), dev.clinic, since)
+    for c in res["conflicts"]:
+        SyncConflict.objects.create(
+            clinic=dev.clinic, model_label=c["model"], object_pk=str(c["pk"]),
+            object_repr=c["object_repr"], local_data=c["local_data"], cloud_data=c["cloud_data"],
+            local_updated_at=parse_datetime(c["local_updated_at"] or "") if c["local_updated_at"] else None,
+            cloud_updated_at=parse_datetime(c["cloud_updated_at"] or "") if c["cloud_updated_at"] else None,
+        )
+    return JsonResponse({
+        "ok": True, "applied": res["applied"], "conflicts": len(res["conflicts"]),
+        "rejected": res["rejected"], "skipped_deleted": res["skipped_deleted"],
+        "errors": res["errors"], "done": res["done"], "overlaps": res["overlaps"],
+    })
+
+
 @login_required
+@require_POST
 def sync_run(request):
-    """Локальная кнопка «Синхронизация»: отправить локальные данные в облако и забрать свежие."""
+    """Офлайн-копия: кнопка «Синхронизация»."""
     from django.conf import settings
     if not getattr(settings, "OFFLINE_MODE", False):
         return JsonResponse({"ok": False, "error": "Доступно только в оффлайн-режиме"}, status=400)
-    cfg_path = getattr(settings, "DATA_DIR", settings.BASE_DIR) / "offline_cloud.json"
-    if not cfg_path.exists():
-        return JsonResponse({"ok": False, "error": "Сначала выполните первичную настройку (offline_setup)"}, status=400)
+    from .runner import run_sync, SyncError
     try:
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-        from .cloud_client import CloudClient
-        from .core import export_clinic, import_blocks
-        from apps.users.models import Clinic
-        from django.db import transaction
-
-        cli = CloudClient(cfg["url"])
-        if not cli.login(cfg["login"], cfg["password"]):
-            return JsonResponse({"ok": False, "error": "Не удалось войти в облако"}, status=400)
-
-        # Отметка последней успешной синхронизации — точка отсчёта для
-        # обнаружения конфликтов (что реально поменялось с обеих сторон с тех пор).
-        since = cfg.get("last_synced_at", "")
-        sync_started_at = timezone.now().isoformat()
-
-        # 1) push локальных данных вверх
-        clinic = Clinic.objects.first()
-        pushed = conflicts = push_errors = 0
-        if clinic:
-            res = cli.post_json("/sync/push/", {"blocks": export_clinic(clinic), "since": since})
-            pushed = sum(res.get("applied", {}).values()) if res.get("ok") else 0
-            conflicts = res.get("conflicts", 0) if res.get("ok") else 0
-            push_errors = res.get("errors", 0) if res.get("ok") else 0
-
-        # 2) pull свежих данных вниз (в т.ч. то, что не применилось из-за конфликта —
-        # у нас останется актуальная облачная версия локально)
-        data = cli.get_json("/sync/export/")
-        pulled = 0
-        if data.get("ok"):
-            with transaction.atomic():
-                counts = import_blocks(data["blocks"])
-            pulled = sum(counts.values())
-
-        # Сдвигаем отметку синхронизации вперёд независимо от конфликтов —
-        # неразрешённые конфликты остаются в списке (см. /sync/conflicts/)
-        # и не будут блокировать дальнейшую работу.
-        cfg["last_synced_at"] = sync_started_at
-        cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
-
-        return JsonResponse({
-            "ok": True, "pushed": pushed, "pulled": pulled, "conflicts": conflicts, "errors": push_errors,
-        })
-    except Exception as e:
+        return JsonResponse(run_sync())
+    except SyncError as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
-
-
-@login_required
-def sync_push(request):
-    """Принять локальные изменения и применить в облаке (upsert по PK).
-
-    Если пришла отметка `since` (последняя успешная синхронизация) — включаем
-    точное обнаружение конфликтов: запись, изменённая одновременно и локально,
-    и в облаке, НЕ перезаписывается молча, а сохраняется в SyncConflict для
-    разрешения персоналом клиники вручную (см. /sync/conflicts/).
-    """
-    if request.method != "POST":
-        return JsonResponse({"ok": False, "error": "POST only"}, status=405)
-    if not _sync_staff_ok(request.user):
-        return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
-    clinic = _user_clinic(request)
-    if clinic is None:
-        return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
-    try:
-        payload = json.loads(request.body)
-        since_raw = payload.get("since") or ""
-        since = parse_datetime(since_raw) if since_raw else None
-
-        if since is not None:
-            res = import_blocks(payload.get("blocks", []), since=since, collect_conflicts=True, clinic=clinic)
-            if True:
-                from .models import SyncConflict
-                for c in res.get("conflicts", []):
-                    SyncConflict.objects.create(
-                        clinic=clinic, model_label=c["model"], object_pk=str(c["pk"]),
-                        object_repr=c["object_repr"],
-                        local_data=c["local_data"], cloud_data=c["cloud_data"],
-                        local_updated_at=c["local_updated_at"], cloud_updated_at=c["cloud_updated_at"],
-                    )
-            return JsonResponse({
-                "ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {}),
-                "conflicts": len(res.get("conflicts", [])),
-                "errors": sum(res.get("errors", {}).values()),
-            })
-
-        # Нет отметки последней синхронизации (старый локальный клиент или
-        # первый push) — прежнее поведение: не затираем то, что в облаке новее.
-        res = import_blocks(payload.get("blocks", []), prefer_newer=True, clinic=clinic)
-        return JsonResponse({
-            "ok": True, "applied": res.get("applied", {}), "skipped": res.get("skipped", {}), "conflicts": 0,
-            "errors": sum(res.get("errors", {}).values()),
-        })
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+    except Exception as e:  # noqa: BLE001 — нет интернета и т. п.
+        return JsonResponse({"ok": False, "error": f"Нет связи с облаком: {e}"}, status=400)
 
 
 @login_required
@@ -154,38 +167,53 @@ def sync_conflicts(request):
         return redirect("/")
     from .models import SyncConflict
     clinic = _user_clinic(request)
-    qs = SyncConflict.objects.filter(resolved=False)
-    if clinic is not None:
-        qs = qs.filter(clinic=clinic)
+    if clinic is None:
+        return redirect("/")
+    qs = SyncConflict.objects.filter(resolved=False, clinic=clinic)
     return render(request, "sync/conflicts.html", {"conflicts": qs.select_related("clinic").order_by("-created_at")})
 
 
 @login_required
 @require_POST
 def sync_conflict_resolve(request, pk):
-    """Разрешить конфликт: оставить облачную версию (по умолчанию, ничего не
-    делаем с данными) или применить локальную (перезаписать текущую запись)."""
+    """Разрешить конфликт: оставить облачную версию (ничего не меняем) или
+    применить офлайн-версию (перезаписать или удалить текущую запись)."""
     if not _sync_staff_ok(request.user):
         return redirect("/")
-    from .models import SyncConflict
-    from .core import push_allowed
     from django.apps import apps as django_apps
     from django.core import serializers as _serializers
+    from .core import push_allowed
+    from .models import SyncConflict
     clinic = _user_clinic(request)
     if clinic is None:
         return redirect("/")
-    c = get_object_or_404(SyncConflict, pk=pk, clinic=clinic)
-    action = request.POST.get("action")
-    if action == "local":
+    c = get_object_or_404(SyncConflict, pk=pk, clinic=clinic, resolved=False)
+    if request.POST.get("action") == "local":
         model = django_apps.get_model(c.model_label)
         existing = model._base_manager.filter(pk=c.object_pk).first()
-        for d in _serializers.deserialize("python", [c.local_data]):
-            if not push_allowed(c.model_label, d.object, existing, clinic):
-                messages.error(request, "Эту запись нельзя применить")
-                return redirect("sync_conflicts")
-            d.save()
+        patient_id = getattr(existing, "patient_id", None)
+        if (c.local_data or {}).get("deleted"):
+            if existing is not None:
+                if not push_allowed(c.model_label, existing, existing, clinic):
+                    messages.error(request, "Эту запись нельзя изменить")
+                    return redirect("sync_conflicts")
+                existing.delete()
+        else:
+            for d in _serializers.deserialize("python", [c.local_data]):
+                d.object.pk = existing.pk if existing is not None else d.object.pk
+                if not push_allowed(c.model_label, d.object, existing, clinic):
+                    messages.error(request, "Эту запись нельзя применить")
+                    return redirect("sync_conflicts")
+                d.save()
+                patient_id = patient_id or getattr(d.object, "patient_id", None) or (
+                    d.object.pk if c.model_label == "patients.Patient" else None)
+        if patient_id:
+            from apps.patients.models import Patient
+            p = Patient.all_objects.filter(pk=patient_id).first()
+            if p:
+                p.recalc_balance()
         c.resolution = SyncConflict.RESOLUTION_LOCAL
-        messages.success(request, "Применена локальная версия записи")
+        messages.success(request, "Применена офлайн-версия записи")
     else:
         c.resolution = SyncConflict.RESOLUTION_CLOUD
         messages.success(request, "Оставлена облачная версия записи")

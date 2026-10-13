@@ -68,9 +68,12 @@ def run(now=None, log=None):
             if opener is None:
                 continue
             try:
-                CashShift.all_clinics.create(branch=b, clinic=clinic, opened_by=opener, opening_cash=0)
+                new = CashShift.all_clinics.create(branch=b, clinic=clinic, opened_by=opener, opening_cash=0)
             except IntegrityError:
                 continue
+            # время открытия — момент проверки (opened_at ставится автоматически
+            # по часам; при догоняющем запуске они могут отличаться)
+            CashShift.all_clinics.filter(pk=new.pk).update(opened_at=now)
             done["opened"] += 1
             say("открыта смена %s / %s" % (clinic.name, b.name))
     return done

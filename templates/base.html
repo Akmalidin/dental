@@ -310,7 +310,8 @@
           const btn = document.getElementById('sync-btn'), lbl = document.getElementById('sync-label');
           btn.disabled = true; lbl.textContent = 'Синхронизация…';
           try {
-            const r = await fetch('/sync/run/');
+            const fd = new FormData(); fd.append('csrfmiddlewaretoken', (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'');
+            const r = await fetch('/sync/run/', {method:'POST', body: fd, headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||''}});
             const d = await r.json();
             if (d.ok) {
               lbl.textContent = '✓ Готово';

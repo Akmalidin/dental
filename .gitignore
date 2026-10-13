@@ -62,3 +62,10 @@ nginx/certs/
 # Offline mode (local only)
 offline_cloud.json
 offline.sqlite3
+
+# офлайн-копия: локальные данные, ключ и токен устройства
+offline.sqlite3
+offline_cloud.json
+offline_setup.json
+secret_key.txt
+backups/offline-*.sqlite3

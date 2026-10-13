@@ -23,6 +23,21 @@ if getattr(sys, "frozen", False):
 else:
     DATA_DIR = BASE_DIR
 
+# Свой секретный ключ для каждой установки (а не общий dev-ключ из кода):
+# создаётся при первом запуске рядом с базой.
+_key_file = DATA_DIR / "secret_key.txt"
+try:
+    SECRET_KEY = _key_file.read_text(encoding="utf-8").strip()
+except OSError:
+    SECRET_KEY = ""
+if not SECRET_KEY:
+    import secrets as _secrets
+    SECRET_KEY = _secrets.token_urlsafe(50)
+    try:
+        _key_file.write_text(SECRET_KEY, encoding="utf-8")
+    except OSError:
+        pass
+
 # Отдельная локальная база (копия данных клиники)
 DATABASES = {
     "default": {
@@ -36,7 +51,7 @@ DATABASES = {
 MEDIA_ROOT = DATA_DIR / "media"
 
 # Адрес облака для синхронизации
-CLOUD_URL = os.environ.get("CLOUD_URL", "https://sadaf.denta.tw1.ru")
+CLOUD_URL = os.environ.get("CLOUD_URL", "https://soft.stom.asia")
 
 # Разрешаем любой Host-заголовок: сервер слушает на 0.0.0.0 и доступен другим
 # компьютерам клиники по локальному IP (сам сервер не выходит в интернет,
