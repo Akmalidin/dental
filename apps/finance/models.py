@@ -258,6 +258,8 @@ class InstallmentItem(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма")
     reminded_before = models.BooleanField(default=False)
     reminded_overdue = models.BooleanField(default=False)
+    # что уже отправлено: {"before": [7, 1], "overdue": 2, "overdue_last": "2026-10-20"}
+    reminder_log = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["due_date", "id"]

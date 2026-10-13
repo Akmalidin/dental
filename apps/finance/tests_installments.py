@@ -63,19 +63,55 @@ class InstallmentTestCase(TestCase):
         plan = inst.create_plan(self.p, 10000, [(self.today, Decimal(10000))])
         self.assertEqual(inst.state(plan)["paid"], 0)
 
-    def test_reminders_once_before_and_after_overdue(self):
-        plan = inst.create_plan(self.p, 20000, [
+    def _at(self, day, hour):
+        from datetime import datetime
+        return timezone.make_aware(datetime(day.year, day.month, day.day, hour, 5))
+
+    def test_reminders_follow_settings_and_send_once(self):
+        from apps.settings_clinic.models import ClinicSettings
+        cs = ClinicSettings.get()
+        cs.installment_reminders = {"before_days": [3, 1], "hour": 9, "overdue_after": 2,
+                                    "overdue_repeat": 7, "overdue_max": 2}
+        cs.save()
+        plan = inst.create_plan(self.p, 30000, [
+            (self.today + timedelta(days=3), Decimal(10000)),
             (self.today + timedelta(days=1), Decimal(10000)),
-            (self.today - timedelta(days=3), Decimal(10000)),
+            (self.today - timedelta(days=2), Decimal(10000)),
         ])
         with patch("apps.notifications.whatsapp.wa_enabled", return_value=True), \
                 patch("apps.notifications.whatsapp.wa_send_text", return_value=True) as send:
-            self.assertEqual(inst.run_reminders(today=self.today), 2)
-            self.assertEqual(inst.run_reminders(today=self.today), 0)   # не повторяем
-        texts = [c[0][1] for c in send.call_args_list]
-        self.assertTrue(any("завтра" in t for t in texts))
-        self.assertTrue(any("не поступил" in t for t in texts))
-        self.assertTrue(all(it.reminded_before or it.reminded_overdue for it in InstallmentItem.objects.filter(plan=plan)))
+            self.assertEqual(inst.run_reminders(now=self._at(self.today, 15)), 0)   # не тот час
+            self.assertEqual(inst.run_reminders(now=self._at(self.today, 9)), 3)    # за 3, за 1, просрочка
+            self.assertEqual(inst.run_reminders(now=self._at(self.today, 9)), 0)    # один раз
+            texts = [c[0][1] for c in send.call_args_list]
+            self.assertTrue(any("через 3 дн." in t for t in texts))
+            self.assertTrue(any("завтра" in t for t in texts))
+            self.assertTrue(any("не поступил" in t for t in texts))
+            # повтор о просрочке через 7 дней, но не больше 2 раз
+            later = self.today + timedelta(days=7)
+            send.reset_mock()
+            inst.run_reminders(now=self._at(later, 9))
+            self.assertTrue(any("не поступил" in c[0][1] for c in send.call_args_list))
+            send.reset_mock()
+            inst.run_reminders(now=self._at(self.today + timedelta(days=14), 9))
+            self.assertFalse(any("не поступил" in c[0][1] and "%s" % (self.today - timedelta(days=2)).strftime("%d.%m.%Y") in c[0][1]
+                                 for c in send.call_args_list))
+        cs.installment_reminders = {"enabled": False}
+        cs.save()
+        self.assertEqual(inst.run_reminders(now=self._at(self.today + timedelta(days=20), 9)), 0)
+
+    def test_settings_endpoint_admin_only_and_clamped(self):
+        c = Client()
+        c.force_login(self.admin)
+        r = c.post("/new/installments/settings/", {"enabled": "1", "before_days": ["7", "1", "99"], "hour": "30",
+                                                   "overdue_after": "3", "overdue_repeat": "30", "overdue_max": "50"})
+        self.assertEqual(r.json()["settings"], {"enabled": True, "before_days": [7, 1], "hour": 22,
+                                                "overdue_after": 3, "overdue_repeat": 30, "overdue_max": 12})
+        doc = User.objects.create(login="in_doc", name="Врач", clinic=self.clinic,
+                                  role=Role.objects.get(name="doctor", clinic__isnull=True))
+        c2 = Client()
+        c2.force_login(doc)
+        self.assertNotEqual(c2.post("/new/installments/settings/", {"enabled": ""}).status_code, 200)
 
     def test_create_endpoint_validation_and_scope(self):
         c = Client()

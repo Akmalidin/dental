@@ -18,6 +18,7 @@
         <div class="topbar-right">
           <div class="search-box"><input type="text" id="inSearch" autocomplete="off" placeholder="Пациент или телефон…" oninput="inRender()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="inOnlyOverdue" onchange="inRender()"> только просроченные</label>
+          <button class="btn btn-ghost" type="button" onclick="inOpenSettings()" title="Настройки напоминаний">⚙ Напоминания</button>
         </div>
       </div>
       <div class="page">
@@ -27,7 +28,33 @@
           <div class="card kpi b-amber"><span class="lbl">Осталось получить всего</span><b style="font-size:22px" id="inLeft">—</b></div>
           <div class="card kpi b-coral"><span class="lbl">Просрочено</span><b style="font-size:22px" id="inOverdue">—</b></div>
         </div>
+        <div class="in-sub" id="inRemindSummary" style="margin:-6px 0 12px;"></div>
         <div class="card"><div id="inList"></div></div>
+      </div>
+
+      <div class="modal-backdrop" id="m-in-settings">
+        <div class="modal" style="max-width:520px;">
+          <div class="modal-head"><h3>Напоминания по рассрочкам</h3><button class="modal-close" type="button" onclick="closeModal('m-in-settings')">✕</button></div>
+          <div class="modal-body">
+            <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:12px;"><input type="checkbox" id="isEnabled"> Отправлять пациентам напоминания (WhatsApp/Telegram)</label>
+            <div class="form-group"><label>До платежа — напомнить</label>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;" id="isBefore">
+                <label><input type="checkbox" value="7"> за 7 дней</label>
+                <label><input type="checkbox" value="3"> за 3 дня</label>
+                <label><input type="checkbox" value="1"> за 1 день</label>
+                <label><input type="checkbox" value="0"> в день платежа</label>
+              </div></div>
+            <div class="form-group"><label>Время отправки (по времени клиники)</label><select id="isHour"></select></div>
+            <div style="font-weight:600;font-size:13px;margin:6px 0;">Если платёж просрочен</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;">
+              <div class="form-group"><label>Первое — через, дней</label><input type="number" id="isOverAfter" min="0" max="60"></div>
+              <div class="form-group"><label>Повторять каждые, дней</label><input type="number" id="isOverRepeat" min="0" max="60"></div>
+              <div class="form-group"><label>Не больше, раз</label><input type="number" id="isOverMax" min="1" max="12"></div>
+            </div>
+            <div class="in-sub">0 в «первое через» — не напоминать о просрочке; 0 в «повторять» — один раз. 30 — примерно раз в месяц. Каждое напоминание по каждому платежу уходит один раз.</div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-in-settings')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="inSaveSettings()">Сохранить</button></div>
+        </div>
       </div>
 {% endblock %}
 {% block extra_js %}
@@ -67,6 +94,41 @@
           ${p.status === 'active' ? `<div style="text-align:right;margin-top:6px;"><button class="btn btn-ghost btn-sm" type="button" onclick="instCancel(${p.id}, () => location.reload())">Отменить рассрочку</button></div>` : ''}` : ''}
       </div>`;
     }).join('') : `<div class="in-row in-sub" style="text-align:center;padding:24px;">${D.plans.length ? 'Ничего не найдено' : 'Рассрочек пока нет. Оформить: карточка пациента → «Финансы» → «Оформить рассрочку».'}</div>`;
+  };
+  function summary(c){
+    if(!c.enabled) return '🔕 Напоминания пациентам выключены';
+    const b = c.before_days.map(d => d === 0 ? 'в день платежа' : 'за ' + d + ' дн.').join(', ') || 'до срока не напоминать';
+    let o = c.overdue_after ? `при просрочке — через ${c.overdue_after} дн.` + (c.overdue_repeat ? `, потом каждые ${c.overdue_repeat} дн. (до ${c.overdue_max} раз)` : '') : 'о просрочке не напоминать';
+    return `🔔 Напоминания: ${b}; ${o}; в ${String(c.hour).padStart(2, '0')}:00`;
+  }
+  let S = D.settings;
+  document.getElementById('inRemindSummary').textContent = summary(S);
+  const hourSel = document.getElementById('isHour');
+  for(let h = 6; h <= 22; h++) hourSel.insertAdjacentHTML('beforeend', `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`);
+  window.inOpenSettings = function(){
+    document.getElementById('isEnabled').checked = S.enabled;
+    document.querySelectorAll('#isBefore input').forEach(i => i.checked = S.before_days.includes(+i.value));
+    hourSel.value = S.hour;
+    document.getElementById('isOverAfter').value = S.overdue_after;
+    document.getElementById('isOverRepeat').value = S.overdue_repeat;
+    document.getElementById('isOverMax').value = S.overdue_max;
+    openModal('m-in-settings');
+  };
+  window.inSaveSettings = async function(){
+    const fd = new FormData();
+    if(document.getElementById('isEnabled').checked) fd.append('enabled', '1');
+    document.querySelectorAll('#isBefore input:checked').forEach(i => fd.append('before_days', i.value));
+    fd.append('hour', hourSel.value);
+    fd.append('overdue_after', document.getElementById('isOverAfter').value || 0);
+    fd.append('overdue_repeat', document.getElementById('isOverRepeat').value || 0);
+    fd.append('overdue_max', document.getElementById('isOverMax').value || 1);
+    const res = await postForm('/new/installments/settings/', fd);
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось сохранить', 'error'); return; }
+    S = d.settings;
+    document.getElementById('inRemindSummary').textContent = summary(S);
+    closeModal('m-in-settings');
+    showToast('Настройки напоминаний сохранены', 'success');
   };
   inRender();
 })();

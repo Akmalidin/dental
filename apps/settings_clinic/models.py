@@ -31,6 +31,10 @@ class ClinicSettings(models.Model):
     # Настройки → «Меню клиники») — тот же формат, что и User.menu_prefs, но применяется
     # только сотрудникам, у которых нет своей личной настройки (User.menu_prefs пуст).
     menu_prefs = models.JSONField(default=dict, blank=True, verbose_name="Настройка меню клиники")
+    # Напоминания по рассрочкам («Деньги → Рассрочки» → ⚙), см.
+    # apps.finance.installments.reminder_settings — там значения по умолчанию.
+    installment_reminders = models.JSONField(default=dict, blank=True,
+                                             verbose_name="Напоминания по рассрочкам")
     require_unique_phone = models.BooleanField(default=True, verbose_name="Уникальный телефон")
     telegram_bot_token = models.CharField(max_length=200, blank=True, verbose_name="Telegram Bot Token")
     telegram_enabled = models.BooleanField(default=True, verbose_name="Telegram включён для клиники")

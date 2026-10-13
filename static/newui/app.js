@@ -4677,12 +4677,108 @@ function initNavNotifBell(){
     bell.className='icon-btn navbar-notif-bell';
     bell.title=t('nav_уведомления');
     bell.setAttribute('aria-label', t('nav_уведомления'));
-    bell.onclick=()=>{ location.href='/new/notifications/'; };
+    bell.onclick=(e)=>{ e.stopPropagation(); notifDrawerToggle(); };
     bell.innerHTML='🔔<span class="nav-badge hidden" id="navNotifBadge">0</span>';
     const right=topbar.querySelector('.topbar-right');
     if(right) right.insertBefore(bell, right.firstChild);
     else topbar.appendChild(bell);
   });
+}
+/* Боковая панель уведомлений: колокольчик открывает список справа поверх
+   текущей страницы — без перехода на /new/notifications/ и обратно. Клик по
+   уведомлению отмечает его прочитанным и, если у него есть страница (касса,
+   расписание, карточка пациента…), переходит туда; ✓ — просто отметить. */
+let notifDrawerItems=[], notifDrawerFilter='all';
+function notifDrawerEnsure(){
+  if(document.getElementById('notifDrawer')) return;
+  const wrap=document.createElement('div');
+  wrap.innerHTML=`<div id="notifDrawerBackdrop" class="notif-drawer-backdrop" onclick="notifDrawerClose()"></div>
+  <aside id="notifDrawer" class="notif-drawer" role="dialog" aria-label="${t('nav_уведомления')}">
+    <div class="notif-drawer-head">
+      <b>${t('nav_уведомления')}</b>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="notifDrawerReadAll()">${t('w_notif_read_all','Прочитать все')}</button>
+        <button type="button" class="modal-close" onclick="notifDrawerClose()" aria-label="Закрыть">✕</button>
+      </div>
+    </div>
+    <div class="notif-drawer-tabs">
+      <button type="button" data-f="all" class="active" onclick="notifDrawerSetFilter('all')">${t('w_all','Все')}</button>
+      <button type="button" data-f="unread" onclick="notifDrawerSetFilter('unread')">${t('w_notif_unread','Непрочитанные')}</button>
+    </div>
+    <div class="notif-drawer-list" id="notifDrawerList"></div>
+    <a class="notif-drawer-foot" href="/new/notifications/">${t('w_notif_all_page','Все уведомления')} →</a>
+  </aside>`;
+  while(wrap.firstChild) document.body.appendChild(wrap.firstChild);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') notifDrawerClose(); });
+}
+async function notifDrawerToggle(){
+  notifDrawerEnsure();
+  const d=document.getElementById('notifDrawer');
+  if(d.classList.contains('open')){ notifDrawerClose(); return; }
+  d.classList.add('open');
+  document.getElementById('notifDrawerBackdrop').classList.add('open');
+  document.getElementById('notifDrawerList').innerHTML=`<div class="notif-drawer-empty">…</div>`;
+  try{
+    const r=await fetch('/new/notifications/data/', {credentials:'same-origin'});
+    const data=await r.json();
+    notifDrawerItems=data.items||[];
+  }catch(e){ notifDrawerItems=[]; }
+  notifDrawerRender();
+}
+function notifDrawerClose(){
+  const d=document.getElementById('notifDrawer');
+  if(!d) return;
+  d.classList.remove('open');
+  document.getElementById('notifDrawerBackdrop').classList.remove('open');
+}
+function notifDrawerSetFilter(f){
+  notifDrawerFilter=f;
+  document.querySelectorAll('#notifDrawer .notif-drawer-tabs button').forEach(b=>b.classList.toggle('active', b.dataset.f===f));
+  notifDrawerRender();
+}
+function notifDrawerRender(){
+  const el=document.getElementById('notifDrawerList');
+  if(!el) return;
+  const items=notifDrawerFilter==='unread' ? notifDrawerItems.filter(n=>!n.isRead) : notifDrawerItems;
+  if(!items.length){ el.innerHTML=`<div class="notif-drawer-empty">${t('w_notif_empty')}</div>`; return; }
+  let html='', group=null;
+  items.forEach(n=>{
+    const g=notifDateGroupLabel(n.time);
+    if(g!==group){ group=g; html+=`<div class="notif-drawer-group">${g}</div>`; }
+    const icon=NOTIF_TYPE_ICON[n.type]||'🔔';
+    html+=`<div class="notif-drawer-item${n.isRead?'':' unread'}" onclick="notifDrawerOpenItem(${n.id})">
+      <div class="row-avatar">${icon}</div>
+      <div class="notif-drawer-text"><b>${chatEscape(n.title)}</b><span>${chatEscape(n.body)}${n.actor?' · '+chatEscape(n.actor):''}</span>
+        <span class="notif-drawer-time">${chatEscape(n.time)}</span></div>
+      ${n.isRead?'':`<button type="button" class="btn btn-ghost btn-sm" title="${t('w_notif_mark_read','Отметить прочитанным')}" onclick="event.stopPropagation();notifDrawerMarkRead(${n.id})">✓</button>`}
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+function notifDrawerMarkRead(id){
+  const n=notifDrawerItems.find(x=>x.id===id);
+  if(!n || n.isRead) return;
+  n.isRead=true;
+  fetch(`/notifications/${id}/read/`, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
+  const pageItem=(typeof notificationsData!=='undefined' && notificationsData) ? notificationsData.find(x=>x.id===id) : null;
+  if(pageItem){ pageItem.isRead=true; renderNotifications(); }
+  notifDrawerRender();
+  setTimeout(updateNotifBadge, 300);
+}
+function notifDrawerOpenItem(id){
+  const n=notifDrawerItems.find(x=>x.id===id);
+  notifDrawerMarkRead(id);
+  const target=n ? notifResolveLink(n) : null;
+  if(target && target!==location.pathname){ location.href=target; return; }
+  if(target===location.pathname){ notifDrawerClose(); return; }
+  if(n && n.link) showToast(t('w_notif_no_new_page'), 'error');
+}
+async function notifDrawerReadAll(){
+  await fetch('/notifications/read-all/', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCookie('csrftoken')}}).catch(()=>{});
+  notifDrawerItems.forEach(n=>n.isRead=true);
+  if(typeof notificationsData!=='undefined' && notificationsData){ notificationsData.forEach(n=>n.isRead=true); renderNotifications(); }
+  notifDrawerRender();
+  updateNotifBadge();
 }
 // Бейдж непрочитанных — на КАЖДОЙ странице /new/*, не только на самой
 // странице уведомлений (тот же принцип, что и у voiceFab — общий виджет
