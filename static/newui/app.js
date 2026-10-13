@@ -5644,6 +5644,13 @@ function scrollRibbonToAnchorDay(){
 // якорь и так уже сегодня (просто проскроллили ленту вправо) — не
 // перестраиваем всё заново, только мгновенно возвращаем скролл к якорю.
 function goToScheduleToday(){
+  if(calView==='week' || calView==='month'){
+    // остаёмся в том же виде, просто возвращаемся к текущей неделе/месяцу
+    currentDayOffset=0;
+    if(calView==='week') calWeekAnchor=dateAtOffset(0); else calMonthAnchor=dateAtOffset(0);
+    renderSchedule();
+    return;
+  }
   const delta=-currentDayOffset;
   if(delta===0){
     if(calView!=='day'){ calSetView('day'); return; }
@@ -5665,13 +5672,22 @@ function goToScheduleToday(){
 let schedDayTransitionBusy=false;
 function changeDay(delta){
   if(schedDayTransitionBusy) return;
-  currentDayOffset+=delta;
-  if(calView!=='day'){
-    calView='day';
-    document.getElementById('chipDay').classList.add('active');
-    document.getElementById('chipWeek').classList.remove('active');
-    document.getElementById('chipMonth').classList.remove('active');
+  // Стрелки ‹ › листают в текущем виде: неделя — на 7 дней, месяц — на месяц.
+  // Раньше любой вид здесь принудительно переключался на «День».
+  if(calView==='week'){
+    const a=new Date(calWeekAnchor); a.setDate(a.getDate()+7*delta);
+    calWeekAnchor=a;
+    currentDayOffset=daysBetween(baseScheduleDate, a);
+    renderSchedule();
+    return;
   }
+  if(calView==='month'){
+    calMonthAnchor=new Date(calMonthAnchor.getFullYear(), calMonthAnchor.getMonth()+delta, 1);
+    currentDayOffset=daysBetween(baseScheduleDate, calMonthAnchor);
+    renderSchedule();
+    return;
+  }
+  currentDayOffset+=delta;
   // Смена якорного дня кнопкой ‹ › — лента строится заново отсюда (см.
   // buildDayRibbonHTML). Автопрокрутки/отката через скролл больше нет —
   // лента только дозагружается вправо (appendRibbonDays), назад в прошлое
