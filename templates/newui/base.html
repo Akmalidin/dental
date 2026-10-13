@@ -212,6 +212,10 @@ window.addEventListener('load',function(){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 15s1 1.5 3 1.5 3-1 3-2.2c0-2.5-6-1-6-3.5C9 9.5 10.5 8.5 12 8.5s3 .8 3 .8M12 6.5v11"/></svg>
       <span data-i18n="nav_финансы">Финансы</span>
     </a>
+    <a class="nav-item{% if active == 'installments' %} active{% endif %}" data-view="installments" href="{% url 'newui_installments' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 15h3M14 15h3"/></svg>
+      <span>Рассрочки</span>{% if real_data.installmentsOverdue %}<span class="nav-badge" title="Просрочен платёж">{{ real_data.installmentsOverdue }}</span>{% endif %}
+    </a>
     <a class="nav-item{% if active == 'accounting' %} active{% endif %}" data-view="accounting" href="{% url 'newui_accounting' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span data-i18n="nav_бухгалтерия">Бухгалтерия</span>
@@ -1350,6 +1354,7 @@ window.addEventListener('load',function(){
 {{ real_data|json_script:"newui-real-data" }}
 
 <script src="{% static 'newui/app.js' %}?v={{ asset_v }}"></script>
+<script src="{% static 'newui/installments.js' %}?v={{ asset_v }}"></script>
 {% if user.is_authenticated %}
 <script>
 /* Баннер-объявление супер-админа (см. apps.users.newui_views.

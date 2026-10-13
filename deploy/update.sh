@@ -89,6 +89,11 @@ echo ">>> резервные копии: папка + ночной cron (00:00 �
   SHIFT_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_cashshift.lock $APP/venv/bin/python manage.py cashshift_auto >> $APP/backups/cashshift.log 2>&1"
   ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py cashshift_auto" || true; echo "*/5 * * * * $SHIFT_CMD" ) | crontab -u www-data -
   echo ">>> cron кассовой смены установлен"
+  # Рассрочки: напоминания пациентам о платежах — раз в день, 04:00 UTC
+  # (10:00 Бишкек / 09:00 Ташкент), чтобы сообщение не пришло ночью.
+  INST_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_installments.lock $APP/venv/bin/python manage.py installment_reminders >> $APP/backups/installments.log 2>&1"
+  ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py installment_reminders" || true; echo "0 4 * * * $INST_CMD" ) | crontab -u www-data -
+  echo ">>> cron напоминаний по рассрочкам установлен"
   echo ">>> cron бэкапа установлен"
 ) || echo "!!! не удалось установить cron бэкапа (см. вывод выше) — деплой продолжается, это не критично для работы сайта"
 echo ">>> pg_dump: $(command -v pg_dump || echo 'НЕ НАЙДЕН — бэкап Postgres не сработает, поставьте пакет postgresql-client на сервере')"

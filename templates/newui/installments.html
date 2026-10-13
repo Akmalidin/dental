@@ -1,0 +1,74 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Рассрочки{% endblock %}
+{% block content %}
+<style>
+  .in-row{border-top:1px solid var(--mist-line,#e3e5ec);padding:12px 18px}
+  .in-row:first-child{border-top:none}
+  .in-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;cursor:pointer}
+  .in-sub{font-size:12px;color:var(--ink-soft)}
+  .in-bar{height:6px;background:var(--mist,#eceef4);border-radius:4px;overflow:hidden;margin-top:6px}
+  .in-bar span{display:block;height:100%;background:var(--teal,#12b886)}
+  .in-chip{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600}
+  .in-chip.active{background:var(--cobalt-tint,#e8ecff);color:var(--cobalt,#2f4bff)}
+  .in-chip.done{background:#e3f7ef;color:#0f8a5f}
+  .in-chip.overdue{background:var(--coral-tint,#ffe9e2);color:var(--coral,#ff5a1f)}
+</style>
+      <div class="topbar">
+        <div><h1>Рассрочки</h1><div class="topbar-sub">Оформляется в карточке пациента → «Финансы». Оплаты принимаются как обычно в кассе и сами засчитываются в график.</div></div>
+        <div class="topbar-right">
+          <div class="search-box"><input type="text" id="inSearch" autocomplete="off" placeholder="Пациент или телефон…" oninput="inRender()" style="border:none;background:transparent;width:100%;outline:none;font-size:13px;"></div>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="inOnlyOverdue" onchange="inRender()"> только просроченные</label>
+        </div>
+      </div>
+      <div class="page">
+        <div class="kpi-grid" style="margin-bottom:16px;">
+          <div class="card kpi b-cobalt"><span class="lbl">Действующих рассрочек</span><b style="font-size:22px" id="inActive">—</b></div>
+          <div class="card kpi b-teal"><span class="lbl">Ожидается до конца месяца</span><b style="font-size:22px" id="inExpected">—</b></div>
+          <div class="card kpi b-amber"><span class="lbl">Осталось получить всего</span><b style="font-size:22px" id="inLeft">—</b></div>
+          <div class="card kpi b-coral"><span class="lbl">Просрочено</span><b style="font-size:22px" id="inOverdue">—</b></div>
+        </div>
+        <div class="card"><div id="inList"></div></div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  const D = REAL.installments;
+  if(!D) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = n => Math.round(n).toLocaleString('ru-RU') + ' ' + ((typeof CUR_SYM !== 'undefined' && CUR_SYM) || 'сом');
+  document.getElementById('inActive').textContent = D.activeCount;
+  document.getElementById('inExpected').textContent = money(D.expectedMonth);
+  document.getElementById('inLeft').textContent = money(D.leftTotal);
+  document.getElementById('inOverdue').textContent = money(D.overdueTotal) + (D.overdueCount ? ' · ' + D.overdueCount + ' пац.' : '');
+  const open = new Set();
+  window.inToggle = id => { open.has(id) ? open.delete(id) : open.add(id); inRender(); };
+  window.inRender = function(){
+    const q = document.getElementById('inSearch').value.trim().toLowerCase();
+    const only = document.getElementById('inOnlyOverdue').checked;
+    const list = D.plans.filter(p => (!q || p.patient.toLowerCase().includes(q) || (p.phone || '').includes(q)) && (!only || p.overdue > 0));
+    document.getElementById('inList').innerHTML = list.length ? list.map(p => {
+      const pct = p.total ? Math.min(100, Math.round(p.paid / p.total * 100)) : 0;
+      const chip = p.overdue > 0 ? '<span class="in-chip overdue">просрочка</span>'
+        : `<span class="in-chip ${p.status === 'done' ? 'done' : 'active'}">${esc(p.statusLabel)}</span>`;
+      return `<div class="in-row">
+        <div class="in-head" onclick="inToggle(${p.id})">
+          <div><a href="/new/patients/${p.patientId}/" onclick="event.stopPropagation()" style="color:inherit;font-weight:700;">${esc(p.patient)}</a>
+            <span class="in-sub">${esc(p.phone)}</span> ${chip}
+            <div class="in-sub">оформлена ${esc(p.created)}${p.note ? ' · ' + esc(p.note) : ''}</div></div>
+          <div style="text-align:right;font-size:13px;">
+            <div><b>${money(p.paid)}</b> из ${money(p.total)}${p.overdue > 0 ? ` · <b style="color:var(--coral);">просрочено ${money(p.overdue)}</b>` : ''}</div>
+            ${p.status === 'active' && p.nextDue ? `<div class="in-sub">следующий: ${esc(p.nextDue)} — ${money(p.nextAmount)}</div>` : ''}
+          </div>
+        </div>
+        <div class="in-bar"><span style="width:${pct}%"></span></div>
+        ${open.has(p.id) ? `<div style="overflow-x:auto;margin-top:8px;">${instItemsTable(p)}</div>
+          ${p.status === 'active' ? `<div style="text-align:right;margin-top:6px;"><button class="btn btn-ghost btn-sm" type="button" onclick="instCancel(${p.id}, () => location.reload())">Отменить рассрочку</button></div>` : ''}` : ''}
+      </div>`;
+    }).join('') : `<div class="in-row in-sub" style="text-align:center;padding:24px;">${D.plans.length ? 'Ничего не найдено' : 'Рассрочек пока нет. Оформить: карточка пациента → «Финансы» → «Оформить рассрочку».'}</div>`;
+  };
+  inRender();
+})();
+</script>
+{% endblock %}

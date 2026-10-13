@@ -25,6 +25,7 @@ FIELDS = {
     "users.DoctorReview": ("author", "text"),
     "appointments.Appointment": ("notes", "cancel_note"),
     "appointments.WaitlistEntry": ("note",),
+    "finance.InstallmentPlan": ("note",),
     "notifications.Notification": ("title", "body"),
 }
 
