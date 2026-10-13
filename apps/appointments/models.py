@@ -140,3 +140,65 @@ class Appointment(ClinicSoftDeleteModel):
     def duration_minutes(self):
         delta = self.end_at - self.start_at
         return int(delta.total_seconds() / 60)
+
+
+from apps.tenancy import ClinicScopedModel  # noqa: E402
+
+
+class WaitlistEntry(ClinicScopedModel):
+    """Лист ожидания: пациент хочет попасть раньше / на занятое время.
+    Когда запись отменяют или переносят, освободившееся окно сверяется с
+    листом (apps.appointments.waitlist.match) — администратор получает
+    уведомление и в один клик записывает или предлагает время пациенту."""
+
+    STATUS_WAITING = "waiting"
+    STATUS_OFFERED = "offered"
+    STATUS_BOOKED = "booked"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_WAITING, "Ждёт"),
+        (STATUS_OFFERED, "Предложено"),
+        (STATUS_BOOKED, "Записан"),
+        (STATUS_CANCELLED, "Снят"),
+    ]
+    PART_ANY, PART_MORNING, PART_DAY, PART_EVENING = "any", "morning", "day", "evening"
+    PART_CHOICES = [
+        (PART_ANY, "Любое время"),
+        (PART_MORNING, "Утро (до 12:00)"),
+        (PART_DAY, "День (12:00–16:00)"),
+        (PART_EVENING, "Вечер (после 16:00)"),
+    ]
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="waitlist_entries",
+                                verbose_name="Пациент")
+    doctor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="+", verbose_name="Врач (пусто — любой)")
+    service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="+", verbose_name="Услуга")
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="+", verbose_name="Филиал (пусто — любой)")
+    date_from = models.DateField(null=True, blank=True, verbose_name="С даты")
+    date_to = models.DateField(null=True, blank=True, verbose_name="По дату")
+    part_of_day = models.CharField(max_length=10, choices=PART_CHOICES, default=PART_ANY,
+                                   verbose_name="Время дня")
+    duration_min = models.PositiveIntegerField(default=30, verbose_name="Длительность, мин")
+    urgent = models.BooleanField(default=False, verbose_name="Срочно (боль)")
+    note = models.CharField(max_length=500, blank=True, verbose_name="Комментарий")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_WAITING,
+                              db_index=True, verbose_name="Статус")
+    offered_at = models.DateTimeField(null=True, blank=True)
+    offered_start = models.DateTimeField(null=True, blank=True, verbose_name="Предложенное время")
+    appointment = models.ForeignKey(Appointment, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="+", verbose_name="Запись")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Лист ожидания"
+        verbose_name_plural = "Лист ожидания"
+        ordering = ["-urgent", "created_at"]
+
+    def __str__(self):
+        return f"{self.patient_id}: {self.get_status_display()}"

@@ -1,0 +1,259 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Лист ожидания{% endblock %}
+{% block content %}
+<style>
+  .wl-slot{border-top:1px solid var(--mist-line,#e3e5ec);padding:12px 18px}
+  .wl-slot:first-child{border-top:none}
+  .wl-slot-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+  .wl-slot-head b{font:700 15px var(--mono,monospace)}
+  .wl-sub{font-size:12px;color:var(--ink-soft)}
+  .wl-match{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 10px;background:var(--cloud,#f5f6fa);border-radius:8px;margin-top:6px}
+  .wl-urgent{display:inline-block;background:var(--coral-tint,#ffe9e2);color:var(--coral,#ff5a1f);border-radius:6px;padding:0 6px;font-size:11px;font-weight:700;margin-left:6px}
+  .wl-st{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600}
+  .wl-st.waiting{background:var(--cobalt-tint,#e8ecff);color:var(--cobalt,#2f4bff)}
+  .wl-st.offered{background:#fff4dc;color:#b45309}
+  .wl-st.booked{background:#e3f7ef;color:#0f8a5f}
+  .wl-st.cancelled{background:var(--mist,#eceef4);color:var(--ink-soft)}
+  .wl-results{border:1px solid var(--mist-line,#e3e5ec);border-radius:8px;margin-top:4px;max-height:220px;overflow:auto;background:var(--paper,#fff)}
+  .wl-results div{padding:7px 10px;cursor:pointer;font-size:13px}
+  .wl-results div:hover{background:var(--cloud,#f5f6fa)}
+  .wl-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media(max-width:640px){.wl-grid{grid-template-columns:1fr}}
+</style>
+      <div class="topbar">
+        <div><h1>Лист ожидания</h1><div class="topbar-sub">Пациенты, которые хотят прийти раньше. Когда запись отменяют или переносят, подходящие появляются в «Свободных окнах», а администраторам приходит уведомление.</div></div>
+        <div class="topbar-right">
+          <button class="btn btn-cobalt" type="button" onclick="wlOpenAdd()">+ Добавить в лист</button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="card" id="wlSlotsCard" style="margin-bottom:16px;">
+          <div class="card-head"><h3>🟢 Свободные окна</h3><span class="wl-sub" id="wlSlotsCount"></span></div>
+          <div id="wlSlots"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-head"><h3>Ждут</h3><span class="wl-sub" id="wlCount"></span></div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Пациент</th><th>Врач</th><th>Услуга</th><th>Когда удобно</th><th>Ждёт</th><th>Статус</th><th>Комментарий</th><th></th></tr></thead>
+            <tbody id="wlBody"></tbody>
+          </table></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>История</h3><span class="wl-sub">последние 30: записанные и снятые</span></div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Пациент</th><th>Врач</th><th>Статус</th><th>Добавлен</th></tr></thead>
+            <tbody id="wlHistory"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-wl-add">
+        <div class="modal">
+          <div class="modal-head"><h3>Добавить в лист ожидания</h3><button class="modal-close" type="button" onclick="closeModal('m-wl-add')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Пациент</label>
+              <input type="text" id="wlPatientQ" autocomplete="off" placeholder="Имя или телефон…" oninput="wlSearchPatient()">
+              <input type="hidden" id="wlPatientId">
+              <div class="wl-results hidden" id="wlPatientResults"></div>
+              <div class="wl-sub" id="wlPatientChosen" style="margin-top:4px;"></div>
+            </div>
+            <div class="wl-grid">
+              <div class="form-group"><label>Врач</label><select id="wlDoctor"></select></div>
+              <div class="form-group"><label>Услуга</label><select id="wlService" onchange="wlServiceChanged()"></select></div>
+              <div class="form-group"><label>Удобно с</label><input type="date" id="wlFrom"></div>
+              <div class="form-group"><label>по</label><input type="date" id="wlTo"></div>
+              <div class="form-group"><label>Время дня</label><select id="wlPart">
+                <option value="any">Любое время</option><option value="morning">Утро (до 12:00)</option>
+                <option value="day">День (12:00–16:00)</option><option value="evening">Вечер (после 16:00)</option></select></div>
+              <div class="form-group"><label>Длительность, мин</label><input type="number" id="wlDuration" min="10" max="480" step="5" value="30"></div>
+              <div class="form-group hidden" id="wlBranchWrap"><label>Филиал</label><select id="wlBranch"></select></div>
+            </div>
+            <label style="display:flex;gap:8px;align-items:center;margin:4px 0 10px;font-size:13px;"><input type="checkbox" id="wlUrgent"> Срочно (боль) — предлагать первым</label>
+            <div class="form-group"><label>Комментарий</label><input type="text" id="wlNote" autocomplete="off" maxlength="500" placeholder="Например: только после работы, можно к любому врачу"></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-wl-add')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="wlSave()">Добавить</button></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-wl-book">
+        <div class="modal">
+          <div class="modal-head"><h3 id="wlBookTitle">Записать</h3><button class="modal-close" type="button" onclick="closeModal('m-wl-book')">✕</button></div>
+          <div class="modal-body">
+            <div class="wl-sub" style="margin-bottom:10px;">Выберите время — запись появится в расписании, пациенту уйдёт подтверждение.</div>
+            <div class="wl-grid">
+              <div class="form-group"><label>Дата</label><input type="date" id="wlBookDate"></div>
+              <div class="form-group"><label>Время</label><input type="time" id="wlBookTime" step="300"></div>
+              <div class="form-group"><label>Врач</label><select id="wlBookDoctor"></select></div>
+            </div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-wl-book')">Отмена</button>
+            <button class="btn btn-ghost" type="button" onclick="wlBookManual(true)">Предложить в мессенджер</button>
+            <button class="btn btn-cobalt" type="button" onclick="wlBookManual(false)">Записать</button></div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  let W = REAL.waitlist;
+  if(!W) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const byId = id => (W.entries || []).find(e => e.id === id);
+  const fmtD = s => s ? s.split('-').reverse().join('.') : '';
+
+  function when(e){
+    const parts = [];
+    if(e.dateFrom || e.dateTo) parts.push((e.dateFrom ? 'с ' + fmtD(e.dateFrom) : '') + (e.dateTo ? ' по ' + fmtD(e.dateTo) : ''));
+    if(e.part !== 'any') parts.push(e.partLabel.toLowerCase());
+    parts.push(e.duration + ' мин');
+    return parts.join(', ');
+  }
+  function patientCell(e){
+    return `<a href="/new/patients/${e.patientId}/" style="color:inherit;font-weight:600;">${esc(e.patient)}</a>${e.urgent ? '<span class="wl-urgent">срочно</span>' : ''}<div class="wl-sub">${esc(e.phone)}</div>`;
+  }
+  function render(){
+    const slots = W.slots || [];
+    document.getElementById('wlSlotsCard').classList.toggle('hidden', !slots.length);
+    document.getElementById('wlSlotsCount').textContent = slots.length ? slots.length + ' окон' : '';
+    document.getElementById('wlSlots').innerHTML = slots.map((s, si) => `
+      <div class="wl-slot">
+        <div class="wl-slot-head"><b>${esc(s.label)}</b><span>${esc(s.doctor)}</span>${s.branch ? '<span class="wl-sub">· ' + esc(s.branch) + '</span>' : ''}<span class="wl-sub">· запись отменили — окно свободно</span></div>
+        ${s.matches.map(id => byId(id)).filter(Boolean).map(e => `
+          <div class="wl-match"><div>${patientCell(e)}<div class="wl-sub">${esc(e.service || 'услуга не указана')} · ждёт ${e.waitDays} дн.${e.status === 'offered' ? ' · уже предложено ' + esc(e.offeredStart) : ''}</div></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="wlSlotAction(${si}, ${e.id}, 'offer')">Предложить</button>
+              <button class="btn btn-cobalt btn-sm" type="button" onclick="wlSlotAction(${si}, ${e.id}, 'book')">Записать</button>
+            </div></div>`).join('')}
+      </div>`).join('');
+
+    const list = W.entries || [];
+    document.getElementById('wlCount').textContent = list.length ? list.length + ' пациентов' : '';
+    document.getElementById('wlBody').innerHTML = list.length ? list.map(e => `<tr>
+        <td>${patientCell(e)}</td>
+        <td>${esc(e.doctor || 'любой')}</td>
+        <td>${esc(e.service || '—')}</td>
+        <td style="font-size:12.5px;">${esc(when(e))}</td>
+        <td class="mono">${e.waitDays} дн.</td>
+        <td><span class="wl-st ${e.status}">${esc(e.statusLabel)}</span>${e.offeredStart ? '<div class="wl-sub">' + esc(e.offeredStart) + '</div>' : ''}</td>
+        <td style="font-size:12.5px;max-width:220px;">${esc(e.note)}</td>
+        <td style="white-space:nowrap;text-align:right;">
+          <button class="btn btn-cobalt btn-sm" type="button" onclick="wlOpenBook(${e.id})">Записать…</button>
+          <button class="btn btn-ghost btn-sm" type="button" title="Снять с листа" onclick="wlSetStatus(${e.id}, 'cancelled')">✕</button>
+        </td></tr>`).join('')
+      : '<tr><td colspan="8" class="wl-sub" style="text-align:center;padding:22px;">В листе ожидания никого нет. Добавьте пациента, который хочет прийти раньше, — система подскажет, когда освободится время.</td></tr>';
+
+    const hist = W.history || [];
+    document.getElementById('wlHistory').innerHTML = hist.length ? hist.map(e => `<tr>
+        <td>${patientCell(e)}</td><td>${esc(e.doctor || 'любой')}</td>
+        <td><span class="wl-st ${e.status}">${esc(e.statusLabel)}</span>${e.appointmentId ? ' <a class="wl-sub" href="/new/schedule/">в расписании</a>' : ''}
+          ${e.status === 'cancelled' ? ` <button class="btn btn-ghost btn-sm" type="button" onclick="wlSetStatus(${e.id}, 'waiting')">вернуть</button>` : ''}</td>
+        <td class="wl-sub">${esc(e.created)}</td></tr>`).join('')
+      : '<tr><td colspan="4" class="wl-sub" style="text-align:center;padding:14px;">Пока пусто</td></tr>';
+  }
+
+  async function reload(){
+    try{ const r = await fetch('/new/waitlist/data/'); if(r.ok){ W = await r.json(); render(); } }catch(e){}
+  }
+  async function post(url, data){
+    const fd = new FormData();
+    Object.entries(data || {}).forEach(([k, v]) => fd.append(k, v == null ? '' : v));
+    const res = await postForm(url, fd);
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось выполнить', 'error'); return null; }
+    return d;
+  }
+
+  window.wlSlotAction = async function(si, id, action){
+    const s = W.slots[si];
+    if(action === 'book' && !confirm('Записать пациента на ' + s.label + ' к ' + s.doctor + '?')) return;
+    const d = await post('/new/waitlist/' + id + '/' + action + '/', {start: s.start, end: s.end, doctor_id: s.doctorId, branch_id: s.branchId});
+    if(d){ showToast(action === 'book' ? 'Записан. Пациенту отправлено подтверждение.' : 'Предложение отправлено пациенту', 'success'); reload(); }
+  };
+  window.wlSetStatus = async function(id, st){
+    if(st === 'cancelled' && !confirm('Снять пациента с листа ожидания?')) return;
+    if(await post('/new/waitlist/' + id + '/status/', {status: st})) reload();
+  };
+
+  function fillSelect(el, items, emptyLabel, selected){
+    el.innerHTML = (emptyLabel != null ? `<option value="">${esc(emptyLabel)}</option>` : '') +
+      items.map(i => `<option value="${i.id}" ${String(i.id) === String(selected) ? 'selected' : ''}>${esc(i.name)}</option>`).join('');
+  }
+  window.wlOpenAdd = function(){
+    ['wlPatientQ','wlPatientId','wlFrom','wlTo','wlNote'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('wlPatientChosen').textContent = '';
+    document.getElementById('wlPatientResults').classList.add('hidden');
+    document.getElementById('wlDuration').value = 30;
+    document.getElementById('wlUrgent').checked = false;
+    document.getElementById('wlPart').value = 'any';
+    document.getElementById('wlFrom').value = W.today;
+    fillSelect(document.getElementById('wlDoctor'), W.doctors, 'Любой врач');
+    fillSelect(document.getElementById('wlService'), W.services, '— не указана —');
+    fillSelect(document.getElementById('wlBranch'), W.branches, 'Любой филиал');
+    document.getElementById('wlBranchWrap').classList.toggle('hidden', (W.branches || []).length < 2);
+    openModal('m-wl-add');
+    setTimeout(() => document.getElementById('wlPatientQ').focus(), 50);
+  };
+  let searchTimer = null;
+  window.wlSearchPatient = function(){
+    clearTimeout(searchTimer);
+    document.getElementById('wlPatientId').value = '';
+    searchTimer = setTimeout(async () => {
+      const q = document.getElementById('wlPatientQ').value.trim();
+      const box = document.getElementById('wlPatientResults');
+      if(q.length < 2){ box.classList.add('hidden'); return; }
+      const r = await fetch('/new/waitlist/patients/?q=' + encodeURIComponent(q));
+      const d = await r.json().catch(() => ({results: []}));
+      box.innerHTML = d.results.length ? d.results.map(p => `<div data-id="${p.id}" data-name="${esc(p.name)}">${esc(p.name)} <span class="wl-sub">${esc(p.phone)}</span></div>`).join('')
+        : '<div class="wl-sub">Не найдено — сначала добавьте пациента в «Пациенты»</div>';
+      box.classList.remove('hidden');
+      box.querySelectorAll('div[data-id]').forEach(el => el.onclick = () => {
+        document.getElementById('wlPatientId').value = el.dataset.id;
+        document.getElementById('wlPatientQ').value = el.dataset.name;
+        document.getElementById('wlPatientChosen').textContent = '✓ выбран';
+        box.classList.add('hidden');
+      });
+    }, 250);
+  };
+  window.wlServiceChanged = function(){
+    const s = (W.services || []).find(x => String(x.id) === document.getElementById('wlService').value);
+    if(s && s.duration) document.getElementById('wlDuration').value = s.duration;
+  };
+  window.wlSave = async function(){
+    const pid = document.getElementById('wlPatientId').value;
+    if(!pid){ showToast('Выберите пациента из списка', 'error'); return; }
+    const d = await post('/new/waitlist/add/', {
+      patient_id: pid, doctor_id: document.getElementById('wlDoctor').value,
+      service_id: document.getElementById('wlService').value, branch_id: document.getElementById('wlBranch').value,
+      date_from: document.getElementById('wlFrom').value, date_to: document.getElementById('wlTo').value,
+      part: document.getElementById('wlPart').value, duration: document.getElementById('wlDuration').value,
+      urgent: document.getElementById('wlUrgent').checked ? '1' : '', note: document.getElementById('wlNote').value,
+    });
+    if(d){ closeModal('m-wl-add'); showToast('Пациент добавлен в лист ожидания', 'success'); reload(); }
+  };
+
+  let bookingId = null;
+  window.wlOpenBook = function(id){
+    const e = byId(id); if(!e) return;
+    bookingId = id;
+    document.getElementById('wlBookTitle').textContent = 'Записать: ' + e.patient;
+    document.getElementById('wlBookDate').value = e.dateFrom && e.dateFrom > W.today ? e.dateFrom : W.today;
+    document.getElementById('wlBookTime').value = e.part === 'evening' ? '16:00' : (e.part === 'day' ? '12:00' : '09:00');
+    fillSelect(document.getElementById('wlBookDoctor'), W.doctors, null, e.doctorId || (W.doctors[0] || {}).id);
+    openModal('m-wl-book');
+  };
+  window.wlBookManual = async function(offerOnly){
+    const date = document.getElementById('wlBookDate').value, time = document.getElementById('wlBookTime').value;
+    if(!date || !time){ showToast('Укажите дату и время', 'error'); return; }
+    const d = await post('/new/waitlist/' + bookingId + '/' + (offerOnly ? 'offer' : 'book') + '/', {
+      start: date + 'T' + time, doctor_id: document.getElementById('wlBookDoctor').value,
+    });
+    if(d){ closeModal('m-wl-book'); showToast(offerOnly ? 'Предложение отправлено пациенту' : 'Записан. Пациенту отправлено подтверждение.', 'success'); reload(); }
+  };
+
+  render();
+})();
+</script>
+{% endblock %}

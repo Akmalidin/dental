@@ -47,6 +47,14 @@ def _messages_unread_count(clinic):
     return messages_conversation_qs(clinic).filter(direction="in", read=False).count()
 
 
+def _waitlist_count(clinic):
+    try:
+        from apps.appointments.waitlist_views import active_count
+        return active_count(clinic)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _shared_options(request, clinic):
     """Опции для модалок, которые могут быть на любой странице (форма
     сотрудника/пациента/услуги и т.п. — общий base.html их всегда рендерит)."""
@@ -89,6 +97,7 @@ def _shared_options(request, clinic):
         # та же граница, что у списка бесед (_newui_messages_data): входящие
         # непрочитанные с привязанным пациентом.
         "messagesUnread": _messages_unread_count(clinic),
+        "waitlistCount": _waitlist_count(clinic),
         "roleOptions": [
             # roleKey — стабильный системный ключ роли (Role.DOCTOR и т.п., не
             # зависит от языка/переименования display_name) — нужен, чтобы

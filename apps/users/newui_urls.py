@@ -1,6 +1,7 @@
 from django.urls import path
 from . import newui_views as v
 from . import salary_views as sv
+from apps.appointments import waitlist_views as wv
 
 urlpatterns = [
     path("", v.newui_dashboard, name="newui_dashboard"),
@@ -32,6 +33,13 @@ urlpatterns = [
     path("visits/", v.newui_visits, name="newui_visits"),
     path("schedule/", v.newui_schedule, name="newui_schedule"),
     path("schedule/data/", v.newui_schedule_data_json, name="newui_schedule_data"),
+    path("waitlist/", wv.newui_waitlist, name="newui_waitlist"),
+    path("waitlist/data/", wv.waitlist_json, name="newui_waitlist_data"),
+    path("waitlist/patients/", wv.waitlist_patients, name="newui_waitlist_patients"),
+    path("waitlist/add/", wv.waitlist_add, name="newui_waitlist_add"),
+    path("waitlist/<int:pk>/book/", wv.waitlist_book, name="newui_waitlist_book"),
+    path("waitlist/<int:pk>/offer/", wv.waitlist_offer, name="newui_waitlist_offer"),
+    path("waitlist/<int:pk>/status/", wv.waitlist_status, name="newui_waitlist_status"),
     path("treatplans/", v.newui_treatplans, name="newui_treatplans"),
     path("treatplans/<int:pk>/", v.newui_treatplan_detail, name="newui_treatplan_detail"),
     path("staff/", v.newui_staff, name="newui_staff"),

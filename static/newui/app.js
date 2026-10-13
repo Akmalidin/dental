@@ -4838,7 +4838,7 @@ function navIconSvg(key){
 }
 const DEFAULT_NAV_SECTIONS = [
   {id:'dashboard', label:'Дашборд', labelKey:'nav_дашборд', icon:'dashboard', tabs:['dashboard']},
-  {id:'schedule', label:'Расписание', icon:'schedule', tabs:['schedule','visits','visitsjournal']},
+  {id:'schedule', label:'Расписание', icon:'schedule', tabs:['schedule','waitlist','visits','visitsjournal']},
   {id:'patients', label:'Пациенты', labelKey:'nav_пациенты', icon:'patients', tabs:['patients','treatplans','funnel','marketing']},
   {id:'messages', label:'Мессенджеры', labelKey:'nav_мессенджеры', icon:'messages', tabs:['messages']},
   {id:'money', label:'Деньги', icon:'money', tabs:['cashdesk','finance','accounting','salary','mysalary']},
