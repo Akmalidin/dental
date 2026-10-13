@@ -24,6 +24,7 @@ FIELDS = {
     "users.ClinicAccessRequest": ("clinic_slug", "clinic_name", "contact_name", "phone", "email", "message"),
     "users.DoctorReview": ("author", "text"),
     "appointments.Appointment": ("notes", "cancel_note"),
+    "appointments.WaitlistEntry": ("note",),
     "notifications.Notification": ("title", "body"),
 }
 

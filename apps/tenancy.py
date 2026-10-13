@@ -508,6 +508,7 @@ class SectionAccessMiddleware:
         ("/new/staff", "staff"),
         ("/new/settings", "settings"),
         ("/new/schedule", "appointments"),
+        ("/new/waitlist", "appointments"),
         ("/new/visitcard", "treatments"),
         ("/new/treatplans", "treatments"),
         ("/new/patients", "patients"),

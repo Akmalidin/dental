@@ -95,6 +95,7 @@ EXPORT_PLAN = [
     ("treatments", "ToothSurfaceCondition", ("via", "patient__clinic")),
     ("treatments", "ToothGumCondition", ("via", "patient__clinic")),
     ("appointments", "Appointment", "direct"),
+    ("appointments", "WaitlistEntry", "direct"),
     ("treatments", "Treatment", "direct"),
     ("treatments", "TreatmentCure", ("via", "treatment__clinic")),
     ("treatments", "TreatmentFollowUp", ("via", "treatment__clinic")),
