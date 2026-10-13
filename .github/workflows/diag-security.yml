@@ -48,3 +48,11 @@ jobs:
             for u in /api/v1/patients/ /api/v1/auth/users/ /api/docs/ /django-admin/login/ /sync/push/; do
               curl -sk -o /dev/null -w "$u  %{http_code}\n" --resolve "$H:443:127.0.0.1" "https://$H$u"
             done
+            echo; echo "=== защищённые файлы: подписанная ссылка (как в чеке по QR) ==="
+            SAMPLE=$(cd media && find treatments -type f 2>/dev/null | head -1)
+            if [ -n "$SAMPLE" ]; then
+              SU=$(./venv/bin/python manage.py shell -c "from apps.users.media_views import signed_url; print(signed_url('$SAMPLE'))" 2>/dev/null | tail -1)
+              curl -sk -o /tmp/sec_sample -w "подписанная ссылка: %{http_code} %{content_type} %{size_download}B\n" --resolve "$H:443:127.0.0.1" "https://$H$SU"
+              echo "размер файла на диске: $(stat -c %s "media/$SAMPLE")B"
+              rm -f /tmp/sec_sample
+            fi
