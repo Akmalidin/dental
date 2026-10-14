@@ -701,6 +701,9 @@ def _newui_technicians_data():
             "balance": float(tech.balance),
             "userId": tech.user_id,
             "userLogin": tech.user.login if tech.user_id else "",
+            "userName": tech.user.name if tech.user_id else "",
+            # логин из другой клиники — подключён по коду техника
+            "byCode": bool(tech.user_id and tech.user.clinic_id != tech.clinic_id),
         })
         payable = TechnicianTask.objects.filter(technician=tech, status=TechnicianTask.STATUS_INSTALLED, paid=False)
         s = payable.aggregate(x=Sum("amount"))["x"] or Decimal(0)

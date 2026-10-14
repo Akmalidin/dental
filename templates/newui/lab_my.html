@@ -4,6 +4,10 @@
 <style>
   .lm-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
   .lm-sub{font-size:12px;color:var(--ink-soft)}
+  .lm-clinics{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .lm-clinics .chip{display:inline-flex;gap:6px;align-items:center}
+  .lm-clinics .chip i{font-style:normal;font-size:11px;background:var(--mist,#eceef4);border-radius:10px;padding:0 6px;color:var(--ink)}
+  .lm-clinics .chip.active i{background:rgba(255,255,255,.25);color:inherit}
   .lm-board{display:grid;grid-template-columns:repeat(6,minmax(165px,1fr));gap:12px;overflow-x:auto;padding-bottom:8px}
   .lm-col{background:var(--mist,#f1f3f8);border-radius:12px;padding:10px;min-height:120px}
   .lm-col.drop{outline:2px dashed var(--cobalt,#2f4bff);outline-offset:-2px}
@@ -12,6 +16,8 @@
   .lm-card[draggable=true]{cursor:grab}
   .lm-card.overdue{border-color:var(--coral,#ff5a1f)}
   .lm-card b{display:block;margin:2px 0}
+  .lm-clinic{font-size:11.5px;font-weight:600;color:var(--cobalt,#2f4bff);margin-bottom:2px}
+  .lm-clinic.ext{color:#7c3aed}
   .lm-tag{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:600;background:var(--cobalt-tint,#e8ecff);color:var(--cobalt,#2f4bff)}
   .lm-tag.red{background:var(--coral-tint,#ffe9e2);color:var(--coral,#ff5a1f)}
   .lm-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
@@ -20,29 +26,33 @@
   .lm-files .lm-doc{width:84px;height:84px;border-radius:8px;border:1px solid var(--mist-line,#e3e5ec);display:flex;align-items:center;justify-content:center;font-size:24px}
   .lm-dl{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:13.5px}
   .lm-dl dt{color:var(--ink-soft)}
-  @media (max-width:900px){.lm-board{grid-template-columns:repeat(6,82vw)}}
+  .lm-code{font-family:ui-monospace,monospace;font-size:20px;font-weight:700;letter-spacing:2px;user-select:all}
+  .lm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media (max-width:900px){.lm-board{grid-template-columns:repeat(6,82vw)}.lm-grid2{grid-template-columns:1fr}}
 </style>
       <div class="topbar">
         <div><h1>Мои заказы</h1><div class="topbar-sub" id="lmWho"></div></div>
         <div class="topbar-right">
           <button class="chip active" type="button" id="lmTabOrders" onclick="lmTab('orders')">Заказы</button>
           <button class="chip" type="button" id="lmTabPay" onclick="lmTab('pay')">Мои выплаты</button>
+          <button class="chip" type="button" id="lmTabClinics" onclick="lmTab('clinics')">Клиники</button>
         </div>
       </div>
       <div class="page">
-        <div id="lmNoLink" class="card hidden" style="padding:22px;">
-          <b>Ваша учётная запись ещё не связана с техником.</b>
-          <div class="lm-sub" style="margin-top:6px;">Попросите администратора: «Склад и лаборатория» → «Лаборатория» → вкладка «Техники» → «Вход в кабинет» — и выбрать ваш логин.</div>
-        </div>
+        <div class="lm-clinics" id="lmClinicBar"></div>
 
         <div id="lmOrders">
+          <div id="lmNoLink" class="card hidden" style="padding:16px 18px;margin-bottom:14px;"></div>
           <div class="lm-kpis">
             <div class="card kpi b-cobalt"><span class="lbl">Новых заказов</span><b style="font-size:22px" id="lmKNew">—</b></div>
             <div class="card kpi b-amber"><span class="lbl">В работе</span><b style="font-size:22px" id="lmKWork">—</b></div>
             <div class="card kpi b-coral"><span class="lbl">Просрочено</span><b style="font-size:22px" id="lmKLate">—</b></div>
             <div class="card kpi b-teal"><span class="lbl">Готово, ждут примерки/установки</span><b style="font-size:22px" id="lmKReady">—</b></div>
           </div>
-          <div class="lm-sub" style="margin:-4px 0 10px;">Перетащите карточку в следующий столбец или откройте её: «Взял в работу» → «Готово». Примерку и установку отмечает клиника.</div>
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin:-4px 0 10px;">
+            <div class="lm-sub">Перетащите карточку в следующий столбец или откройте её. В заказах клиник ODONTIS примерку и установку отмечает клиника.</div>
+            <button class="btn btn-cobalt btn-sm" type="button" onclick="lmExtOrderOpen()">+ Заказ от сторонней клиники</button>
+          </div>
           <div class="lm-board" id="lmBoard"></div>
         </div>
 
@@ -53,12 +63,43 @@
             <div class="card kpi b-cobalt"><span class="lbl">Выплачено в этом месяце</span><b style="font-size:22px" id="lmPPaid">—</b></div>
             <div class="card kpi"><span class="lbl">Сейчас в работе на сумму</span><b style="font-size:22px" id="lmPWork">—</b></div>
           </div>
+          <div class="card" style="margin-bottom:14px;" id="lmPayByClinicCard">
+            <div class="card-head"><h3>По клиникам</h3></div>
+            <div style="overflow-x:auto;"><table>
+              <thead><tr><th>Клиника</th><th class="n">Заработано за месяц</th><th class="n">К выплате</th><th class="n">Выплачено за месяц</th><th class="n">В работе</th></tr></thead>
+              <tbody id="lmPayByClinic"></tbody>
+            </table></div>
+          </div>
           <div class="card">
             <div class="card-head"><h3>Установленные работы за 90 дней</h3></div>
             <div style="overflow-x:auto;"><table>
-              <thead><tr><th>Установлено</th><th>Пациент</th><th>Работа</th><th class="n">Сумма</th><th>Оплата</th></tr></thead>
+              <thead><tr><th>Установлено</th><th>Клиника</th><th>Пациент</th><th>Работа</th><th class="n">Сумма</th><th>Оплата</th></tr></thead>
               <tbody id="lmWorks"></tbody>
             </table></div>
+          </div>
+        </div>
+
+        <div id="lmClinicsPanel" class="hidden">
+          <div class="card" style="padding:16px 18px;margin-bottom:14px;">
+            <div style="font-weight:700;margin-bottom:6px;">Мой код техника</div>
+            <div class="lm-code" id="lmCode"></div>
+            <div class="lm-sub" style="margin-top:6px;max-width:640px;">Работаете с клиникой, у которой тоже ODONTIS? Сообщите им этот код — администратор вводит его в «Лаборатория → Техники → Подключить по коду». После этого их заказы приходят сюда; им видны только их собственные заказы, вам — только заказы, отправленные вам.</div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="lmCopyCode()">Скопировать</button>
+              <button class="btn btn-ghost btn-sm" type="button" onclick="lmNewCode()" title="Старый код перестанет работать; уже подключённые клиники останутся">Сменить код</button>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-head"><h3>Клиники в ODONTIS</h3></div>
+            <div style="overflow-x:auto;"><table><tbody id="lmOdontisClinics"></tbody></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <h3>Сторонние клиники</h3>
+              <button class="btn btn-cobalt btn-sm" type="button" onclick="lmExtClinicOpen()">+ Добавить клинику</button>
+            </div>
+            <div class="lm-sub" style="padding:0 18px 8px;">Клиники без ODONTIS: заказы от них вы заносите сами. Эти записи видите только вы.</div>
+            <div style="overflow-x:auto;"><table><tbody id="lmExtClinics"></tbody></table></div>
           </div>
         </div>
       </div>
@@ -67,7 +108,43 @@
         <div class="modal" style="max-width:600px;">
           <div class="modal-head"><h3 id="lmOTitle">Заказ</h3><button class="modal-close" type="button" onclick="closeModal('m-lm-order')">✕</button></div>
           <div class="modal-body" id="lmOBody"></div>
-          <div class="modal-foot" id="lmOFoot"></div>
+          <div class="modal-foot" id="lmOFoot" style="flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-lm-ext-clinic">
+        <div class="modal" style="max-width:460px;">
+          <div class="modal-head"><h3 id="lmECTitle">Сторонняя клиника</h3><button class="modal-close" type="button" onclick="closeModal('m-lm-ext-clinic')">✕</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="lmECId">
+            <div class="form-group"><label>Название</label><input type="text" id="lmECName" maxlength="200" autocomplete="off" placeholder="Например: Стоматология «Улыбка»"></div>
+            <div class="form-group"><label>Телефон</label><input type="text" id="lmECPhone" maxlength="40" autocomplete="off"></div>
+            <div class="form-group"><label>Контакт / адрес</label><input type="text" id="lmECContact" maxlength="200" autocomplete="off"></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-lm-ext-clinic')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="lmExtClinicSave()">Сохранить</button></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-lm-ext-order">
+        <div class="modal" style="max-width:600px;">
+          <div class="modal-head"><h3 id="lmEOTitle">Заказ от сторонней клиники</h3><button class="modal-close" type="button" onclick="closeModal('m-lm-ext-order')">✕</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="lmEOId">
+            <div class="form-group"><label>Клиника</label><select id="lmEOClinic"></select></div>
+            <div class="lm-grid2">
+              <div class="form-group"><label>Работа</label><input type="text" id="lmEOWork" maxlength="200" autocomplete="off" placeholder="Коронка циркониевая"></div>
+              <div class="form-group"><label>Зуб(ы)</label><input type="text" id="lmEOTooth" maxlength="120" autocomplete="off" placeholder="11, 21"></div>
+              <div class="form-group"><label>Пациент</label><input type="text" id="lmEOPatient" maxlength="200" autocomplete="off"></div>
+              <div class="form-group"><label>Врач</label><input type="text" id="lmEODoctor" maxlength="200" autocomplete="off"></div>
+              <div class="form-group"><label>Материал</label><input type="text" id="lmEOMaterial" maxlength="120" autocomplete="off"></div>
+              <div class="form-group"><label>Цвет (Vita)</label><input type="text" id="lmEOColor" maxlength="20" autocomplete="off" placeholder="A2"></div>
+              <div class="form-group"><label>Получен</label><input type="date" id="lmEOTransferred"></div>
+              <div class="form-group"><label>Срок</label><input type="date" id="lmEOExpected"></div>
+              <div class="form-group"><label>Моя цена</label><input type="number" id="lmEOAmount" min="0" step="1"></div>
+            </div>
+            <div class="form-group"><label>Комментарий врача</label><textarea id="lmEOComment" rows="2" maxlength="2000"></textarea></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-lm-ext-order')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="lmExtOrderSave()">Сохранить</button></div>
         </div>
       </div>
 {% endblock %}
@@ -79,33 +156,62 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money = n => Math.round(n || 0).toLocaleString('ru-RU') + ' ' + ((typeof CUR_SYM !== 'undefined' && CUR_SYM) || 'сом');
   const MOVE_LABEL = {in_progress: 'Взял в работу', ready: 'Готово'};
-  if(!D){
-    document.getElementById('lmNoLink').classList.remove('hidden');
-    document.getElementById('lmOrders').classList.add('hidden');
-    document.querySelectorAll('#lmTabOrders,#lmTabPay').forEach(b => b.classList.add('hidden'));
-    return;
+  const STATUS_LABEL = {transferred:'Передан в работу', in_progress:'В изготовлении', correction:'Коррекция', ready:'Готов',
+                        fitting:'Примерка', installed:'Установлено', cancelled:'Отменить заказ'};
+  let current = 'all';
+  try{ current = localStorage.getItem('lmClinic') || 'all'; }catch(e){}
+
+  async function post(url, data){
+    const fd = data instanceof FormData ? data : new FormData();
+    if(!(data instanceof FormData)) Object.entries(data || {}).forEach(([k, v]) => fd.append(k, v == null ? '' : v));
+    const res = await postForm(url, fd);
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось сохранить', 'error'); return null; }
+    return d;
   }
-  document.getElementById('lmWho').textContent = 'Техник: ' + D.technician.name;
+  async function reload(){
+    try{ const r = await fetch('/new/lab/my/data/', {credentials: 'same-origin'}); if(r.ok){ D = await r.json(); render(); } }catch(e){}
+  }
 
   window.lmTab = function(which){
-    document.getElementById('lmOrders').classList.toggle('hidden', which !== 'orders');
-    document.getElementById('lmPay').classList.toggle('hidden', which !== 'pay');
-    document.getElementById('lmTabOrders').classList.toggle('active', which === 'orders');
-    document.getElementById('lmTabPay').classList.toggle('active', which === 'pay');
+    [['orders','lmOrders','lmTabOrders'],['pay','lmPay','lmTabPay'],['clinics','lmClinicsPanel','lmTabClinics']].forEach(([k, panel, tab]) => {
+      document.getElementById(panel).classList.toggle('hidden', k !== which);
+      document.getElementById(tab).classList.toggle('active', k === which);
+    });
+    document.getElementById('lmClinicBar').classList.toggle('hidden', which === 'clinics');
+  };
+  window.lmPick = function(key){
+    current = key;
+    try{ localStorage.setItem('lmClinic', key); }catch(e){}
+    render();
   };
 
-  const byId = id => D.orders.find(o => o.id === id);
+  const inClinic = o => current === 'all' || o.clinicKey === current;
+  const byKey = k => D.orders.find(o => o.key === k);
   function render(){
-    const o = D.orders;
+    if(current !== 'all' && !D.clinics.some(c => c.key === current)) current = 'all';
+    document.getElementById('lmWho').textContent = D.technician.name;
+    const totalOpen = D.clinics.reduce((a, c) => a + c.open, 0);
+    document.getElementById('lmClinicBar').innerHTML = D.clinics.length > 1 || D.clinics.some(c => c.kind === 'ext') ?
+      `<button class="chip${current === 'all' ? ' active' : ''}" type="button" onclick="lmPick('all')">Все клиники <i>${totalOpen}</i></button>` +
+      D.clinics.map(c => `<button class="chip${current === c.key ? ' active' : ''}" type="button" onclick="lmPick('${c.key}')">${c.kind === 'ext' ? '🏠' : '🏥'} ${esc(c.name)} <i>${c.open}</i></button>`).join('')
+      : '';
+    const noLink = document.getElementById('lmNoLink');
+    noLink.classList.toggle('hidden', D.technician.linked || D.clinics.length > 0);
+    noLink.innerHTML = `<b>Пока нет подключённых клиник.</b><div class="lm-sub" style="margin-top:4px;">Если вы техник нашей клиники — администратор выберет ваш логин в «Лаборатория → Техники → Вход в кабинет». Другим клиникам сообщите код со вкладки «Клиники». Заказы от клиник без ODONTIS добавляйте сами.</div>`;
+
+    const o = D.orders.filter(inClinic);
     document.getElementById('lmKNew').textContent = o.filter(x => x.status === 'transferred').length;
     document.getElementById('lmKWork').textContent = o.filter(x => x.status === 'in_progress' || x.status === 'correction').length;
     document.getElementById('lmKLate').textContent = o.filter(x => x.overdue).length;
     document.getElementById('lmKReady').textContent = o.filter(x => x.status === 'ready' || x.status === 'fitting').length;
+    const showClinic = current === 'all' && D.clinics.length > 1;
     document.getElementById('lmBoard').innerHTML = D.statuses.map(s => {
       const items = o.filter(x => x.status === s.value);
       return `<div class="lm-col" data-status="${s.value}">
         <div class="lm-col-head"><b>${esc(s.label)}</b><span class="lm-sub">${items.length}</span></div>
-        ${items.map(x => `<div class="lm-card${x.overdue ? ' overdue' : ''}" data-id="${x.id}" ${x.moves.length ? 'draggable="true"' : ''}>
+        ${items.map(x => `<div class="lm-card${x.overdue ? ' overdue' : ''}" data-key="${x.key}" ${x.moves.length ? 'draggable="true"' : ''}>
+            ${showClinic ? `<div class="lm-clinic${x.src === 'ext' ? ' ext' : ''}">${x.src === 'ext' ? '🏠' : '🏥'} ${esc(x.clinicName)}</div>` : ''}
             <div style="display:flex;justify-content:space-between;gap:6px;"><span class="lm-sub">${esc(x.code)}</span>${x.overdue ? '<span class="lm-tag red">просрочен</span>' : ''}</div>
             <b>${esc(x.service || 'Работа')}</b>
             <div>${esc(x.patient)}${x.tooth ? ' · зуб ' + esc(x.tooth) : ''}</div>
@@ -114,52 +220,88 @@
       </div>`;
     }).join('');
     document.querySelectorAll('#lmBoard .lm-card').forEach(el => {
-      el.onclick = () => lmOpen(+el.dataset.id);
-      el.ondragstart = ev => { ev.dataTransfer.setData('text/plain', el.dataset.id); ev.dataTransfer.effectAllowed = 'move'; };
+      el.onclick = () => lmOpen(el.dataset.key);
+      el.ondragstart = ev => { ev.dataTransfer.setData('text/plain', el.dataset.key); ev.dataTransfer.effectAllowed = 'move'; };
     });
     document.querySelectorAll('#lmBoard .lm-col').forEach(col => {
       col.ondragover = ev => { ev.preventDefault(); col.classList.add('drop'); };
       col.ondragleave = () => col.classList.remove('drop');
       col.ondrop = ev => {
         ev.preventDefault(); col.classList.remove('drop');
-        const x = byId(+ev.dataTransfer.getData('text/plain'));
+        const x = byKey(ev.dataTransfer.getData('text/plain'));
         if(!x || x.status === col.dataset.status) return;
         if(!x.moves.includes(col.dataset.status)){ showToast('Этот статус ставит клиника', 'error'); return; }
-        lmMove(x.id, col.dataset.status);
+        lmMove(x, col.dataset.status);
       };
     });
-    const P = D.pay;
-    document.getElementById('lmPEarned').textContent = money(P.earnedMonth);
-    document.getElementById('lmPUnpaid').textContent = money(P.unpaid);
-    document.getElementById('lmPPaid').textContent = money(P.paidMonth);
-    document.getElementById('lmPWork').textContent = money(P.inWork);
-    document.getElementById('lmWorks').innerHTML = P.works.length ? P.works.map(w => `<tr>
-        <td>${esc(w.date)}</td><td>${esc(w.patient)}</td><td>${esc(w.service)}${w.tooth ? ' · зуб ' + esc(w.tooth) : ''}</td>
+    renderPay();
+    renderClinics();
+  }
+
+  function renderPay(){
+    const rows = D.pay.clinics.filter(r => current === 'all' || r.key === current);
+    const sum = k => rows.reduce((a, r) => a + r[k], 0);
+    document.getElementById('lmPEarned').textContent = money(sum('earnedMonth'));
+    document.getElementById('lmPUnpaid').textContent = money(sum('unpaid'));
+    document.getElementById('lmPPaid').textContent = money(sum('paidMonth'));
+    document.getElementById('lmPWork').textContent = money(sum('inWork'));
+    document.getElementById('lmPayByClinicCard').classList.toggle('hidden', D.pay.clinics.length < 2 || current !== 'all');
+    document.getElementById('lmPayByClinic').innerHTML = D.pay.clinics.map(r => `<tr>
+      <td><a href="#" onclick="event.preventDefault();lmPick('${r.key}')">${esc(r.name)}</a></td>
+      <td class="n mono">${money(r.earnedMonth)}</td><td class="n mono">${money(r.unpaid)}</td>
+      <td class="n mono">${money(r.paidMonth)}</td><td class="n mono">${money(r.inWork)}</td></tr>`).join('');
+    const works = D.pay.works.filter(w => current === 'all' || w.clinicKey === current);
+    document.getElementById('lmWorks').innerHTML = works.length ? works.map(w => `<tr>
+        <td>${esc(w.date)}</td><td>${esc(w.clinicName)}</td><td>${esc(w.patient)}</td><td>${esc(w.service)}${w.tooth ? ' · зуб ' + esc(w.tooth) : ''}</td>
         <td class="n mono">${money(w.amount)}</td>
-        <td>${w.paid ? '<span style="color:var(--teal);font-weight:600;">выплачено ' + esc(w.paidAt) + '</span>' : '<span class="lm-sub">ждёт выплаты</span>'}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="lm-sub" style="text-align:center;padding:18px;">Пока нет установленных работ</td></tr>';
+        <td>${w.paid ? '<span style="color:var(--teal);font-weight:600;">выплачено ' + esc(w.paidAt) + '</span>' : '<span class="lm-sub">ждёт выплаты</span>'}
+          ${w.extId ? ` <button class="btn btn-ghost btn-sm" type="button" onclick="lmExtPaid(${w.extId}, ${!w.paid})">${w.paid ? 'не оплачено' : 'Оплачено'}</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="lm-sub" style="text-align:center;padding:18px;">Пока нет установленных работ</td></tr>';
+  }
+
+  function renderClinics(){
+    document.getElementById('lmCode').textContent = D.technician.code;
+    const od = D.clinics.filter(c => c.kind === 'odontis');
+    document.getElementById('lmOdontisClinics').innerHTML = od.length ? od.map(c => `<tr>
+        <td><b>🏥 ${esc(c.name)}</b>${c.home ? ' <span class="lm-sub">— ваша клиника</span>' : ''}</td>
+        <td class="lm-sub">открытых заказов: ${c.open}</td>
+        <td style="text-align:right;">${c.home ? '' : `<button class="btn btn-ghost btn-sm" type="button" onclick="lmLeave(${c.techId})">Отключиться</button>`}</td></tr>`).join('')
+      : '<tr><td class="lm-sub" style="padding:14px 18px;">Пока нет. Сообщите клинике свой код техника.</td></tr>';
+    const ex = D.clinics.filter(c => c.kind === 'ext');
+    document.getElementById('lmExtClinics').innerHTML = ex.length ? ex.map(c => `<tr>
+        <td><b>🏠 ${esc(c.name)}</b><div class="lm-sub">${esc([c.phone, c.contact].filter(Boolean).join(' · '))}</div></td>
+        <td class="lm-sub">открытых заказов: ${c.open}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" type="button" onclick="lmExtClinicOpen(${c.id})">Изменить</button>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="lmExtClinicDelete(${c.id})">✕</button></td></tr>`).join('')
+      : '<tr><td class="lm-sub" style="padding:14px 18px;">Пока нет.</td></tr>';
   }
 
   function replaceOrder(order){
-    const i = D.orders.findIndex(o => o.id === order.id);
-    if(i >= 0) D.orders[i] = order;
+    const i = D.orders.findIndex(o => o.key === order.key);
+    if(i >= 0) D.orders[i] = order; else D.orders.push(order);
   }
-  async function lmMove(id, status){
-    const fd = new FormData(); fd.append('status', status);
-    const res = await postForm('/new/lab/my/' + id + '/status/', fd);
-    const d = await res.json().catch(() => ({}));
-    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось сохранить', 'error'); return false; }
-    replaceOrder(d.order); render();
-    showToast(status === 'ready' ? 'Отмечено «Готово» — врачу и администратору ушло уведомление' : 'Статус: ' + d.order.statusLabel, 'success');
+  async function lmMove(x, status){
+    if(status === 'cancelled' && !confirm('Отменить заказ?')) return false;
+    const url = x.src === 'ext' ? '/new/lab/my/ext/order/' + x.id + '/status/' : '/new/lab/my/' + x.id + '/status/';
+    const d = await post(url, {status});
+    if(!d) return false;
+    if(status === 'cancelled') D.orders = D.orders.filter(o => o.key !== x.key); else replaceOrder(d.order);
+    render();
+    showToast(x.src !== 'ext' && status === 'ready' ? 'Отмечено «Готово» — врачу и администратору ушло уведомление'
+      : 'Статус: ' + (status === 'cancelled' ? 'отменён' : d.order.statusLabel), 'success');
+    if(status === 'installed') reload();
     return true;
   }
-  window.lmOpen = function(id){
-    const x = byId(id); if(!x) return;
+
+  window.lmOpen = function(key){
+    const x = byKey(key); if(!x) return;
+    const ext = x.src === 'ext';
     document.getElementById('lmOTitle').textContent = x.code + ' · ' + (x.service || 'Работа');
     const row = (k, v) => v ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
     document.getElementById('lmOBody').innerHTML = `
-      <dl class="lm-dl">${row('Статус', x.statusLabel)}${row('Пациент', x.patient)}${row('Врач', x.doctor)}${row('Зуб', x.tooth)}
-        ${row('Материал', x.material)}${row('Цвет (Vita)', x.color)}${row('Передан', x.transferred)}${row('Срок', x.expectedReady + (x.overdue ? ' — просрочен' : ''))}
+      <dl class="lm-dl">${row('Клиника', (ext ? '🏠 ' : '🏥 ') + x.clinicName)}${row('Статус', x.statusLabel)}${row('Пациент', x.patient)}${row('Врач', x.doctor)}${row('Зуб', x.tooth)}
+        ${row('Материал', x.material)}${row('Цвет (Vita)', x.color)}${row(ext ? 'Получен' : 'Передан', x.transferred)}${row('Срок', x.expectedReady + (x.overdue ? ' — просрочен' : ''))}
         ${row('Готов', x.readyAt)}${row('Установлен', x.installedAt)}${row('Оплата', money(x.amount) + (x.paid ? ' · выплачено' : ''))}</dl>
       ${x.comment ? `<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--mist,#f1f3f8);font-size:13.5px;white-space:pre-wrap;"><b>Комментарий врача:</b>\n${esc(x.comment)}</div>` : ''}
       <div style="margin-top:12px;font-weight:600;font-size:13px;">Файлы</div>
@@ -167,28 +309,139 @@
       <label class="btn btn-ghost btn-sm" style="margin-top:8px;display:inline-block;">📎 Загрузить фото/файл<input type="file" id="lmFile" accept="image/*,.pdf,.stl,.ply,.obj,.zip" style="display:none;"></label>
       ${x.events.length ? `<div style="margin-top:12px;font-weight:600;font-size:13px;">История</div>
         <div class="lm-sub" style="font-size:12.5px;">${x.events.map(e => esc(e.at) + ' — ' + esc(e.label) + (e.by ? ' (' + esc(e.by) + ')' : '')).join('<br>')}</div>` : ''}`;
-    document.getElementById('lmOFoot').innerHTML = `<button class="btn btn-ghost" type="button" onclick="closeModal('m-lm-order')">Закрыть</button>` +
-      x.moves.map(m => `<button class="btn btn-cobalt" type="button" data-move="${m}">${esc(MOVE_LABEL[m] || m)}</button>`).join('');
-    document.querySelectorAll('#lmOFoot [data-move]').forEach(b => b.onclick = async () => {
+    let foot = `<button class="btn btn-ghost" type="button" onclick="closeModal('m-lm-order')">Закрыть</button>`;
+    if(ext){
+      foot += `<button class="btn btn-ghost" type="button" data-act="edit">Изменить</button>
+        <button class="btn btn-ghost" type="button" data-act="paid">${x.paid ? 'Снять «оплачено»' : 'Оплачено'}</button>
+        <select class="btn btn-ghost" data-act="status" style="max-width:200px;"><option value="">Сменить статус…</option>
+          ${x.moves.map(m => `<option value="${m}">${esc(STATUS_LABEL[m] || m)}</option>`).join('')}</select>
+        <button class="btn btn-ghost" type="button" data-act="delete" title="Удалить заказ">🗑</button>`;
+    } else {
+      foot += x.moves.map(m => `<button class="btn btn-cobalt" type="button" data-move="${m}">${esc(MOVE_LABEL[m] || m)}</button>`).join('');
+    }
+    const footEl = document.getElementById('lmOFoot');
+    footEl.innerHTML = foot;
+    footEl.querySelectorAll('[data-move]').forEach(b => b.onclick = async () => {
       b.disabled = true;
-      if(await lmMove(x.id, b.dataset.move)) closeModal('m-lm-order'); else b.disabled = false;
+      if(await lmMove(x, b.dataset.move)) closeModal('m-lm-order'); else b.disabled = false;
     });
+    const act = a => footEl.querySelector(`[data-act="${a}"]`);
+    if(ext){
+      act('edit').onclick = () => { closeModal('m-lm-order'); lmExtOrderOpen(x); };
+      act('paid').onclick = async () => { if(await lmExtPaid(x.id, !x.paid)) lmOpen(x.key); };
+      act('status').onchange = async ev => { const v = ev.target.value; if(v && await lmMove(x, v)) closeModal('m-lm-order'); };
+      act('delete').onclick = async () => {
+        if(!confirm('Удалить заказ вместе с файлами?')) return;
+        if(await post('/new/lab/my/ext/order/' + x.id + '/delete/')){ D.orders = D.orders.filter(o => o.key !== x.key); closeModal('m-lm-order'); render(); reload(); }
+      };
+    }
     document.getElementById('lmFile').onchange = async ev => {
       const f = ev.target.files[0]; if(!f) return;
       const fd = new FormData(); fd.append('file', f);
-      const res = await postForm('/new/lab/my/' + x.id + '/upload/', fd);
-      const d = await res.json().catch(() => ({}));
-      if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось загрузить', 'error'); return; }
-      replaceOrder(d.order); render(); lmOpen(x.id);
+      const d = await post(ext ? '/new/lab/my/ext/order/' + x.id + '/upload/' : '/new/lab/my/' + x.id + '/upload/', fd);
+      if(!d) return;
+      replaceOrder(d.order); render(); lmOpen(x.key);
       showToast('Файл загружен', 'success');
     };
     openModal('m-lm-order');
   };
 
+  window.lmExtPaid = async function(id, paid){
+    const d = await post('/new/lab/my/ext/order/' + id + '/paid/', {paid: paid ? '1' : ''});
+    if(!d) return false;
+    replaceOrder(d.order); await reload();
+    showToast(paid ? 'Отмечено: клиника оплатила' : 'Оплата снята', 'success');
+    return true;
+  };
+
+  /* Сторонние клиники */
+  window.lmExtClinicOpen = function(id){
+    const c = D.clinics.find(x => x.kind === 'ext' && x.id === id) || {};
+    document.getElementById('lmECTitle').textContent = id ? 'Изменить клинику' : 'Новая сторонняя клиника';
+    document.getElementById('lmECId').value = id || '';
+    document.getElementById('lmECName').value = c.name || '';
+    document.getElementById('lmECPhone').value = c.phone || '';
+    document.getElementById('lmECContact').value = c.contact || '';
+    openModal('m-lm-ext-clinic');
+    setTimeout(() => document.getElementById('lmECName').focus(), 50);
+  };
+  window.lmExtClinicSave = async function(){
+    const d = await post('/new/lab/my/ext/clinic/save/', {id: document.getElementById('lmECId').value,
+      name: document.getElementById('lmECName').value, phone: document.getElementById('lmECPhone').value,
+      contact: document.getElementById('lmECContact').value});
+    if(!d) return;
+    closeModal('m-lm-ext-clinic');
+    await reload();
+    showToast('Клиника сохранена', 'success');
+    if(pendingOrderAfterClinic){ pendingOrderAfterClinic = false; lmExtOrderOpen(null, d.id); }
+  };
+  window.lmExtClinicDelete = async function(id){
+    if(!confirm('Убрать клинику из списка? Заказы и выплаты по ней останутся в истории.')) return;
+    if(await post('/new/lab/my/ext/clinic/' + id + '/delete/')){ await reload(); showToast('Клиника убрана', 'success'); }
+  };
+
+  /* Заказ от сторонней клиники */
+  let pendingOrderAfterClinic = false;
+  window.lmExtOrderOpen = function(x, clinicId){
+    const ext = D.clinics.filter(c => c.kind === 'ext');
+    if(!ext.length){
+      pendingOrderAfterClinic = true;
+      showToast('Сначала добавьте клинику, от которой заказ', 'success');
+      return lmExtClinicOpen();
+    }
+    x = x || {};
+    const cur = D.clinics.find(c => c.key === current && c.kind === 'ext');
+    const sel = document.getElementById('lmEOClinic');
+    sel.innerHTML = ext.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    sel.value = x.clinicId || clinicId || (cur ? cur.id : ext[0].id);
+    document.getElementById('lmEOTitle').textContent = x.id ? 'Изменить заказ ' + x.code : 'Заказ от сторонней клиники';
+    document.getElementById('lmEOId').value = x.id || '';
+    document.getElementById('lmEOWork').value = x.service || '';
+    document.getElementById('lmEOTooth').value = x.tooth || '';
+    document.getElementById('lmEOPatient').value = x.patient && x.patient !== '—' ? x.patient : '';
+    document.getElementById('lmEODoctor').value = x.doctor || '';
+    document.getElementById('lmEOMaterial').value = x.material || '';
+    document.getElementById('lmEOColor').value = x.color || '';
+    document.getElementById('lmEOTransferred').value = x.transferredIso || D.today;
+    document.getElementById('lmEOExpected').value = x.expectedIso || '';
+    document.getElementById('lmEOAmount').value = x.id ? Math.round(x.amount) : '';
+    document.getElementById('lmEOComment').value = x.comment || '';
+    openModal('m-lm-ext-order');
+    setTimeout(() => document.getElementById('lmEOWork').focus(), 50);
+  };
+  window.lmExtOrderSave = async function(){
+    const v = id => document.getElementById(id).value;
+    const d = await post('/new/lab/my/ext/order/save/', {id: v('lmEOId'), clinic_id: v('lmEOClinic'), work: v('lmEOWork'),
+      tooth: v('lmEOTooth'), patient: v('lmEOPatient'), doctor: v('lmEODoctor'), material: v('lmEOMaterial'),
+      color: v('lmEOColor'), transferred: v('lmEOTransferred'), expected: v('lmEOExpected'), amount: v('lmEOAmount') || 0,
+      comment: v('lmEOComment')});
+    if(!d) return;
+    closeModal('m-lm-ext-order');
+    await reload();
+    showToast('Заказ сохранён', 'success');
+  };
+
+  /* Код техника и клиники ODONTIS */
+  window.lmCopyCode = function(){
+    const c = D.technician.code;
+    (navigator.clipboard ? navigator.clipboard.writeText(c) : Promise.reject()).then(
+      () => showToast('Код скопирован: ' + c, 'success'), () => showToast('Код: ' + c, 'success'));
+  };
+  window.lmNewCode = async function(){
+    if(!confirm('Сменить код? Старый перестанет работать; уже подключённые клиники останутся.')) return;
+    const d = await post('/new/lab/my/code/new/');
+    if(d){ D.technician.code = d.code; renderClinics(); showToast('Новый код: ' + d.code, 'success'); }
+  };
+  window.lmLeave = async function(techId){
+    const name = (D.clinics.find(c => c.techId === techId) || {}).name || '';
+    if(!confirm('Отключиться от клиники «' + name + '»? Её новые заказы перестанут приходить вам.')) return;
+    if(await post('/new/lab/my/leave/' + techId + '/')){ await reload(); showToast('Вы отключились от клиники', 'success'); }
+  };
+
   // новые заказы от врачей — без перезагрузки страницы
-  setInterval(async () => {
-    if(document.hidden || document.querySelector('.modal-backdrop.open, .modal-backdrop.show')) return;
-    try{ const r = await fetch('/new/lab/my/data/', {credentials: 'same-origin'}); if(r.ok){ D = await r.json(); render(); } }catch(e){}
+  setInterval(() => {
+    if(document.hidden || document.querySelector('.modal-backdrop.open')) return;
+    reload();
   }, 60000);
   render();
 })();

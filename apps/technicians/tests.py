@@ -135,5 +135,112 @@ class TechnicianCabinetTestCase(TestCase):
         self.tech.save()
         r = self.c.get("/new/lab/my/")
         self.assertEqual(r.status_code, 200)
-        self.assertIsNone(r.context["real_data"]["labMy"])
-        self.assertEqual(self.c.get("/new/lab/my/data/").status_code, 403)
+        d = r.context["real_data"]["labMy"]
+        self.assertFalse(d["technician"]["linked"])
+        self.assertEqual(d["orders"], [])
+        self.assertTrue(d["technician"]["code"].startswith("T-"))
+
+    def _other_clinic(self):
+        """Клиника Б в ODONTIS: свой админ, свой врач, свой пациент, свой заказ."""
+        set_current_clinic(self.other)
+        role = lambda n: Role.objects.get(name=n, clinic__isnull=True)  # noqa: E731
+        admin_b = User.objects.create(login="lab_admin_b", name="Админ Б", role=role("admin_main"), clinic=self.other)
+        doc_b = User.objects.create(login="lab_doc_b", name="Врач Б", role=role("doctor"), clinic=self.other)
+        branch = Branch.objects.create(name="ФБ", address="-", phone="0", is_main=True, clinic=self.other)
+        pat = Patient.objects.create(first_name="Бека", last_name="Б", phone="+996555000444", clinic=self.other)
+        svc = Service.objects.create(name="Мост", price=1, clinic=self.other)
+        t = Treatment.objects.create(patient=pat, doctor=doc_b, branch=branch, status="completed")
+        local_tech = Technician.objects.create(name="Местный техник Б")
+        foreign = TechnicianTask.objects.create(technician=local_tech, treatment=t, patient=pat, service=svc,
+                                                amount=7000, clinic=self.other)
+        set_current_clinic(self.clinic)
+        return admin_b, t, svc, pat, foreign
+
+    def test_connect_by_code_and_clinic_switch(self):
+        self.tech.user = self.tech_user
+        self.tech.save()
+        code = self.c.get("/new/lab/my/data/").json()["technician"]["code"]
+        admin_b, t, svc, pat, foreign = self._other_clinic()
+        b = Client()
+        b.force_login(admin_b)
+        self.assertIn("не найден", b.post("/new/lab/connect/", {"code": "T-AAAA-AAAA"}).json()["error"])
+        r = b.post("/new/lab/connect/", {"code": code.lower().replace("-", "")[1:]})   # без «T-» и дефисов
+        self.assertTrue(r.json()["ok"], r.content)
+        self.assertIn("уже подключён", b.post("/new/lab/connect/", {"code": code}).json()["error"])
+        tech_b = Technician.all_clinics.get(pk=r.json()["id"])
+        self.assertEqual((tech_b.clinic_id, tech_b.user_id), (self.other.pk, self.tech_user.pk))
+        self.assertTrue(Notification.objects.filter(user=self.tech_user, title__contains="подключила").exists())
+        # клиника Б отправляет заказ подключённому технику
+        set_current_clinic(self.other)
+        order_b = TechnicianTask.objects.create(technician=tech_b, treatment=t, patient=pat, service=svc,
+                                                amount=5000, clinic=self.other)
+        set_current_clinic(self.clinic)
+        d = self.c.get("/new/lab/my/data/").json()
+        keys = {o["key"]: o["clinicName"] for o in d["orders"]}
+        self.assertEqual(keys, {f"c{self.mine.pk}": "Лаб", f"c{order_b.pk}": "Чужая"})
+        self.assertEqual({c["key"] for c in d["clinics"]}, {f"c{self.clinic.pk}", f"c{self.other.pk}"})
+        self.assertEqual(len(d["pay"]["clinics"]), 2)
+        # заказ клиники Б — меняет статус; заказ другого техника клиники Б — нет
+        self.assertTrue(self.c.post(f"/new/lab/my/{order_b.pk}/status/", {"status": "in_progress"}).json()["ok"])
+        self.assertEqual(self.c.post(f"/new/lab/my/{foreign.pk}/status/", {"status": "in_progress"}).status_code, 404)
+        self.assertTrue(self.c.post(f"/new/lab/my/{order_b.pk}/status/", {"status": "ready"}).json()["ok"])
+        doc_b = t.doctor
+        n = Notification.objects.filter(user=doc_b, title__startswith="Работа готова").first()
+        self.assertIsNotNone(n)
+        self.assertEqual(n.clinic_id, self.other.pk)
+        # админ клиники А не может привязать чужой логин и не видит заказов Б
+        self.assertEqual(self.c.get("/new/lab/").status_code, 302)
+        # техник отключился — заказы Б пропали
+        self.assertTrue(self.c.post(f"/new/lab/my/leave/{tech_b.pk}/").json()["ok"])
+        keys = [o["key"] for o in self.c.get("/new/lab/my/data/").json()["orders"]]
+        self.assertEqual(keys, [f"c{self.mine.pk}"])
+        # новый код — старый не работает
+        new = self.c.post("/new/lab/my/code/new/").json()["code"]
+        self.assertNotEqual(new, code)
+        self.assertIn("не найден", b.post("/new/lab/connect/", {"code": code}).json()["error"])
+        # чужой сотрудник (не админ) подключать не может
+        d2 = Client()
+        d2.force_login(self.doc)
+        self.assertEqual(d2.post("/new/lab/connect/", {"code": new}).status_code, 403)
+
+    def test_connect_throttled(self):
+        from django.core.cache import cache
+        cache.clear()
+        a = Client()
+        a.force_login(self.admin)
+        for _ in range(10):
+            a.post("/new/lab/connect/", {"code": "T-ZZZZ-ZZZZ"})
+        self.assertEqual(a.post("/new/lab/connect/", {"code": "T-ZZZZ-ZZZZ"}).status_code, 429)
+        cache.clear()
+
+    def test_external_clinic_orders_private(self):
+        from apps.technicians.models import ExternalOrder
+        r = self.c.post("/new/lab/my/ext/clinic/save/", {"name": "Улыбка <b>", "phone": "0555"})
+        cid = r.json()["id"]
+        r = self.c.post("/new/lab/my/ext/order/save/", {"clinic_id": cid, "work": "Коронка", "tooth": "11",
+                                                        "patient": "Петров", "amount": "4500", "expected": "2030-01-01"})
+        o = r.json()["order"]
+        self.assertEqual((o["clinicName"], o["status"], o["amount"]), ("Улыбка b", "transferred", 4500.0))
+        oid = o["id"]
+        self.assertTrue(self.c.post(f"/new/lab/my/ext/order/{oid}/status/", {"status": "installed"}).json()["ok"])
+        self.assertTrue(self.c.post(f"/new/lab/my/ext/order/{oid}/paid/", {"paid": "1"}).json()["order"]["paid"])
+        up = self.c.post(f"/new/lab/my/ext/order/{oid}/upload/",
+                         {"file": SimpleUploadedFile("scan.stl", b"solid x", content_type="model/stl")}).json()
+        url = up["order"]["files"][0]["url"]
+        d = self.c.get("/new/lab/my/data/").json()
+        row = [p for p in d["pay"]["clinics"] if p["key"] == f"x{cid}"][0]
+        self.assertEqual((row["earnedMonth"], row["paidMonth"], row["unpaid"]), (4500.0, 4500.0, 0.0))
+        # другой пользователь: ни заказа, ни файла (без подписи)
+        other = Client()
+        other.force_login(self.admin)
+        self.assertEqual(other.post(f"/new/lab/my/ext/order/{oid}/status/", {"status": "ready"}).status_code, 404)
+        self.assertEqual(other.post("/new/lab/my/ext/order/save/", {"clinic_id": cid, "work": "x"}).status_code, 400)
+        path = url.split("?")[0]
+        self.assertEqual(other.get(path).status_code, 404)
+        self.assertEqual(self.c.get(path).status_code, 200)
+        self.assertEqual(Client().get(url).status_code, 200)       # подписанная ссылка
+        # клиника с заказами не удаляется, а прячется
+        self.assertTrue(self.c.post(f"/new/lab/my/ext/clinic/{cid}/delete/").json()["ok"])
+        self.assertTrue(ExternalOrder.objects.filter(pk=oid).exists())
+        self.assertTrue(self.c.post(f"/new/lab/my/ext/order/{oid}/delete/").json()["ok"])
+        self.assertFalse(ExternalOrder.objects.filter(pk=oid).exists())

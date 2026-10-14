@@ -30,16 +30,20 @@ class Technician(ClinicScopedModel):
     is_active = models.BooleanField(default=True, verbose_name="Активен")
     notes = models.TextField(blank=True)
     # Логин техника: с ним он входит в свой кабинет (/new/lab/my/) и видит
-    # только свои заказы и выплаты.
-    user = models.OneToOneField(
+    # только свои заказы и выплаты. Один логин может быть техником в
+    # нескольких клиниках (подключение по коду техника, TechnicianCode) —
+    # по одной записи Technician в каждой.
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="technician_profile", verbose_name="Учётная запись для входа",
+        related_name="technician_profiles", verbose_name="Учётная запись для входа",
     )
 
     class Meta:
         verbose_name = "Техник"
         verbose_name_plural = "Технические специалисты"
         ordering = ["name"]
+        constraints = [models.UniqueConstraint(fields=["clinic", "user"], condition=models.Q(user__isnull=False),
+                                               name="technician_one_per_clinic_user")]
 
     def __str__(self):
         return self.name
@@ -173,3 +177,74 @@ class TechnicianWarrantyCase(ClinicScopedModel):
         verbose_name = "Гарантийный случай"
         verbose_name_plural = "Гарантийные случаи"
         ordering = ["-created_at"]
+
+
+class TechnicianCode(models.Model):
+    """Код техника: техник сообщает его другой клинике, её администратор
+    вводит код — и техник подключается к этой клинике (своя запись Technician
+    там, заказы приходят в тот же кабинет)."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="technician_code")
+    code = models.CharField(max_length=20, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+# ─── Заказы от клиник, которые не работают в ODONTIS ─────────────────────────
+# Техник ведёт их сам в своём кабинете. Принадлежат логину техника (owner),
+# а не клинике: клиника их не видит.
+
+class ExternalClinic(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="lab_external_clinics")
+    name = models.CharField(max_length=200, verbose_name="Клиника")
+    phone = models.CharField(max_length=40, blank=True)
+    contact = models.CharField(max_length=200, blank=True, verbose_name="Контакт / адрес")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class ExternalOrder(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="lab_external_orders")
+    clinic = models.ForeignKey(ExternalClinic, on_delete=models.CASCADE, related_name="orders")
+    patient_name = models.CharField(max_length=200, blank=True)
+    doctor_name = models.CharField(max_length=200, blank=True)
+    work = models.CharField(max_length=200, verbose_name="Работа")
+    tooth_number = models.CharField(max_length=120, blank=True)
+    material = models.CharField(max_length=120, blank=True)
+    vita_color = models.CharField(max_length=20, blank=True)
+    comment = models.TextField(blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=TechnicianTask.STATUS_CHOICES,
+                              default=TechnicianTask.STATUS_TRANSFERRED)
+    transferred_at = models.DateField(null=True, blank=True)
+    expected_ready = models.DateField(null=True, blank=True)
+    ready_at = models.DateField(null=True, blank=True)
+    installed_at = models.DateField(null=True, blank=True)
+    paid = models.BooleanField(default=False)
+    paid_at = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def is_overdue(self):
+        return bool(self.expected_ready and self.status in TechnicianTask.OPEN_STATUSES
+                    and self.expected_ready < timezone.localdate())
+
+
+class ExternalOrderFile(models.Model):
+    order = models.ForeignKey(ExternalOrder, on_delete=models.CASCADE, related_name="files")
+    file = models.FileField(upload_to="tech_orders/ext/%Y/%m/")
+    name = models.CharField(max_length=200, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_image(self):
+        n = (self.file.name or "").lower()
+        return n.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"))
