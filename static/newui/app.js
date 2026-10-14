@@ -9627,9 +9627,14 @@ function renderStaffTable(){
     const counts={all:sorted.length};
     sorted.forEach(s=>{ const g=staffGroupOf(s); counts[g]=(counts[g]||0)+1; });
     if(staffFilter!=='all' && !counts[staffFilter]) staffFilter='all';
-    filters.innerHTML=STAFF_GROUPS.filter(g=>g.key==='all'||counts[g.key])
-      .map(g=>`<button type="button" class="staff-chip${staffFilter===g.key?' active':''}" onclick="staffSetFilter('${g.key}')">${g.label}<b>${counts[g.key]||0}</b></button>`).join('')
-      + `<input class="staff-search" type="search" placeholder="Поиск: имя, телефон, логин" value="${esc(staffQuery)}" oninput="staffSearch(this.value)">`;
+    // Поле поиска создаётся один раз и дальше не перерисовывается — иначе
+    // после каждой буквы оно пересоздавалось и терялся фокус.
+    if(!document.getElementById('staffSearchInput')){
+      filters.innerHTML=`<span id="staffChips" style="display:contents;"></span><input id="staffSearchInput" class="staff-search" type="search" autocomplete="off" placeholder="Поиск: имя, телефон, логин" oninput="staffSearch(this.value)">`;
+      document.getElementById('staffSearchInput').value=staffQuery;
+    }
+    document.getElementById('staffChips').innerHTML=STAFF_GROUPS.filter(g=>g.key==='all'||counts[g.key])
+      .map(g=>`<button type="button" class="staff-chip${staffFilter===g.key?' active':''}" onclick="staffSetFilter('${g.key}')">${g.label}<b>${counts[g.key]||0}</b></button>`).join('');
   }
   const rows=sorted.filter(s=>(staffFilter==='all' || staffGroupOf(s)===staffFilter)
     && (!staffQuery || [s.name,s.phone,s.login].some(v=>String(v||'').toLowerCase().includes(staffQuery))));
