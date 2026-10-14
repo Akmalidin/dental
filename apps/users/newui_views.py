@@ -204,14 +204,14 @@ def _shared_options(request, clinic):
         # не настроен на сервере (тот же безопасно-выключенный паттерн, что
         # и у GreenAPI), И если супер-админ явно заблокировал его этой
         # клинике (Clinic.blocked_features, "voice_bot" — см. /new/superadmin/).
-        "voiceEnabled": voice_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
+        "voiceEnabled": not request.user.is_technician_only and voice_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # Свободный вопрос-ответ (YandexGPT) — включает и голосовой fallback
         # («спроси что угодно» в плавающем виджете), и реальный ответ в
         # текстовом чате «ИИ-помощник» на странице Отчётов.
-        "aiEnabled": ai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
+        "aiEnabled": not request.user.is_technician_only and ai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # ИИ-помощник с доступом к данным клиники (OpenAI) — запись пациентов,
         # вопросы, зубы и услуги в карте приёма (apps/notifications/assistant.py).
-        "agentEnabled": openai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
+        "agentEnabled": not request.user.is_technician_only and openai_enabled() and not (clinic and clinic.is_blocked("voice_bot")),
         # «Ограничение доступа» в карточке сотрудника (Персонал → редактирование) —
         # тот же персональный механизм allowed_sections, что и в старом интерфейсе
         # (см. apps.users.forms.UserForm.sections/full_access, apps.users.views.

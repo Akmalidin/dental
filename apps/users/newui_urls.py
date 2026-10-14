@@ -3,6 +3,7 @@ from . import newui_views as v
 from . import salary_views as sv
 from apps.appointments import waitlist_views as wv
 from apps.finance import installment_views as iv
+from apps.technicians import my_views as tv
 
 urlpatterns = [
     path("", v.newui_dashboard, name="newui_dashboard"),
@@ -47,6 +48,11 @@ urlpatterns = [
     path("services/", v.newui_services, name="newui_services"),
     path("warehouse/", v.newui_warehouse, name="newui_warehouse"),
     path("lab/", v.newui_lab, name="newui_lab"),
+    path("lab/my/", tv.my_lab, name="newui_lab_my"),
+    path("lab/my/data/", tv.my_lab_json, name="newui_lab_my_data"),
+    path("lab/my/<int:pk>/status/", tv.my_status, name="newui_lab_my_status"),
+    path("lab/my/<int:pk>/upload/", tv.my_upload, name="newui_lab_my_upload"),
+    path("lab/link/", tv.lab_link, name="newui_lab_link"),
     path("cashdesk/", v.newui_cashdesk, name="newui_cashdesk"),
     path("finance/", v.newui_finance, name="newui_finance"),
     path("accounting/", v.newui_accounting, name="newui_accounting"),

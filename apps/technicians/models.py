@@ -29,6 +29,12 @@ class Technician(ClinicScopedModel):
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Баланс")
     is_active = models.BooleanField(default=True, verbose_name="Активен")
     notes = models.TextField(blank=True)
+    # Логин техника: с ним он входит в свой кабинет (/new/lab/my/) и видит
+    # только свои заказы и выплаты.
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="technician_profile", verbose_name="Учётная запись для входа",
+    )
 
     class Meta:
         verbose_name = "Техник"

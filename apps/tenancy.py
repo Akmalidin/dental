@@ -10,6 +10,7 @@ request.user.clinic (или из выбора суперадмина). Мене�
   ClinicScopedModel       — clinic FK + авто-фильтр (каталог, финансы, справочники)
   ClinicSoftDeleteModel   — то же + мягкое удаление (пациенты, приёмы, записи)
 """
+import re
 import threading
 from django.db import models
 from django.utils import timezone
@@ -528,11 +529,47 @@ class SectionAccessMiddleware:
         ("/new/recycle", "recycle"),
     ]
 
+    # Зубной техник (только эта роль): свой кабинет, касса и то, без чего
+    # они не работают. Всё остальное закрыто — список разрешённых адресов,
+    # а не запрещённых, чтобы новый раздел не открылся технику сам собой.
+    TECH_ALLOWED = re.compile(r"^/(?:" + "|".join([
+        r"login/", r"logout/", r"static/", r"media/", r"i18n/", r"robots\.txt$", r"sw\.js$",
+        r"manifest\.json$", r"favicon", r"r/", r"t/",
+        r"new/lab/my/", r"new/cashdesk/", r"new/profile/", r"profile/", r"new/language/save/",
+        r"new/notifications/", r"notifications/(?:poll/|push/subscribe/|\d+/(?:open|read)/|read-all/)$",
+        r"finance/payments/create/$", r"finance/payments/\d+/receipt/$", r"finance/cashdesk/queue/",
+        r"finance/cashshift/", r"new/patients/data/$", r"new/patients/\d+/lookup/$",
+        r"treatments/create-quick/$",
+    ]) + r")")
+    TECH_HOME = "/new/lab/my/"
+
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def _technician_gate(self, request):
+        path = request.path
+        if self.TECH_ALLOWED.match(path):
+            return None
+        wants_json = (request.method != "GET" or request.headers.get("x-requested-with") == "XMLHttpRequest"
+                      or "application/json" in request.headers.get("accept", ""))
+        if wants_json and path not in ("/", "/new/"):
+            from django.http import JsonResponse
+            return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
+        from django.shortcuts import redirect
+        return redirect(self.TECH_HOME)
+
     def __call__(self, request):
         user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and getattr(user, "is_technician_only", False):
+            resp = self._technician_gate(request)
+            if resp is not None:
+                return resp
+            clinic = getattr(user, "clinic", None)
+            if clinic is not None and "technicians" in (clinic.blocked_features or []) \
+                    and request.path.startswith("/new/lab/my/"):
+                from django.http import HttpResponseForbidden
+                return HttpResponseForbidden("Эта функция отключена для вашей клиники")
+            return self.get_response(request)
         if (user is not None and user.is_authenticated
                 and not getattr(user, "is_superadmin", False)):
             allowed = getattr(user, "allowed_sections", None)  # None = персональных ограничений нет

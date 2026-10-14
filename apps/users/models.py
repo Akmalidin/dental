@@ -405,8 +405,19 @@ class User(AbstractUser):
         return section in allowed
 
     @property
+    def is_technician_only(self):
+        """Зубной техник без других ролей: работает только в своём кабинете
+        (/new/lab/my/) и на кассе — остальное закрыто (SectionAccessMiddleware)."""
+        if self.is_superuser:
+            return False
+        names = self.all_role_names
+        return bool(names) and names <= {Role.TECHNICIAN}
+
+    @property
     def nav_sections(self):
         """Множество ключей разделов, доступных пользователю лично (для сайдбара)."""
+        if self.is_technician_only:
+            return {"technicians", "finance"}
         if self.is_superadmin or self.allowed_sections is None:
             return set(SECTION_KEYS)
         return set(self.allowed_sections) | {"dashboard"}

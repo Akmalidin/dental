@@ -127,20 +127,8 @@ def order_status(request, pk):
     valid = dict(TechnicianTask.STATUS_CHOICES)
     if new_status not in valid:
         return redirect(request.META.get("HTTP_REFERER") or "technician_tasks")
-    task.status = new_status
-    today = timezone.localdate()
-    if new_status == TechnicianTask.STATUS_READY and not task.ready_at:
-        task.ready_at = today
-    if new_status == TechnicianTask.STATUS_INSTALLED:
-        if not task.installed_at:
-            task.installed_at = today
-        task.warranty_until = task.compute_warranty()
-        if task.cure_id:
-            from apps.treatments.models import TreatmentCure
-            TreatmentCure.objects.filter(pk=task.cure_id).update(
-                technician=task.technician, warranty_until=task.warranty_until, lab_order=task)
-    task.save()
-    TechnicianOrderEvent.objects.create(task=task, status=new_status, by=request.user)
+    from .services import apply_status
+    apply_status(task, new_status, request.user)
     messages.success(request, _("Статус заказа: %(s)s") % {"s": valid[new_status]})
     return redirect(request.META.get("HTTP_REFERER") or "technician_tasks")
 

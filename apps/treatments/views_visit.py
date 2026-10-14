@@ -536,6 +536,8 @@ def _create_lab_order(treatment, cure, svc, it, user):
         expected_ready=today + _td(days=lead),
     )
     TechnicianOrderEvent.objects.create(task=order, status=order.status, by=user)
+    from apps.technicians.services import notify_new_order
+    notify_new_order(order)
     # сразу проставим техника в процедуру (гарантия — при установке)
     cure.technician = tech
     cure.lab_order = order

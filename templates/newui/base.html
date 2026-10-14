@@ -23,7 +23,7 @@ window.addEventListener('load',function(){
 {% block extra_head %}{% endblock %}
 {% if request.GET.embed == '1' %}<base target="_top">{% endif %}
 </head>
-<body class="{% if real_data.broadcastBanner or request.impersonator %}has-broadcast{% endif %}{% if request.GET.embed == '1' %} embed{% endif %}">
+<body class="{% if real_data.broadcastBanner or request.impersonator %}has-broadcast{% endif %}{% if request.GET.embed == '1' %} embed{% endif %}{% if request.user.is_technician_only %} tech-only{% endif %}">
 
 {% if request.impersonator %}
 <!-- «Войти как сотрудник»: директор/суперадмин смотрит систему глазами
@@ -139,6 +139,20 @@ window.addEventListener('load',function(){
          заглушки; если он упал — после загрузки страницы виден старый список. -->
     <div id="navSections" class="hidden"><div class="nav-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
     <div id="navSource">
+    {% if request.user.is_technician_only %}
+    {# Техник: только свой кабинет и касса (остальное закрыто на сервере, SectionAccessMiddleware) #}
+    <a class="nav-item{% if active == 'labmy' %} active{% endif %}" data-view="labmy" href="{% url 'newui_lab_my' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>
+      <span>Мои заказы</span>
+    </a>
+    <a class="nav-item{% if active == 'cashdesk' %} active{% endif %}" data-view="cashdesk" href="{% url 'newui_cashdesk' %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+      <span data-i18n="nav_касса">Касса</span>
+    </a>
+    {# заглушки: loadRealStaffData переключает у этих пунктов класс hidden #}
+    <span class="hidden" id="navSalary"></span><span class="hidden" id="navRecycle"></span>
+    <span class="hidden" id="navSuperadmin"></span><span class="hidden" id="navVisitsJournal"></span>
+    {% else %}
     <div class="nav-label">Продажи</div>
     <a class="nav-item{% if active == 'dashboard' %} active{% endif %}" data-view="dashboard" href="{% url 'newui_dashboard' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
@@ -265,14 +279,17 @@ window.addEventListener('load',function(){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
       <span data-i18n="nav_superadmin">Супер-админ</span>
     </a>
+    {% endif %}
     </div>
 
+    {% if not request.user.is_technician_only %}
     <a class="nav-item" href="#" onclick="event.preventDefault();openMenuSettings();" style="margin-top:2px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
       <span data-i18n="nav_настроить_меню">Настроить меню</span>
     </a>
+    {% endif %}
 
-    {% if offline_mode %}
+    {% if offline_mode and not request.user.is_technician_only %}
     <div style="margin:8px 0;padding:10px;border:1px solid #F59E0B;border-radius:10px;font-size:12px;color:#B45309;">
       <b>ОФЛАЙН-РЕЖИМ</b>
       {% if offline_lan_url %}<div style="margin-top:4px;">Другие компьютеры: <span style="user-select:all;">{{ offline_lan_url }}</span></div>{% endif %}
@@ -309,10 +326,17 @@ window.addEventListener('load',function(){
       <div><b>{{ request.user.name|truncatechars:18 }}</b><span>{{ request.user.role }}</span></div>
     </a>
 
+    {% if request.user.is_technician_only %}
+    <a href="{% url 'logout' %}" class="nav-item" style="margin-top:6px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span>Выйти</span>
+    </a>
+    {% else %}
     <a href="/new/use-old-interface/" class="nav-item" style="margin-top:6px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       <span>Старый интерфейс</span>
     </a>
+    {% endif %}
   </aside>
 
   <main class="main">
