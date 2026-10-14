@@ -396,7 +396,7 @@ function vwOpenPlan(){
   };
 
   // ---- план/процедуры ----
-  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, discountMode:'%', done:true}));
+  let vwPlan = (vw.cures||[]).map(c=>({service_id:c.service_id, tooth:c.tooth, qty:c.qty, price:c.price, discount:c.discount||0, discountMode:'%', done:true, lab:c.lab||null}));
   vwRefreshOdontogram(); // теперь vwPlan существует — можно считать метки зубов
   // Единая точка правды для суммы строки плана с учётом скидки (%) — используется
   // и в таблице плана, и в чипах «Выбранные зубы», и при расчёте суммы к оплате.
@@ -455,6 +455,62 @@ function vwOpenPlan(){
     if(svc){ vwPlanSetField(i,'service_id',svc.id); vwPlanFillPrice(i, svc.id); }
     else { vwPlanSetField(i,'service_id',''); }
   };
+  /* ---- Заказ технику по лабораторной услуге (галочка «Лабораторная работа»
+     в карточке услуги). Заказ создаётся при «Завершить приём»
+     (apps.treatments.views_visit._create_lab_order) и уходит технику в кабинет. ---- */
+  const vwEsc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function vwLabRow(it, i, svc){
+    if(it.lab){
+      return `<tr class="vw-lab-row"><td colspan="7"><div class="vw-lab vw-lab-done">🧪 Заказ технику <b>${vwEsc(it.lab.code)}</b> · ${vwEsc(it.lab.technician)} · ${vwEsc(it.lab.status)}
+        <a href="/new/lab/" style="margin-left:6px;">в лабораторию →</a></div></td></tr>`;
+    }
+    const techs = vw.technicians || [];
+    if(!techs.length){
+      return `<tr class="vw-lab-row"><td colspan="7"><div class="vw-lab vw-lab-warn">🧪 Лабораторная работа — но в клинике нет техников. Добавьте техника: «Склад и лаборатория → Лаборатория → Техники». Без техника заказ не создастся.</div></td></tr>`;
+    }
+    const need = !it.technician_id;
+    const lead = it.lead_days || '';
+    return `<tr class="vw-lab-row"><td colspan="7"><div class="vw-lab${need ? ' vw-lab-need' : ''}">
+      <div class="vw-lab-title">🧪 Заказ технику${need ? ' <span class="vw-lab-req">— выберите техника</span>' : ''}</div>
+      <div class="vw-lab-grid">
+        <label>Техник<select onchange="vwLabTech(${i}, this.value)">
+          <option value="" ${need?'selected':''} disabled>Выберите…</option>
+          ${techs.map(tc=>`<option value="${tc.id}" ${String(it.technician_id)===String(tc.id)?'selected':''}>${vwEsc(tc.name)}${tc.spec ? ' · '+vwEsc(tc.spec) : ''}</option>`).join('')}
+          <option value="none" ${it.technician_id==='none'?'selected':''}>Без заказа технику</option>
+        </select></label>
+        <label>Материал<input type="text" maxlength="120" autocomplete="off" value="${vwEsc(it.material)}" placeholder="цирконий, E.max…" onchange="vwPlanSetField(${i},'material',this.value)"></label>
+        <label>Цвет Vita<input type="text" maxlength="20" autocomplete="off" value="${vwEsc(it.vita)}" placeholder="A2" style="width:80px;" onchange="vwPlanSetField(${i},'vita',this.value)"></label>
+        <label>Срок, дней<input type="number" min="1" max="365" autocomplete="off" value="${vwEsc(lead)}" style="width:80px;" onchange="vwPlanSetField(${i},'lead_days',this.value)"></label>
+        ${vwLabPriceNote(it)}
+        <label class="vw-lab-wide">Комментарий технику<input type="text" maxlength="2000" autocomplete="off" value="${vwEsc(it.tech_comment)}" placeholder="плотный контакт, прикус…" onchange="vwPlanSetField(${i},'tech_comment',this.value)"></label>
+      </div></div></td></tr>`;
+  }
+  function vwLabPriceNote(it){
+    if(!it.technician_id || it.technician_id === 'none') return '';
+    const tc = (vw.technicians||[]).find(x=>String(x.id)===String(it.technician_id));
+    const price = tc && tc.prices ? tc.prices[String(it.service_id)] : undefined;
+    if(price !== undefined) return `<div class="vw-lab-price">Работа техника: <b>${fmtSom(price)}</b></div>`;
+    return `<div class="vw-lab-price vw-lab-warn" title="Лаборатория → Техники → Открыть → расценки">⚠ У техника нет цены на эту услугу — заказ уйдёт с ценой 0</div>`;
+  }
+  window.vwLabTech = function(i, val){
+    const it = vwPlan[i];
+    it.technician_id = val;
+    if(val && val !== 'none' && !it.lead_days){
+      const svc = vw.services.find(s=>String(s.id)===String(it.service_id));
+      const tc = (vw.technicians||[]).find(x=>String(x.id)===String(val));
+      it.lead_days = (tc && tc.lead) || (svc && svc.lab_days) || 5;
+    }
+    vwRenderPlan();
+  };
+  // Строки лабораторных услуг без выбранного техника (ни техника, ни «без заказа»)
+  function vwLabMissing(){
+    return vwPlan.filter(it=>{
+      if(it.lab || !(vw.technicians||[]).length) return false;
+      const svc = vw.services.find(s=>String(s.id)===String(it.service_id));
+      return svc && svc.is_lab && !it.technician_id;
+    });
+  }
+
   function vwRenderPlan(){
     const body=document.getElementById('vwPlanBody');
     document.getElementById('vwPlanEmpty').style.display = vwPlan.length ? 'none' : '';
@@ -472,7 +528,7 @@ function vwOpenPlan(){
         </div></td>
         <td class="mono" style="white-space:nowrap;">${fmtSom(vwPlanRowTotal(it))}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="vwPlanRemove(${i})">✕</button></td>
-      </tr>`;
+      </tr>${svc && svc.is_lab ? vwLabRow(it, i, svc) : ''}`;
     }).join('');
     document.getElementById('vwPlanFoot').style.display = vwPlan.length ? '' : 'none';
     document.getElementById('vwPlanTotal').textContent = fmtSom(vwPlan.reduce((a, it) => a + (vwPlanRowTotal(it) || 0), 0));
@@ -869,9 +925,18 @@ function vwOpenPlan(){
       location.href = redirectTo;
       return;
     }
+    const missing = vwLabMissing();
+    if(missing.length){
+      const names = missing.map(it=>(vw.services.find(s=>String(s.id)===String(it.service_id))||{}).name).join(', ');
+      showToast('Выберите техника для лабораторной работы: ' + names + ' (или «Без заказа технику»)', 'error');
+      const el = document.querySelector('.vw-lab-need');
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
     if(!skipConfirm && !confirm(t('w_confirm_finish_visit'))) return;
     await vwAutosave();
-    const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan: vwPlan});
+    const plan = vwPlan.map(it=>Object.assign({}, it, {technician_id: it.technician_id === 'none' ? '' : (it.technician_id || '')}));
+    const res = await apiJson('/treatments/visit/'+vw.treatmentId+'/commit/', {plan});
     const data = await res.json();
     if(res.ok && data.ok){
       // Долг за ЭТОТ приём уходит в кассу сразу же, без лишнего клика в
