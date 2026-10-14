@@ -132,20 +132,37 @@ def _safe(fn, *a):
         logging.getLogger("apps").exception("waitlist notify failed")
 
 
-def book(entry, start, end, doctor, branch, user):
-    """Записать пациента из листа в окно. Возвращает (appointment, ошибка)."""
+def upcoming_appointment(patient):
+    """Ближайшая будущая запись пациента — её предлагаем перенести на
+    освободившееся время вместо второй записи."""
+    return (Appointment.objects.filter(patient=patient, start_at__gt=timezone.now(), is_deleted=False,
+                                       status__in=(Appointment.STATUS_SCHEDULED, Appointment.STATUS_CONFIRMED))
+            .select_related("doctor").order_by("start_at").first())
+
+
+def book(entry, start, end, doctor, branch, user, move=None):
+    """Записать пациента из листа в окно. move — его уже существующая будущая
+    запись: она переносится на это время (без второй записи).
+    Возвращает (appointment, ошибка)."""
     if start <= timezone.now():
         return None, "Это время уже прошло"
-    if not slot_is_free(doctor.pk, start, end):
+    if not slot_is_free(doctor.pk, start, end, exclude_pk=move.pk if move else None):
         return None, "Это время уже занято"
     with transaction.atomic():
-        appt = Appointment.objects.create(
-            clinic_id=entry.clinic_id, patient=entry.patient, doctor=doctor, branch=branch,
-            service=entry.service, start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED,
-            notes=("Из листа ожидания. " + entry.note).strip(), source="manual", created_by=user,
-        )
-        if entry.service_id:
-            appt.services.add(entry.service)
+        if move is not None:
+            appt = move
+            appt.start_at, appt.end_at, appt.doctor, appt.branch = start, end, doctor, branch
+            appt.status = Appointment.STATUS_SCHEDULED
+            appt.notes = ("Перенесено из листа ожидания. " + (appt.notes or "")).strip()
+            appt.save(update_fields=["start_at", "end_at", "doctor", "branch", "status", "notes"])
+        else:
+            appt = Appointment.objects.create(
+                clinic_id=entry.clinic_id, patient=entry.patient, doctor=doctor, branch=branch,
+                service=entry.service, start_at=start, end_at=end, status=Appointment.STATUS_SCHEDULED,
+                notes=("Из листа ожидания. " + entry.note).strip(), source="manual", created_by=user,
+            )
+            if entry.service_id:
+                appt.services.add(entry.service)
         entry.status = WaitlistEntry.STATUS_BOOKED
         entry.appointment = appt
         entry.save(update_fields=["status", "appointment", "updated_at"])
