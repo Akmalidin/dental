@@ -917,3 +917,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 .notif-drawer-text .notif-drawer-time{font-size:11px;font-family:var(--mono,monospace);}
 .notif-drawer-empty{text-align:center;color:var(--ink-soft);padding:40px 10px;font-size:13px;}
 .notif-drawer-foot{display:block;text-align:center;padding:12px;border-top:1px solid var(--mist-line,#e3e5ec);font-size:13px;color:var(--cobalt,#2f4bff);text-decoration:none;}
+
+/* Техник: карточки пациентов ему закрыты — ссылки на них на кассе не ведут никуда */
+body.tech-only .btn[href^="/new/patients/"]{display:none}
+body.tech-only a[href^="/new/patients/"]{pointer-events:none;color:inherit !important}

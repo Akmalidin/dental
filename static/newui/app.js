@@ -4063,7 +4063,7 @@ function renderTechniciansRoster(){
   if(!body) return;
   const list=(techniciansData.roster||[]);
   if(list.length===0){
-    body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">${t('w_list_empty')}</td></tr>`;
     return;
   }
   body.innerHTML=list.map(tc=>`
@@ -4073,8 +4073,34 @@ function renderTechniciansRoster(){
       <td>${tc.labName||'—'}</td>
       <td>${tc.specializationLabel}</td>
       <td class="mono">${tc.openOrders}</td>
+      <td onclick="event.stopPropagation()">${techLinkCell(tc)}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();location.href='/technicians/${tc.id}/'">${t('w_open')}</button></td>
     </tr>`).join('');
+}
+/* «Вход в кабинет»: какой логин (сотрудник с ролью «Техник») открывает
+   этому технику его кабинет /new/lab/my/ — только его заказы и выплаты. */
+function techLinkCell(tc){
+  const users=techniciansData.techUsers||[];
+  if(!(IS_SUPERADMIN || IS_ADMIN)) return tc.userLogin ? navEsc(tc.userLogin) : '—';
+  if(!users.length && !tc.userId) return '<span style="font-size:12px;color:var(--ink-soft);" title="Персонал → новый сотрудник с ролью «Техник»">нет логинов техников</span>';
+  return `<select style="max-width:190px;" onchange="techLinkSave(${tc.id}, this.value, this)">
+    <option value="">— не привязан —</option>
+    ${users.map(u=>`<option value="${u.id}" ${u.id===tc.userId?'selected':''}>${navEsc(u.name)} (${navEsc(u.login)})</option>`).join('')}
+  </select>`;
+}
+async function techLinkSave(techId, userId, sel){
+  const fd=new FormData();
+  fd.append('technician_id', techId);
+  fd.append('user_id', userId);
+  const res=await postForm('/new/lab/link/', fd);
+  const d=await res.json().catch(()=>({}));
+  if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'), 'error'); return; }
+  (techniciansData.roster||[]).forEach(r=>{
+    if(r.id===techId) r.userId=userId?+userId:null;
+    else if(userId && r.userId===+userId) r.userId=null;   // один логин — один техник
+  });
+  renderTechniciansRoster();
+  showToast(userId ? 'Готово: техник входит под этим логином и видит только свои заказы' : 'Вход отвязан', 'success');
 }
 function renderTechnicianPayouts(){
   const body=document.getElementById('technicianPayoutsBody');
@@ -4934,6 +4960,7 @@ function navIconSvg(key){
 }
 const DEFAULT_NAV_SECTIONS = [
   {id:'dashboard', label:'Дашборд', labelKey:'nav_дашборд', icon:'dashboard', tabs:['dashboard']},
+  {id:'labmy', label:'Мои заказы', icon:'stock', tabs:['labmy']},
   {id:'schedule', label:'Расписание', icon:'schedule', tabs:['schedule','waitlist','visits','visitsjournal']},
   {id:'patients', label:'Пациенты', labelKey:'nav_пациенты', icon:'patients', tabs:['patients','treatplans','funnel','marketing']},
   {id:'messages', label:'Мессенджеры', labelKey:'nav_мессенджеры', icon:'messages', tabs:['messages']},
@@ -4950,7 +4977,7 @@ const NAV_GROUPS = {
   money:  {label:'Деньги и учёт',   key:'navgrp_money',  color:'#12B886'},
   manage: {label:'Управление',      key:'navgrp_manage', color:'#F5A524'},
 };
-const NAV_SECTION_GROUP = {dashboard:'work', schedule:'work', patients:'work', messages:'work',
+const NAV_SECTION_GROUP = {dashboard:'work', labmy:'work', schedule:'work', patients:'work', messages:'work',
   money:'money', stock:'money', reports:'money', settings:'manage', superadmin:'manage'};
 function navEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function navSourceItems(){
@@ -4977,6 +5004,10 @@ function navSectionLabel(sec){
    нет (новые страницы или раскладка сохранена до их появления), кладём в их
    стандартный раздел — ни одна страница не теряется из меню. */
 function effectiveNavSections(prefs, viewsPresent){
+  // Техник: только «Мои заказы» и «Касса» (base.html), без раскладки клиники
+  if((viewsPresent||[]).includes('labmy'))
+    return [{id:'labmy', label:'Мои заказы', icon:'stock', tabs:['labmy']},
+            {id:'money', label:'Касса', icon:'money', tabs:['cashdesk']}];
   const saved=(prefs.sections||[]).filter(s=>s && s.id && Array.isArray(s.tabs));
   const out=(saved.length ? saved : DEFAULT_NAV_SECTIONS).map(s=>({id:s.id, label:s.label||'', icon:s.icon||'', tabs:[...s.tabs]}));
   const placed=new Set(out.flatMap(s=>s.tabs));

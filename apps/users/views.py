@@ -690,7 +690,7 @@ def _newui_technicians_data():
         open_counts[tid] = open_counts.get(tid, 0) + 1
 
     roster, payouts = [], []
-    for tech in Technician.objects.filter(is_active=True).order_by("name"):
+    for tech in Technician.objects.filter(is_active=True).select_related("user").order_by("name"):
         roster.append({
             "id": tech.pk,
             "name": tech.name,
@@ -699,6 +699,8 @@ def _newui_technicians_data():
             "specializationLabel": tech.get_specialization_display() if tech.specialization else "—",
             "openOrders": open_counts.get(tech.pk, 0),
             "balance": float(tech.balance),
+            "userId": tech.user_id,
+            "userLogin": tech.user.login if tech.user_id else "",
         })
         payable = TechnicianTask.objects.filter(technician=tech, status=TechnicianTask.STATUS_INSTALLED, paid=False)
         s = payable.aggregate(x=Sum("amount"))["x"] or Decimal(0)
@@ -706,10 +708,18 @@ def _newui_technicians_data():
         if cnt:
             payouts.append({"id": tech.pk, "name": tech.name, "sum": float(s), "count": cnt})
 
+    from apps.users.models import Role, User
+    from django.db.models import Q
+    tech_users = (User.objects.filter(is_active=True)
+                  .filter(Q(role__name=Role.TECHNICIAN) | Q(roles__name=Role.TECHNICIAN)).distinct().order_by("name"))
+    from apps.tenancy import get_current_clinic
+    tech_users = tech_users.filter(clinic=get_current_clinic()) if get_current_clinic() else tech_users.none()
     return {
         "roster": roster,
         "payouts": payouts,
         "specializations": [{"value": v, "label": l} for v, l in Technician.SPEC_CHOICES],
+        # для «Вход в кабинет» — сотрудники с ролью «Техник» этой клиники
+        "techUsers": [{"id": u.pk, "name": u.name, "login": u.login} for u in tech_users],
     }
 
 
