@@ -56,6 +56,7 @@ INSTALLED_APPS = [
 
 # ─── Middleware (без TenantMainMiddleware) ────────────────────────────────────
 MIDDLEWARE = [
+    "apps.users.health.HealthMiddleware",   # /healthz/ — до редиректов и входа (безопасный деплой)
     "django.middleware.security.SecurityMiddleware",
     "apps.users.sanitize.JsonNamesMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
