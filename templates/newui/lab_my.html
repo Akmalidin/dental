@@ -26,6 +26,10 @@
   .lm-files .lm-doc{width:84px;height:84px;border-radius:8px;border:1px solid var(--mist-line,#e3e5ec);display:flex;align-items:center;justify-content:center;font-size:24px}
   .lm-dl{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:13.5px}
   .lm-dl dt{color:var(--ink-soft)}
+  .lm-chat{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto;margin-top:6px}
+  .lm-msg{background:var(--mist,#f1f3f8);border-radius:8px;padding:7px 10px;font-size:13.5px;max-width:92%}
+  .lm-msg.mine{align-self:flex-end;background:var(--cobalt-tint,#e8ecff)}
+  .lm-deadline summary{cursor:pointer;font-size:13px;font-weight:600}
   .lm-code{font-family:ui-monospace,monospace;font-size:20px;font-weight:700;letter-spacing:2px;user-select:all}
   .lm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
   @media (max-width:900px){.lm-board{grid-template-columns:repeat(6,82vw)}.lm-grid2{grid-template-columns:1fr}}
@@ -215,7 +219,7 @@
             <div style="display:flex;justify-content:space-between;gap:6px;"><span class="lm-sub">${esc(x.code)}</span>${x.overdue ? '<span class="lm-tag red">просрочен</span>' : ''}</div>
             <b>${esc(x.service || 'Работа')}</b>
             <div>${esc(x.patient)}${x.tooth ? ' · зуб ' + esc(x.tooth) : ''}</div>
-            <div class="lm-sub">${x.expectedReady ? 'срок ' + esc(x.expectedReady) : ''}${x.doctor ? ' · ' + esc(x.doctor) : ''}${x.files.length ? ' · 📎' + x.files.length : ''}</div>
+            <div class="lm-sub">${x.expectedReady ? 'срок ' + esc(x.expectedReady) : ''}${x.doctor ? ' · ' + esc(x.doctor) : ''}${x.files.length ? ' · 📎' + x.files.length : ''}${(x.messages || []).length ? ' · 💬' + x.messages.length : ''}${(x.messages || []).some(m => m.kind === 'deadline' && m.decision === 'pending') ? ' · ⏰' : ''}</div>
           </div>`).join('') || '<div class="lm-sub" style="text-align:center;padding:10px 0;">—</div>'}
       </div>`;
     }).join('');
@@ -294,6 +298,59 @@
     return true;
   }
 
+  /* Переписка с клиникой и запрос нового срока (заказы клиник ODONTIS) */
+  function lmMsgHtml(m){
+    const who = m.fromTech ? 'Вы' : esc(m.author);
+    if(m.kind === 'deadline'){
+      const st = m.decision === 'pending' ? '<span class="lm-tag">ждёт решения клиники</span>'
+        : m.decision === 'approved' ? `<span class="lm-tag" style="background:var(--teal-tint,#e3f7ef);color:var(--teal,#0f8a5f);">срок перенесён${m.decidedBy ? ' · ' + esc(m.decidedBy) : ''}</span>`
+        : `<span class="lm-tag red">отклонено${m.decidedBy ? ' · ' + esc(m.decidedBy) : ''}</span>`;
+      return `<div class="lm-msg${m.fromTech ? ' mine' : ''}"><div class="lm-sub">${who} · ${esc(m.at)}</div>
+        ⏰ Просит перенести срок: <b>${esc(m.oldDate)} → ${esc(m.proposed)}</b> ${st}${m.text ? '<div>' + esc(m.text) + '</div>' : ''}</div>`;
+    }
+    return `<div class="lm-msg${m.fromTech ? ' mine' : ''}"><div class="lm-sub">${who} · ${esc(m.at)}</div><div style="white-space:pre-wrap;">${esc(m.text)}</div></div>`;
+  }
+  function lmChatHtml(x){
+    const pending = x.messages.some(m => m.kind === 'deadline' && m.decision === 'pending');
+    return `<div style="margin-top:14px;font-weight:600;font-size:13px;">Переписка с клиникой</div>
+      <div class="lm-chat">${x.messages.map(lmMsgHtml).join('') || '<div class="lm-sub">Сообщений пока нет. Вопрос врачу — напишите здесь, ему придёт уведомление.</div>'}</div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <textarea id="lmChatText" rows="2" maxlength="2000" placeholder="Сообщение врачу/клинике…" style="flex:1;min-width:0;"></textarea>
+        <button class="btn btn-cobalt btn-sm" type="button" id="lmChatSend" style="align-self:flex-end;">Отправить</button>
+      </div>
+      ${x.canRequestDeadline ? (pending ? '<div class="lm-sub" style="margin-top:8px;">⏰ Запрос нового срока ждёт решения клиники.</div>' : `
+      <details class="lm-deadline" style="margin-top:10px;"><summary>⏰ Не успеваю — попросить новый срок</summary>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+          <label class="lm-sub" style="display:flex;flex-direction:column;gap:3px;">Новый срок<input type="date" id="lmDlDate" min="${esc(D.today)}" value="${esc(x.expectedIso || '')}"></label>
+          <label class="lm-sub" style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px;">Причина<input type="text" id="lmDlReason" maxlength="500" placeholder="ждём материал, нужна повторная примерка…"></label>
+          <button class="btn btn-ghost btn-sm" type="button" id="lmDlSend">Отправить запрос</button>
+        </div>
+        <div class="lm-sub" style="margin-top:4px;">Срок поменяется, когда клиника подтвердит. Врачу и администратору придёт уведомление.</div>
+      </details>`) : ''}`;
+  }
+  function lmChatBind(x){
+    const send = document.getElementById('lmChatSend');
+    if(send) send.onclick = async () => {
+      const txt = document.getElementById('lmChatText').value.trim();
+      if(!txt){ showToast('Напишите сообщение', 'error'); return; }
+      send.disabled = true;
+      const d = await post('/new/lab/my/' + x.id + '/comment/', {text: txt});
+      send.disabled = false;
+      if(!d) return;
+      replaceOrder(d.order); render(); lmOpen(x.key);
+      showToast('Отправлено — врачу и администратору пришло уведомление', 'success');
+    };
+    const dl = document.getElementById('lmDlSend');
+    if(dl) dl.onclick = async () => {
+      const date = document.getElementById('lmDlDate').value;
+      if(!date){ showToast('Выберите новую дату', 'error'); return; }
+      const d = await post('/new/lab/my/' + x.id + '/deadline/', {date, reason: document.getElementById('lmDlReason').value});
+      if(!d) return;
+      replaceOrder(d.order); render(); lmOpen(x.key);
+      showToast('Запрос отправлен клинике', 'success');
+    };
+  }
+
   window.lmOpen = function(key){
     const x = byKey(key); if(!x) return;
     const ext = x.src === 'ext';
@@ -307,6 +364,7 @@
       <div style="margin-top:12px;font-weight:600;font-size:13px;">Файлы</div>
       <div class="lm-files">${x.files.map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${f.isImage ? `<img src="${esc(f.url)}" alt="">` : '<div class="lm-doc">📄</div>'}${esc(f.name)}</a>`).join('') || '<span class="lm-sub">нет</span>'}</div>
       <label class="btn btn-ghost btn-sm" style="margin-top:8px;display:inline-block;">📎 Загрузить фото/файл<input type="file" id="lmFile" accept="image/*,.pdf,.stl,.ply,.obj,.zip" style="display:none;"></label>
+      ${ext ? '' : lmChatHtml(x)}
       ${x.events.length ? `<div style="margin-top:12px;font-weight:600;font-size:13px;">История</div>
         <div class="lm-sub" style="font-size:12.5px;">${x.events.map(e => esc(e.at) + ' — ' + esc(e.label) + (e.by ? ' (' + esc(e.by) + ')' : '')).join('<br>')}</div>` : ''}`;
     let foot = `<button class="btn btn-ghost" type="button" onclick="closeModal('m-lm-order')">Закрыть</button>`;
@@ -335,6 +393,7 @@
         if(await post('/new/lab/my/ext/order/' + x.id + '/delete/')){ D.orders = D.orders.filter(o => o.key !== x.key); closeModal('m-lm-order'); render(); reload(); }
       };
     }
+    if(!ext) lmChatBind(x);
     document.getElementById('lmFile').onchange = async ev => {
       const f = ev.target.files[0]; if(!f) return;
       const fd = new FormData(); fd.append('file', f);

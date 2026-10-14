@@ -936,3 +936,7 @@ body.tech-only a[href^="/new/patients/"]{pointer-events:none;color:inherit !impo
 .vw-lab-grid .vw-lab-wide{flex:1 1 220px}
 .vw-lab-grid .vw-lab-wide input{width:100%}
 .vw-lab-price{font-size:12px;align-self:center}
+/* Лаборатория: переписка с техником в карточке заказа */
+.lab-chat{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;margin-top:6px}
+.lab-msg{background:var(--mist,#f1f3f8);border-radius:8px;padding:7px 10px;font-size:13.5px;max-width:92%}
+.lab-msg.mine{align-self:flex-end;background:var(--cobalt-tint,#e8ecff)}

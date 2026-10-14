@@ -654,7 +654,11 @@ def _newui_lab_data():
     страница обновляет карточку локально и не перезагружается)."""
     from apps.technicians.models import TechnicianTask
     orders = []
+    from django.db.models import Count, Q
     for t in (TechnicianTask.objects.select_related("patient", "service", "technician")
+              .annotate(msg_count=Count("messages", distinct=True),
+                        deadline_pending=Count("messages", filter=Q(messages__kind="deadline",
+                                                                  messages__decision="pending"), distinct=True))
               .order_by("-created_at")[:200]):
         orders.append({
             "id": t.pk, "code": f"#L-{t.pk:04d}",
@@ -667,6 +671,8 @@ def _newui_lab_data():
             "amount": float(t.amount),
             "expectedReady": t.expected_ready.strftime("%d.%m.%Y") if t.expected_ready else "",
             "isOverdue": t.is_overdue,
+            "msgCount": t.msg_count,
+            "deadlinePending": bool(t.deadline_pending),
         })
     return {
         "orders": orders,
