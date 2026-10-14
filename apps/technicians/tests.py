@@ -298,3 +298,34 @@ class TechnicianCabinetTestCase(TestCase):
         self.assertEqual(self.c.post(f"/new/lab/order/{self.mine.pk}/deadline/{mid2}/", {"approve": "1"}).status_code, 403)
         lab = self.c.get("/new/lab/my/data/").json()["orders"][0]
         self.assertEqual([m["kind"] for m in lab["messages"]], ["comment", "deadline", "comment", "deadline"])
+
+    def test_create_login_button(self):
+        a = Client()
+        a.force_login(self.admin)
+        self.tech2.phone = "+998 90 533-16-33"
+        self.tech2.save()
+        r = a.post("/new/lab/create-login/", {"technician_id": self.tech2.pk}).json()
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["login"], "998905331633")
+        self.assertEqual(len(r["password"]), 8)
+        self.tech2.refresh_from_db()
+        u = self.tech2.user
+        self.assertTrue(u.is_technician_only)
+        self.assertEqual((u.clinic_id, u.name), (self.clinic.pk, "Другой"))
+        self.assertTrue(u.check_password(r["password"]))
+        # повторно — нельзя; врач — нельзя
+        self.assertIn("уже есть", a.post("/new/lab/create-login/", {"technician_id": self.tech2.pk}).json()["error"])
+        d = Client()
+        d.force_login(self.doc)
+        self.assertEqual(d.post("/new/lab/create-login/", {"technician_id": self.tech.pk}).status_code, 403)
+        # тот же телефон у другого техника — логин с суффиксом; без телефона — tech<id>
+        self.tech.phone = "+998905331633"
+        self.tech.save()
+        self.assertEqual(a.post("/new/lab/create-login/", {"technician_id": self.tech.pk}).json()["login"],
+                         "998905331633-2")
+        t3 = Technician.objects.create(name="Без телефона", clinic=self.clinic)
+        self.assertEqual(a.post("/new/lab/create-login/", {"technician_id": t3.pk}).json()["login"], f"tech{t3.pk}")
+        # созданный техник входит и попадает в свой кабинет
+        c = Client()
+        self.assertTrue(c.login(login="998905331633", password=r["password"]))
+        self.assertEqual(c.get("/new/").get("Location"), "/new/lab/my/")
