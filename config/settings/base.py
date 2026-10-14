@@ -61,6 +61,7 @@ SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
 
 # ─── Middleware ──────────────────────────────────────────────────────────────
 MIDDLEWARE = [
+    "apps.users.health.HealthMiddleware",   # /healthz/ — безопасный деплой
     "django_tenants.middleware.main.TenantMainMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",

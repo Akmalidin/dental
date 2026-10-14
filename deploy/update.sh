@@ -1,30 +1,140 @@
 #!/usr/bin/env bash
-# Обновление SADAF Clinic на сервере: git pull + deps + migrate + static + restart.
-# Запуск на сервере:  bash /var/www/sadaf/deploy/update.sh
+# Безопасное обновление SADAF Clinic на сервере.
+# Запуск: deploy.yml берёт этот файл прямо из origin/main и выполняет его,
+# так что изменения в нём действуют с того же деплоя.
+#
+#  1. Запоминаем текущую версию (PREV) — на неё откатываемся при любой беде.
+#  2. Новый код + зависимости, затем `manage.py check` ДО переключения:
+#     не собирается — возвращаем прежний код, сайт этого даже не заметил.
+#  3. Пробный запуск новой версии рядом (порт 8022, один воркер) и проверка
+#     /healthz/: не запускается — возвращаем прежний код, ни сайт, ни база не тронуты.
+#  4. Есть новые миграции — сначала бэкап базы (backups/predeploy/, 5 последних);
+#     migrate, collectstatic.
+#  5. Плавный перезапуск: HUP мастеру gunicorn — новые воркеры стартуют,
+#     старые дорабатывают свои запросы, 502 нет. Не подхватилось — обычный restart.
+#  6. Проверка /healthz/: отвечает, база доступна, отвечает НОВАЯ версия.
+#     Нет — автоматический откат кода на PREV и restart; деплой помечается
+#     проваленным (GitHub заводит issue). Миграции сами не откатываются —
+#     для этого есть бэкап из шага 4 и deploy/restore_db.sh.
 set -euo pipefail
 APP=/var/www/sadaf
 cd "$APP"
+HEALTH_URL="http://127.0.0.1:8021/healthz/"
+PREDEPLOY_DIR="$APP/backups/predeploy"
 
-echo ">>> git pull"
+PREV=$(git rev-parse HEAD)
+echo ">>> сейчас работает: $PREV"
+
+echo ">>> git fetch"
 # fetch + reset --hard вместо "git pull --ff-only": сервер — чистое зеркало
-# origin/main, локальных правок тут никогда не бывает намеренно, поэтому
-# "разошедшиеся ветки" — это ВСЕГДА повреждение состояния (осиротевший
-# коммит от оборванного деплоя, случайная ручная правка через SSH и т.п.),
-# а не то, что нужно спрашивать/мержить. "git pull --ff-only" в таком
-# случае падает с "Not possible to fast-forward, aborting" и валит ВЕСЬ
-# деплой на самом первом шаге, требуя ручного вмешательства по SSH (баг с
-# прода, PR #107 «Редизайн лендинга»: разошлось на сервере, автодеплой
-# перестал катиться, пока кто-то руками не поправил git-состояние) —
-# reset --hard самовосстанавливается в любом случае, не требуя SSH.
+# origin/main, разошедшиеся ветки тут — всегда повреждённое состояние
+# (оборванный деплой, ручная правка), reset --hard самовосстанавливается.
 git fetch origin main
-git reset --hard origin/main
+NEW=$(git rev-parse origin/main)
+echo ">>> новая версия: $NEW"
 
-echo ">>> deps"
-./venv/bin/pip install -r requirements_server.txt -q
+set_code() {   # $1 — коммит
+  git reset --hard "$1"
+  echo "$1" > REVISION
+  ./venv/bin/pip install -r requirements_server.txt -q
+}
 
+health_ok() {  # $1 — ожидаемая версия, $2 — сколько секунд ждать, $3 — адрес; нужно 3 удачных ответа подряд
+  local want=$1 limit=$2 url=${3:-$HEALTH_URL} hits=0 waited=0 body=""
+  while [ "$waited" -lt "$limit" ]; do
+    body=$(curl -s --max-time 5 "$url" || true)
+    if echo "$body" | grep -q '"ok": true' && echo "$body" | grep -q "\"rev\": \"$want\""; then
+      hits=$((hits + 1))
+      [ "$hits" -ge 3 ] && return 0
+    else
+      hits=0
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "    последний ответ /healthz/: ${body:-нет ответа}"
+  return 1
+}
+
+canary_ok() {   # $1 — версия: пробный запуск рядом (порт 8022, 1 воркер), рабочий сайт не трогаем
+  local pidf=/tmp/sadaf_canary.pid ok=0 runas=""
+  rm -f "$pidf"
+  if id www-data >/dev/null 2>&1 && command -v runuser >/dev/null 2>&1; then runas="runuser -u www-data --"; fi
+  if $runas ./venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8022 --workers 1 --timeout 60 \
+      --pid "$pidf" --daemon --error-logfile /tmp/sadaf_canary.log; then
+    health_ok "$1" 40 "http://127.0.0.1:8022/healthz/" && ok=1
+  fi
+  [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null || true
+  if [ "$ok" != 1 ]; then
+    echo "    ошибки пробного запуска:"; tail -n 30 /tmp/sadaf_canary.log 2>/dev/null | sed 's/^/    /' || true
+    return 1
+  fi
+}
+
+restart_and_check() {   # $1 — ожидаемая версия
+  echo ">>> плавный перезапуск (HUP: новые воркеры стартуют, старые дорабатывают запросы)"
+  if systemctl is-active --quiet sadaf.service; then
+    kill -HUP "$(systemctl show -p MainPID --value sadaf.service)"
+    health_ok "$1" 45 && return 0
+    echo ">>> плавный перезапуск не подхватил новую версию — обычный restart"
+  fi
+  systemctl restart sadaf.service
+  health_ok "$1" 90
+}
+
+rollback() {   # $1 — причина
+  echo "!!! $1"
+  echo "!!! ОТКАТ на прежнюю версию $PREV"
+  set_code "$PREV"
+  ./venv/bin/python manage.py collectstatic --noinput >/dev/null || true
+  chown -R www-data:www-data "$APP"
+  if restart_and_check "$PREV"; then
+    echo "!!! откат выполнен: сайт работает на прежней версии $PREV"
+  else
+    echo "!!! и прежняя версия не отвечает — нужна ручная проверка (journalctl -u sadaf -n 100)"
+  fi
+  if [ -n "${BACKUP_FILE:-}" ]; then
+    echo "!!! миграции новой версии уже применены. Если прежняя версия с ними работает неправильно —"
+    echo "!!! восстановить базу на момент до деплоя: bash deploy/restore_db.sh $BACKUP_FILE --yes"
+  fi
+  exit 1
+}
+
+set_code "$NEW"
 set -a; . ./.env; set +a
+
+echo ">>> проверка нового кода до переключения (manage.py check)"
+if ! ./venv/bin/python manage.py check --fail-level ERROR; then
+  echo "!!! новый код не проходит проверку — возвращаю прежний, сайт не тронут"
+  set_code "$PREV"
+  exit 1
+fi
+
+echo ">>> пробный запуск новой версии рядом с рабочей (порт 8022, база не меняется)"
+if ! canary_ok "$NEW"; then
+  echo "!!! новая версия не запускается — возвращаю прежний код, рабочий сайт и база не тронуты"
+  set_code "$PREV"
+  exit 1
+fi
+
+BACKUP_FILE=""
+if ! ./venv/bin/python manage.py migrate --check >/dev/null 2>&1; then
+  echo ">>> есть новые миграции — сначала бэкап базы ($PREDEPLOY_DIR)"
+  mkdir -p "$PREDEPLOY_DIR"
+  if ! out=$(./venv/bin/python manage.py backup_database --dir "$PREDEPLOY_DIR" --prefix predeploy_ --keep 5); then
+    echo "$out"
+    echo "!!! бэкап не удался — деплой остановлен до миграций, сайт работает на прежней версии"
+    set_code "$PREV"
+    exit 1
+  fi
+  echo "$out"
+  BACKUP_FILE=$(ls -t "$PREDEPLOY_DIR"/predeploy_* | head -1)
+fi
+
 echo ">>> migrate"
-./venv/bin/python manage.py migrate --noinput
+if ! ./venv/bin/python manage.py migrate --noinput; then
+  rollback "миграция не прошла"
+fi
 
 echo ">>> collectstatic"
 ./venv/bin/python manage.py collectstatic --noinput
@@ -44,11 +154,11 @@ if ! grep -q '^GUNICORN_CMD_ARGS=' .env; then
   printf '\nGUNICORN_CMD_ARGS="--threads 4"\n' >> .env
 fi
 
-echo ">>> chown + restart"
 chown -R www-data:www-data "$APP"
-systemctl restart sadaf.service
-sleep 2
-systemctl is-active sadaf.service
+if ! restart_and_check "$NEW"; then
+  rollback "новая версия не отвечает на /healthz/"
+fi
+echo ">>> новая версия $NEW работает"
 
 # Ночной авто-бэкап БД (apps/users/management/commands/backup_database.py) —
 # сама команда написана и покрыта тестами, но раньше требовала РУЧНОЙ

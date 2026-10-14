@@ -35,11 +35,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--dry", action="store_true", help="не писать/удалять файлы, только показать план")
         parser.add_argument("--keep", type=int, default=DEFAULT_KEEP, help="сколько последних копий хранить")
+        # перед деплоем с миграциями (deploy/update.sh): своя папка и префикс,
+        # чтобы эти копии не вытесняли ночные из общей ротации
+        parser.add_argument("--dir", default="", help="папка для копий (по умолчанию settings.BACKUPS_DIR)")
+        parser.add_argument("--prefix", default=FILENAME_PREFIX, help="префикс имени файла")
 
     def handle(self, *args, **opts):
         dry = opts.get("dry")
         keep = opts.get("keep") or DEFAULT_KEEP
-        backups_dir = Path(settings.BACKUPS_DIR)
+        backups_dir = Path(opts.get("dir") or settings.BACKUPS_DIR)
+        prefix = opts.get("prefix") or FILENAME_PREFIX
         backups_dir.mkdir(parents=True, exist_ok=True)
 
         db = settings.DATABASES["default"]
@@ -47,11 +52,11 @@ class Command(BaseCommand):
         stamp = timezone.localtime(timezone.now()).strftime("%Y-%m-%d_%H%M")
 
         if "postgresql" in engine:
-            dest = backups_dir / f"{FILENAME_PREFIX}{stamp}.sql.gz"
+            dest = backups_dir / f"{prefix}{stamp}.sql.gz"
             if not dry:
                 self._dump_postgres(db, dest)
         elif "sqlite3" in engine:
-            dest = backups_dir / f"{FILENAME_PREFIX}{stamp}.sqlite3.gz"
+            dest = backups_dir / f"{prefix}{stamp}.sqlite3.gz"
             if not dry:
                 self._dump_sqlite(db["NAME"], dest)
         else:
@@ -71,7 +76,7 @@ class Command(BaseCommand):
         # Ротация — не критична для успеха самого бэкапа (сбой удаления одного
         # старого файла не должен превращать успешный бэкап в ошибку команды),
         # тот же защитный приём, что и в apps.notifications.wa_reminders.
-        self._rotate(backups_dir, keep, dry)
+        self._rotate(backups_dir, keep, dry, prefix)
 
     def _dump_postgres(self, db, dest):
         cmd = [
@@ -109,8 +114,8 @@ class Command(BaseCommand):
         finally:
             os.unlink(tmp_path)
 
-    def _rotate(self, backups_dir, keep, dry):
-        files = sorted(backups_dir.glob(f"{FILENAME_PREFIX}*"),
+    def _rotate(self, backups_dir, keep, dry, prefix=FILENAME_PREFIX):
+        files = sorted(backups_dir.glob(f"{prefix}*"),
                         key=lambda p: p.stat().st_mtime, reverse=True)
         for old in files[keep:]:
             if dry:
