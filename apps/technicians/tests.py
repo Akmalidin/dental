@@ -244,3 +244,57 @@ class TechnicianCabinetTestCase(TestCase):
         self.assertTrue(ExternalOrder.objects.filter(pk=oid).exists())
         self.assertTrue(self.c.post(f"/new/lab/my/ext/order/{oid}/delete/").json()["ok"])
         self.assertFalse(ExternalOrder.objects.filter(pk=oid).exists())
+
+
+    def test_comments_and_deadline_request(self):
+        from datetime import timedelta as td
+        from apps.technicians.models import TechnicianOrderMessage as M
+        self.tech.user = self.tech_user
+        self.tech.save()
+        today = timezone.localdate()
+        old_due = self.mine.expected_ready
+        # техник пишет — врачу и админу уведомление
+        r = self.c.post(f"/new/lab/my/{self.mine.pk}/comment/", {"text": "Нужен ещё слепок <b>"}).json()
+        self.assertEqual(r["order"]["messages"][0]["text"], "Нужен ещё слепок b")
+        for u in (self.doc, self.admin):
+            n = Notification.objects.filter(user=u, title__startswith="Техник пишет").first()
+            self.assertIsNotNone(n)
+            self.assertEqual(n.link, f"/new/lab/?order={self.mine.pk}")
+        # чужой заказ — нельзя
+        self.assertEqual(self.c.post(f"/new/lab/my/{self.alien.pk}/comment/", {"text": "x"}).status_code, 404)
+        # запрос срока: проверки
+        url = f"/new/lab/my/{self.mine.pk}/deadline/"
+        self.assertIn("не раньше", self.c.post(url, {"date": (today - td(days=1)).isoformat()}).json()["error"])
+        self.assertIn("текущий", self.c.post(url, {"date": old_due.isoformat()}).json()["error"])
+        new_due = today + td(days=9)
+        r = self.c.post(url, {"date": new_due.isoformat(), "reason": "ждём циркон"}).json()
+        self.assertTrue(r["ok"])
+        self.assertIn("ждёт", self.c.post(url, {"date": (today + td(days=10)).isoformat()}).json()["error"])
+        self.assertTrue(Notification.objects.filter(user=self.doc, title__startswith="Техник просит").exists())
+        self.mine.refresh_from_db()
+        self.assertEqual(self.mine.expected_ready, old_due)          # пока клиника не решила — срок прежний
+        # клиника: карточка, ответ, решение
+        a = Client()
+        a.force_login(self.admin)
+        d = a.get(f"/new/lab/order/{self.mine.pk}/").json()["order"]
+        mid = d["pendingDeadline"]
+        self.assertIsNotNone(mid)
+        a.post(f"/new/lab/order/{self.mine.pk}/comment/", {"text": "Хорошо"})
+        self.assertTrue(Notification.objects.filter(user=self.tech_user, title__startswith="Клиника пишет").exists())
+        d = a.post(f"/new/lab/order/{self.mine.pk}/deadline/{mid}/", {"approve": "1"}).json()["order"]
+        self.assertIsNone(d["pendingDeadline"])
+        self.mine.refresh_from_db()
+        self.assertEqual(self.mine.expected_ready, new_due)
+        self.assertTrue(Notification.objects.filter(user=self.tech_user, title__startswith="Срок перенесён").exists())
+        self.assertIn("решён", a.post(f"/new/lab/order/{self.mine.pk}/deadline/{mid}/", {"approve": "1"}).json()["error"])
+        # отклонение
+        self.c.post(url, {"date": (today + td(days=20)).isoformat()})
+        mid2 = M.objects.get(task=self.mine, decision=M.PENDING).pk
+        a.post(f"/new/lab/order/{self.mine.pk}/deadline/{mid2}/", {"approve": ""})
+        self.mine.refresh_from_db()
+        self.assertEqual(self.mine.expected_ready, new_due)
+        # техник не может решать сам и не видит карточку клиники
+        self.assertEqual(self.c.get(f"/new/lab/order/{self.mine.pk}/").status_code, 302)
+        self.assertEqual(self.c.post(f"/new/lab/order/{self.mine.pk}/deadline/{mid2}/", {"approve": "1"}).status_code, 403)
+        lab = self.c.get("/new/lab/my/data/").json()["orders"][0]
+        self.assertEqual([m["kind"] for m in lab["messages"]], ["comment", "deadline", "comment", "deadline"])

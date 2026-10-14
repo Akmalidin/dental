@@ -23,7 +23,7 @@ from django.views.decorators.http import require_POST
 
 from .models import (ExternalClinic, ExternalOrder, ExternalOrderFile, Technician, TechnicianCode,
                      TechnicianOrderFile, TechnicianTask)
-from .services import TECH_MOVES, apply_status
+from .services import TECH_MOVES, add_comment, apply_status, messages_json, request_deadline
 
 UPLOAD_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".gif", ".pdf", ".stl", ".ply", ".obj", ".zip"}
 UPLOAD_MAX = 25 * 1024 * 1024
@@ -103,6 +103,8 @@ def _order_json(t):
         "files": _files(t.files.all()),
         "events": [{"label": e.get_status_display(), "at": timezone.localtime(e.at).strftime("%d.%m %H:%M"),
                     "by": e.by.name if e.by_id else ""} for e in t.events.all()],
+        "messages": messages_json(t),
+        "canRequestDeadline": t.status in TechnicianTask.OPEN_STATUSES,
     }
 
 
@@ -143,7 +145,8 @@ def my_data(user):
     tasks = (TechnicianTask.all_clinics.filter(technician__in=techs, status__in=BOARD)
              .exclude(status=TechnicianTask.STATUS_INSTALLED, installed_at__lt=recent)
              .select_related("patient", "service", "treatment__doctor", "technician__clinic")
-             .prefetch_related("files", "events__by").order_by("expected_ready", "created_at"))
+             .prefetch_related("files", "events__by", "messages__author", "messages__decided_by")
+             .order_by("expected_ready", "created_at"))
     ext = (ExternalOrder.objects.filter(owner=user, status__in=BOARD)
            .exclude(status=TechnicianTask.STATUS_INSTALLED, installed_at__lt=recent)
            .select_related("clinic").prefetch_related("files").order_by("expected_ready", "created_at"))
@@ -250,6 +253,33 @@ def my_upload(request, pk):
     if err:
         return _err(err)
     TechnicianOrderFile.objects.create(task=task, file=f, name=_clean(os.path.basename(f.name)))
+    return _ok(_order_json(task))
+
+
+@login_required
+@require_POST
+def my_comment(request, pk):
+    """Комментарий техника к заказу клиники — врачу и администраторам уведомление."""
+    task = _my_task(request, pk)
+    if task is None:
+        return _err("Заказ не найден", 404)
+    text = _clean(request.POST.get("text"), 2000)
+    if not text:
+        return _err("Напишите комментарий")
+    add_comment(task, request.user, text, from_tech=True)
+    return _ok(_order_json(task))
+
+
+@login_required
+@require_POST
+def my_deadline(request, pk):
+    """Техник не успевает — просит новый срок; меняется после подтверждения клиники."""
+    task = _my_task(request, pk)
+    if task is None:
+        return _err("Заказ не найден", 404)
+    err = request_deadline(task, request.user, _date(request.POST.get("date")), _clean(request.POST.get("reason"), 500))
+    if err:
+        return _err(err)
     return _ok(_order_json(task))
 
 
@@ -486,3 +516,66 @@ def lab_connect(request):
     except Exception:  # noqa: BLE001
         pass
     return JsonResponse({"ok": True, "id": tech.pk, "name": tech.name})
+
+
+def _clinic_task(request, pk):
+    if request.user.is_technician_only:
+        return None
+    return (TechnicianTask.objects.filter(pk=pk)
+            .select_related("patient", "service", "treatment__doctor", "technician__user", "technician__clinic")
+            .first())
+
+
+def _clinic_order_json(t):
+    from .services import pending_deadline
+    p = t.patient
+    pend = pending_deadline(t)
+    return {
+        "id": t.pk, "code": f"#L-{t.pk:04d}", "status": t.status, "statusLabel": t.get_status_display(),
+        "patient": p.full_name if p else "—", "patientId": t.patient_id,
+        "doctor": t.treatment.doctor.name if t.treatment_id and t.treatment.doctor_id else "",
+        "technician": t.technician.name if t.technician_id else "",
+        "service": t.service.name if t.service_id else "", "tooth": t.tooth_number, "material": t.material,
+        "color": t.vita_color, "comment": t.doctor_comment, "amount": float(t.amount),
+        "transferred": _d(t.transferred_at), "expectedReady": _d(t.expected_ready), "overdue": t.is_overdue,
+        "files": _files(t.files.all()), "messages": messages_json(t),
+        "pendingDeadline": pend.pk if pend else None,
+    }
+
+
+@login_required
+def lab_order_json(request, pk):
+    """Карточка заказа для клиники (Лаборатория → Канбан): детали, файлы, переписка."""
+    t = _clinic_task(request, pk)
+    if t is None:
+        return _err("Заказ не найден", 404)
+    return JsonResponse({"ok": True, "order": _clinic_order_json(t)})
+
+
+@login_required
+@require_POST
+def lab_order_comment(request, pk):
+    t = _clinic_task(request, pk)
+    if t is None:
+        return _err("Заказ не найден", 404)
+    text = _clean(request.POST.get("text"), 2000)
+    if not text:
+        return _err("Напишите комментарий")
+    add_comment(t, request.user, text, from_tech=False)
+    return JsonResponse({"ok": True, "order": _clinic_order_json(t)})
+
+
+@login_required
+@require_POST
+def lab_order_deadline(request, pk, mid):
+    """Клиника решает по запросу техника о новом сроке."""
+    from .models import TechnicianOrderMessage as M
+    from .services import decide_deadline
+    t = _clinic_task(request, pk)
+    if t is None:
+        return _err("Заказ не найден", 404)
+    msg = M.objects.filter(pk=mid, task=t, kind=M.KIND_DEADLINE, decision=M.PENDING).first()
+    if msg is None:
+        return _err("Запрос уже решён")
+    decide_deadline(msg, request.user, request.POST.get("approve") in ("1", "true", "on"))
+    return JsonResponse({"ok": True, "order": _clinic_order_json(t)})

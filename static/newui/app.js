@@ -4016,14 +4016,92 @@ function renderLabKanban(){
     const label = t(LAB_COL_I18N[s.value]) || s.label;
     return `<div class="kanban-col" data-status="${s.value}" ondragover="labColDragOver(event)" ondrop="labColDrop(event,'${s.value}')">
       <div class="kanban-col-head"><b>${label}</b><span class="kanban-count">${items.length}</span></div>` +
-      items.map(o=>`<div class="kcard" draggable="true" ondragstart="labCardDragStart(event,${o.id})" style="${o.isOverdue?'border-color:var(--coral);':''}">
-        <div class="kcard-top"><span>${o.code}</span><span class="pill cobalt">${o.service||t('w_work')}</span></div>
-        <b>${o.patient}</b><p>${o.detail||''}</p>
-        <p style="font-size:11px;color:var(--ink-soft);">${o.technicianName}${o.expectedReady?' · '+o.expectedReady:''}${o.isOverdue?' · '+t('w_overdue'):''}</p>
+      items.map(o=>`<div class="kcard" draggable="true" ondragstart="labCardDragStart(event,${o.id})" onclick="labOrderOpen(${o.id})" style="cursor:pointer;${o.isOverdue?'border-color:var(--coral);':''}">
+        <div class="kcard-top"><span>${o.code}</span><span class="pill cobalt">${navEsc(o.service||t('w_work'))}</span></div>
+        <b>${navEsc(o.patient)}</b><p>${navEsc(o.detail||'')}</p>
+        <p style="font-size:11px;color:var(--ink-soft);">${navEsc(o.technicianName)}${o.expectedReady?' · '+o.expectedReady:''}${o.isOverdue?' · '+t('w_overdue'):''}${o.msgCount?' · 💬'+o.msgCount:''}</p>
+        ${o.deadlinePending?'<p style="font-size:11.5px;color:var(--coral);font-weight:600;">⏰ Техник просит новый срок</p>':''}
       </div>`).join('') +
       `</div>`;
   }).join('');
 }
+/* Карточка заказа для клиники: детали, файлы, переписка с техником,
+   решение по запросу нового срока (apps.technicians.my_views.lab_order_*). */
+function labOrderModal(){
+  let m=document.getElementById('m-lab-order');
+  if(m) return m;
+  const div=document.createElement('div');
+  div.innerHTML=`<div class="modal-backdrop" id="m-lab-order"><div class="modal" style="max-width:620px;">
+    <div class="modal-head"><h3 id="labOTitle">Заказ</h3><button class="modal-close" type="button" onclick="closeModal('m-lab-order')">✕</button></div>
+    <div class="modal-body" id="labOBody"></div></div></div>`;
+  document.body.appendChild(div.firstElementChild);
+  m=document.getElementById('m-lab-order');
+  m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); });
+  return m;
+}
+async function labOrderOpen(id){
+  labOrderModal();
+  const r=await fetch('/new/lab/order/'+id+'/', {credentials:'same-origin'});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok || !d.ok){ showToast(d.error || t('w_save_failed'), 'error'); return; }
+  labOrderRender(d.order);
+  openModal('m-lab-order');
+}
+function labOrderRender(o){
+  const e=navEsc;
+  const row=(k,v)=>v?`<div style="color:var(--ink-soft);">${k}</div><div>${e(v)}</div>`:'';
+  const msgs=o.messages.map(m=>{
+    const who=e(m.author)+(m.fromTech?' (техник)':'');
+    if(m.kind==='deadline'){
+      const st=m.decision==='pending'
+        ? `<div style="display:flex;gap:6px;margin-top:6px;"><button class="btn btn-cobalt btn-sm" type="button" onclick="labDeadlineDecide(${o.id},${m.id},1)">Перенести срок</button><button class="btn btn-ghost btn-sm" type="button" onclick="labDeadlineDecide(${o.id},${m.id},0)">Отклонить</button></div>`
+        : `<div style="font-size:12px;color:var(--ink-soft);margin-top:3px;">${e(m.decisionLabel)}${m.decidedBy?' · '+e(m.decidedBy):''}</div>`;
+      return `<div class="lab-msg" style="border:1.5px solid ${m.decision==='pending'?'var(--coral)':'var(--mist-line,#e3e5ec)'};"><div style="font-size:11.5px;color:var(--ink-soft);">${who} · ${e(m.at)}</div>
+        ⏰ Просит перенести срок: <b>${e(m.oldDate)} → ${e(m.proposed)}</b>${m.text?'<div>'+e(m.text)+'</div>':''}${st}</div>`;
+    }
+    return `<div class="lab-msg${m.fromTech?'':' mine'}"><div style="font-size:11.5px;color:var(--ink-soft);">${who} · ${e(m.at)}</div><div style="white-space:pre-wrap;">${e(m.text)}</div></div>`;
+  }).join('') || '<div style="font-size:12.5px;color:var(--ink-soft);">Сообщений пока нет.</div>';
+  document.getElementById('labOTitle').textContent=o.code+' · '+(o.service||'');
+  document.getElementById('labOBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:13.5px;">
+      ${row('Статус',o.statusLabel)}${row('Пациент',o.patient)}${row('Врач',o.doctor)}${row('Техник',o.technician)}${row('Зуб',o.tooth)}
+      ${row('Материал',o.material)}${row('Цвет (Vita)',o.color)}${row('Передан',o.transferred)}${row('Срок',o.expectedReady+(o.overdue?' — просрочен':''))}
+    </div>
+    ${o.comment?`<div style="margin-top:8px;font-size:13px;"><b>Комментарий врача:</b> ${e(o.comment)}</div>`:''}
+    ${o.files.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${o.files.map(f=>`<a href="${e(f.url)}" target="_blank" rel="noopener" style="font-size:12px;">📎 ${e(f.name)}</a>`).join('')}</div>`:''}
+    <div style="margin-top:14px;font-weight:600;font-size:13px;">Переписка с техником</div>
+    <div class="lab-chat">${msgs}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;">
+      <textarea id="labOText" rows="2" maxlength="2000" placeholder="Сообщение технику…" style="flex:1;min-width:0;"></textarea>
+      <button class="btn btn-cobalt btn-sm" type="button" style="align-self:flex-end;" onclick="labOrderComment(${o.id})">Отправить</button>
+    </div>`;
+  const lo=(labRealData && labRealData.orders||[]).find(x=>x.id===o.id);
+  if(lo){ lo.msgCount=o.messages.length; lo.deadlinePending=!!o.pendingDeadline; lo.expectedReady=o.expectedReady; lo.isOverdue=o.overdue; renderLabKanban(); }
+}
+async function labOrderComment(id){
+  const txt=document.getElementById('labOText').value.trim();
+  if(!txt){ showToast('Напишите сообщение','error'); return; }
+  const fd=new FormData(); fd.append('text', txt);
+  const res=await postForm('/new/lab/order/'+id+'/comment/', fd);
+  const d=await res.json().catch(()=>({}));
+  if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'),'error'); return; }
+  labOrderRender(d.order);
+  showToast('Отправлено технику','success');
+}
+async function labDeadlineDecide(id, mid, approve){
+  const fd=new FormData(); fd.append('approve', approve?'1':'');
+  const res=await postForm('/new/lab/order/'+id+'/deadline/'+mid+'/', fd);
+  const d=await res.json().catch(()=>({}));
+  if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'),'error'); return; }
+  labOrderRender(d.order);
+  showToast(approve?'Срок перенесён — техник получил уведомление':'Запрос отклонён — техник получил уведомление','success');
+}
+// ссылка из уведомления: /new/lab/?order=ID — сразу открыть заказ
+(function(){
+  if(!location.pathname.startsWith('/new/lab/') || location.pathname.startsWith('/new/lab/my')) return;
+  const id=parseInt(new URLSearchParams(location.search).get('order'));
+  if(id) window.addEventListener('load', ()=>setTimeout(()=>labOrderOpen(id), 300));
+})();
 let labDragOrderId=null;
 function labCardDragStart(ev, orderId){
   labDragOrderId=orderId;

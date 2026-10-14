@@ -150,6 +150,31 @@ class TechnicianOrderEvent(models.Model):
         ordering = ["at"]
 
 
+class TechnicianOrderMessage(models.Model):
+    """Переписка по заказу между техником и клиникой и запросы техника
+    перенести срок (kind=deadline): клиника подтверждает — срок меняется."""
+    KIND_COMMENT = "comment"
+    KIND_DEADLINE = "deadline"
+    KIND_CHOICES = [(KIND_COMMENT, "Комментарий"), (KIND_DEADLINE, "Запрос нового срока")]
+    PENDING, APPROVED, DECLINED = "pending", "approved", "declined"
+    DECISION_CHOICES = [(PENDING, "Ждёт решения"), (APPROVED, "Срок перенесён"), (DECLINED, "Отклонено")]
+
+    task = models.ForeignKey(TechnicianTask, on_delete=models.CASCADE, related_name="messages")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    from_technician = models.BooleanField(default=False)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_COMMENT)
+    text = models.TextField(blank=True)
+    old_date = models.DateField(null=True, blank=True)
+    proposed_date = models.DateField(null=True, blank=True)
+    decision = models.CharField(max_length=10, choices=DECISION_CHOICES, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
 class TechnicianOrderFile(models.Model):
     """Файлы заказа: фото слепка, готового изделия, 3D-скан."""
     task = models.ForeignKey(TechnicianTask, on_delete=models.CASCADE, related_name="files")

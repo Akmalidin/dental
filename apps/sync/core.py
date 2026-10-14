@@ -101,6 +101,7 @@ EXPORT_PLAN = [
     ("treatments", "TreatmentFollowUp", ("via", "treatment__clinic")),
     ("technicians", "TechnicianTask", "direct"),
     ("technicians", "TechnicianOrderEvent", ("via", "task__clinic")),
+    ("technicians", "TechnicianOrderMessage", ("via", "task__clinic")),
     ("treatments", "MedicalRecord", ("via", "treatment__clinic")),
     ("treatments", "TreatmentPlan", ("via", "patient__clinic")),
     ("treatments", "TreatmentPlanStage", ("via", "plan__patient__clinic")),
