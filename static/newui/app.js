@@ -9644,7 +9644,7 @@ function renderStaffTable(){
     }
     const extraRolesHtml = (s.extraRoleNames||[]).map(n=>`<span class="pill grey" style="margin-left:4px;">${esc(n)}</span>`).join('');
     const loginAs = s.canLoginAs ? `<button class="btn btn-ghost btn-sm" title="Посмотреть систему глазами сотрудника" onclick='staffLoginAs(${s.id}, ${JSON.stringify(String(s.name)).replace(/'/g,"&#39;")})'>👁 Войти как</button> ` : '';
-    return head+`<tr><td><b>${esc(s.name)}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${esc(s.roleName)}</span>`:'—'}${extraRolesHtml}</td><td>${esc(s.branch)}</td><td>${esc(s.load)}</td><td class="mono">${esc(s.phone||'—')}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;">${loginAs}<button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
+    return head+`<tr><td><b>${esc(s.name)}</b></td><td>${s.roleName?`<span class="pill ${s.roleColor}">${esc(s.roleName)}</span>`:'—'}${extraRolesHtml}</td><td>${esc(s.branch)}</td><td>${esc(s.load)}</td><td class="mono">${esc(s.phone||'—')}</td><td><span class="pill ${s.active?'teal':'amber'}">${s.active?t('w_active_f'):t('w_inactive_f')}</span></td><td style="white-space:nowrap;">${loginAs}<button class="btn btn-ghost btn-sm" title="Что может этот сотрудник" onclick="openStaffAccess(${s.id})">🔑 Доступы</button> <button class="btn btn-ghost btn-sm" onclick="editStaff(${s.id})">${t('w_edit')}</button></td></tr>`;
   }).join('');
 }
 function renderRolesTable(){
@@ -9767,11 +9767,63 @@ function populateStaffSections(selectedKeys){
 // roleOptions), не завязаны на display_name/язык.
 const ROLE_SECTION_DEFAULTS = {
   admin_main:  ['calendar','appointments','patients','treatments','services','finance','warehouse','medicines','technicians','tasks','reports','staff','settings'],
-  admin:       ['calendar','appointments','patients','services','finance','tasks','reports'],
-  doctor:      ['calendar','appointments','patients','treatments','services','medicines','tasks'],
+  admin:       ['calendar','appointments','patients','treatments','services','finance','tasks','reports'],
+  doctor:      ['calendar','appointments','patients','treatments','services','medicines','technicians','tasks'],
   nurse:       ['calendar','appointments','patients','treatments','medicines','tasks'],
-  technician:  ['technicians','warehouse','tasks'],
+  technician:  ['technicians'],
 };
+// Новый сотрудник: разделы сразу по роли (директору и своим ролям без набора —
+// «Полный доступ»). Пока админ сам не трогал разделы, смена роли меняет набор.
+let staffSectionsTouched=false;
+function staffApplyRoleDefaults(){
+  if(editingStaffId || staffSectionsTouched) return;
+  const roleId=document.getElementById('staff-role').value;
+  const role=roleOptions.find(r=>String(r.id)===String(roleId));
+  const key=role && role.roleKey;
+  const defaults=(key && key!=='admin_main') ? ROLE_SECTION_DEFAULTS[key] : null;
+  document.getElementById('staff-full-access').checked=!defaults;
+  populateStaffSections(defaults||[]);
+  staffAccessVisibility();
+  const hint=document.getElementById('staff-sections-hint');
+  if(hint) hint.textContent = defaults ? 'Разделы подставлены по роли «'+role.name+'» — отметьте или снимите нужные.' : '';
+}
+document.addEventListener('change', ev=>{
+  if(ev.target && ev.target.id==='staff-role') staffApplyRoleDefaults();
+  if(ev.target && (ev.target.classList.contains('staff-section-cb') || ev.target.id==='staff-full-access')) staffSectionsTouched=true;
+});
+
+/* «Что может этот сотрудник» — итог всех правил одной таблицей (по сохранённым настройкам) */
+async function openStaffAccess(id){
+  let m=document.getElementById('m-staff-access');
+  if(!m){
+    const div=document.createElement('div');
+    div.innerHTML=`<div class="modal-backdrop" id="m-staff-access"><div class="modal" style="max-width:640px;">
+      <div class="modal-head"><h3 id="saTitle">Доступы</h3><button class="modal-close" type="button" onclick="closeModal('m-staff-access')">✕</button></div>
+      <div class="modal-body" id="saBody"></div></div></div>`;
+    document.body.appendChild(div.firstElementChild);
+    m=document.getElementById('m-staff-access');
+    m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); });
+  }
+  const r=await fetch('/new/staff/'+id+'/access/', {credentials:'same-origin'});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok || !d.ok){ showToast(d.error || t('w_save_failed'),'error'); return; }
+  const e=navEsc;
+  const list=(title, rows, note)=>`<div class="sa-block"><div class="sa-head">${title}</div>${note?`<div class="sa-note">${note}</div>`:''}
+    ${rows.map(x=>`<div class="sa-row${x.ok?'':' off'}"><span class="sa-mark">${x.ok?'✓':'✕'}</span><span class="sa-label">${e(x.label)}</span><span class="sa-why">${e(x.why)}</span></div>`).join('')}</div>`;
+  document.getElementById('saTitle').textContent='Что может: '+d.name;
+  document.getElementById('saBody').innerHTML=`
+    <div class="sa-summary">
+      <div><span>Роль</span><b>${e(d.roles.join(' + ')||'—')}</b></div>
+      <div><span>Разделы</span><b>${d.techOnly?'кабинет техника':(d.fullAccess?'полный доступ':'выбранные')}</b></div>
+      <div><span>Филиалы</span><b>${e(d.branches.length?d.branches.join(', '):'все')}</b></div>
+      ${d.active?'':'<div><span>Статус</span><b style="color:var(--coral);">отключён — войти не может</b></div>'}
+    </div>
+    ${list('Разделы — что видит', d.sections, 'Меняется в карточке сотрудника: «Полный доступ» или галочки разделов.')}
+    ${list('Действия — что может делать', d.actions, 'Даёт роль. Свои права — через «Роли и права доступа» → «Дублировать» роль.')}
+    ${list('Особые правила', d.special, 'Заданы в программе по роли, галочками не меняются.')}
+    <div class="sa-note" style="margin-top:8px;">Показано по сохранённым настройкам. Чтобы увидеть систему его глазами — «👁 Войти как».</div>`;
+  openModal('m-staff-access');
+}
 function staffAccessVisibility(){
   document.getElementById('staff-sections-grid').classList.toggle('hidden', document.getElementById('staff-full-access').checked);
 }
@@ -9805,9 +9857,8 @@ function openNewStaff(){
   populateStaffRole2Select(null);
   populateStaffBranches([]);
   document.getElementById('staff-access-section').classList.remove('hidden');
-  document.getElementById('staff-full-access').checked=true;
-  populateStaffSections([]);
-  staffAccessVisibility();
+  staffSectionsTouched=false;
+  staffApplyRoleDefaults();
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }
@@ -9835,6 +9886,7 @@ function editStaff(id){
   document.getElementById('staff-full-access').checked = s.fullAccess !== false;
   populateStaffSections(s.allowedSections || []);
   staffAccessVisibility();
+  const saHint=document.getElementById('staff-sections-hint'); if(saHint) saHint.textContent='';
   document.getElementById('staffModalError').classList.add('hidden');
   openModal('m-staff');
 }

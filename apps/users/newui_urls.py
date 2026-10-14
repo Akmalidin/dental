@@ -1,6 +1,7 @@
 from django.urls import path
 from . import newui_views as v
 from . import salary_views as sv
+from . import access_summary
 from apps.appointments import waitlist_views as wv
 from apps.finance import installment_views as iv
 from apps.technicians import my_views as tv
@@ -44,6 +45,7 @@ urlpatterns = [
     path("waitlist/<int:pk>/status/", wv.waitlist_status, name="newui_waitlist_status"),
     path("treatplans/", v.newui_treatplans, name="newui_treatplans"),
     path("treatplans/<int:pk>/", v.newui_treatplan_detail, name="newui_treatplan_detail"),
+    path("staff/<int:pk>/access/", access_summary.staff_access, name="newui_staff_access"),
     path("staff/", v.newui_staff, name="newui_staff"),
     path("services/", v.newui_services, name="newui_services"),
     path("warehouse/", v.newui_warehouse, name="newui_warehouse"),

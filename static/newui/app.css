@@ -940,3 +940,16 @@ body.tech-only a[href^="/new/patients/"]{pointer-events:none;color:inherit !impo
 .lab-chat{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;margin-top:6px}
 .lab-msg{background:var(--mist,#f1f3f8);border-radius:8px;padding:7px 10px;font-size:13.5px;max-width:92%}
 .lab-msg.mine{align-self:flex-end;background:var(--cobalt-tint,#e8ecff)}
+/* Персонал → 🔑 Доступы */
+.sa-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.sa-summary div{background:var(--mist,#f1f3f8);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.sa-summary span{font-size:11.5px;color:var(--ink-soft)}
+.sa-block{margin-top:12px}
+.sa-head{font-weight:700;font-size:14px}
+.sa-note{font-size:12px;color:var(--ink-soft);margin:2px 0 6px}
+.sa-row{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--mist-line,#e3e5ec);font-size:13px}
+.sa-mark{font-weight:700;color:var(--teal,#12b886);text-align:center}
+.sa-row.off .sa-mark{color:var(--coral,#ff5a1f)}
+.sa-row.off .sa-label{color:var(--ink-soft)}
+.sa-why{font-size:12px;color:var(--ink-soft)}
+@media (max-width:600px){.sa-row{grid-template-columns:22px minmax(0,1fr)}.sa-why{grid-column:2}}
