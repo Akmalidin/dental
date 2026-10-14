@@ -93,6 +93,16 @@
             <button class="btn btn-cobalt" type="button" onclick="wlBookManual(false)">Записать</button></div>
         </div>
       </div>
+
+      <div class="modal-backdrop" id="m-wl-choice">
+        <div class="modal" style="max-width:460px;">
+          <div class="modal-head"><h3>У пациента уже есть запись</h3><button class="modal-close" type="button" onclick="closeModal('m-wl-choice')">✕</button></div>
+          <div class="modal-body"><div id="wlChoiceText" style="font-size:14px;line-height:1.5;"></div></div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" type="button" onclick="wlChoice('new')">Новая запись</button>
+            <button class="btn btn-cobalt" type="button" onclick="wlChoice('move')">Перенести</button></div>
+        </div>
+      </div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -166,11 +176,41 @@
     return d;
   }
 
+  // Запись из листа. Если у пациента уже есть будущая запись, сервер
+  // возвращает needChoice — спрашиваем: перенести её или сделать новую.
+  let pendingBook = null;
+  async function book(id, data, onDone){
+    const fd = new FormData();
+    Object.entries(data).forEach(([k, v]) => fd.append(k, v == null ? '' : v));
+    const res = await postForm('/new/waitlist/' + id + '/book/', fd);
+    const d = await res.json().catch(() => ({}));
+    if(d.needChoice){
+      pendingBook = {id, data, onDone};
+      const e = byId(id);
+      document.getElementById('wlChoiceText').innerHTML = `У пациента <b>${esc(e ? e.patient : '')}</b> уже есть запись
+        <b>${esc(d.existing.label)}</b>${d.existing.doctor ? ' к ' + esc(d.existing.doctor) : ''}.<br>Перенести её на новое время или сделать ещё одну запись?`;
+      openModal('m-wl-choice');
+      return;
+    }
+    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось выполнить', 'error'); return; }
+    showToast(d.moved ? 'Запись перенесена. Пациенту отправлено новое время.' : 'Записан. Пациенту отправлено подтверждение.', 'success');
+    if(onDone) onDone();
+    reload();
+  }
+  window.wlChoice = function(mode){
+    closeModal('m-wl-choice');
+    const p = pendingBook; pendingBook = null;
+    if(p) book(p.id, Object.assign({}, p.data, {mode}), p.onDone);
+  };
   window.wlSlotAction = async function(si, id, action){
     const s = W.slots[si];
-    if(action === 'book' && !confirm('Записать пациента на ' + s.label + ' к ' + s.doctor + '?')) return;
-    const d = await post('/new/waitlist/' + id + '/' + action + '/', {start: s.start, end: s.end, doctor_id: s.doctorId, branch_id: s.branchId});
-    if(d){ showToast(action === 'book' ? 'Записан. Пациенту отправлено подтверждение.' : 'Предложение отправлено пациенту', 'success'); reload(); }
+    const data = {start: s.start, end: s.end, doctor_id: s.doctorId, branch_id: s.branchId};
+    if(action === 'book'){
+      if(!confirm('Записать пациента на ' + s.label + ' к ' + s.doctor + '?')) return;
+      return book(id, data);
+    }
+    const d = await post('/new/waitlist/' + id + '/offer/', data);
+    if(d){ showToast('Предложение отправлено пациенту', 'success'); reload(); }
   };
   window.wlSetStatus = async function(id, st){
     if(st === 'cancelled' && !confirm('Снять пациента с листа ожидания?')) return;
@@ -247,10 +287,10 @@
   window.wlBookManual = async function(offerOnly){
     const date = document.getElementById('wlBookDate').value, time = document.getElementById('wlBookTime').value;
     if(!date || !time){ showToast('Укажите дату и время', 'error'); return; }
-    const d = await post('/new/waitlist/' + bookingId + '/' + (offerOnly ? 'offer' : 'book') + '/', {
-      start: date + 'T' + time, doctor_id: document.getElementById('wlBookDoctor').value,
-    });
-    if(d){ closeModal('m-wl-book'); showToast(offerOnly ? 'Предложение отправлено пациенту' : 'Записан. Пациенту отправлено подтверждение.', 'success'); reload(); }
+    const data = {start: date + 'T' + time, doctor_id: document.getElementById('wlBookDoctor').value};
+    if(!offerOnly) return book(bookingId, data, () => closeModal('m-wl-book'));
+    const d = await post('/new/waitlist/' + bookingId + '/offer/', data);
+    if(d){ closeModal('m-wl-book'); showToast('Предложение отправлено пациенту', 'success'); reload(); }
   };
 
   render();

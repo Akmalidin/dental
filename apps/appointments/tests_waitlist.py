@@ -126,6 +126,36 @@ class WaitlistTestCase(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("занято", r.json()["error"])
 
+    def test_book_asks_to_move_existing_appointment(self):
+        later = self._appt(start=self.start + timedelta(days=5), end=self.end + timedelta(days=5),
+                           doctor=self.doc2, status=Appointment.STATUS_CONFIRMED)
+        e = self._entry(patient=self.p2)
+        c = Client()
+        c.force_login(self.admin)
+        url = f"/new/waitlist/{e.pk}/book/"
+        slot = {"start": self.start.isoformat(), "end": self.end.isoformat(), "doctor_id": self.doc.pk}
+        d = c.post(url, slot).json()
+        self.assertTrue(d["needChoice"])
+        self.assertEqual(d["existing"]["id"], later.pk)
+        self.assertFalse(Appointment.objects.filter(patient=self.p2, start_at=self.start).exists())
+        with patch("apps.notifications.whatsapp.wa_enabled", return_value=False):
+            d = c.post(url, dict(slot, mode="move")).json()
+        self.assertTrue(d["ok"] and d["moved"], d)
+        later.refresh_from_db()
+        self.assertEqual((later.start_at, later.doctor_id, later.status),
+                         (self.start, self.doc.pk, Appointment.STATUS_SCHEDULED))
+        self.assertEqual(Appointment.objects.filter(patient=self.p2).count(), 1)
+        e.refresh_from_db()
+        self.assertEqual((e.status, e.appointment_id), (WaitlistEntry.STATUS_BOOKED, later.pk))
+        # «Новая запись» — вторая запись, старая остаётся
+        e2 = self._entry(patient=self.p2, doctor=self.doc2)
+        slot2 = dict(slot, start=(self.start + timedelta(hours=3)).isoformat(),
+                     end=(self.end + timedelta(hours=3)).isoformat())
+        with patch("apps.notifications.whatsapp.wa_enabled", return_value=False):
+            d = c.post(f"/new/waitlist/{e2.pk}/book/", dict(slot2, mode="new")).json()
+        self.assertTrue(d["ok"] and not d["moved"], d)
+        self.assertEqual(Appointment.objects.filter(patient=self.p2).count(), 2)
+
     def test_add_validation_and_other_clinic(self):
         c = Client()
         c.force_login(self.admin)

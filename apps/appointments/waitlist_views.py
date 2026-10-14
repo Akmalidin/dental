@@ -196,10 +196,20 @@ def waitlist_book(request, pk):
               else None) or e.branch or Branch.objects.filter(is_active=True).order_by("-is_main").first()
     if branch is None:
         return JsonResponse({"ok": False, "error": "Нет филиала"}, status=400)
-    appt, err = wl.book(e, start, end, doctor, branch, request.user)
+    # У пациента уже есть будущая запись — сначала спрашиваем: перенести её
+    # на это время (mode=move) или сделать ещё одну (mode=new).
+    mode = request.POST.get("mode") or ""
+    existing = wl.upcoming_appointment(e.patient)
+    if existing is not None and mode not in ("move", "new"):
+        loc = timezone.localtime(existing.start_at)
+        return JsonResponse({"ok": False, "needChoice": True, "existing": {
+            "id": existing.pk, "label": loc.strftime("%d.%m.%Y %H:%M"),
+            "doctor": existing.doctor.name if existing.doctor_id else ""}})
+    appt, err = wl.book(e, start, end, doctor, branch, request.user,
+                        move=existing if mode == "move" else None)
     if err:
         return JsonResponse({"ok": False, "error": err}, status=400)
-    return JsonResponse({"ok": True, "appointmentId": appt.pk})
+    return JsonResponse({"ok": True, "appointmentId": appt.pk, "moved": mode == "move" and existing is not None})
 
 
 @login_required
