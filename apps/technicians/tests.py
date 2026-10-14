@@ -329,3 +329,32 @@ class TechnicianCabinetTestCase(TestCase):
         c = Client()
         self.assertTrue(c.login(login="998905331633", password=r["password"]))
         self.assertEqual(c.get("/new/").get("Location"), "/new/lab/my/")
+
+    def test_new_ui_technician_card(self):
+        from apps.technicians.models import TechnicianAgreement, TechnicianWarrantyCase
+        a = Client()
+        a.force_login(self.admin)
+        r = a.get(f"/new/lab/tech/{self.tech.pk}/")
+        self.assertEqual(r.status_code, 200)
+        d = r.context["real_data"]["labTech"]
+        self.assertEqual([o["id"] for o in d["orders"]], [self.mine.pk])
+        # расценка: добавить, изменить, удалить
+        url = f"/new/lab/tech/{self.tech.pk}/"
+        d = a.post(url + "price/", {"service_id": self.crown.pk, "price": "3500"}).json()["tech"]
+        self.assertEqual(d["prices"][0]["price"], 3500.0)
+        d = a.post(url + "price/", {"service_id": self.crown.pk, "price": "4000"}).json()["tech"]
+        self.assertEqual([p["price"] for p in d["prices"]], [4000.0])
+        self.assertIn("цена", a.post(url + "price/", {"service_id": self.crown.pk, "price": "-5"}).json()["error"])
+        aid = TechnicianAgreement.objects.get(technician=self.tech).pk
+        self.assertEqual(a.post(url + f"price/{aid}/delete/").json()["tech"]["prices"], [])
+        # правка карточки
+        d = a.post(url + "edit/", {"name": "Асан Техник", "phone": "0555", "default_lead_days": "6",
+                                   "specialization": "zirconia", "is_active": "on"}).json()["tech"]
+        self.assertEqual((d["name"], d["leadDays"], d["specializationLabel"]), ("Асан Техник", 6, "Цирконий"))
+        # гарантийный случай + отметка «решено»
+        d = a.post(url + "warranty/", {"task_id": self.mine.pk, "reason": "скол"}).json()["tech"]
+        self.assertEqual(d["warranty"][0]["order"], f"#L-{self.mine.pk:04d}")
+        w = TechnicianWarrantyCase.objects.get(technician=self.tech)
+        self.assertTrue(a.post(url + f"warranty/{w.pk}/resolve/").json()["tech"]["warranty"][0]["resolved"])
+        # техник сам эту страницу не открывает
+        self.assertEqual(self.c.get(url).get("Location"), "/new/lab/my/")

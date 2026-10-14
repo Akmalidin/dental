@@ -611,3 +611,126 @@ def lab_create_login(request):
     tech.user = user
     tech.save(update_fields=["user"])
     return JsonResponse({"ok": True, "login": login, "password": password, "userId": user.pk})
+
+
+# ─── Карточка техника в новом интерфейсе (Лаборатория → Техники → Открыть) ──
+
+def _staff_tech(request, pk):
+    if request.user.is_technician_only:
+        return None
+    return Technician.objects.filter(pk=pk).select_related("user", "user__clinic").first()
+
+
+def _tech_card_data(tech):
+    from apps.services.models import Service
+    payable = TechnicianTask.objects.filter(technician=tech, status=TechnicianTask.STATUS_INSTALLED, paid=False)
+    orders = (TechnicianTask.objects.filter(technician=tech)
+              .select_related("patient", "service").order_by("-created_at")[:300])
+    return {
+        "id": tech.pk, "name": tech.name, "phone": tech.phone, "labName": tech.lab_name,
+        "labContact": tech.lab_contact, "specialization": tech.specialization,
+        "specializationLabel": tech.get_specialization_display() if tech.specialization else "",
+        "leadDays": tech.default_lead_days, "active": tech.is_active, "notes": tech.notes,
+        "login": tech.user.login if tech.user_id else "",
+        "byCode": bool(tech.user_id and tech.user.clinic_id != tech.clinic_id),
+        "payableSum": _sum(payable), "payableCount": payable.count(),
+        "orders": [{"id": t.pk, "code": f"#L-{t.pk:04d}",
+                    "patient": t.patient.full_name if t.patient_id else "—", "patientId": t.patient_id,
+                    "service": t.service.name if t.service_id else "", "tooth": t.tooth_number,
+                    "status": t.status, "statusLabel": t.get_status_display(),
+                    "created": _d(timezone.localtime(t.created_at)), "expected": _d(t.expected_ready),
+                    "warranty": _d(t.warranty_until), "amount": float(t.amount), "paid": t.paid,
+                    "overdue": t.is_overdue} for t in orders],
+        "prices": [{"id": a.pk, "serviceId": a.service_id, "service": a.service.name, "price": float(a.price)}
+                   for a in tech.agreements.select_related("service").order_by("service__name")],
+        "warranty": [{"id": w.pk, "date": _d(timezone.localtime(w.created_at)),
+                      "patient": w.patient.full_name if w.patient_id else "—",
+                      "order": f"#L-{w.task_id:04d}" if w.task_id else "", "reason": w.reason,
+                      "resolved": w.resolved} for w in tech.warranty_cases.select_related("patient").all()],
+        "services": [{"id": s.pk, "name": s.name, "isLab": s.is_lab}
+                     for s in Service.objects.filter(is_active=True).order_by("-is_lab", "name")],
+        "specializations": [{"value": v, "label": label} for v, label in Technician.SPEC_CHOICES],
+    }
+
+
+@login_required
+def lab_tech_page(request, pk):
+    from apps.users.newui_views import _render
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return redirect("/new/lab/")
+    return _render(request, "lab", "lab_tech.html", {"labTech": _tech_card_data(tech)})
+
+
+@login_required
+@require_POST
+def lab_tech_edit(request, pk):
+    from .forms import TechnicianForm
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return _err("Техник не найден", 404)
+    form = TechnicianForm(request.POST, instance=tech)
+    if not form.is_valid():
+        first = next(iter(form.errors.values()))[0]
+        return _err(first)
+    form.save()
+    return JsonResponse({"ok": True, "tech": _tech_card_data(tech)})
+
+
+@login_required
+@require_POST
+def lab_tech_price(request, pk):
+    """Расценка техника по услуге (себестоимость заказа): добавить/изменить."""
+    from apps.services.models import Service
+    from .models import TechnicianAgreement
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return _err("Техник не найден", 404)
+    svc = Service.objects.filter(pk=request.POST.get("service_id") or 0).first()
+    price = _money(request.POST.get("price"))
+    if svc is None:
+        return _err("Выберите услугу")
+    if price is None:
+        return _err("Неверная цена")
+    TechnicianAgreement.objects.update_or_create(technician=tech, service=svc, defaults={"price": price})
+    return JsonResponse({"ok": True, "tech": _tech_card_data(tech)})
+
+
+@login_required
+@require_POST
+def lab_tech_price_delete(request, pk, aid):
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return _err("Техник не найден", 404)
+    tech.agreements.filter(pk=aid).delete()
+    return JsonResponse({"ok": True, "tech": _tech_card_data(tech)})
+
+
+@login_required
+@require_POST
+def lab_tech_warranty(request, pk):
+    from .models import TechnicianWarrantyCase
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return _err("Техник не найден", 404)
+    reason = _clean(request.POST.get("reason"), 2000)
+    if not reason:
+        return _err("Опишите причину обращения")
+    task = TechnicianTask.objects.filter(pk=request.POST.get("task_id") or 0, technician=tech).first()
+    TechnicianWarrantyCase.objects.create(technician=tech, task=task, patient=task.patient if task else None,
+                                          reason=reason, created_by=request.user)
+    return JsonResponse({"ok": True, "tech": _tech_card_data(tech)})
+
+
+@login_required
+@require_POST
+def lab_tech_warranty_resolve(request, pk, wid):
+    tech = _staff_tech(request, pk)
+    if tech is None:
+        return _err("Техник не найден", 404)
+    w = tech.warranty_cases.filter(pk=wid).first()
+    if w is None:
+        return _err("Случай не найден", 404)
+    w.resolved = not w.resolved
+    w.save(update_fields=["resolved"])
+    return JsonResponse({"ok": True, "tech": _tech_card_data(tech)})

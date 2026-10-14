@@ -1,0 +1,232 @@
+{% extends "newui/base.html" %}
+{% block page_title %}Техник{% endblock %}
+{% block content %}
+<style>
+  .lt-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .lt-sub{font-size:12px;color:var(--ink-soft)}
+  .lt-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .lt-st{display:inline-block;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:600;background:var(--mist,#eceef4)}
+  .lt-st.installed{background:#e3f7ef;color:#0f8a5f}
+  .lt-st.cancelled{color:var(--ink-soft)}
+  .lt-st.ready,.lt-st.fitting{background:var(--cobalt-tint,#e8ecff);color:var(--cobalt,#2f4bff)}
+  .lt-st.transferred,.lt-st.in_progress,.lt-st.correction{background:#fff4e0;color:#b45309}
+  .lt-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 18px;border-top:1px solid var(--mist-line,#e3e5ec)}
+  .lt-form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-soft)}
+  .lt-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media (max-width:700px){.lt-grid2{grid-template-columns:1fr}}
+</style>
+      <div class="topbar">
+        <div><h1 id="ltName">Техник</h1></div>
+        <div class="topbar-right">
+          <a class="btn btn-ghost" href="/new/lab/">← Лаборатория</a>
+          <button class="btn btn-ghost" type="button" onclick="ltOpenEdit()">✏️ Изменить</button>
+        </div>
+      </div>
+      <div class="page">
+        <div class="lt-kpis">
+          <div class="card kpi b-cobalt"><span class="lbl">Специализация</span><b style="font-size:17px" id="ltSpec">—</b></div>
+          <div class="card kpi"><span class="lbl">Лаборатория</span><b style="font-size:17px" id="ltLab">—</b><span class="lt-sub" id="ltLabContact"></span></div>
+          <div class="card kpi"><span class="lbl">Телефон · вход</span><b style="font-size:17px" id="ltPhone">—</b><span class="lt-sub" id="ltLogin"></span></div>
+          <div class="card kpi b-coral"><span class="lbl">К выплате</span><b style="font-size:22px" id="ltPayable">—</b>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;"><span class="lt-sub" id="ltPayableCount"></span>
+              <button class="btn btn-cobalt btn-sm hidden" type="button" id="ltPayBtn">Выплатить</button></div></div>
+        </div>
+        <div class="lt-tabs">
+          <button class="chip active" type="button" data-tab="orders" onclick="ltTab('orders')">Заказы</button>
+          <button class="chip" type="button" data-tab="prices" onclick="ltTab('prices')">Расценки</button>
+          <button class="chip" type="button" data-tab="warranty" onclick="ltTab('warranty')">Гарантийные случаи</button>
+        </div>
+
+        <div class="card" id="ltOrders">
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Заказ</th><th>Пациент</th><th>Работа</th><th>Статус</th><th>Срок</th><th>Гарантия до</th><th class="n">Цена техника</th></tr></thead>
+            <tbody id="ltOrdersBody"></tbody>
+          </table></div>
+        </div>
+
+        <div class="card hidden" id="ltPrices">
+          <div class="card-head"><h3>Расценки техника</h3></div>
+          <div class="lt-sub" style="padding:0 18px 8px;">Цена работы техника по услуге: с ней создаётся заказ, её клиника платит технику, она вычитается из базы процента врача.</div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Услуга</th><th class="n">Цена техника</th><th></th></tr></thead>
+            <tbody id="ltPricesBody"></tbody>
+          </table></div>
+          <div class="lt-form">
+            <label style="flex:1 1 240px;">Услуга<select id="ltPriceService"></select></label>
+            <label>Цена<input type="number" id="ltPriceValue" min="0" step="1" style="width:130px;"></label>
+            <button class="btn btn-cobalt btn-sm" type="button" onclick="ltSavePrice()">Сохранить</button>
+          </div>
+        </div>
+
+        <div class="card hidden" id="ltWarranty">
+          <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3>Гарантийные случаи</h3>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="ltOpenWarranty()">+ Зафиксировать случай</button>
+          </div>
+          <div style="overflow-x:auto;"><table>
+            <thead><tr><th>Дата</th><th>Пациент</th><th>Заказ</th><th>Причина</th><th>Статус</th></tr></thead>
+            <tbody id="ltWarrantyBody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-lt-edit">
+        <div class="modal" style="max-width:520px;">
+          <div class="modal-head"><h3>Изменить техника</h3><button class="modal-close" type="button" onclick="closeModal('m-lt-edit')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>ФИО</label><input type="text" id="lteName" maxlength="200" autocomplete="off"></div>
+            <div class="lt-grid2">
+              <div class="form-group"><label>Телефон</label><input type="text" id="ltePhone" maxlength="30" autocomplete="off"></div>
+              <div class="form-group"><label>Срок изготовления по умолчанию, дней</label><input type="number" id="lteLead" min="1" max="365"></div>
+              <div class="form-group"><label>Лаборатория</label><input type="text" id="lteLab" maxlength="200" autocomplete="off"></div>
+              <div class="form-group"><label>Контакт лаборатории</label><input type="text" id="lteContact" maxlength="200" autocomplete="off"></div>
+            </div>
+            <div class="form-group"><label>Специализация</label><select id="lteSpec"></select></div>
+            <div class="form-group"><label>Заметки</label><textarea id="lteNotes" rows="2"></textarea></div>
+            <label style="display:flex;gap:8px;align-items:center;font-size:13.5px;"><input type="checkbox" id="lteActive"> Активен (виден врачам при выборе техника)</label>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-lt-edit')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="ltSaveEdit()">Сохранить</button></div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-lt-warranty">
+        <div class="modal" style="max-width:480px;">
+          <div class="modal-head"><h3>Гарантийный случай</h3><button class="modal-close" type="button" onclick="closeModal('m-lt-warranty')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label>Заказ</label><select id="ltwTask"></select></div>
+            <div class="form-group"><label>Причина обращения</label><textarea id="ltwReason" rows="3" maxlength="2000" placeholder="Скол коронки через 3 месяца…"></textarea></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-lt-warranty')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="ltSaveWarranty()">Сохранить</button></div>
+        </div>
+      </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  const REAL = JSON.parse(document.getElementById('newui-real-data').textContent);
+  let T = REAL.labTech;
+  if(!T) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = n => Math.round(n || 0).toLocaleString('ru-RU') + ' ' + ((typeof CUR_SYM !== 'undefined' && CUR_SYM) || 'сом');
+  const base = '/new/lab/tech/' + T.id + '/';
+  async function post(url, data){
+    const fd = new FormData();
+    Object.entries(data || {}).forEach(([k, v]) => fd.append(k, v == null ? '' : v));
+    const res = await postForm(url, fd);
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok){ showToast(d.error || 'Не удалось сохранить', 'error'); return null; }
+    T = d.tech; render();
+    return d;
+  }
+
+  window.ltTab = function(which){
+    document.querySelectorAll('.lt-tabs .chip').forEach(b => b.classList.toggle('active', b.dataset.tab === which));
+    document.getElementById('ltOrders').classList.toggle('hidden', which !== 'orders');
+    document.getElementById('ltPrices').classList.toggle('hidden', which !== 'prices');
+    document.getElementById('ltWarranty').classList.toggle('hidden', which !== 'warranty');
+  };
+
+  function render(){
+    document.title = T.name + ' — техник';
+    document.getElementById('ltName').innerHTML = esc(T.name) + (T.active ? '' : ' <span class="lt-st cancelled">неактивен</span>');
+    document.getElementById('ltSpec').textContent = T.specializationLabel || '—';
+    document.getElementById('ltLab').textContent = T.labName || '—';
+    document.getElementById('ltLabContact').textContent = T.labContact || '';
+    document.getElementById('ltPhone').textContent = T.phone || '—';
+    document.getElementById('ltLogin').textContent = T.login ? (T.byCode ? 'подключён по коду: ' : 'вход: ') + T.login : 'нет входа в кабинет';
+    document.getElementById('ltPayable').textContent = money(T.payableSum);
+    document.getElementById('ltPayableCount').textContent = T.payableCount ? T.payableCount + ' заказ(ов) установлено, не оплачено' : 'долгов нет';
+    const pay = document.getElementById('ltPayBtn');
+    pay.classList.toggle('hidden', !T.payableCount);
+    pay.onclick = () => technicianPay(T.id);
+    document.querySelectorAll('.lt-tabs .chip').forEach(b => {
+      const n = {orders: T.orders.length, prices: T.prices.length, warranty: T.warranty.length}[b.dataset.tab];
+      b.textContent = {orders: 'Заказы', prices: 'Расценки', warranty: 'Гарантийные случаи'}[b.dataset.tab] + ' (' + n + ')';
+    });
+
+    document.getElementById('ltOrdersBody').innerHTML = T.orders.length ? T.orders.map(o => `<tr class="clickable" onclick="labOrderOpen(${o.id})">
+        <td class="mono">${esc(o.code)}</td><td>${esc(o.patient)}</td><td>${esc(o.service)}${o.tooth ? ' · зуб ' + esc(o.tooth) : ''}</td>
+        <td><span class="lt-st ${esc(o.status)}">${esc(o.statusLabel)}</span>${o.overdue ? ' <span class="lt-st" style="background:var(--coral-tint,#ffe9e2);color:var(--coral);">просрочен</span>' : ''}</td>
+        <td>${esc(o.expected || '—')}</td><td>${esc(o.warranty || '—')}</td>
+        <td class="n mono">${money(o.amount)}${o.paid ? ' <span class="lt-st installed">оплачен</span>' : ''}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="lt-sub" style="text-align:center;padding:22px;">Заказов пока нет</td></tr>';
+
+    document.getElementById('ltPricesBody').innerHTML = T.prices.length ? T.prices.map(a => `<tr>
+        <td>${esc(a.service)}</td><td class="n mono">${money(a.price)}</td>
+        <td style="text-align:right;white-space:nowrap;"><button class="btn btn-ghost btn-sm" type="button" onclick="ltEditPrice(${a.serviceId}, ${a.price})">Изменить</button>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="ltDeletePrice(${a.id})">✕</button></td></tr>`).join('')
+      : '<tr><td colspan="3" class="lt-sub" style="text-align:center;padding:16px;">Расценок нет — заказы этому технику будут с ценой 0</td></tr>';
+    const sel = document.getElementById('ltPriceService');
+    const keep = sel.value;
+    const has = new Set(T.prices.map(a => a.serviceId));
+    sel.innerHTML = '<option value="">Выберите услугу…</option>' + T.services.map(s =>
+      `<option value="${s.id}">${esc(s.name)}${s.isLab ? ' · лаб.' : ''}${has.has(s.id) ? ' (есть цена)' : ''}</option>`).join('');
+    sel.value = keep;
+
+    document.getElementById('ltWarrantyBody').innerHTML = T.warranty.length ? T.warranty.map(w => `<tr>
+        <td>${esc(w.date)}</td><td>${esc(w.patient)}</td><td class="mono">${esc(w.order || '—')}</td><td style="max-width:280px;">${esc(w.reason)}</td>
+        <td><button class="btn btn-ghost btn-sm" type="button" onclick="ltResolve(${w.id})">${w.resolved ? '✓ решено' : 'открыт — отметить решённым'}</button></td></tr>`).join('')
+      : '<tr><td colspan="5" class="lt-sub" style="text-align:center;padding:16px;">Гарантийных случаев нет</td></tr>';
+  }
+
+  window.ltEditPrice = function(serviceId, price){
+    document.getElementById('ltPriceService').value = serviceId;
+    document.getElementById('ltPriceValue').value = Math.round(price);
+    document.getElementById('ltPriceValue').focus();
+  };
+  window.ltSavePrice = async function(){
+    const service_id = document.getElementById('ltPriceService').value;
+    const price = document.getElementById('ltPriceValue').value;
+    if(!service_id || price === ''){ showToast('Выберите услугу и укажите цену', 'error'); return; }
+    if(await post(base + 'price/', {service_id, price})){
+      document.getElementById('ltPriceValue').value = '';
+      document.getElementById('ltPriceService').value = '';
+      showToast('Расценка сохранена', 'success');
+    }
+  };
+  window.ltDeletePrice = async function(aid){
+    if(!confirm('Удалить расценку?')) return;
+    if(await post(base + 'price/' + aid + '/delete/')) showToast('Расценка удалена', 'success');
+  };
+
+  window.ltOpenEdit = function(){
+    document.getElementById('lteName').value = T.name;
+    document.getElementById('ltePhone').value = T.phone || '';
+    document.getElementById('lteLead').value = T.leadDays || 5;
+    document.getElementById('lteLab').value = T.labName || '';
+    document.getElementById('lteContact').value = T.labContact || '';
+    document.getElementById('lteNotes').value = T.notes || '';
+    document.getElementById('lteActive').checked = T.active;
+    document.getElementById('lteSpec').innerHTML = '<option value="">—</option>' + T.specializations.map(s =>
+      `<option value="${esc(s.value)}" ${s.value === T.specialization ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
+    openModal('m-lt-edit');
+  };
+  window.ltSaveEdit = async function(){
+    const v = id => document.getElementById(id).value;
+    const data = {name: v('lteName').trim(), phone: v('ltePhone').trim(), default_lead_days: v('lteLead') || 5,
+      lab_name: v('lteLab').trim(), lab_contact: v('lteContact').trim(), specialization: v('lteSpec'), notes: v('lteNotes')};
+    if(!data.name){ showToast('Укажите ФИО', 'error'); return; }
+    if(document.getElementById('lteActive').checked) data.is_active = 'on';
+    if(await post(base + 'edit/', data)){ closeModal('m-lt-edit'); showToast('Сохранено', 'success'); }
+  };
+
+  window.ltOpenWarranty = function(){
+    document.getElementById('ltwTask').innerHTML = '<option value="">— без привязки к заказу —</option>' +
+      T.orders.filter(o => o.status !== 'cancelled').map(o => `<option value="${o.id}">${esc(o.code)} · ${esc(o.patient)} · ${esc(o.service)}</option>`).join('');
+    document.getElementById('ltwReason').value = '';
+    openModal('m-lt-warranty');
+  };
+  window.ltSaveWarranty = async function(){
+    const reason = document.getElementById('ltwReason').value.trim();
+    if(!reason){ showToast('Опишите причину', 'error'); return; }
+    if(await post(base + 'warranty/', {task_id: document.getElementById('ltwTask').value, reason})){
+      closeModal('m-lt-warranty'); showToast('Гарантийный случай зафиксирован', 'success');
+    }
+  };
+  window.ltResolve = async function(wid){ await post(base + 'warranty/' + wid + '/resolve/'); };
+
+  if(location.hash === '#prices') ltTab('prices');
+  render();
+})();
+</script>
+{% endblock %}
