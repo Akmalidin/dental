@@ -56,6 +56,7 @@ urlpatterns = [
     path("lab/my/<int:pk>/upload/", tv.my_upload, name="newui_lab_my_upload"),
     path("lab/link/", tv.lab_link, name="newui_lab_link"),
     path("lab/connect/", tv.lab_connect, name="newui_lab_connect"),
+    path("lab/create-login/", tv.lab_create_login, name="newui_lab_create_login"),
     path("lab/order/<int:pk>/", tv.lab_order_json, name="newui_lab_order"),
     path("lab/order/<int:pk>/comment/", tv.lab_order_comment, name="newui_lab_order_comment"),
     path("lab/order/<int:pk>/deadline/<int:mid>/", tv.lab_order_deadline, name="newui_lab_order_deadline"),

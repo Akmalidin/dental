@@ -4166,11 +4166,51 @@ function techLinkCell(tc){
       : label;
   }
   if(!(IS_SUPERADMIN || IS_ADMIN)) return tc.userLogin ? navEsc(tc.userLogin) : '—';
-  if(!users.length && !tc.userId) return '<span style="font-size:12px;color:var(--ink-soft);" title="Персонал → новый сотрудник с ролью «Техник»">нет логинов техников</span>';
-  return `<select style="max-width:190px;" onchange="techLinkSave(${tc.id}, this.value, this)">
+  const createBtn = tc.userId ? '' : `<button class="btn btn-cobalt btn-sm" type="button" onclick="techCreateLogin(${tc.id}, this)">🔑 Создать вход</button>`;
+  if(!users.length && !tc.userId) return createBtn;
+  return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><select style="max-width:190px;" onchange="techLinkSave(${tc.id}, this.value, this)">
     <option value="">— не привязан —</option>
     ${users.map(u=>`<option value="${u.id}" ${u.id===tc.userId?'selected':''}>${navEsc(u.name)} (${navEsc(u.login)})</option>`).join('')}
-  </select>`;
+  </select>${createBtn}</div>`;
+}
+/* «Создать вход»: логин (телефон) + случайный пароль; показываем один раз */
+async function techCreateLogin(techId, btn){
+  const tc=(techniciansData.roster||[]).find(r=>r.id===techId);
+  if(!confirm('Создать технику «'+(tc?tc.name:'')+'» вход в его кабинет? Логин — его телефон, пароль сгенерируется.')) return;
+  if(btn) btn.disabled=true;
+  const fd=new FormData(); fd.append('technician_id', techId);
+  const res=await postForm('/new/lab/create-login/', fd);
+  const d=await res.json().catch(()=>({}));
+  if(btn) btn.disabled=false;
+  if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'),'error'); return; }
+  if(tc){ tc.userId=d.userId; tc.userLogin=d.login; }
+  (techniciansData.techUsers=techniciansData.techUsers||[]).push({id:d.userId, name:tc?tc.name:d.login, login:d.login});
+  renderTechniciansRoster();
+  let m=document.getElementById('m-tech-login');
+  if(!m){
+    const div=document.createElement('div');
+    div.innerHTML=`<div class="modal-backdrop" id="m-tech-login"><div class="modal" style="max-width:440px;">
+      <div class="modal-head"><h3>Вход для техника создан</h3><button class="modal-close" type="button" onclick="closeModal('m-tech-login')">✕</button></div>
+      <div class="modal-body" id="techLoginBody"></div>
+      <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-tech-login')">Готово</button><button class="btn btn-cobalt" type="button" id="techLoginCopy">Скопировать</button></div></div></div>`;
+    document.body.appendChild(div.firstElementChild);
+    m=document.getElementById('m-tech-login');
+  }
+  const site=location.origin+'/login/';
+  const text='Вход в ODONTIS (кабинет техника)\nСайт: '+site+'\nЛогин: '+d.login+'\nПароль: '+d.password;
+  document.getElementById('techLoginBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:70px 1fr;gap:6px 10px;font-size:14px;">
+      <span style="color:var(--ink-soft);">Сайт</span><b style="user-select:all;word-break:break-all;">${navEsc(site)}</b>
+      <span style="color:var(--ink-soft);">Логин</span><b class="mono" style="user-select:all;">${navEsc(d.login)}</b>
+      <span style="color:var(--ink-soft);">Пароль</span><b class="mono" style="user-select:all;">${navEsc(d.password)}</b>
+    </div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-top:12px;">Передайте эти данные технику. Пароль показывается только сейчас — если потеряется, задайте новый в «Персонал» → сотрудник → «Изменить». После входа техник сразу попадает в «Мои заказы».</div>`;
+  document.getElementById('techLoginCopy').onclick=()=>{
+    (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(
+      ()=>showToast('Скопировано — отправьте технику','success'),
+      ()=>showToast('Выделите и скопируйте данные вручную','error'));
+  };
+  openModal('m-tech-login');
 }
 /* Подключить техника из другой клиники по его коду (код — в кабинете техника) */
 function openTechConnect(){

@@ -579,3 +579,35 @@ def lab_order_deadline(request, pk, mid):
         return _err("Запрос уже решён")
     decide_deadline(msg, request.user, request.POST.get("approve") in ("1", "true", "on"))
     return JsonResponse({"ok": True, "order": _clinic_order_json(t)})
+
+
+@login_required
+@require_POST
+def lab_create_login(request):
+    """«Создать вход» в строке техника: учётная запись с ролью «Техник»,
+    логин — телефон (без «+»), пароль — случайный, показывается один раз.
+    Техник сразу привязан и входит в свой кабинет."""
+    from apps.users.models import Role, User
+    if not _is_admin(request.user):
+        return _err("Создать вход может администратор", 403)
+    tech = Technician.objects.filter(pk=request.POST.get("technician_id") or 0).first()
+    if tech is None:
+        return _err("Техник не найден", 404)
+    if tech.user_id:
+        return _err("У техника уже есть вход")
+    role = Role.objects.filter(name=Role.TECHNICIAN, clinic__isnull=True).first()
+    if role is None:
+        return _err("Роль «Техник» не найдена")
+    digits = "".join(ch for ch in (tech.phone or "") if ch.isdigit())
+    base = digits if len(digits) >= 6 else f"tech{tech.pk}"
+    login, n = base, 2
+    while User.objects.filter(login=login).exists():
+        login, n = f"{base}-{n}", n + 1
+    password = "".join(secrets.choice(CODE_ALPHABET.lower() + "23456789") for _ in range(8))
+    user = User(login=login, name=tech.name, phone=tech.phone or "", clinic_id=tech.clinic_id, role=role,
+                use_new_interface=True)
+    user.set_password(password)
+    user.save()
+    tech.user = user
+    tech.save(update_fields=["user"])
+    return JsonResponse({"ok": True, "login": login, "password": password, "userId": user.pk})
