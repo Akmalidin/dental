@@ -4145,14 +4145,14 @@ function renderTechniciansRoster(){
     return;
   }
   body.innerHTML=list.map(tc=>`
-    <tr class="clickable" onclick="location.href='/technicians/${tc.id}/'">
+    <tr class="clickable" onclick="location.href='/new/lab/tech/${tc.id}/'">
       <td><b>${tc.name}</b></td>
       <td class="mono">${tc.phone||'—'}</td>
       <td>${tc.labName||'—'}</td>
       <td>${tc.specializationLabel}</td>
       <td class="mono">${tc.openOrders}</td>
       <td onclick="event.stopPropagation()">${techLinkCell(tc)}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();location.href='/technicians/${tc.id}/'">${t('w_open')}</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();location.href='/new/lab/tech/${tc.id}/'">${t('w_open')}</button></td>
     </tr>`).join('');
 }
 /* «Вход в кабинет»: какой логин (сотрудник с ролью «Техник») открывает
