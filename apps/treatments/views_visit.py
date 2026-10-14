@@ -173,8 +173,10 @@ def _visit_wizard_context(treatment):
                 .order_by("category__sort_order", "name")]
     from apps.technicians.models import Technician
     technicians_json = [{"id": t.pk, "name": t.name, "lead": t.default_lead_days,
-                         "spec": t.get_specialization_display()}
-                        for t in Technician.objects.filter(is_active=True)]
+                         "spec": t.get_specialization_display(),
+                         # прайс техника: цена его работы по услуге (себестоимость заказа)
+                         "prices": {str(a.service_id): float(a.price) for a in t.agreements.all()}}
+                        for t in Technician.objects.filter(is_active=True).prefetch_related("agreements")]
     statuses = [{"code": s.code, "name": s.name, "color": s.color} for s in ToothStatus.objects.all()]
     # сохранённые состояния зубов пациента (для предзаполнения карты)
     tooth_conditions = {str(tc.tooth_number): (tc.status.code if tc.status else "")
@@ -188,9 +190,18 @@ def _visit_wizard_context(treatment):
                       for gc in ToothGumCondition.objects.filter(patient=treatment.patient).select_related("status")
                       if gc.status}
     # уже добавленные сегодня процедуры
+    def _lab(c):
+        # заказ технику, уже созданный по этой процедуре (после «Завершить приём»)
+        o = getattr(c, "lab_order_obj", None)
+        if o is None:
+            return None
+        return {"id": o.pk, "code": f"#L-{o.pk:04d}", "status": o.get_status_display(),
+                "technician": o.technician.name if o.technician_id else ""}
+
     cures = [{"service_id": c.service_id, "name": c.service.name, "tooth": c.tooth_number,
-              "qty": c.quantity, "price": float(c.price), "discount": float(c.discount), "done": True}
-             for c in treatment.cures.all()]
+              "qty": c.quantity, "price": float(c.price), "discount": float(c.discount), "done": True,
+              "lab": _lab(c)}
+             for c in treatment.cures.select_related("service", "lab_order_obj__technician")]
     # уже загруженные снимки/файлы этого приёма
     from django.utils import timezone as _tz
     files = [{"id": f.pk, "url": f.file.url, "name": f.name,
@@ -515,13 +526,17 @@ def _create_lab_order(treatment, cure, svc, it, user):
     from datetime import timedelta as _td
     from django.utils import timezone as _tz
     from apps.technicians.models import Technician, TechnicianAgreement, TechnicianTask, TechnicianOrderEvent
-    tech = Technician.objects.filter(pk=it.get("technician_id")).first()
+    try:
+        tech_id = int(it.get("technician_id"))
+    except (TypeError, ValueError):
+        return
+    tech = Technician.objects.filter(pk=tech_id, is_active=True).first()
     if not tech:
         return
     today = _tz.localdate()
     lead = it.get("lead_days")
     try:
-        lead = int(lead)
+        lead = max(1, min(365, int(lead)))
     except (TypeError, ValueError):
         lead = tech.default_lead_days or svc.lab_days or 5
     # себестоимость работы техника: из договора, иначе 0
@@ -530,8 +545,8 @@ def _create_lab_order(treatment, cure, svc, it, user):
     order = TechnicianTask.objects.create(
         technician=tech, treatment=treatment, patient=treatment.patient, cure=cure,
         service=svc, tooth_number=str(it.get("tooth") or ""),
-        material=(it.get("material") or "").strip(), vita_color=(it.get("vita") or "").strip(),
-        amount=amount, doctor_comment=(it.get("tech_comment") or "").strip(),
+        material=str(it.get("material") or "").strip()[:120], vita_color=str(it.get("vita") or "").strip()[:20],
+        amount=amount, doctor_comment=str(it.get("tech_comment") or "").strip()[:2000],
         status=TechnicianTask.STATUS_TRANSFERRED, transferred_at=today,
         expected_ready=today + _td(days=lead),
     )

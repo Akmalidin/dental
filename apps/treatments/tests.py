@@ -239,6 +239,53 @@ class NewUIVisitWizardTestCase(_VisitWizardTestBase):
         treatment.refresh_from_db()
         self.assertEqual(treatment.status, Treatment.STATUS_COMPLETED)
 
+    def test_newui_visit_commit_creates_lab_order_from_visitcard_fields(self):
+        """Новая карта приёма шлёт техника/материал/цвет/срок/комментарий —
+        «Завершить приём» создаёт заказ технику; «без заказа» ('') — нет."""
+        from apps.services.models import Service
+        from apps.technicians.models import Technician, TechnicianAgreement, TechnicianTask
+        from apps.notifications.models import Notification
+        set_current_clinic(self.clinic)
+        crown = Service.objects.create(name="Коронка", price=20000, is_lab=True, lab_days=7, clinic=self.clinic)
+        tech_user = User.objects.create(login="vw_lab", name="Лаборант", clinic=self.clinic,
+                                        role=Role.objects.get(name="technician", clinic__isnull=True))
+        tech = Technician.objects.create(name="Лаборант", user=tech_user, clinic=self.clinic)
+        TechnicianAgreement.objects.create(technician=tech, service=crown, price=6000)
+        clear_current_clinic()
+        self.client.get(f"/new/visit/start/?appointment={self.appt.pk}")
+        treatment = Treatment.objects.get(appointment=self.appt)
+        import re
+
+        def vw_data():
+            html = self.client.get(f"/new/visitcard/{treatment.pk}/").content.decode()
+            m = re.search(r'<script id="newui-real-data" type="application/json">(.*?)</script>', html, re.DOTALL)
+            return json.loads(m.group(1))["visitWizard"] if m else None
+
+        self.assertIn("Лаборант", [t["name"] for t in vw_data()["technicians"]])   # техники приходят в карту
+        plan = [
+            {"service_id": crown.pk, "tooth": "36", "qty": 1, "price": 20000, "done": True,
+             "technician_id": str(tech.pk), "material": "цирконий", "vita": "A2", "lead_days": 5,
+             "tech_comment": "плотный контакт"},
+            {"service_id": crown.pk, "tooth": "37", "qty": 1, "price": 20000, "done": True, "technician_id": ""},
+            {"service_id": crown.pk, "tooth": "38", "qty": 1, "price": 20000, "done": True, "technician_id": "none"},
+        ]
+        resp = self.client.post(f"/treatments/visit/{treatment.pk}/commit/", data=json.dumps({"plan": plan}),
+                                content_type="application/json")
+        self.assertTrue(resp.json()["ok"], resp.content)
+        orders = list(TechnicianTask.all_clinics.filter(treatment=treatment))
+        self.assertEqual(len(orders), 1)
+        o = orders[0]
+        self.assertEqual((o.tooth_number, o.material, o.vita_color, o.doctor_comment, o.amount),
+                         ("36", "цирконий", "A2", "плотный контакт", Decimal("6000")))
+        self.assertEqual((o.expected_ready - o.transferred_at).days, 5)
+        self.assertEqual(o.status, TechnicianTask.STATUS_TRANSFERRED)
+        self.assertTrue(Notification.objects.filter(user=tech_user, title__startswith="Новый заказ").exists())
+        # после завершения карта показывает созданный заказ
+        data = vw_data()
+        if data is not None:
+            labs = [c["lab"] for c in data["cures"] if c.get("lab")]
+            self.assertEqual([lab["code"] for lab in labs], [f"#L-{o.pk:04d}"])
+
     def test_newui_visit_start_no_patient_redirects_to_schedule(self):
         resp = self.client.get("/new/visit/start/")
         self.assertRedirects(resp, "/new/schedule/")

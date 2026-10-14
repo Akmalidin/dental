@@ -921,3 +921,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cobalt-tint);bor
 /* Техник: карточки пациентов ему закрыты — ссылки на них на кассе не ведут никуда */
 body.tech-only .btn[href^="/new/patients/"]{display:none}
 body.tech-only a[href^="/new/patients/"]{pointer-events:none;color:inherit !important}
+
+/* Карта приёма: заказ технику под строкой лабораторной услуги */
+.vw-lab-row td{padding-top:0;border-top:none}
+.vw-lab{background:var(--mist,#f1f3f8);border:1px solid var(--mist-line,#e3e5ec);border-radius:10px;padding:10px 12px;font-size:13px}
+.vw-lab-need{border-color:var(--coral,#ff5a1f)}
+.vw-lab-warn{color:var(--coral,#ff5a1f)}
+.vw-lab-done{color:var(--ink-soft)}
+.vw-lab-title{font-weight:600;margin-bottom:8px}
+.vw-lab-req{color:var(--coral,#ff5a1f);font-weight:600}
+.vw-lab-grid{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}
+.vw-lab-grid label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--ink-soft)}
+.vw-lab-grid select,.vw-lab-grid input{font-size:13px;padding:5px 8px;min-width:0}
+.vw-lab-grid .vw-lab-wide{flex:1 1 220px}
+.vw-lab-grid .vw-lab-wide input{width:100%}
+.vw-lab-price{font-size:12px;align-self:center}
