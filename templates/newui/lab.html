@@ -20,7 +20,10 @@
           <div class="card">
             <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
               <h3 data-i18n="w_lab_tab_technicians">Техники</h3>
-              <button class="btn btn-cobalt btn-sm" onclick="openTechnicianAddModal()">+ <span data-i18n="title_m_technician_add">Добавить техника</span></button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-sm" type="button" onclick="openTechConnect()">🔗 Подключить по коду</button>
+                <button class="btn btn-cobalt btn-sm" onclick="openTechnicianAddModal()">+ <span data-i18n="title_m_technician_add">Добавить техника</span></button>
+              </div>
             </div>
             <table>
               <thead><tr>
@@ -50,6 +53,18 @@
               <tbody id="technicianPayoutsBody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="m-tech-connect">
+        <div class="modal" style="max-width:460px;">
+          <div class="modal-head"><h3>Подключить техника по коду</h3><button class="modal-close" type="button" onclick="closeModal('m-tech-connect')">✕</button></div>
+          <div class="modal-body">
+            <div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;">Техник работает в ODONTIS с другой клиникой? Попросите у него код из его кабинета («Мои заказы» → «Мой код техника»). После подключения ваши заказы будут приходить ему в кабинет — видны ему будут только эти заказы.</div>
+            <div class="form-group"><label>Код техника</label><input type="text" id="techConnectCode" autocomplete="off" placeholder="T-XXXX-XXXX" style="text-transform:uppercase;letter-spacing:1px;"></div>
+            <div class="form-group"><label>В списке техников</label><select id="techConnectTarget"></select></div>
+          </div>
+          <div class="modal-foot"><button class="btn btn-ghost" type="button" onclick="closeModal('m-tech-connect')">Отмена</button><button class="btn btn-cobalt" type="button" onclick="submitTechConnect()">Подключить</button></div>
         </div>
       </div>
 {% endblock %}

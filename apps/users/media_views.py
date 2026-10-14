@@ -78,10 +78,18 @@ def protected_media(request, path):
         user = request.user
         if not (user.is_authenticated and user.is_active):
             raise Http404
-        clinic_id = _file_clinic_id(name)
-        if clinic_id is None:
-            raise Http404
-        allowed = user.is_superadmin or clinic_id == user.clinic_id
+        if name.startswith("tech_orders/ext/"):
+            # заказы клиник вне ODONTIS — личные записи техника: только ему
+            from apps.technicians.models import ExternalOrderFile
+            f = ExternalOrderFile.objects.filter(file=name).select_related("order").first()
+            if f is None:
+                raise Http404
+            allowed = f.order.owner_id == user.pk
+        else:
+            clinic_id = _file_clinic_id(name)
+            if clinic_id is None:
+                raise Http404
+            allowed = user.is_superadmin or clinic_id == user.clinic_id
     if not allowed:
         raise Http404
     full = os.path.join(settings.MEDIA_ROOT, name)

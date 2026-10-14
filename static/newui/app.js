@@ -4081,12 +4081,37 @@ function renderTechniciansRoster(){
    этому технику его кабинет /new/lab/my/ — только его заказы и выплаты. */
 function techLinkCell(tc){
   const users=techniciansData.techUsers||[];
+  if(tc.byCode){
+    const label=`🔗 ${navEsc(tc.userName)} <span style="font-size:11.5px;color:var(--ink-soft);">по коду</span>`;
+    return (IS_SUPERADMIN || IS_ADMIN)
+      ? `${label} <button class="btn btn-ghost btn-sm" type="button" onclick="if(confirm('Отключить техника? Новые заказы ему не уйдут в кабинет.'))techLinkSave(${tc.id}, '', this)">Отключить</button>`
+      : label;
+  }
   if(!(IS_SUPERADMIN || IS_ADMIN)) return tc.userLogin ? navEsc(tc.userLogin) : '—';
   if(!users.length && !tc.userId) return '<span style="font-size:12px;color:var(--ink-soft);" title="Персонал → новый сотрудник с ролью «Техник»">нет логинов техников</span>';
   return `<select style="max-width:190px;" onchange="techLinkSave(${tc.id}, this.value, this)">
     <option value="">— не привязан —</option>
     ${users.map(u=>`<option value="${u.id}" ${u.id===tc.userId?'selected':''}>${navEsc(u.name)} (${navEsc(u.login)})</option>`).join('')}
   </select>`;
+}
+/* Подключить техника из другой клиники по его коду (код — в кабинете техника) */
+function openTechConnect(){
+  document.getElementById('techConnectCode').value='';
+  const sel=document.getElementById('techConnectTarget');
+  sel.innerHTML='<option value="">Новый техник в списке</option>'+(techniciansData.roster||[]).filter(r=>!r.userId)
+    .map(r=>`<option value="${r.id}">Это наш техник: ${navEsc(r.name)}</option>`).join('');
+  openModal('m-tech-connect');
+  setTimeout(()=>document.getElementById('techConnectCode').focus(), 50);
+}
+async function submitTechConnect(){
+  const fd=new FormData();
+  fd.append('code', document.getElementById('techConnectCode').value);
+  fd.append('technician_id', document.getElementById('techConnectTarget').value);
+  const res=await postForm('/new/lab/connect/', fd);
+  const d=await res.json().catch(()=>({}));
+  if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'), 'error'); return; }
+  closeModal('m-tech-connect');
+  flashAndReload('Техник «'+d.name+'» подключён — заказы ему будут приходить в его кабинет');
 }
 async function techLinkSave(techId, userId, sel){
   const fd=new FormData();
@@ -4096,7 +4121,7 @@ async function techLinkSave(techId, userId, sel){
   const d=await res.json().catch(()=>({}));
   if(!res.ok || !d.ok){ showToast(d.error || t('w_save_failed'), 'error'); return; }
   (techniciansData.roster||[]).forEach(r=>{
-    if(r.id===techId) r.userId=userId?+userId:null;
+    if(r.id===techId){ r.userId=userId?+userId:null; if(!userId) r.byCode=false; }
     else if(userId && r.userId===+userId) r.userId=null;   // один логин — один техник
   });
   renderTechniciansRoster();

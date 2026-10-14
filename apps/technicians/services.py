@@ -76,7 +76,9 @@ def notify_status(task, new_status, by):
             _send(u, f"Работа готова: {order_title(task)}", f"Техник {task.technician.name} отметил заказ готовым.",
                   "/new/lab/", actor=by)
     elif not by_tech and new_status == TechnicianTask.STATUS_CORRECTION:
-        _send(tech_user, f"Коррекция: {order_title(task)}", task.doctor_comment[:300], "/new/lab/my/", actor=by)
+        clinic = task.technician.clinic.name if task.technician.clinic_id else ""
+        _send(tech_user, f"Коррекция: {order_title(task)}",
+              f"{'Клиника: ' + clinic + '. ' if clinic else ''}{task.doctor_comment[:300]}", "/new/lab/my/", actor=by)
 
 
 def notify_new_order(task):
@@ -84,5 +86,7 @@ def notify_new_order(task):
     if tech_user is None:
         return
     due = task.expected_ready.strftime("%d.%m.%Y") if task.expected_ready else "не указан"
-    _send(tech_user, f"Новый заказ: {order_title(task)}", f"Срок: {due}. {task.doctor_comment[:250]}".strip(),
+    clinic = task.technician.clinic.name if task.technician.clinic_id else ""
+    _send(tech_user, f"Новый заказ: {order_title(task)}",
+          f"{'Клиника: ' + clinic + '. ' if clinic else ''}Срок: {due}. {task.doctor_comment[:250]}".strip(),
           "/new/lab/my/")
