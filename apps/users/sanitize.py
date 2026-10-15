@@ -69,14 +69,30 @@ def connect():
 _NAME_KEY = re.compile(r"(name|patient|doctor|author|sender|phone|actor|fio|who|client)", re.I)
 
 
+# Остальной текст (заголовки задач, описания, причины, шаблоны, комментарии…)
+# интерфейс тоже местами вставляет в HTML без экранирования. Его не режем, а
+# заменяем «<» «>» на похожие «‹» «›» и «"» на «”»: читается так же, но код
+# из такого текста уже не выполняется. Адреса, файлы, токены не трогаем.
+_RAW_KEY = re.compile(r"(url|href|src|links?|path|file|filename|token|secret|embed|svg|icon|qr)s?$", re.I)
+_SOFT = str.maketrans({"<": "‹", ">": "›", '"': "”", "`": "ʼ"})
+
+
+def soft_clean(value):
+    return value.translate(_SOFT) if isinstance(value, str) else value
+
+
 def strip_names(obj, _key=""):
     if isinstance(obj, dict):
         return {k: strip_names(v, k) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [strip_names(v, _key) for v in obj]
-    if _key and _NAME_KEY.search(_key) and _dirty(obj):
+    if not _dirty(obj):
+        return obj
+    if _key and _NAME_KEY.search(_key):
         return clean(obj)
-    return obj
+    if _key and _RAW_KEY.search(_key):
+        return obj
+    return soft_clean(obj)
 
 
 class JsonNamesMiddleware:

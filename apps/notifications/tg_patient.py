@@ -60,6 +60,14 @@ T = {
         "ru": "✅ Спасибо, {name}! Мы вас зарегистрировали.",
         "uz": "✅ Rahmat, {name}! Siz ro'yxatdan o'tdingiz.",
     },
+    "own_contact_only": {
+        "ru": "Пришлите, пожалуйста, СВОЙ номер — кнопкой «Поделиться номером» ниже.",
+        "uz": "Iltimos, O'Z raqamingizni pastdagi «Raqamni yuborish» tugmasi orqali yuboring.",
+    },
+    "use_share_button": {
+        "ru": "Этот номер уже есть в клинике. Чтобы подтвердить, что он ваш, нажмите кнопку «Поделиться номером» ниже.",
+        "uz": "Bu raqam klinikada bor. U sizniki ekanini tasdiqlash uchun pastdagi «Raqamni yuborish» tugmasini bosing.",
+    },
     "need_phone": {
         "ru": "Сначала поделитесь номером телефона — нажмите /start",
         "uz": "Avval telefon raqamingizni yuboring — /start ni bosing",
@@ -535,6 +543,15 @@ def handle_message(clinic, msg, token, cs):
         return True
 
     if contact:
+        # Только СВОЙ контакт (кнопка «Поделиться номером»): Telegram даёт
+        # отправить и чужой контакт из записной книжки — тогда user_id
+        # контакта не совпадает с отправителем, и по нему нельзя привязывать
+        # карточку (иначе любой получает долг, визиты и записи чужого пациента).
+        sender = (msg.get("from") or {}).get("id")
+        if not sender or contact.get("user_id") != sender:
+            _send(chat_id, t("own_contact_only", lang), token)
+            ask_contact(chat_id, clinic, lang, token)
+            return True
         link_by_phone(clinic, chat, contact.get("phone_number") or "", token)
         return True
 
@@ -565,11 +582,19 @@ def handle_message(clinic, msg, token, cs):
         register_patient(clinic, chat, text, token)
         return True
 
-    # Номер напечатан текстом (не через кнопку «Поделиться»)
+    # Номер напечатан текстом (не через кнопку «Поделиться»). Если такой
+    # номер уже есть в базе — к карточке не привязываем (так можно было
+    # «войти» в чужую карточку, просто написав чужой номер): только кнопкой.
+    # Номера нет — новый пациент, заводим карточку по нему.
     if text and not text.startswith("/") and patient is None:
         digits = re.sub(r"\D", "", text)
         if 9 <= len(digits) <= 15 and re.fullmatch(r"[\d\s()+\-]+", text):
-            link_by_phone(clinic, chat, text, token)
+            from apps.patients.models import normalize_phone
+            if Patient.objects.filter(phone_norm=normalize_phone(text)).exists():
+                _send(chat_id, t("use_share_button", lang), token)
+                ask_contact(chat_id, clinic, lang, token)
+            else:
+                link_by_phone(clinic, chat, text, token)
             return True
     return False
 

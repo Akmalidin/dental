@@ -3,6 +3,14 @@ from .models import Payment, Expense, ExpenseCategory
 
 
 class PaymentForm(forms.ModelForm):
+    def clean_amount(self):
+        # Отрицательный «приход» уменьшал оплаченное и выручку в отчётах.
+        # 0 допустим: касса им закрывает заявку «к оплате: 0».
+        v = self.cleaned_data.get("amount")
+        if v is None or not v.is_finite() or v < 0:
+            raise forms.ValidationError("Сумма не может быть отрицательной")
+        return v
+
     class Meta:
         model = Payment
         fields = ["patient", "treatment", "amount", "method", "type", "branch", "notes"]
@@ -36,6 +44,12 @@ class PaymentForm(forms.ModelForm):
 
 
 class ExpenseForm(forms.ModelForm):
+    def clean_amount(self):
+        v = self.cleaned_data.get("amount")
+        if v is None or not v.is_finite() or v <= 0:
+            raise forms.ValidationError("Сумма расхода должна быть больше нуля")
+        return v
+
     class Meta:
         model = Expense
         fields = ["category", "amount", "description", "branch", "date"]

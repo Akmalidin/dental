@@ -120,7 +120,7 @@ class StripNamesTestCase(TestCase):
         data = {"patients": [{"fullName": "Ma'mura <b>\"x\"", "note": "<5 мм"}], "who": "`a`"}
         out = strip_names(data)
         self.assertEqual(out["patients"][0]["fullName"], "Ma'mura b”x”")
-        self.assertEqual(out["patients"][0]["note"], "<5 мм")
+        self.assertEqual(out["patients"][0]["note"], "‹5 мм")   # смысл тот же, но не HTML
         self.assertEqual(out["who"], "ʼaʼ")
 
     def test_json_middleware_cleans_names(self):
@@ -131,7 +131,7 @@ class StripNamesTestCase(TestCase):
         resp = mw(RequestFactory().get("/new/patients/data/"))
         data = json.loads(resp.content)
         self.assertNotIn("<", data["name"])
-        self.assertEqual(data["body"], "<ok>")
+        self.assertEqual(data["body"], "‹ok›")       # остальной текст — безопасные «‹›»
         sync = JsonNamesMiddleware(lambda r: JsonResponse({"name": "<x>"}))(RequestFactory().get("/sync/export/"))
         self.assertEqual(json.loads(sync.content)["name"], "<x>")
 
@@ -225,3 +225,28 @@ class OpenRedirectTestCase(TestCase):
         self.assertEqual(r["Location"], "/new/")
         r = Client().post("/login/?next=/new/patients/", {"login": "or_user", "password": "Pass12345!"})
         self.assertEqual(r["Location"], "/new/patients/")
+
+
+class StoredXssPageDataTestCase(TestCase):
+    """Отчёт безопасности №2: текст задач, шаблонов и т.п. не попадает на
+    страницу с «<» — интерфейс местами вставляет его через innerHTML."""
+
+    def test_task_title_is_neutralized_in_page_data_and_json(self):
+        from apps.tasks.models import Task
+        from apps.users.sanitize import strip_names
+        clinic = Clinic.objects.create(slug="xss-a", name="X")
+        u = User.objects.create(login="xss_dir", name="Директор", clinic=clinic,
+                                role=Role.objects.get(name="admin_main", clinic__isnull=True))
+        Task.objects.create(title='<img src=x onerror=alert(1)>', description='"><svg onload=alert(2)>',
+                                clinic=clinic, created_by=u)
+        c = Client()
+        c.force_login(u)
+        r = c.get("/new/tasks/")
+        self.assertEqual(r.status_code, 200)
+        data = r.context["real_data"]
+        blob = json.dumps(data, ensure_ascii=False)
+        self.assertNotIn("<img", blob)
+        self.assertNotIn("<svg", blob)
+        self.assertIn("‹img src=x onerror=alert(1)›", blob)
+        # адреса и файлы не трогаем
+        self.assertEqual(strip_names({"fileUrl": "/media/a<b>.jpg"})["fileUrl"], "/media/a<b>.jpg")

@@ -143,7 +143,8 @@ class TgInboxLoggingTestCase(TestCase):
             _tg_handle_update(json.dumps({"message": message}).encode(), self.clinic.slug)
 
     def test_contact_share_links_patient_and_logs_conversation(self):
-        self._send({"chat": {"id": 555}, "contact": {"phone_number": "+996553565674"}})
+        self._send({"chat": {"id": 555}, "from": {"id": 555},
+                    "contact": {"phone_number": "+996553565674", "user_id": 555}})
         from apps.notifications.models import WaMessage
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.telegram_chat_id, 555)
@@ -161,11 +162,21 @@ class TgInboxLoggingTestCase(TestCase):
         self.assertEqual(m.patient_id, self.patient.pk)
         self.assertEqual(m.body, BTN_MY_DEBT)
 
-    def test_typed_phone_number_link_is_logged(self):
-        self._send({"chat": {"id": 555}, "text": "+996553565674"})
-        from apps.notifications.models import WaMessage
-        m = WaMessage.objects.get()
-        self.assertEqual(m.patient_id, self.patient.pk)
+    def test_typed_existing_phone_does_not_link(self):
+        """Напечатанный номер, который уже есть в базе, к карточке не привязывает:
+        так любой мог «войти» в чужую карточку (долг, визиты, записи)."""
+        self._send({"chat": {"id": 555}, "from": {"id": 555}, "text": "+996553565674"})
+        self.patient.refresh_from_db()
+        self.assertIsNone(self.patient.telegram_chat_id)
+
+    def test_foreign_contact_does_not_link(self):
+        self._send({"chat": {"id": 555}, "from": {"id": 555},
+                    "contact": {"phone_number": "+996553565674", "user_id": 999}})
+        self.patient.refresh_from_db()
+        self.assertIsNone(self.patient.telegram_chat_id)
+        self._send({"chat": {"id": 556}, "from": {"id": 556}, "contact": {"phone_number": "+996553565674"}})
+        self.patient.refresh_from_db()
+        self.assertIsNone(self.patient.telegram_chat_id)
 
     def test_unlinked_text_gets_card_then_contact_share_merges(self):
         from apps.notifications.models import WaMessage
@@ -177,7 +188,8 @@ class TgInboxLoggingTestCase(TestCase):
         m = WaMessage.objects.get()
         self.assertEqual((m.patient_id, m.clinic_id), (auto.pk, self.clinic.pk))
         # поделился номером, который уже есть в базе — переписка переезжает, дубля нет
-        self._send({"chat": {"id": 777}, "contact": {"phone_number": "+996553565674"}})
+        self._send({"chat": {"id": 777}, "from": {"id": 777},
+                    "contact": {"phone_number": "+996553565674", "user_id": 777}})
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.telegram_chat_id, 777)
         self.assertFalse(Patient.objects.filter(pk=auto.pk).exists())
@@ -187,7 +199,8 @@ class TgInboxLoggingTestCase(TestCase):
         from apps.patients.models import Patient
         self._send({"chat": {"id": 778}, "from": {"first_name": "Zoir"}, "text": "Салом"})
         auto = Patient.objects.get(telegram_chat_id=778)
-        self._send({"chat": {"id": 778}, "contact": {"phone_number": "+996700123456"}})
+        self._send({"chat": {"id": 778}, "from": {"id": 778},
+                    "contact": {"phone_number": "+996700123456", "user_id": 778}})
         self._send({"chat": {"id": 778}, "text": "Иминов Зоир"})
         auto.refresh_from_db()
         self.assertEqual((auto.last_name, auto.first_name, auto.phone), ("Иминов", "Зоир", "+996700123456"))

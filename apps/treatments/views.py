@@ -829,14 +829,16 @@ def treatment_emr_print(request, pk):
 
 @login_required
 @require_POST
+@require_permission("finance.accept_payments")
 def treatment_set_discount(request, pk):
-    """Установить/изменить скидку на приём."""
-    from decimal import Decimal, InvalidOperation
+    """Установить/изменить скидку на приём (от 0 до суммы приёма)."""
+    from decimal import InvalidOperation
+    from apps.finance.views import clamp_discount
     treatment = _get_own_treatment_or_404(pk)
     try:
-        d = Decimal(str(request.POST.get("discount", "0") or "0"))
-        if d < 0:
-            d = Decimal("0")
+        d = clamp_discount(treatment, request.POST.get("discount", "0") or "0")
+        if d is None:
+            raise InvalidOperation
         treatment.discount = d
         treatment.save(update_fields=["discount", "updated_at"])
         treatment.recalculate_total()
