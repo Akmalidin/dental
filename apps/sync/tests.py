@@ -307,3 +307,23 @@ class SyncEndpointsTestCase(_Base):
         c.post(f"/sync/conflicts/{mine.pk}/resolve/", {"action": "local"})
         p.refresh_from_db()
         self.assertEqual(p.address, "OFFLINE")
+
+
+class ForeignReferencePushTestCase(_Base):
+    """Отчёт безопасности №10: запись своей клиники не может ссылаться на чужого пациента."""
+
+    def test_payment_for_foreign_patient_rejected(self):
+        from apps.finance.models import Payment
+        foreign = self.patient(clinic=self.other, phone="+996700000077")
+        own = self.patient()
+        pay = Payment.objects.create(patient=own, amount=100, branch=self.branch, clinic=self.clinic,
+                                     type="income", method="cash", received_by=self.admin)
+        raw = snap(pay)
+        raw["pk"] = core.device_range(3)[0] + 5
+        raw["fields"]["patient"] = foreign.pk
+        r = self.push([{"model": "finance.Payment", "objects": [raw]}])
+        self.assertEqual((r["applied"], r["rejected"]), (0, 1))
+        self.assertFalse(Payment._base_manager.filter(pk=raw["pk"]).exists())
+        raw["fields"]["patient"] = own.pk
+        r = self.push([{"model": "finance.Payment", "objects": [raw]}])
+        self.assertEqual(r["applied"], 1)

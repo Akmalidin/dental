@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from apps.users.utils import safe_referer
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
@@ -827,7 +828,7 @@ def expense_category_add(request):
             if request.headers.get("X-Requested-With") == "XMLHttpRequest":
                 return JsonResponse({"ok": True, "id": cat.pk, "name": cat.name})
             messages.success(request, _("Категория добавлена"))
-    return redirect(request.META.get("HTTP_REFERER", "expense_list"))
+    return redirect(safe_referer(request, "expense_list"))
 
 
 @login_required

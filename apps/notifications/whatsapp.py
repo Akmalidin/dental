@@ -70,9 +70,33 @@ def _chat_id(phone):
     return (d + "@c.us") if d else None
 
 
+_GREEN_HOSTS = ("greenapi.com", "green-api.com")
+
+
+def safe_wa_api_url(url):
+    """Адрес Green-API из настроек → «https://<хост>» или "" (адрес по
+    умолчанию). Только https и только домены Green-API: иначе сервер ходил бы
+    по адресу, который вписал администратор (127.0.0.1, 169.254.169.254, file://)."""
+    from urllib.parse import urlsplit
+    url = (url or "").strip()
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        return ""
+    if parts.scheme != "https" or port not in (None, 443) or parts.username or parts.password:
+        return ""
+    if not any(host == h or host.endswith("." + h) for h in _GREEN_HOSTS):
+        return ""
+    return "https://" + host
+
+
 def _api_url(method):
     _enabled, idi, token, url = _wa_config()
-    base = (url or "https://api.greenapi.com").rstrip("/")
+    base = safe_wa_api_url(url) or "https://api.greenapi.com"
     return "%s/waInstance%s/%s/%s" % (base, idi, method, token)
 
 
@@ -223,7 +247,7 @@ def wa_download_media(url, max_bytes=WA_MEDIA_MAX_BYTES):
     """Скачать входящее медиа (голосовое и т.п.) по downloadUrl из вебхука Green-API.
     Возвращает (bytes, file_name) или (None, ""). Обрывает скачивание, если файл
     больше max_bytes — так не тратим время/трафик на заведомо огромные вложения."""
-    if not url:
+    if not url or not str(url).lower().startswith("https://"):
         return None, ""
     try:
         req = urllib.request.Request(url)

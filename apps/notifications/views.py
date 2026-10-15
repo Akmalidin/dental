@@ -736,9 +736,13 @@ def wa_connect(request):
         cs.wa_enabled = bool(request.POST.get("wa_enabled"))
         cs.wa_id_instance = (request.POST.get("wa_id_instance") or "").strip()
         cs.wa_token = (request.POST.get("wa_token") or "").strip()
-        cs.wa_api_url = (request.POST.get("wa_api_url") or "").strip()
+        from .whatsapp import safe_wa_api_url
+        raw_url = (request.POST.get("wa_api_url") or "").strip()
+        cs.wa_api_url = safe_wa_api_url(raw_url)
         cs.wa_phone = (request.POST.get("wa_phone") or "").strip()
         cs.save(update_fields=["wa_enabled", "wa_id_instance", "wa_token", "wa_api_url", "wa_phone"])
+        if raw_url and not cs.wa_api_url:
+            messages.warning(request, "API URL не принят (нужен https-адрес Green-API) — используется адрес по умолчанию")
         messages.success(request, "Настройки WhatsApp сохранены")
         return redirect("wa_connect")
 

@@ -1,3 +1,4 @@
+from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -86,18 +87,18 @@ def task_edit(request, pk):
 
 
 @login_required
+@require_POST
 def task_done(request, pk):
+    from apps.users.utils import safe_referer
     task = get_object_or_404(Task, pk=pk)
     task.status = Task.STATUS_DONE
     task.save()
     messages.success(request, _("Задача отмечена выполненной"))
-    referer = request.META.get("HTTP_REFERER")
-    if referer:
-        return redirect(referer)
-    return redirect("task_list")
+    return redirect(safe_referer(request, "task_list"))
 
 
 @login_required
+@require_POST
 def task_delete(request, pk):
     task = get_object_or_404(Task, pk=pk)
     # удалять может автор, админ или суперадмин

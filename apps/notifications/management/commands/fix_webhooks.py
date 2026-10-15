@@ -24,7 +24,8 @@ def _mask(url):
 
 
 def _ga(base, idi, token, method, payload=None):
-    url = "%s/waInstance%s/%s/%s" % ((base or "https://api.greenapi.com").rstrip("/"), idi, method, token)
+    from apps.notifications.whatsapp import safe_wa_api_url
+    url = "%s/waInstance%s/%s/%s" % (safe_wa_api_url(base) or "https://api.greenapi.com", idi, method, token)
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data, method="POST" if data else "GET",
                                  headers={"Content-Type": "application/json"} if data else {})

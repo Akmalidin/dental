@@ -170,6 +170,10 @@ def landing_lead(request):
     if not clinic_name or not phone:
         messages.error(request, "Укажите название клиники и телефон")
         return redirect("/#contact")
+    from apps.users.ratelimit import allow_request
+    if not allow_request(request, "landing", [(5, 3600)]):
+        messages.error(request, "Слишком много заявок. Попробуйте позже.")
+        return redirect("/#contact")
     LandingLead.objects.create(clinic_name=clinic_name, phone=phone, city=city)
     # Раньше такие заявки лежали только в django-admin и никто о них не
     # узнавал — уведомляем супер-админов (колокольчик + web push), тем же
