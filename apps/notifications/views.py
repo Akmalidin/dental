@@ -79,6 +79,9 @@ def push_subscribe(request):
         sub = data.get("subscription") or data
         endpoint = sub["endpoint"]
         keys = sub.get("keys", {})
+        from .push import push_endpoint_ok
+        if not push_endpoint_ok(endpoint):
+            return JsonResponse({"ok": False, "error": "Неподдерживаемый адрес push-сервиса"}, status=400)
         PushSubscription.objects.update_or_create(
             endpoint=endpoint,
             defaults={
@@ -89,8 +92,10 @@ def push_subscribe(request):
             },
         )
         return JsonResponse({"ok": True})
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Неверные данные подписки"}, status=400)
+
+
 
 
 def web_manifest(request):

@@ -47,7 +47,7 @@ class Command(BaseCommand):
             def send(patient, appt, body):
                 if not patient or not body:
                     return False
-                sent_any = False
+                sent_any = False   # True — хотя бы в один канал реально доставлено (или dry-run)
                 msg = render_message(body, patient=patient, appt=appt)
                 if wa_on and patient.phone:
                     if dry:
@@ -56,7 +56,9 @@ class Command(BaseCommand):
                         ok = wa_send_text(patient.phone, msg)
                         WaMessage.objects.create(patient=patient, direction="out", channel="wa",
                                                  phone=patient.phone, body=msg, ok=ok)
-                    sent_any = True
+                        sent_any = sent_any or bool(ok)
+                    if dry:
+                        sent_any = True
                 if tg_on and patient.telegram_chat_id:
                     if dry:
                         self.stdout.write("  [DRY][TG] -> %s (%s)" % (patient.full_name, patient.telegram_chat_id))
@@ -64,7 +66,9 @@ class Command(BaseCommand):
                         ok = tg_send_text(patient.telegram_chat_id, msg)
                         WaMessage.objects.create(patient=patient, direction="out", channel="tg",
                                                  phone=str(patient.telegram_chat_id), body=msg, ok=ok)
-                    sent_any = True
+                        sent_any = sent_any or bool(ok)
+                    if dry:
+                        sent_any = True
                 return sent_any
 
             # — за час —
@@ -77,10 +81,12 @@ class Command(BaseCommand):
                             start_at__gt=now, start_at__lte=now + timedelta(minutes=75))
                           .select_related("patient", "doctor"))
                     for a in qs:
-                        send(a.patient, a, body)
-                        if not dry:
-                            Appointment.objects.filter(pk=a.pk).update(reminded_hour=True)
-                        stat["hour"] += 1
+                        # «Напомнили» — только если сообщение реально ушло; иначе
+                        # следующий запуск попробует снова (пока запись в окне).
+                        if send(a.patient, a, body):
+                            if not dry:
+                                Appointment.objects.filter(pk=a.pk).update(reminded_hour=True)
+                            stat["hour"] += 1
 
             # — за день —
             if cs.wa_remind_day:
@@ -93,10 +99,12 @@ class Command(BaseCommand):
                             start_at__lte=now + timedelta(hours=25))
                           .select_related("patient", "doctor"))
                     for a in qs:
-                        send(a.patient, a, body)
-                        if not dry:
-                            Appointment.objects.filter(pk=a.pk).update(reminded_day=True)
-                        stat["day"] += 1
+                        # «Напомнили» — только если сообщение реально ушло; иначе
+                        # следующий запуск попробует снова (пока запись в окне).
+                        if send(a.patient, a, body):
+                            if not dry:
+                                Appointment.objects.filter(pk=a.pk).update(reminded_day=True)
+                            stat["day"] += 1
 
             # — должникам (раз в N дней, около 10:00 локального времени) —
             if cs.wa_remind_debt_days and cs.wa_remind_debt_days > 0 and local_hour == 10:

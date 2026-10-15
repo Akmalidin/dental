@@ -840,12 +840,18 @@ def treatment_set_discount(request, pk):
         if d is None:
             raise InvalidOperation
         from django.db import transaction
+        old_discount = treatment.discount
         with transaction.atomic():
             treatment.discount = d
             treatment.save(update_fields=["discount", "updated_at"])
             treatment.recalculate_total()
             if treatment.patient_id:
                 treatment.patient.recalc_balance()
+        from apps.users.audit import log_audit_event
+        log_audit_event(action="treatment_discount", category="change", actor=request.user, request=request,
+                        clinic=treatment.clinic, object_model="treatment", object_id=treatment.pk,
+                        object_repr=f"Скидка на приём #{treatment.display_number}",
+                        diff=[{"field": "discount", "old": str(old_discount), "new": str(d)}])
         messages.success(request, f"Скидка обновлена: {d:,.0f} сом")
     except (InvalidOperation, Exception):
         messages.error(request, "Неверное значение скидки")

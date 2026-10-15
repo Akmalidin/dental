@@ -286,5 +286,7 @@ def export_excel(request, report_type):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = f'attachment; filename="{report_type}.xlsx"'
+    from apps.users.utils import neutralize_formulas
+    neutralize_formulas(wb)
     wb.save(response)
     return response
