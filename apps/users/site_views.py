@@ -252,6 +252,12 @@ def submit_booking(request, clinic):
     сайта — apps.marketing.views.directory, для клиник без ClinicSite).
     Сама запись — create_booking (её же использует Telegram-бот)."""
     from django.http import JsonResponse
+    from apps.patients.models import normalize_phone
+    from .ratelimit import allow, allow_request
+    if not allow_request(request, "book", [(5, 600), (20, 86400)]) \
+            or not allow("book-phone", normalize_phone(request.POST.get("phone") or ""), 3, 86400):
+        return JsonResponse({"ok": False, "error": "Слишком много заявок. Попробуйте позже или позвоните в клинику."},
+                            status=429)
     appt, err = create_booking(
         clinic,
         name=(request.POST.get("name") or "").strip(),
@@ -291,11 +297,23 @@ def create_booking(clinic, *, name, phone, doctor_id, date_str, slot, branch_id=
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
         hh = int(slot.split(":")[0])
+        start = timezone.make_aware(datetime.combine(d, dtime(hour=hh)))
     except (ValueError, IndexError):
         return None, ("Неверная дата/время", 400)
-
-    start = timezone.make_aware(datetime.combine(d, dtime(hour=hh)))
+    # Только слоты, которые предлагает сама страница (free_slots): рабочие
+    # часы, не в прошлом и не дальше, чем на полгода вперёд.
+    if not (WORK_START <= hh < WORK_END) or start <= timezone.now() \
+            or d > timezone.localdate() + timedelta(days=183):
+        return None, ("Это время недоступно для записи, выберите другое", 400)
     end = start + timedelta(hours=SLOT_HOURS)
+    if service_id:
+        from apps.services.models import Service
+        try:
+            service_id = int(service_id)
+        except (TypeError, ValueError):
+            service_id = None
+        if service_id and not Service.all_objects.filter(pk=service_id, clinic=clinic, is_deleted=False).exists():
+            service_id = None
     clash = (Appointment.all_objects.filter(clinic=clinic, doctor_id=doctor_id,
              start_at__lt=end, end_at__gt=start).exclude(status__in=["cancelled", "no_show"]).exists())
     if clash:

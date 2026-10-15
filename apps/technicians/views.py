@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from apps.users.utils import safe_referer
 from decimal import Decimal
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -126,11 +127,11 @@ def order_status(request, pk):
     new_status = request.POST.get("status")
     valid = dict(TechnicianTask.STATUS_CHOICES)
     if new_status not in valid:
-        return redirect(request.META.get("HTTP_REFERER") or "technician_tasks")
+        return redirect(safe_referer(request, "technician_tasks"))
     from .services import apply_status
     apply_status(task, new_status, request.user)
     messages.success(request, _("Статус заказа: %(s)s") % {"s": valid[new_status]})
-    return redirect(request.META.get("HTTP_REFERER") or "technician_tasks")
+    return redirect(safe_referer(request, "technician_tasks"))
 
 
 @login_required

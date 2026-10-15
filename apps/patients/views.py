@@ -300,10 +300,8 @@ def patient_mark_not_duplicate(request, pk):
     if pnorm:
         SharedPhoneNumber.objects.get_or_create(phone_norm=pnorm, defaults={"noted_by": request.user})
         messages.success(request, _("Отмечено: этот номер телефона общий для разных пациентов — предупреждение больше не будет показываться."))
-    referer = request.META.get("HTTP_REFERER")
-    if referer:
-        return redirect(referer)
-    return redirect("patient_detail", pk=patient.pk)
+    from apps.users.utils import safe_referer
+    return redirect(safe_referer(request, f"/patients/{patient.pk}/"))
 
 
 def merge_patients(source, target, user=None):
@@ -780,7 +778,7 @@ def patient_notify(request, pk):
     from apps.patients.models import normalize_phone as _norm
     _n = _norm(patient.phone)
     _scope = _Q(patient=patient)
-    if _n:
+    if len(_n) == 9:
         _scope |= (_Q(phone__contains=_n)
                    & (_Q(clinic=patient.clinic) | _Q(clinic__isnull=True)))
     WaMessage.all_clinics.filter(_scope).filter(direction="in", read=False).update(read=True)
@@ -836,7 +834,9 @@ def _chat_scope(patient):
     from apps.patients.models import normalize_phone
     norm = normalize_phone(patient.phone)
     scope = Q(patient=patient)
-    if norm:
+    # Только полный номер (9 цифр): короткий/ошибочный («555») подстрокой
+    # захватывал бы чужие беседы — а «удалить беседу» их бы удалила.
+    if len(norm) == 9:
         # Чужие клиники не подмешиваем: тот же номер может быть пациентом и в
         # другой клинике. Сообщения без клиники (не привязанные ни к кому)
         # берём — они с этого же номера.

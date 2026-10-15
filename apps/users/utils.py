@@ -25,3 +25,15 @@ def validate_uploaded_image(f):
     finally:
         f.seek(0)
     return True
+
+
+def safe_referer(request, default):
+    """Вернуться туда, откуда пришли (Referer), — только если это наш же сайт.
+    Иначе default (URL или имя маршрута для redirect()): Referer задаёт тот,
+    кто прислал ссылку, и без проверки это open redirect."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+    url = request.META.get("HTTP_REFERER")
+    if url and url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()},
+                                               require_https=request.is_secure()):
+        return url
+    return default

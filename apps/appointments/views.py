@@ -1,4 +1,5 @@
 import json
+from apps.users.utils import safe_referer
 from datetime import datetime, timedelta
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -980,7 +981,7 @@ def appointment_finish(request, pk):
 
     if request.POST.get("redirect"):
         messages.success(request, _("Приём завершён") if do_complete else _("Следующий приём назначен"))
-        return redirect(request.META.get("HTTP_REFERER") or "appointment_list")
+        return redirect(safe_referer(request, "appointment_list"))
     return JsonResponse({"ok": True, "next_id": new_id, "status": appt.status})
 
 

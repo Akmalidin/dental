@@ -3,6 +3,8 @@ Development settings — SQLite, без Docker, без мультитенант�
 Запуск: python manage.py runserver
 """
 import os
+import sys
+import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -138,8 +140,17 @@ BACKUPS_DIR = BASE_DIR / "backups"
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-    }
+    },
+    # Лимиты публичных форм (apps.users.ratelimit) — общий для всех воркеров.
+    "ratelimit": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": os.path.join(tempfile.gettempdir(), "sadaf-ratelimit"),
+        "OPTIONS": {"MAX_ENTRIES": 20000},
+    },
 }
+
+# В тестах лимит выключен (много заявок с одного 127.0.0.1); его тест включает сам.
+RATELIMIT_ENABLED = "test" not in sys.argv[1:2]
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_HTTPONLY = True

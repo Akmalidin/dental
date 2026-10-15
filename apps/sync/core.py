@@ -197,7 +197,38 @@ def push_allowed(model_label, obj, existing, clinic):
         return False
     if existing is not None and _clinic_of(existing, rule) != clinic.pk:
         return False
+    if _foreign_reference(obj, clinic):
+        return False
     return True
+
+
+def _foreign_reference(obj, clinic):
+    """Ссылается ли запись (FK) на объект ДРУГОЙ клиники — например, оплата
+    этой клиники на пациента чужой. Ссылки на общие справочники, на записи
+    без клиники (служебные пользователи платформы) и на ещё не существующие
+    объекты не считаются чужими."""
+    for field in obj._meta.concrete_fields:
+        if not field.is_relation or not field.many_to_one and not field.one_to_one:
+            continue
+        target_id = getattr(obj, field.attname, None)
+        if target_id is None:
+            continue
+        rel = field.related_model
+        label = f"{rel._meta.app_label}.{rel.__name__}"
+        rule = PLAN_RULES.get(label)
+        if rule is None or rule == "all":
+            continue
+        if rule == "self":
+            if target_id != clinic.pk:
+                return True
+            continue
+        target = _manager(rel).filter(pk=target_id).first()
+        if target is None:
+            continue
+        owner = _clinic_of(target, rule)
+        if owner is not None and owner != clinic.pk:
+            return True
+    return False
 
 
 def _manager(model):

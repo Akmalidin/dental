@@ -52,7 +52,7 @@
       </div>
       <div class="flex gap-2 shrink-0 items-center">
         {% if task.status != 'done' %}
-        <a href="/tasks/{{ task.pk }}/done/" class="badge badge-green hover:bg-emerald-100">✓ Готово</a>
+        <form method="post" action="/tasks/{{ task.pk }}/done/" style="display:contents">{% csrf_token %}<button type="submit" class="badge badge-green hover:bg-emerald-100">✓ Готово</button></form>
         {% endif %}
         <a href="/tasks/{{ task.pk }}/edit/" class="badge badge-gray hover:bg-slate-200">Ред.</a>
         <form method="post" action="/tasks/{{ task.pk }}/delete/" onsubmit="return confirm('Удалить задачу «{{ task.title|escapejs }}»?')">{% csrf_token %}

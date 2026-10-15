@@ -1,4 +1,5 @@
 from django.contrib.auth import login, logout
+from apps.users.utils import safe_referer
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -2962,7 +2963,7 @@ def toggle_clinic_site(request, clinic_id):
     from apps.users.models import Clinic, ClinicSite
     if not request.user.is_superadmin:
         messages.error(request, _("Включать сайт может только суперадмин"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     site, _c = ClinicSite.objects.get_or_create(clinic=clinic, defaults={"headline": clinic.name})
     was_enabled = site.enabled
@@ -2977,7 +2978,7 @@ def toggle_clinic_site(request, clinic_id):
     )
     messages.success(request, _("Публичный сайт %(s)s") % {
         "s": "включён" if site.enabled else "выключен"})
-    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{clinic_id}/overview/"))
 
 
 @login_required
@@ -2989,11 +2990,11 @@ def toggle_clinic_channel(request, clinic_id, channel):
     from apps.users.models import Clinic
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     field = {"wa": "wa_master_enabled", "tg": "telegram_master_enabled"}.get(channel)
     if not field:
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     was = getattr(clinic, field)
     setattr(clinic, field, not was)
     clinic.save(update_fields=[field])
@@ -3007,7 +3008,7 @@ def toggle_clinic_channel(request, clinic_id, channel):
     label = "WhatsApp" if channel == "wa" else "Telegram"
     state = "включён" if getattr(clinic, field) else "выключен"
     messages.success(request, _("%(label)s для клиники %(state)s") % {"label": label, "state": state})
-    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{clinic_id}/overview/"))
 
 
 @login_required
@@ -3020,7 +3021,7 @@ def clinic_update(request, clinic_id):
     from apps.users.models import Clinic
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     tracked_fields = ["name", "slug", "timezone", "tariff_plan", "tariff_until", "enabled_modules"]
     before = {f: getattr(clinic, f) for f in tracked_fields}
@@ -3055,7 +3056,7 @@ def clinic_update(request, clinic_id):
         object_repr=f"clinic/{clinic.slug}", diff=diff,
     )
     messages.success(request, _("Клиника «%(n)s» обновлена") % {"n": clinic.name})
-    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{clinic_id}/overview/"))
 
 
 @login_required
@@ -3066,7 +3067,7 @@ def clinic_set_access(request, clinic_id):
     from apps.users.models import Clinic
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     before = clinic.granted_access or []
     valid_keys = {key for key, _label in Clinic.GRANTABLE_ACCESS}
@@ -3082,7 +3083,7 @@ def clinic_set_access(request, clinic_id):
                "new": ", ".join(clinic.granted_access) or "—"}],
     )
     messages.success(request, _("Доступы клиники «%(n)s» обновлены") % {"n": clinic.name})
-    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{clinic_id}/overview/"))
 
 
 @login_required
@@ -3095,7 +3096,7 @@ def clinic_toggle_active(request, clinic_id):
     from apps.users.models import Clinic
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     was_active = clinic.is_active
     clinic.is_active = not clinic.is_active
@@ -3117,7 +3118,7 @@ def clinic_toggle_active(request, clinic_id):
     )
     state = _("разблокирована") if clinic.is_active else _("заблокирована")
     messages.success(request, _("Клиника «%(n)s» %(s)s") % {"n": clinic.name, "s": state})
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @require_superadmin
@@ -3138,7 +3139,7 @@ def clinic_notify(request, clinic_id):
     body = request.POST.get("body", "").strip()
     if not title:
         messages.error(request, _("Укажите заголовок уведомления"))
-        return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+        return redirect(safe_referer(request, "/users/superadmin/"))
     recipients = list(User.objects.filter(clinic=clinic, is_active=True))
     for u in recipients:
         Notification.send(u, title, body=body, type="system", actor=request.user)
@@ -3150,7 +3151,7 @@ def clinic_notify(request, clinic_id):
         diff=[{"field": "notification", "old": "—", "new": f"{title} → {len(recipients)} чел."}],
     )
     messages.success(request, _("Уведомление отправлено (%(n)s чел.)") % {"n": len(recipients)})
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @require_superadmin
@@ -3172,7 +3173,7 @@ def clinic_archive(request, clinic_id):
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     if request.POST.get("confirm_name", "").strip() != clinic.name:
         messages.error(request, _("Название клиники не совпадает"))
-        return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+        return redirect(safe_referer(request, "/users/superadmin/"))
     clinic.is_active = False
     clinic.is_archived = True
     clinic.archived_at = timezone.now()
@@ -3183,7 +3184,7 @@ def clinic_archive(request, clinic_id):
         clinic=clinic, object_model="clinic", object_id=clinic.pk, object_repr=f"clinic/{clinic.slug}",
     )
     messages.success(request, _("Клиника архивирована"))
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @require_superadmin
@@ -3203,7 +3204,7 @@ def clinic_restore(request, clinic_id):
         clinic=clinic, object_model="clinic", object_id=clinic.pk, object_repr=f"clinic/{clinic.slug}",
     )
     messages.success(request, _("Клиника восстановлена"))
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @login_required
@@ -3214,7 +3215,7 @@ def clinic_set_blocked_features(request, clinic_id):
     from apps.users.models import Clinic
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     clinic = get_object_or_404(Clinic, pk=clinic_id)
     before = clinic.blocked_features or []
     valid_keys = {key for key, _label in Clinic.BLOCKABLE_FEATURES}
@@ -3230,7 +3231,7 @@ def clinic_set_blocked_features(request, clinic_id):
                "new": ", ".join(clinic.blocked_features) or "—"}],
     )
     messages.success(request, _("Заблокированные функции клиники «%(n)s» обновлены") % {"n": clinic.name})
-    return redirect(request.META.get("HTTP_REFERER") or f"/users/clinic/{clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{clinic_id}/overview/"))
 
 
 @login_required
@@ -3248,7 +3249,7 @@ def block_ip(request):
     from apps.users.models import BlockedIP
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     ip = request.POST.get("ip_address", "").strip()
     if ip:
         from django.utils import timezone
@@ -3277,7 +3278,7 @@ def block_ip(request):
             ],
         )
         messages.success(request, _("IP %(ip)s заблокирован") % {"ip": ip})
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @login_required
@@ -3287,7 +3288,7 @@ def unblock_ip(request, pk):
     from apps.users.models import BlockedIP
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     blocked = BlockedIP.objects.filter(pk=pk).first()
     if blocked is not None:
         ip = blocked.ip_address
@@ -3299,7 +3300,7 @@ def unblock_ip(request, pk):
             diff=[{"field": "status", "old": "blocked", "new": "allowed"}],
         )
     messages.success(request, _("IP разблокирован"))
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @login_required
@@ -3309,13 +3310,13 @@ def clinic_access_request_set_status(request, pk):
     from apps.users.models import ClinicAccessRequest
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     req = get_object_or_404(ClinicAccessRequest, pk=pk)
     status = request.POST.get("status", "")
     if status in dict(ClinicAccessRequest.STATUS_CHOICES):
         req.status = status
         req.save(update_fields=["status"])
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 @login_required
@@ -3331,7 +3332,7 @@ def branch_toggle_active(request, pk):
     просто быстрый тумблер без открытия полной формы."""
     if not request.user.is_superadmin:
         messages.error(request, _("Доступно только суперадмину"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
     from apps.tenancy import unscoped
     with unscoped():
         # Branch.objects — clinic-scoped (ClinicManager); супер-админ может
@@ -3351,7 +3352,7 @@ def branch_toggle_active(request, pk):
         )
     state = _("разблокирован") if branch.is_active else _("заблокирован")
     messages.success(request, _("Филиал «%(n)s» %(s)s") % {"n": branch.name, "s": state})
-    return redirect(request.META.get("HTTP_REFERER") or "/users/superadmin/")
+    return redirect(safe_referer(request, "/users/superadmin/"))
 
 
 def _can_edit_site(user, clinic):
@@ -3481,7 +3482,7 @@ def save_user_access(request, pk):
     target = get_object_or_404(User, pk=pk)
     if not _can_manage_access(request.user, target):
         messages.error(request, _("Нет прав менять доступы этого сотрудника"))
-        return redirect(request.META.get("HTTP_REFERER") or "/")
+        return redirect(safe_referer(request, "/"))
 
     target.is_active = not bool(request.POST.get("block_login"))
     if request.POST.get("full_access"):
@@ -3490,8 +3491,7 @@ def save_user_access(request, pk):
         target.allowed_sections = [s for s in request.POST.getlist("sections") if s in SECTION_KEYS]
     target.save(update_fields=["allowed_sections", "is_active"])
     messages.success(request, _("Доступы сотрудника «%(n)s» обновлены") % {"n": target.name})
-    return redirect(request.META.get("HTTP_REFERER")
-                    or f"/users/clinic/{target.clinic_id}/overview/")
+    return redirect(safe_referer(request, f"/users/clinic/{target.clinic_id}/overview/"))
 
 
 def _newui_profile_data(user):
@@ -3844,6 +3844,10 @@ def clinic_access_request(request):
         error = None
         if not (clinic_name and contact_name and phone):
             error = _("Заполните название клиники, контактное лицо и телефон")
+        else:
+            from .ratelimit import allow_request
+            if not allow_request(request, "access-request", [(5, 3600)]):
+                error = _("Слишком много запросов. Попробуйте позже.")
         if error:
             messages.error(request, error)
         else:
@@ -4180,7 +4184,7 @@ def staff_purge(request, pk):
     user = get_object_or_404(User, pk=pk)
     if not _can_manage_access(request.user, user):
         messages.error(request, _("Нет прав удалять этого сотрудника"))
-        return redirect(request.META.get("HTTP_REFERER") or "staff_list")
+        return redirect(safe_referer(request, "staff_list"))
     name, user_pk, user_clinic = user.name, user.pk, user.clinic
     try:
         user.delete()
@@ -4197,8 +4201,7 @@ def staff_purge(request, pk):
             user.save(update_fields=["is_active"])
         messages.error(request, _("У сотрудника «%(n)s» есть приёмы/записи — удалить нельзя. "
                                   "Он деактивирован (вход заблокирован).") % {"n": name})
-    return redirect(request.META.get("HTTP_REFERER")
-                    or (f"/users/clinic/{user.clinic_id}/overview/" if user.clinic_id else "/users/"))
+    return redirect(safe_referer(request, (f"/users/clinic/{user.clinic_id}/overview/" if user.clinic_id else "/users/")))
 
 
 def _doctor_related_summary(user):
