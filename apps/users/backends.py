@@ -14,10 +14,12 @@ class LoginBackend(ModelBackend):
         try:
             user = User.objects.get(login=login)
         except User.DoesNotExist:
-            try:
-                user = User.objects.get(email=login)
-            except User.DoesNotExist:
+            # email не уникален: при двух сотрудниках с одним email входить
+            # по нему нельзя (раньше — MultipleObjectsReturned → 500).
+            matches = list(User.objects.filter(email__iexact=login)[:2]) if "@" in login else []
+            if len(matches) != 1:
                 return None
+            user = matches[0]
 
         if user.check_password(password) and self.user_can_authenticate(user):
             return user

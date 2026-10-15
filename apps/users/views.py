@@ -3521,10 +3521,13 @@ def profile_view(request):
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         login_val = request.POST.get("login", "").strip()
-        password = request.POST.get("password", "").strip()
-        password2 = request.POST.get("password2", "").strip()
+        # Пароль не обрезаем: пробелы по краям — часть пароля.
+        password = request.POST.get("password", "")
+        password2 = request.POST.get("password2", "")
+        old_password = request.POST.get("old_password", "")
         avatar = request.FILES.get("avatar")
         errors = []
+        password_changed = False
         # Сохранение номера WhatsApp (отдельная мини-форма карточки)
         if "_whatsapp_only" in request.POST:
             user.phone = request.POST.get("phone", "").strip()
@@ -3545,15 +3548,22 @@ def profile_view(request):
             else:
                 errors.append(_("Фото профиля: файл повреждён или не является изображением"))
         if password:
-            if password != password2:
+            from .passwords import password_problems
+            problems = password_problems(password, user)
+            if not user.check_password(old_password):
+                errors.append(_("Неверный текущий пароль"))
+            elif password != password2:
                 errors.append(_("Пароли не совпадают"))
-            elif len(password) < 6:
-                errors.append(_("Пароль слишком короткий (минимум 6 символов)"))
+            elif problems:
+                errors.extend(problems)
             else:
                 user.set_password(password)
-                update_session_auth_hash(request, user)
+                password_changed = True
         if not errors:
             user.save()
+            if password_changed:
+                update_session_auth_hash(request, user)
+                request.session.pop("must_change_password", None)
             messages.success(request, _("Профиль обновлён"))
             return redirect("profile")
         for e in errors:
@@ -3708,6 +3718,13 @@ def login_view(request):
     if request.method == "POST" and form.is_valid():
         user = form.get_user()
         login(request, user)
+        # Слабый пароль (1111, 123456, только цифры, < 8 символов) — не
+        # сбрасываем, а требуем сменить сразу после входа
+        # (apps.users.passwords.ForcePasswordChangeMiddleware).
+        from .passwords import is_weak, SESSION_FLAG, CHANGE_URL
+        if is_weak(request.POST.get("password", ""), user):
+            request.session[SESSION_FLAG] = True
+            return redirect(CHANGE_URL)
         # Вход в программу — всегда сразу в новый интерфейс (строгое правило,
         # без исключений); на старый интерфейс переходят только явным кликом
         # «Старый интерфейс» в сайдбаре нового (newui_use_old_interface,
@@ -3764,6 +3781,37 @@ def login_view(request):
         return render(request, template_name, ctx)
     finally:
         clear_current_clinic()
+
+
+@login_required
+def password_change_view(request):
+    """Смена пароля: обязательная после входа со слабым паролем
+    (флаг в сессии, см. apps.users.passwords) и доступная по ссылке."""
+    from django.contrib.auth import update_session_auth_hash
+    from .passwords import password_problems, SESSION_FLAG
+    user = request.user
+    forced = bool(request.session.get(SESSION_FLAG))
+    errors = []
+    if request.method == "POST":
+        old = request.POST.get("old_password", "")
+        new = request.POST.get("new_password", "")
+        new2 = request.POST.get("new_password2", "")
+        if not user.check_password(old):
+            errors.append(_("Неверный текущий пароль"))
+        elif new != new2:
+            errors.append(_("Пароли не совпадают"))
+        elif new == old:
+            errors.append(_("Новый пароль должен отличаться от текущего"))
+        else:
+            errors.extend(password_problems(new, user))
+        if not errors:
+            user.set_password(new)
+            user.save(update_fields=["password"])
+            update_session_auth_hash(request, user)
+            request.session.pop(SESSION_FLAG, None)
+            messages.success(request, _("Пароль изменён"))
+            return redirect("/new/")
+    return render(request, "auth/password_change.html", {"forced": forced, "errors": errors})
 
 
 @require_POST
@@ -4049,6 +4097,13 @@ def _is_protected_target(target, actor):
     return target.clinic_id is None or target.clinic_id != actor.clinic_id
 
 
+def _is_director_target(target, actor):
+    """Директора (admin_main) правит только директор или суперадмин —
+    не сотрудник с одним лишь правом staff.manage."""
+    return (target.is_admin_main and target.pk != actor.pk
+            and not (actor.is_superadmin or actor.is_admin_main))
+
+
 @login_required
 @role_required("superadmin", "admin_main")
 @require_POST
@@ -4058,14 +4113,17 @@ def staff_set_password(request, pk):
     if _is_protected_target(user, request.user):
         messages.error(request, _("Доступ запрещён: это сотрудник другой клиники или суперпользователь"))
         return redirect("staff_list")
-    new_pw = request.POST.get("new_password", "").strip()
-    if len(new_pw) < 6:
-        messages.error(request, _("Пароль слишком короткий (минимум 6 символов)"))
+    new_pw = request.POST.get("new_password", "")
+    from .passwords import password_problems
+    problems = password_problems(new_pw, user)
+    if problems:
+        for p in problems:
+            messages.error(request, p)
         return redirect("staff_list")
     user.set_password(new_pw)
     user.save(update_fields=["password"])
-    messages.success(request, _("Пароль для «%(n)s» изменён. Передайте его сотруднику: %(p)s")
-                     % {"n": user.name, "p": new_pw})
+    # Сам пароль во flash-сообщение (оно хранится в сессии) не пишем.
+    messages.success(request, _("Пароль для «%(n)s» изменён") % {"n": user.name})
     return redirect("staff_list")
 
 
@@ -4073,7 +4131,7 @@ def staff_set_password(request, pk):
 @require_permission("staff.manage")
 def staff_create(request):
     from apps.tenancy import get_current_clinic
-    form = UserForm(request.POST or None, request.FILES or None)
+    form = UserForm(request.POST or None, request.FILES or None, actor=request.user)
     if form.is_valid():
         new_user = form.save(commit=False)
         # привязать к текущей клинике (или к клинике создателя)
@@ -4097,7 +4155,10 @@ def staff_edit(request, pk):
     if _is_protected_target(user, request.user):
         messages.error(request, _("Доступ запрещён: это сотрудник другой клиники или суперпользователь"))
         return redirect("staff_list")
-    form = UserForm(request.POST or None, request.FILES or None, instance=user)
+    if _is_director_target(user, request.user):
+        messages.error(request, _("Данные директора меняет только сам директор или суперадмин"))
+        return redirect("staff_list")
+    form = UserForm(request.POST or None, request.FILES or None, instance=user, actor=request.user)
     if form.is_valid():
         form.save()
         _apply_access_from_form(request.user, user, form)

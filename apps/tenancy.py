@@ -201,7 +201,17 @@ class ImpersonationMiddleware:
                     ok = True
             if not ok:
                 request.session.pop("imp_as", None)
+            elif request.method not in ("GET", "HEAD", "OPTIONS") and not request.path.startswith(
+                    self.WRITE_ALLOWED):
+                # «Режим просмотра» — только просмотр: иначе оплаты, правки карт
+                # и смена пароля записывались бы на сотрудника, а не на директора.
+                from django.http import JsonResponse
+                return JsonResponse({"ok": False, "error": "Режим просмотра: изменения недоступны. "
+                                     "Выйдите из режима, чтобы вносить изменения."}, status=403)
         return self.get_response(request)
+
+    # Что можно отправлять POST-ом даже в режиме просмотра.
+    WRITE_ALLOWED = ("/logout/", "/new/language/save/", "/i18n/")
 
 
 class CurrentClinicMiddleware:
@@ -533,7 +543,7 @@ class SectionAccessMiddleware:
     # они не работают. Всё остальное закрыто — список разрешённых адресов,
     # а не запрещённых, чтобы новый раздел не открылся технику сам собой.
     TECH_ALLOWED = re.compile(r"^/(?:" + "|".join([
-        r"login/", r"logout/", r"static/", r"media/", r"i18n/", r"robots\.txt$", r"sw\.js$",
+        r"login/", r"logout/", r"password-change/$", r"static/", r"media/", r"i18n/", r"robots\.txt$", r"sw\.js$",
         r"manifest\.json$", r"favicon", r"r/", r"t/",
         r"new/lab/my/", r"new/cashdesk/", r"new/profile/", r"profile/", r"new/language/save/",
         r"new/notifications/", r"notifications/(?:poll/|push/subscribe/|\d+/(?:open|read)/|read-all/)$",

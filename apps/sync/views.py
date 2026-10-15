@@ -95,13 +95,15 @@ def sync_export(request):
     if dev is not None:
         clinic = dev.clinic
     else:
-        if not _sync_staff_ok(request.user):
+        # Через браузер — только директор/суперадмин и без хешей паролей.
+        user = request.user
+        if not (user.is_authenticated and user.is_active and (user.is_superadmin or user.is_admin_main)):
             return JsonResponse({"ok": False, "error": "Нет доступа"}, status=403)
         clinic = _user_clinic(request)
     if clinic is None:
         return JsonResponse({"ok": False, "error": "У пользователя не задана клиника"}, status=400)
     exported_at = timezone.now()
-    blocks = export_clinic(clinic)
+    blocks = export_clinic(clinic, include_password_hashes=dev is not None)
     if dev is not None:
         dev.last_sync_at = exported_at
         dev.save(update_fields=["last_sync_at"])
