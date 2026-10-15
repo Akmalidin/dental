@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from apps.users.utils import safe_referer
 from decimal import Decimal
 from django.contrib.auth.decorators import login_required
+from apps.users.decorators import require_permission
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -150,6 +151,7 @@ def technician_payouts(request):
 
 @login_required
 @require_POST
+@require_permission("finance.manage_expenses")
 def technician_pay(request, pk):
     """Выплатить технику: создать расход «Оплата лаборатории» и пометить заказы оплаченными."""
     tech = get_object_or_404(Technician, pk=pk)

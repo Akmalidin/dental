@@ -5,6 +5,8 @@ Treatment (приём), MedicalRecord (ЭМК), ToothCondition (зубы), Treat
 Без AI — МКБ-10 из встроенного справочника, план врач формирует сам.
 """
 import json
+
+from django.db import transaction
 from decimal import Decimal
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -376,9 +378,20 @@ def visit_save(request, pk):
                 patient=treatment.patient, tooth_number=tnum,
                 defaults={"status": status, "updated_by": request.user},
             )
-    # план/процедуры — сохраняем и при автосохранении (без списания материалов)
+    # план/процедуры — сохраняем и при автосохранении (без списания материалов).
+    # После завершения/оплаты состав услуг и цены (= сумма, долг, зарплата)
+    # меняет только тот, у кого есть право правки платежей.
     if isinstance(data.get("plan"), list):
-        _apply_plan(treatment, data["plan"], request.user, do_writeoff=False)
+        locked = treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID)
+        if locked and not (request.user.is_superadmin or request.user.has_granular_perm("finance.edit_payment")):
+            return JsonResponse({"ok": True, "plan_locked": True})
+        with transaction.atomic():
+            _apply_plan(treatment, data["plan"], request.user, do_writeoff=False)
+        if locked:
+            from apps.users.audit import log_audit_event
+            log_audit_event(action="treatment_services_edit", category="change", actor=request.user, request=request,
+                            clinic=treatment.clinic, object_model="treatment", object_id=treatment.pk,
+                            object_repr="Правка услуг завершённого приёма #%s" % treatment.display_number)
     return JsonResponse({"ok": True})
 
 
@@ -467,8 +480,21 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
     future_items = [it for it in items if not it.get("done")]
 
     def _price(it, svc):
+        # Цена строки с клиента: нечисловая/отрицательная → цена из прайса.
         v = it.get("price")
-        return Decimal(str(v if v not in (None, "") else svc.price))
+        if v in (None, ""):
+            return svc.price
+        try:
+            d = Decimal(str(v))
+        except Exception:
+            return svc.price
+        return d if d.is_finite() and d >= 0 else svc.price
+
+    def _qty(it):
+        try:
+            return max(1, min(1000, int(it.get("qty") or 1)))
+        except (TypeError, ValueError):
+            return 1
 
     def _discount(it):
         try:
@@ -478,21 +504,40 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
         return max(Decimal(0), min(Decimal(100), v))
 
     # — Процедуры (выполнено сегодня) — перезаписываем набор —
-    already = treatment.cures.exists()
+    # Заказы технику, техник и гарантия уже созданных строк переносятся на
+    # новые строки той же услуги/зуба: иначе после автосохранения заказ терял
+    # связь со строкой (cure=NULL) и себестоимость не вычиталась из зарплаты.
+    from apps.technicians.models import TechnicianTask
+    keep = {}
+    for c in treatment.cures.all():
+        k = (c.service_id, c.tooth_number or "")
+        if k not in keep and (c.lab_order_id or c.technician_id or c.warranty_until):
+            keep[k] = (c.pk, c.lab_order_id, c.technician_id, c.warranty_until)
+    linked_orders = {}
+    for t in TechnicianTask.objects.filter(cure__treatment=treatment).only("pk", "cure_id"):
+        linked_orders.setdefault(t.cure_id, []).append(t.pk)
     treatment.cures.all().delete()
     for it in done_items:
         svc = Service.objects.filter(pk=it.get("service_id")).first()
         if not svc:
             continue
-        qty = max(1, int(it.get("qty") or 1))
+        qty = _qty(it)
+        tooth = str(it.get("tooth") or "")
+        prev = keep.pop((svc.pk, tooth), None)
         cure = TreatmentCure.objects.create(
-            treatment=treatment, service=svc, tooth_number=str(it.get("tooth") or ""),
+            treatment=treatment, service=svc, tooth_number=tooth,
             quantity=qty, price=_price(it, svc), discount=_discount(it), doctor=treatment.doctor,
+            lab_order_id=prev[1] if prev else None, technician_id=prev[2] if prev else None,
+            warranty_until=prev[3] if prev else None,
         )
-        if do_writeoff and not already:
+        if prev and linked_orders.get(prev[0]):
+            TechnicianTask.objects.filter(pk__in=linked_orders[prev[0]]).update(cure=cure)
+        # Материалы списываются при «Завершить» по всем выполненным услугам
+        # (раньше — только если строк ещё не было, а автосохранение их уже создавало).
+        if do_writeoff:
             _auto_writeoff_materials(svc, qty, treatment.branch, user)
-        # — Заказ технику по лабораторной услуге —
-        if create_orders and svc.is_lab and it.get("technician_id"):
+        # — Заказ технику по лабораторной услуге (если по этой строке его ещё нет) —
+        if create_orders and svc.is_lab and it.get("technician_id") and not cure.lab_order_id:
             _create_lab_order(treatment, cure, svc, it, user)
     treatment.recalculate_total()
 
@@ -513,7 +558,7 @@ def _apply_plan(treatment, items, user, do_writeoff=False, create_orders=False):
                 continue
             TreatmentPlanItem.objects.create(
                 plan=plan, stage=stage, service=svc, tooth_number=str(it.get("tooth") or ""),
-                price=_price(it, svc), discount=_discount(it), quantity=max(1, int(it.get("qty") or 1)),
+                price=_price(it, svc), discount=_discount(it), quantity=_qty(it),
                 doctor=treatment.doctor, sort_order=i,
             )
     elif plan is not None:
@@ -566,21 +611,28 @@ def visit_commit(request, pk):
     остальное → план лечения), сменить статусы, при необходимости — следующий визит."""
     from apps.services.models import Service
     from .models_plan import TreatmentPlan, TreatmentPlanStage, TreatmentPlanItem
-    treatment = get_object_or_404(Treatment.objects.select_related("patient", "doctor"), pk=pk)
-    if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
-        return JsonResponse({"error": "Приём уже завершён", "error_key": "visit_already_completed"}, status=403)
+    get_object_or_404(Treatment, pk=pk)   # проверка доступа (клиника)
     try:
         data = json.loads(request.body)
     except (ValueError, TypeError):
         return JsonResponse({"error": "bad json", "error_key": "generic_invalid_json"}, status=400)
 
     items = data.get("plan", [])
-    # применяем план + списываем материалы + создаём заказы технику (финальное сохранение)
-    _apply_plan(treatment, items, request.user, do_writeoff=True, create_orders=True)
+    # Двойное «Завершить» (двойной клик, повтор при плохой связи): строка
+    # приёма блокируется, второй запрос ждёт и видит уже завершённый приём —
+    # материалы и заказы технику не задваиваются.
+    with transaction.atomic():
+        treatment = (Treatment.all_objects.select_for_update(of=("self",)).select_related("patient", "doctor")
+                     .get(pk=pk))
+        if treatment.status in (Treatment.STATUS_COMPLETED, Treatment.STATUS_PAID):
+            return JsonResponse({"error": "Приём уже завершён", "error_key": "visit_already_completed"},
+                                status=403)
+        # применяем план + списываем материалы + создаём заказы технику (финальное сохранение)
+        _apply_plan(treatment, items, request.user, do_writeoff=True, create_orders=True)
 
-    # — Завершить приём и запись —
-    treatment.status = Treatment.STATUS_COMPLETED
-    treatment.save(update_fields=["status", "updated_at"])
+        # — Завершить приём и запись —
+        treatment.status = Treatment.STATUS_COMPLETED
+        treatment.save(update_fields=["status", "updated_at"])
     if treatment.appointment_id:
         from apps.appointments.models import Appointment
         Appointment.objects.filter(pk=treatment.appointment_id).exclude(

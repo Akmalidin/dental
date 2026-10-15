@@ -28,3 +28,9 @@ class WarehouseDistributionForm(forms.ModelForm):
             "product": forms.Select(attrs={"class": "searchable"}),
             "issued_to": forms.Select(attrs={"class": "searchable"}),
         }
+
+    def clean_quantity(self):
+        q = self.cleaned_data.get("quantity")
+        if q is None or q <= 0:
+            raise forms.ValidationError("Количество должно быть больше нуля")
+        return q

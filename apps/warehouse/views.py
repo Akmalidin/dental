@@ -1,5 +1,6 @@
 from django.utils import timezone as dj_tz
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from apps.users.utils import safe_referer
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -102,24 +103,45 @@ def _auto_expense_for_entry(entry, user):
         pass
 
 
+def _decimal(v):
+    """Число из формы («1,5» → 1.5); None — если это не конечное число."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        d = Decimal(str(v).replace(",", ".").strip() or "0")
+    except (InvalidOperation, ValueError):
+        return None
+    return d if d.is_finite() else None
+
+
 @login_required
 def entry_create(request):
     from datetime import date as _date
     from .models import Supplier
     if request.method == "POST":
-        def _num(v):
-            return (str(v).replace(",", ".").strip() or "0")
         supplier_id = request.POST.get("supplier") or None
         the_date = request.POST.get("date") or dj_tz.localdate()
         notes = request.POST.get("notes", "")
         products = request.POST.getlist("product")
         quantities = request.POST.getlist("quantity")
         prices = request.POST.getlist("price")
-        count = 0
+        rows, bad = [], False
         for pid, qty, price in zip(products, quantities, prices):
-            if pid and str(qty).strip():
+            if not (pid and str(qty).strip()):
+                continue
+            q, pr = _decimal(qty), _decimal(price or 0)
+            # Количество > 0, цена ≥ 0, материал — только своей клиники.
+            if q is None or q <= 0 or pr is None or pr < 0 or not Product.objects.filter(pk=pid).exists():
+                bad = True
+                continue
+            rows.append((pid, q, pr))
+        if bad:
+            messages.error(request, _("Проверьте позиции: количество больше нуля, цена не отрицательная"))
+            rows = []
+        count = 0
+        with transaction.atomic():
+            for pid, q, pr in rows:
                 entry = WarehouseEntry.objects.create(
-                    product_id=pid, quantity=_num(qty), price=_num(price or 0),
+                    product_id=pid, quantity=q, price=pr,
                     supplier_id=supplier_id, date=the_date,
                     created_by=request.user, notes=notes,
                 )
@@ -128,7 +150,8 @@ def entry_create(request):
         if count:
             messages.success(request, _("Зафиксировано поступлений: %(n)s") % {"n": count})
             return redirect("entry_list")
-        messages.error(request, _("Добавьте хотя бы одну позицию"))
+        if not bad:
+            messages.error(request, _("Добавьте хотя бы одну позицию"))
     return render(request, "warehouse/entry_form.html", {
         "products": Product.objects.filter(is_active=True),
         "suppliers": Supplier.objects.filter(is_active=True),
@@ -184,9 +207,10 @@ def transfer_create(request):
             product_ids = request.POST.getlist("product")
             quantities = request.POST.getlist("quantity")
             for pid, qty in zip(product_ids, quantities):
-                if pid and qty:
+                q = _decimal(qty)
+                if pid and q is not None and q > 0 and Product.objects.filter(pk=pid).exists():
                     WarehouseTransferItem.objects.create(
-                        transfer=transfer, product_id=pid, quantity=qty
+                        transfer=transfer, product_id=pid, quantity=q
                     )
             messages.success(request, _("Перемещение создано"))
             return redirect("transfer_list")
