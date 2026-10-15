@@ -1,9 +1,10 @@
+from django.utils import timezone as dj_tz
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.http import HttpResponse
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 from apps.treatments.models import Treatment
@@ -21,7 +22,7 @@ def report_dashboard(request):
     from apps.services.models import Service
     from apps.treatments.models import TreatmentCure
     User = get_user_model()
-    today = date.today()
+    today = dj_tz.localdate()
 
     # Period filter
     period = request.GET.get("period", "month")
@@ -201,7 +202,7 @@ def report_dashboard(request):
 @login_required
 @role_required("superadmin", "admin_main", "admin")
 def report_treatments(request):
-    today = date.today()
+    today = dj_tz.localdate()
     month_start = today.replace(day=1)
     treatments = Treatment.objects.filter(
         created_at__date__gte=month_start
@@ -220,7 +221,7 @@ def report_treatments(request):
 def report_doctors(request):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
-    today = date.today()
+    today = dj_tz.localdate()
     month_start = today.replace(day=1)
     doctors = clinic_doctors(get_current_clinic()).annotate(
         treatments_count=Count(
@@ -238,7 +239,7 @@ def report_doctors(request):
 @login_required
 @require_permission("reports.view_finance")
 def report_finance(request):
-    today = date.today()
+    today = dj_tz.localdate()
     month_start = today.replace(day=1)
     income = Payment.objects.filter(
         created_at__date__gte=month_start, type="income"

@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
@@ -44,7 +45,6 @@ def send_appointment_reminders():
 @shared_task(name="apps.notifications.tasks.send_daily_admin_report")
 def send_daily_admin_report():
     """Daily summary sent to each clinic's own admins at 20:00 (per-clinic, own currency)."""
-    from datetime import date
     from django.db.models import Sum
     from decimal import Decimal
     from apps.finance.models import Payment, Expense
@@ -54,7 +54,7 @@ def send_daily_admin_report():
     from apps.tenancy import set_current_clinic
     from .utils import notify_admins
 
-    today = date.today()
+    today = dj_tz.localdate()
     for clinic in Clinic.objects.filter(is_active=True):
         set_current_clinic(clinic)
         cs = ClinicSettings.objects.filter(clinic=clinic).first()

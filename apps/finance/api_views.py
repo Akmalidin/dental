@@ -1,10 +1,10 @@
+from django.utils import timezone as dj_tz
 from rest_framework import generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Sum
 from django.utils import timezone
-from datetime import date
 from decimal import Decimal
 
 from .models import Payment, Expense, ExpenseCategory
@@ -48,7 +48,7 @@ class ExpenseCategoryListAPIView(generics.ListCreateAPIView):
 @permission_classes([IsAuthenticated])
 def finance_summary(request):
     period = request.query_params.get("period", "month")
-    today = date.today()
+    today = dj_tz.localdate()
     if period == "today":
         start = today
         end = today

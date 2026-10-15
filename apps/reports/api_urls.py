@@ -1,9 +1,9 @@
+from django.utils import timezone as dj_tz
 from django.urls import path
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
-from datetime import date
 from decimal import Decimal
 
 
@@ -11,7 +11,7 @@ from decimal import Decimal
 @permission_classes([IsAuthenticated])
 def treatments_report(request):
     from apps.treatments.models import Treatment
-    month_start = date.today().replace(day=1)
+    month_start = dj_tz.localdate().replace(day=1)
     qs = Treatment.objects.filter(created_at__date__gte=month_start)
     return Response({
         "total": qs.count(),
@@ -26,7 +26,7 @@ def treatments_report(request):
 def doctors_report(request):
     from apps.users.models import clinic_doctors
     from apps.tenancy import get_current_clinic
-    month_start = date.today().replace(day=1)
+    month_start = dj_tz.localdate().replace(day=1)
     doctors = clinic_doctors(get_current_clinic()).annotate(
         treatments_count=Count("treatments", filter=Q(treatments__created_at__date__gte=month_start)),
         revenue=Sum("treatments__total_amount", filter=Q(treatments__created_at__date__gte=month_start)),

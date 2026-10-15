@@ -1,4 +1,6 @@
+from django.utils import timezone as dj_tz
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from apps.users.utils import safe_referer
 from django.contrib import messages
 from django.views.decorators.http import require_POST
@@ -7,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from django.db import IntegrityError
 from django.db.models import Sum, Q
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from .models import Payment, Expense, ExpenseCategory, PatientAdvance, CashShift
@@ -30,7 +32,7 @@ def _get_own_payment_or_404(pk, queryset=None):
 
 @login_required
 def finance_dashboard(request):
-    today = date.today()
+    today = dj_tz.localdate()
     month_start = today.replace(day=1)
     _pay = payments_visible_to(Payment.objects.all(), request.user)
     income_today = _pay.filter(
@@ -218,6 +220,14 @@ def _allocate_income(payment, manual=None):
     # авансом пациента и сам ляжет на следующий приём (allocation.reconcile_patient).
     for t in set(affected):
         _recompute_treatment_paid(t)
+
+
+def _lock_patients(*patients):
+    """SELECT ... FOR UPDATE на карточки пациентов (внутри transaction.atomic):
+    операции с деньгами одного пациента выполняются по очереди."""
+    ids = sorted({p.pk for p in patients if p is not None and getattr(p, "pk", None)})
+    if ids:
+        list(Patient._base_manager.select_for_update().filter(pk__in=ids).values_list("pk", flat=True))
 
 
 def clamp_discount(treatment, value):
@@ -543,14 +553,18 @@ def payment_edit(request, pk):
     old_patient = payment.patient  # запомнить ДО того, как form.is_valid() перезапишет payment.patient
     form = PaymentForm(request.POST or None, instance=payment)
     if request.method == "POST" and form.is_valid():
-        payment = form.save()
-        # Скидка на приём (то же, что и при создании)
-        _apply_payment_discount(payment, request.POST.get("discount"))
-        if payment.type == Payment.TYPE_INCOME:
-            _allocate_income(payment)
-        _recalc_patient_balance(payment.patient)
-        if old_patient and old_patient != payment.patient:
-            _recalc_patient_balance(old_patient)
+        # Платёж, скидка, распределение и баланс — одной транзакцией: при сбое
+        # посередине не остаётся платежа без распределения/пересчёта.
+        with transaction.atomic():
+            _lock_patients(old_patient, form.cleaned_data.get("patient"))
+            payment = form.save()
+            # Скидка на приём (то же, что и при создании)
+            _apply_payment_discount(payment, request.POST.get("discount"))
+            if payment.type == Payment.TYPE_INCOME:
+                _allocate_income(payment)
+            _recalc_patient_balance(payment.patient)
+            if old_patient and old_patient != payment.patient:
+                _recalc_patient_balance(old_patient)
         messages.success(request, _("Платёж изменён"))
         return redirect("payment_list")
     if payment.patient_id:
@@ -673,52 +687,57 @@ def payment_create(request):
                 return JsonResponse({"ok": False, "error": str(e)}, status=400)
             form.add_error(None, str(e))
     if request.method == "POST" and form.is_valid():
-        # Двойное нажатие «Принять»: тот же сотрудник, пациент, сумма, тип и способ
-        # оплаты за последние 90 секунд — это повтор, а не новый платёж (сверка
-        # нашла десятки таких пар; из-за них приёмы «оплачены» вдвое).
-        from datetime import timedelta as _td
-        cd = form.cleaned_data
-        dup = (Payment.objects.filter(patient=cd["patient"], amount=cd["amount"],
-                                      type=cd.get("type") or Payment.TYPE_INCOME,
-                                      method=cd.get("method") or Payment.METHOD_CASH,
-                                      treatment=cd.get("treatment"),
-                                      received_by=request.user,
-                                      created_at__gte=timezone.now() - _td(seconds=90))
-               .order_by("-created_at").first())
-        if dup is not None:
-            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                return JsonResponse({"ok": True, "payment_id": dup.pk, "duplicate": True})
-            messages.info(request, _("Этот платёж уже принят"))
-            return redirect("patient_detail", pk=dup.patient_id) if dup.patient_id else redirect("payment_list")
-        payment = form.save(commit=False)
-        payment.received_by = request.user
-        # Канал: касса (channel=cashier) или врач напрямую. Если не указан — определяем по роли.
-        channel = request.POST.get("channel", "")
-        if channel == "cashier":
-            payment.via_cashier = True
-        elif channel == "doctor":
-            payment.via_cashier = False
-        else:
-            payment.via_cashier = not getattr(request.user, "is_doctor", False)
-        allowed = getattr(request, "allowed_branch_ids", None)
-        if allowed and payment.branch_id not in allowed:
-            payment.branch_id = None   # сотрудник принимает оплату только в своём филиале
-        if not payment.branch_id:   # по умолчанию — активный/основной филиал
-            from apps.users.models import Branch
-            payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
-                              or Branch.objects.filter(is_main=True).first()
-                              or request.user.branches.first()
-                              or Branch.objects.first())
-        payment.save()
-        # Скидка на приём (если указана) — на явно выбранный, либо (авто) на тот,
-        # что первым получит распределение платежа в _allocate_income ниже
-        _apply_payment_discount(payment, request.POST.get("discount"))
-        # Распределение платежа по приёмам (счетам): вручную, если кассир
-        # разделил оплату сам, остальное — автоматически по долгам
-        if payment.type == Payment.TYPE_INCOME:
-            _allocate_income(payment, manual_alloc)
-        # update patient balance
-        _recalc_patient_balance(payment.patient)
+        with transaction.atomic():
+            # Блокировка пациента: два одновременных «Принять» (двойной клик,
+            # повтор при плохой связи) идут по очереди — проверка дубля ниже
+            # видит первый платёж, распределение не задваивается.
+            _lock_patients(form.cleaned_data.get("patient"))
+            # Двойное нажатие «Принять»: тот же сотрудник, пациент, сумма, тип и способ
+            # оплаты за последние 90 секунд — это повтор, а не новый платёж (сверка
+            # нашла десятки таких пар; из-за них приёмы «оплачены» вдвое).
+            from datetime import timedelta as _td
+            cd = form.cleaned_data
+            dup = (Payment.objects.filter(patient=cd["patient"], amount=cd["amount"],
+                                          type=cd.get("type") or Payment.TYPE_INCOME,
+                                          method=cd.get("method") or Payment.METHOD_CASH,
+                                          treatment=cd.get("treatment"),
+                                          received_by=request.user,
+                                          created_at__gte=timezone.now() - _td(seconds=90))
+                   .order_by("-created_at").first())
+            if dup is not None:
+                if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                    return JsonResponse({"ok": True, "payment_id": dup.pk, "duplicate": True})
+                messages.info(request, _("Этот платёж уже принят"))
+                return redirect("patient_detail", pk=dup.patient_id) if dup.patient_id else redirect("payment_list")
+            payment = form.save(commit=False)
+            payment.received_by = request.user
+            # Канал: касса (channel=cashier) или врач напрямую. Если не указан — определяем по роли.
+            channel = request.POST.get("channel", "")
+            if channel == "cashier":
+                payment.via_cashier = True
+            elif channel == "doctor":
+                payment.via_cashier = False
+            else:
+                payment.via_cashier = not getattr(request.user, "is_doctor", False)
+            allowed = getattr(request, "allowed_branch_ids", None)
+            if allowed and payment.branch_id not in allowed:
+                payment.branch_id = None   # сотрудник принимает оплату только в своём филиале
+            if not payment.branch_id:   # по умолчанию — активный/основной филиал
+                from apps.users.models import Branch
+                payment.branch = (Branch.objects.filter(pk=request.session.get("active_branch")).first()
+                                  or Branch.objects.filter(is_main=True).first()
+                                  or request.user.branches.first()
+                                  or Branch.objects.first())
+            payment.save()
+            # Скидка на приём (если указана) — на явно выбранный, либо (авто) на тот,
+            # что первым получит распределение платежа в _allocate_income ниже
+            _apply_payment_discount(payment, request.POST.get("discount"))
+            # Распределение платежа по приёмам (счетам): вручную, если кассир
+            # разделил оплату сам, остальное — автоматически по долгам
+            if payment.type == Payment.TYPE_INCOME:
+                _allocate_income(payment, manual_alloc)
+            # update patient balance
+            _recalc_patient_balance(payment.patient)
         # уведомление администраторам о принятой оплате
         _notify_cashier_payment(request, payment)
         # Долг погашен — заявки «В кассу» по этому пациенту больше не нужны

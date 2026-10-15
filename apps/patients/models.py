@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 from django.db import models
 from django.conf import settings
 from django.core.validators import RegexValidator
@@ -314,6 +315,7 @@ class Patient(ClinicSoftDeleteModel):
         # Назначаем порядковый номер в пределах клиники при первом сохранении.
         # _ClinicSaveMixin.save (через super) проставит clinic; нам он нужен заранее,
         # поэтому повторяем его логику здесь для расчёта номера.
+        saved = False
         if self.number is None:
             from apps.tenancy import get_current_clinic
             from django.db.models import Max
@@ -322,10 +324,19 @@ class Patient(ClinicSoftDeleteModel):
                 if cur is not None:
                     self.clinic = cur
             if self.clinic_id is not None:
-                last = (Patient.all_objects.filter(clinic_id=self.clinic_id)
-                        .aggregate(m=Max("number"))["m"] or 0)
-                self.number = last + 1
-        super().save(*args, **kwargs)
+                # Номер выдаётся под блокировкой строки клиники: два
+                # одновременных создания не получат одинаковый номер.
+                from django.db import transaction
+                from apps.users.models import Clinic
+                with transaction.atomic():
+                    list(Clinic._base_manager.select_for_update().filter(pk=self.clinic_id).values_list("pk", flat=True))
+                    last = (Patient.all_objects.filter(clinic_id=self.clinic_id)
+                            .aggregate(m=Max("number"))["m"] or 0)
+                    self.number = last + 1
+                    super().save(*args, **kwargs)
+                    saved = True
+        if not saved:
+            super().save(*args, **kwargs)
 
     @property
     def display_number(self):
@@ -394,8 +405,7 @@ class Patient(ClinicSoftDeleteModel):
     def age(self):
         if not self.birth_date:
             return None
-        from datetime import date
-        today = date.today()
+        today = dj_tz.localdate()
         return today.year - self.birth_date.year - (
             (today.month, today.day) < (self.birth_date.month, self.birth_date.day)
         )
