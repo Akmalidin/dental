@@ -138,8 +138,9 @@ class UserForm(forms.ModelForm):
             "color": forms.TextInput(attrs={"type": "color"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.actor = actor
         self.fields["role"].label = "Основная роль"
         self.fields["role"].required = False
         self.fields["roles"].label = "Дополнительные роли (можно несколько)"
@@ -148,6 +149,24 @@ class UserForm(forms.ModelForm):
         # обычную форму сотрудника ни при каких обстоятельствах.
         self.fields["role"].queryset = self.fields["role"].queryset.exclude(name=Role.SUPERADMIN)
         self.fields["roles"].queryset = self.fields["roles"].queryset.exclude(name=Role.SUPERADMIN)
+        # Только роли этой клиники (системные + свои кастомные), без чужих.
+        from apps.tenancy import get_current_clinic
+        from .roles_views import roles_for_clinic
+        clinic = get_current_clinic() or getattr(actor, "clinic", None)
+        if clinic is not None:
+            self.fields["role"].queryset = roles_for_clinic(clinic)
+            self.fields["roles"].queryset = roles_for_clinic(clinic)
+        # Роль директора выдаёт только директор или суперадмин — право
+        # staff.manage само по себе не позволяет поднять себя/другого до директора.
+        if actor is not None and not (actor.is_superadmin or actor.is_admin_main):
+            self.fields["role"].queryset = self.fields["role"].queryset.exclude(name=Role.ADMIN_MAIN)
+            self.fields["roles"].queryset = self.fields["roles"].queryset.exclude(name=Role.ADMIN_MAIN)
+            # Свою роль сотрудник со staff.manage не меняет.
+            inst = self.instance if self.instance and self.instance.pk else None
+            if inst is not None and inst.pk == actor.pk:
+                self.fields["role"].disabled = True
+                self.fields["roles"].disabled = True
+                self.fields["is_active"].disabled = True
         self.fields["can_view_all_appointments"].label = "Видит записи всех врачей"
         self.fields["can_view_all_appointments"].required = False
         # Филиалы — только текущей клиники (queryset вычисляется в запросе, а не на импорте,
@@ -162,6 +181,15 @@ class UserForm(forms.ModelForm):
             else:
                 self.fields["full_access"].initial = False
                 self.fields["sections"].initial = list(inst.allowed_sections)
+
+    def clean_password(self):
+        password = self.cleaned_data.get("password") or ""
+        if password:
+            from .passwords import password_problems
+            problems = password_problems(password, self.instance if self.instance.pk else None)
+            if problems:
+                raise forms.ValidationError(problems)
+        return password
 
     def save(self, commit=True):
         user = super().save(commit=False)

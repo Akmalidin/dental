@@ -233,11 +233,30 @@ def _dump(objs):
     return json.loads(serializers.serialize("json", objs))
 
 
-def export_clinic(clinic):
-    """Полный снимок данных клиники: список блоков JSON-объектов."""
+# Секреты интеграций в снимок не попадают никогда: офлайн-копии они не нужны
+# (уведомления шлёт облако), а снимок может скачать и человек.
+SECRET_FIELDS = {
+    "settings_clinic.ClinicSettings": ("telegram_bot_token", "telegram_webhook_secret", "wa_token"),
+}
+
+
+def export_clinic(clinic, include_password_hashes=True):
+    """Полный снимок данных клиники: список блоков JSON-объектов.
+
+    Хеши паролей нужны только офлайн-копии (вход сотрудников без интернета) —
+    при выгрузке через браузер их нет (include_password_hashes=False)."""
     blocks = []
     for label, model, rule in _plan_models():
         data = _dump(_queryset_for(model, rule, clinic).order_by("pk"))
+        hidden = list(SECRET_FIELDS.get(label, ()))
+        if label == "users.User" and not include_password_hashes:
+            hidden.append("password")
+        if hidden:
+            for raw in data:
+                fields = raw.get("fields") or {}
+                for name in hidden:
+                    if name in fields:
+                        fields[name] = ""
         blocks.append({"model": label, "objects": data, "count": len(data)})
     return blocks
 

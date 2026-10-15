@@ -2646,7 +2646,7 @@ class StaffFormTabsTestCase(TestCase):
     def test_can_still_create_staff_through_tabbed_form(self):
         resp = self.client.post("/users/create/", {
             "login": "new_staff_tabs", "name": "Новый Сотрудник", "email": "ns@test.local",
-            "password": "secret123", "full_access": "on",
+            "password": "Tab-Strong-Pass-3", "full_access": "on",
         }, follow=True)
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(User.objects.filter(login="new_staff_tabs").exists())
@@ -3802,11 +3802,11 @@ class LoginRedirectsToNewInterfaceTestCase(TestCase):
             login="lr_director", name="Директор LR", email="lrd@test.local",
             role=self.admin_role, clinic=self.clinic, use_new_interface=False,
         )
-        self.director.set_password("pass1234")
+        self.director.set_password("Lr-Strong-Pass-7")
         self.director.save()
 
     def test_post_login_redirects_to_new_ui_when_never_used_it(self):
-        resp = self.client.post("/login/", {"login": "lr_director", "password": "pass1234"})
+        resp = self.client.post("/login/", {"login": "lr_director", "password": "Lr-Strong-Pass-7"})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/new/")
 
@@ -3817,19 +3817,19 @@ class LoginRedirectsToNewInterfaceTestCase(TestCase):
         # переключился обратно на старый явным кликом «Старый интерфейс»
         self.director.use_new_interface = False
         self.director.save(update_fields=["use_new_interface"])
-        resp = self.client.post("/login/", {"login": "lr_director", "password": "pass1234"})
+        resp = self.client.post("/login/", {"login": "lr_director", "password": "Lr-Strong-Pass-7"})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/new/")
 
     def test_next_param_takes_priority_over_default(self):
-        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "pass1234"})
+        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "Lr-Strong-Pass-7"})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/patients/")
 
     def test_next_param_wins_even_when_used_new_last_time(self):
         self.director.use_new_interface = True
         self.director.save(update_fields=["use_new_interface"])
-        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "pass1234"})
+        resp = self.client.post("/login/?next=/patients/", {"login": "lr_director", "password": "Lr-Strong-Pass-7"})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/patients/")
 

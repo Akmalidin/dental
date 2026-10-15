@@ -53,6 +53,7 @@
             <div class="card-body" style="padding:4px 18px;">
               <div class="field-row"><label data-i18n="w_fullname">ФИО</label><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="pf-name"></div>
               <div class="field-row"><label data-i18n="w_login">Логин</label><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" type="text" id="pf-login"></div>
+              <div class="field-row"><label><span data-i18n="w_current_password">Текущий пароль</span><div class="hint" data-i18n="w_current_password_hint">Нужен только для смены пароля</div></label><input autocomplete="current-password" type="password" id="pf-old-password" placeholder="••••••••"></div>
               <div class="field-row"><label><span data-i18n="w_new_password">Новый пароль</span><div class="hint" data-i18n="w_password_blank_hint">Оставьте пустым, чтобы не менять</div></label><input autocomplete="new-password" type="password" id="pf-password" placeholder="••••••••"></div>
               <div class="field-row"><label data-i18n="w_confirm_password">Подтвердите пароль</label><input autocomplete="new-password" type="password" id="pf-password2" placeholder="••••••••"></div>
               <div id="pf-error" class="hidden" style="background:#FDECEC;color:#B42318;border-radius:8px;padding:10px 12px;font-size:13px;margin:10px 0;"></div>
@@ -141,6 +142,7 @@
     const login = document.getElementById('pf-login').value.trim();
     const password = document.getElementById('pf-password').value;
     const password2 = document.getElementById('pf-password2').value;
+    const oldPassword = document.getElementById('pf-old-password').value;
     const errEl = document.getElementById('pf-error');
     errEl.classList.add('hidden');
     if(!name || !login) return;
@@ -152,7 +154,14 @@
     const fd = new FormData();
     fd.append('name', name);
     fd.append('login', login);
-    if(password){ fd.append('password', password); fd.append('password2', password2); }
+    if(password){
+      if(!oldPassword){
+        errEl.textContent = t('w_current_password_required');
+        errEl.classList.remove('hidden');
+        return;
+      }
+      fd.append('password', password); fd.append('password2', password2); fd.append('old_password', oldPassword);
+    }
     const res = await postForm('/profile/', fd);
     if(res.redirected){ flashAndReload(t('w_settings_saved')); }
     else {
