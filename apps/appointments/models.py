@@ -136,6 +136,24 @@ class Appointment(ClinicSoftDeleteModel):
         patient_name = self.patient.full_name if self.patient else "—"
         return f"{patient_name} → {self.doctor} [{self.start_at:%d.%m %H:%M}]"
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        obj = super().from_db(db, field_names, values)
+        obj._loaded_start_at = obj.__dict__.get("start_at")
+        return obj
+
+    def save(self, *args, **kwargs):
+        # Перенос записи на другое время → напоминания о новом времени должны
+        # прийти заново (флаги «уже напомнили» относились к старому времени).
+        loaded = getattr(self, "_loaded_start_at", None)
+        if self.pk and loaded is not None and self.start_at and self.start_at != loaded:
+            self.reminded_day = self.reminded_hour = self.overdue_notified = False
+            fields = kwargs.get("update_fields")
+            if fields is not None:
+                kwargs["update_fields"] = set(fields) | {"reminded_day", "reminded_hour", "overdue_notified"}
+        super().save(*args, **kwargs)
+        self._loaded_start_at = self.start_at
+
     @property
     def duration_minutes(self):
         delta = self.end_at - self.start_at

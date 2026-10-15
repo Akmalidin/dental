@@ -4119,6 +4119,10 @@ def staff_set_password(request, pk):
         return redirect("staff_list")
     user.set_password(new_pw)
     user.save(update_fields=["password"])
+    from .audit import log_audit_event
+    log_audit_event(action="staff_password_set", category="change", actor=request.user, request=request,
+                    clinic=user.clinic, object_model="user", object_id=user.pk,
+                    object_repr=f"Новый пароль сотруднику {user.name}")
     # Сам пароль во flash-сообщение (оно хранится в сессии) не пишем.
     messages.success(request, _("Пароль для «%(n)s» изменён") % {"n": user.name})
     return redirect("staff_list")
@@ -4156,8 +4160,19 @@ def staff_edit(request, pk):
         messages.error(request, _("Данные директора меняет только сам директор или суперадмин"))
         return redirect("staff_list")
     form = UserForm(request.POST or None, request.FILES or None, instance=user, actor=request.user)
+    before = (user.role_id, sorted(user.roles.values_list("pk", flat=True)) if user.pk else [], user.is_active)
     if form.is_valid():
         form.save()
+        after = (user.role_id, sorted(user.roles.values_list("pk", flat=True)), user.is_active)
+        diff = [{"field": f, "old": str(b), "new": str(a)}
+                for f, b, a in zip(("role", "roles", "is_active"), before, after) if b != a]
+        if form.cleaned_data.get("password"):
+            diff.append({"field": "password", "old": "", "new": "изменён"})
+        if diff:
+            from .audit import log_audit_event
+            log_audit_event(action="staff_edit", category="change", actor=request.user, request=request,
+                            clinic=user.clinic, object_model="user", object_id=user.pk,
+                            object_repr=f"Сотрудник {user.name}", diff=diff)
         _apply_access_from_form(request.user, user, form)
         messages.success(request, _("Данные обновлены"))
         return redirect("staff_list")
@@ -4594,6 +4609,8 @@ def salary_export(request):
         ws.column_dimensions[chr(64 + i)].width = w
     resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     resp["Content-Disposition"] = f'attachment; filename="salary_{date_from}_{date_to}.xlsx"'
+    from apps.users.utils import neutralize_formulas
+    neutralize_formulas(wb)
     wb.save(resp)
     return resp
 

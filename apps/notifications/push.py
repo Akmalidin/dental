@@ -14,6 +14,25 @@ def _private_pem():
         return None
 
 
+# Сервер шлёт POST на endpoint подписки — только https-адреса известных
+# push-сервисов браузеров, а не любой адрес (127.0.0.1, 169.254.169.254...).
+_PUSH_HOSTS = ("fcm.googleapis.com", "android.googleapis.com", "updates.push.services.mozilla.com",
+               "push.services.mozilla.com", "notify.windows.com", "push.apple.com")
+
+
+def push_endpoint_ok(endpoint):
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(str(endpoint or ""))
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        return False
+    if parts.scheme != "https" or port not in (None, 443) or parts.username:
+        return False
+    return any(host == h or host.endswith("." + h) for h in _PUSH_HOSTS)
+
+
 def send_web_push(user, title, body="", url="/"):
     """Отправить push на все устройства пользователя. Истёкшие подписки удаляются."""
     pem = _private_pem()
@@ -26,6 +45,8 @@ def send_web_push(user, title, body="", url="/"):
     claims = {"sub": getattr(settings, "VAPID_CLAIM_EMAIL", "mailto:admin@example.com")}
     sent = 0
     for s in PushSubscription.objects.filter(user=user):
+        if not push_endpoint_ok(s.endpoint):
+            continue
         try:
             webpush(
                 subscription_info={"endpoint": s.endpoint, "keys": {"p256dh": s.p256dh, "auth": s.auth}},

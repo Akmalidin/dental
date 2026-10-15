@@ -37,3 +37,15 @@ def safe_referer(request, default):
                                                require_https=request.is_secure()):
         return url
     return default
+
+
+def neutralize_formulas(wb):
+    """Экспорт в Excel: текст, начинающийся с «=», openpyxl записывает как
+    формулу — имя/заметка «=HYPERLINK(...)» из формы записи на сайте стала бы
+    формулой у того, кто откроет файл. Такие значения пишем как обычный текст."""
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.data_type == "f" and isinstance(cell.value, str):
+                    cell.data_type = "s"
+    return wb

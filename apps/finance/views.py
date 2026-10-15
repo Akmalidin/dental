@@ -552,6 +552,8 @@ def payment_edit(request, pk):
     """Изменить платёж + пересчитать баланс пациента."""
     payment = _get_own_payment_or_404(pk)
     old_patient = payment.patient  # запомнить ДО того, как form.is_valid() перезапишет payment.patient
+    _AUDIT = ("amount", "type", "method", "patient_id", "treatment_id", "branch_id")
+    before = {f: getattr(payment, f) for f in _AUDIT}
     form = PaymentForm(request.POST or None, instance=payment)
     if request.method == "POST" and form.is_valid():
         # Платёж, скидка, распределение и баланс — одной транзакцией: при сбое
@@ -566,6 +568,14 @@ def payment_edit(request, pk):
             _recalc_patient_balance(payment.patient)
             if old_patient and old_patient != payment.patient:
                 _recalc_patient_balance(old_patient)
+        from apps.users.audit import log_audit_event
+        diff = [{"field": f, "old": str(before[f]), "new": str(getattr(payment, f))}
+                for f in _AUDIT if before[f] != getattr(payment, f)]
+        if request.POST.get("discount"):
+            diff.append({"field": "discount", "old": "", "new": str(request.POST.get("discount"))})
+        log_audit_event(action="payment_edit", category="change", actor=request.user, request=request,
+                        clinic=payment.clinic, object_model="payment", object_id=payment.pk,
+                        object_repr=f"Платёж #{payment.pk} — {payment.amount}", diff=diff)
         messages.success(request, _("Платёж изменён"))
         return redirect("payment_list")
     if payment.patient_id:

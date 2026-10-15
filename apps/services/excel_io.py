@@ -36,6 +36,8 @@ def export_services_xlsx():
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     resp["Content-Disposition"] = 'attachment; filename="services.xlsx"'
+    from apps.users.utils import neutralize_formulas
+    neutralize_formulas(wb)
     wb.save(resp)
     return resp
 

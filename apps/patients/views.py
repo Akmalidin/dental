@@ -986,13 +986,18 @@ def patient_import(request):
     if not f:
         messages.warning(request, _("Файл не выбран"))
         return redirect("patient_list")
+    if f.size > 10 * 1024 * 1024:
+        messages.error(request, _("Файл слишком большой (больше 10 МБ)"))
+        return redirect("patient_list")
     try:
         created, updated, errors = import_patients_xlsx(f)
         messages.success(request, _("Импорт: добавлено %(c)d, обновлено %(u)d") % {"c": created, "u": updated})
         if errors:
             messages.warning(request, "; ".join(errors[:5]))
-    except Exception as e:
-        messages.error(request, _("Ошибка импорта: %(e)s") % {"e": str(e)})
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("patient_import")
+        messages.error(request, _("Ошибка импорта: файл не удалось прочитать — ничего не изменено"))
     return redirect("patient_list")
 
 
