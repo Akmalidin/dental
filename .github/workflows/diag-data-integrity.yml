@@ -1,0 +1,34 @@
+name: Diag data integrity
+
+# Только чтение: перед включением ограничений в БД / строгой изоляции клиник
+# проверить данные прода. В лог — только числа (репозиторий публичный).
+#  - активные сотрудники без клиники (не суперадмины);
+#  - повторяющиеся номера карточек и приёмов внутри клиники.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          command_timeout: 10m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            DJANGO_SETTINGS_MODULE=config.settings.server ./venv/bin/python manage.py shell -c "
+            from django.db.models import Count
+            from apps.users.models import User
+            from apps.patients.models import Patient
+            from apps.treatments.models import Treatment
+            no_clinic = [u for u in User.objects.filter(is_active=True, clinic__isnull=True) if not u.is_superadmin]
+            print('active non-superadmin users without clinic:', len(no_clinic))
+            for label, model in (('patients', Patient), ('treatments', Treatment)):
+                d = (model._base_manager.exclude(number=None).values('clinic_id', 'number')
+                     .annotate(n=Count('id')).filter(n__gt=1))
+                print('duplicate', label, 'numbers:', d.count(), '| extra rows:', sum(x['n'] - 1 for x in d))
+            "

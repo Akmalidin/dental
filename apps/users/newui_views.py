@@ -309,6 +309,20 @@ def newui_patients_data_json(request):
     активный филиал переключателя сайдбара (request.session["active_branch"])
     — см. _newui_patients_page_data."""
     from django.http import JsonResponse
+    if getattr(request.user, "is_technician_only", False):
+        # Технику список нужен только для поиска пациента в кассе — не вся
+        # база с телефонами: только поиск от 2 символов и не больше 10 строк.
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"results": [], "page": 1, "perPage": 10, "totalCount": 0, "totalPages": 1,
+                                 "counts": {}, "stats": {}})
+        g = request.GET.copy()
+        try:
+            g["per_page"] = str(min(10, int(g.get("per_page") or 10)))
+        except ValueError:
+            g["per_page"] = "10"
+        g["page"] = "1"
+        request.GET = g
     return JsonResponse(_newui_patients_page_data(request))
 
 

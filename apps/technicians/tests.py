@@ -43,6 +43,16 @@ class TechnicianCabinetTestCase(TestCase):
     def tearDown(self):
         clear_current_clinic()
 
+    def test_patients_data_search_only_for_technician(self):
+        """Отчёт безопасности №19: технику — только поиск пациента (2+ символа, ≤10 строк)."""
+        clear_current_clinic()
+        r = self.c.get("/new/patients/data/")
+        self.assertEqual(r.json()["results"], [])
+        r = self.c.get("/new/patients/data/?q=Ив&per_page=200")
+        data = r.json()
+        self.assertEqual(data["perPage"], 10)
+        self.assertEqual([p["id"] for p in data["results"]], [self.patient.pk])
+
     def test_only_cabinet_and_cashdesk_open(self):
         self.assertTrue(self.tech_user.is_technician_only)
         self.assertFalse(self.admin.is_technician_only)
