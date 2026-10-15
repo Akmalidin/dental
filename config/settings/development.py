@@ -77,7 +77,6 @@ MIDDLEWARE = [
     "apps.tenancy.TariffGuardMiddleware",
     "apps.tenancy.PublicSiteMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "apps.users.passwords.ForcePasswordChangeMiddleware",
     "apps.tenancy.SectionAccessMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",

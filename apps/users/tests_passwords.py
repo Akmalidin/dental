@@ -35,35 +35,31 @@ class ForcedChangeAndProfileTestCase(TestCase):
         self.doc.save()
         clear_current_clinic()
 
-    def test_weak_password_login_forces_change(self):
+    def test_weak_password_login_not_forced(self):
+        """Решение владельца: действующие пароли не трогаем — вход со слабым
+        паролем работает как раньше, смена пароля только по желанию."""
         c = Client()
         r = c.post("/login/", {"login": "pw_doc", "password": "1111"})
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r["Location"], "/password-change/")
-        self.assertTrue(c.session.get(SESSION_FLAG))
-        # Остальное закрыто, пока пароль не сменён.
-        r = c.get("/new/")
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(r["Location"], "/password-change/")
-        r = c.post("/finance/payments/create/", {"amount": "1"})
-        self.assertEqual(r.status_code, 403)
+        self.assertNotEqual(r["Location"], "/password-change/")
+        self.assertFalse(c.session.get(SESSION_FLAG))
+        self.assertNotEqual(c.get("/new/").get("Location"), "/password-change/")
+
+    def test_voluntary_password_change(self):
+        c = Client()
+        c.force_login(self.doc)
         self.assertEqual(c.get("/password-change/").status_code, 200)
-        # Слабый новый пароль не принимается.
         r = c.post("/password-change/", {"old_password": "1111", "new_password": "22222222",
                                          "new_password2": "22222222"})
         self.assertEqual(r.status_code, 200)
-        self.assertTrue(c.session.get(SESSION_FLAG))
-        # Неверный текущий.
         r = c.post("/password-change/", {"old_password": "nope", "new_password": "Good-Pass-2026",
                                          "new_password2": "Good-Pass-2026"})
         self.assertEqual(r.status_code, 200)
         r = c.post("/password-change/", {"old_password": "1111", "new_password": "Good-Pass-2026",
                                          "new_password2": "Good-Pass-2026"})
         self.assertEqual(r.status_code, 302)
-        self.assertFalse(c.session.get(SESSION_FLAG))
         self.doc.refresh_from_db()
         self.assertTrue(self.doc.check_password("Good-Pass-2026"))
-        self.assertNotEqual(c.get("/new/").get("Location"), "/password-change/")
 
     def test_strong_password_login_not_forced(self):
         c = Client()
