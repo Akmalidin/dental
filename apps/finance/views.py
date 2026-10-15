@@ -7,7 +7,7 @@ from django.db import IntegrityError
 from django.db.models import Sum, Q
 from django.utils import timezone
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from .models import Payment, Expense, ExpenseCategory, PatientAdvance, CashShift
 from .forms import PaymentForm, ExpenseForm
@@ -219,6 +219,31 @@ def _allocate_income(payment, manual=None):
         _recompute_treatment_paid(t)
 
 
+def clamp_discount(treatment, value):
+    """Скидка на приём: от 0 до суммы приёма. Больше суммы нельзя — лишнее
+    превращалось в аванс пациента (Patient.recalc_balance)."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        d = Decimal(str(value).replace(" ", "").replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
+    if not d.is_finite():
+        return None
+    return max(Decimal(0), min(d, treatment.total_amount or Decimal(0)))
+
+
+def _apply_payment_discount(payment, raw):
+    if not raw:
+        return
+    target = _target_treatment_for_discount(payment)
+    if target is None:
+        return
+    d = clamp_discount(target, raw)
+    if d is not None:
+        target.discount = d
+        target.save(update_fields=["discount", "updated_at"])
+
+
 def _target_treatment_for_discount(payment):
     """Приём, к которому применяется скидка при создании/правке платежа: явно
     выбранный (payment.treatment), либо — для «— авто (по долгу) —», когда
@@ -393,6 +418,8 @@ def cashshift_open(request):
         return JsonResponse({"error": "Смена по этому филиалу уже открыта", "error_key": "cashshift_already_open"}, status=400)
     try:
         opening_cash = Decimal(request.POST.get("opening_cash") or "0")
+        if not opening_cash.is_finite() or opening_cash < 0:
+            raise InvalidOperation
     except Exception:
         return JsonResponse({"error": "Некорректная сумма", "error_key": "cashshift_invalid_amount"}, status=400)
     try:
@@ -508,6 +535,7 @@ def cashdesk_queue_dismiss(request, pk):
 
 
 @login_required
+@require_permission("finance.edit_payment")
 def payment_edit(request, pk):
     """Изменить платёж + пересчитать баланс пациента."""
     payment = _get_own_payment_or_404(pk)
@@ -516,18 +544,7 @@ def payment_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         payment = form.save()
         # Скидка на приём (то же, что и при создании)
-        discount = request.POST.get("discount")
-        if discount:
-            try:
-                from decimal import Decimal as _D
-                d = _D(str(discount))
-                if d >= 0:
-                    target = _target_treatment_for_discount(payment)
-                    if target:
-                        target.discount = d
-                        target.save(update_fields=["discount", "updated_at"])
-            except Exception:
-                pass
+        _apply_payment_discount(payment, request.POST.get("discount"))
         if payment.type == Payment.TYPE_INCOME:
             _allocate_income(payment)
         _recalc_patient_balance(payment.patient)
@@ -694,18 +711,7 @@ def payment_create(request):
         payment.save()
         # Скидка на приём (если указана) — на явно выбранный, либо (авто) на тот,
         # что первым получит распределение платежа в _allocate_income ниже
-        discount = request.POST.get("discount")
-        if discount:
-            try:
-                from decimal import Decimal as _D
-                d = _D(str(discount))
-                if d > 0:
-                    target = _target_treatment_for_discount(payment)
-                    if target:
-                        target.discount = d
-                        target.save(update_fields=["discount", "updated_at"])
-            except Exception:
-                pass
+        _apply_payment_discount(payment, request.POST.get("discount"))
         # Распределение платежа по приёмам (счетам): вручную, если кассир
         # разделил оплату сам, остальное — автоматически по долгам
         if payment.type == Payment.TYPE_INCOME:

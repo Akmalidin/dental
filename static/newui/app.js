@@ -640,7 +640,7 @@ function renderBlacklist(){
     return;
   }
   body.innerHTML=list.map(e=>`
-    <tr><td><b>${e.name}</b></td><td class="mono">${e.phone}</td><td>${e.reason}</td><td>${e.addedBy}</td><td class="mono">${e.date}</td>
+    <tr><td><b>${navEsc(e.name)}</b></td><td class="mono">${navEsc(e.phone)}</td><td>${navEsc(e.reason)}</td><td>${navEsc(e.addedBy)}</td><td class="mono">${navEsc(e.date)}</td>
     <td><button class="btn btn-danger btn-sm" onclick="removeFromBlacklist(${e.id})">${t('w_remove')}</button></td></tr>`).join('');
 }
 function findBlacklistEntryByPhone(phone){
@@ -747,8 +747,8 @@ function renderTasksList(){
   }
   body.innerHTML=list.map(tsk=>`
     <tr>
-      <td><b>${tsk.title}</b>${tsk.description?`<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${tsk.description}</div>`:''}</td>
-      <td>${(tsk.assignedTo||[]).map(u=>u.name).join(', ') || '—'}</td>
+      <td><b>${navEsc(tsk.title)}</b>${tsk.description?`<div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${navEsc(tsk.description)}</div>`:''}</td>
+      <td>${navEsc((tsk.assignedTo||[]).map(u=>u.name).join(', ')) || '—'}</td>
       <td class="mono" ${tsk.overdue?'style="color:var(--coral);font-weight:600;"':''}>${tsk.dueDateDisplay || '—'}</td>
       <td><span class="pill ${taskPriorityPill(tsk.priority)}">${taskPriorityLabel(tsk.priority)}</span></td>
       <td><span class="pill ${taskStatusPill(tsk.status)}">${taskStatusLabel(tsk.status)}</span></td>
@@ -1332,8 +1332,8 @@ function renderTemplatesList(){
   if(!el) return;
   el.innerHTML = messageTemplates.map(t=>`
     <div class="tpl-item">
-      <b>${t.title}</b>
-      <p>${t.text}</p>
+      <b>${navEsc(t.title)}</b>
+      <p>${navEsc(t.text)}</p>
       <div class="tpl-actions">
         <button class="btn btn-danger btn-sm" onclick="deleteTemplate(${t.id})">Удалить</button>
       </div>
@@ -1830,7 +1830,7 @@ function renderCashPayments(){
     <td>${p.receivedBy}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="printPaymentReceipt(${p.id})">🖨 ${t('w_print_receipt')}</button>
-      <a class="btn btn-ghost btn-sm" href="/finance/payments/${p.id}/edit/">${t('w_edit')}</a>
+      ${CAN_EDIT_PAYMENTS?`<a class="btn btn-ghost btn-sm" href="/finance/payments/${p.id}/edit/">${t('w_edit')}</a>`:''}
       ${IS_SUPERADMIN ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral);" onclick="deletePayment(${p.id})">${t('w_delete')}</button>` : ''}
     </td>
   </tr>`).join('');
@@ -1995,7 +1995,7 @@ function acceptCashierPayment(id){
     const tr=document.createElement('tr');
     const now=new Date();
     const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-    tr.innerHTML=`<td class="mono">${time}</td><td>${item.patient}</td><td>${item.description}</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+${formatNum(item.amount)} ${CUR_SYM}</td>`;
+    tr.innerHTML=`<td class="mono">${time}</td><td>${navEsc(item.patient)}</td><td>${navEsc(item.description)}</td><td>Наличные</td><td class="mono" style="color:var(--teal)">+${formatNum(item.amount)} ${CUR_SYM}</td>`;
     opsBody.insertBefore(tr, opsBody.firstChild);
   }
   if(item.statusElId){
@@ -2376,7 +2376,7 @@ async function renderAIInsights(refresh){
   aiInsightsLoaded=true;
   const upd=document.getElementById('aiInsightsUpdated');
   if(upd) upd.innerHTML=`${t('w_updated','Обновлено')} ${data.updated||''} · <a href="#" onclick="renderAIInsights(true);return false;">${t('w_refresh','обновить')}</a>`;
-  const esc=x=>String(x||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const esc=x=>String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   el.innerHTML=(data.items||[]).map(i=>`
     <div class="ai-insight ${i.type}">
       <div class="ai-insight-icon">${esc(i.icon)}</div>
@@ -8681,7 +8681,7 @@ function applyAssistantIntent(data){
   document.addEventListener('touchend', e=>{ const tt=e.changedTouches[0]; onUp(tt.clientX, tt.clientY); });
 })();
 
-let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE_HISTORY=false, CAN_DELETE_PATIENT=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
+let IS_DOCTOR=false, CAN_EDIT_PAYMENTS=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE_HISTORY=false, CAN_DELETE_PATIENT=false, IS_SUPERADMIN=false, IS_ADMIN=false, IS_ADMIN_MAIN=false;
 (function loadRealStaffData(){
   const el=document.getElementById('newui-real-data');
   if(!el) return;
@@ -8752,6 +8752,7 @@ let IS_DOCTOR=false, CAN_QUICK_SALE=false, CAN_ACCEPT_PAYMENTS=false, CAN_DELETE
     IS_DOCTOR=!!data.isDoctor;
     CAN_QUICK_SALE=!!data.canQuickSale;
     CAN_ACCEPT_PAYMENTS=!!data.canAcceptPayments;
+    CAN_EDIT_PAYMENTS=!!data.canEditPayments;
     if(document.getElementById('pcAcceptPaymentBtn')) document.getElementById('pcAcceptPaymentBtn').classList.toggle('hidden', !CAN_ACCEPT_PAYMENTS);
     CAN_DELETE_HISTORY=!!data.canDeleteHistory;
     CAN_DELETE_PATIENT=!!data.canDeletePatient;

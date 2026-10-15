@@ -2466,8 +2466,8 @@ class PermissionSeedTestCase(TestCase):
         # 9 из 0022_seed_permissions + finance.quick_sale (0024) +
         # patients.delete_history (0026) − finance.delete_payment, убрана
         # в 0034 (удаление платежа теперь не делегируется через RBAC-права,
-        # см. apps.users.decorators.require_superadmin).
-        self.assertEqual(Permission.objects.count(), 10)
+        # см. apps.users.decorators.require_superadmin) + finance.edit_payment (0040).
+        self.assertEqual(Permission.objects.count(), 11)
 
     def test_system_roles_marked_is_system(self):
         for name in ["superadmin", "admin_main", "admin", "doctor", "nurse"]:
@@ -4001,10 +4001,14 @@ class NewUITreatplanDetailTestCase(TestCase):
     def test_treatplans_list_and_patientcard_link_to_new_page(self):
         """Оставшиеся ссылки на план лечения ведут в новый интерфейс, не
         на /treatments/plans/... (templates/newui/base.html)."""
+        from pathlib import Path
+        from django.conf import settings
         self.client.force_login(self.director)
-        resp = self.client.get("/new/treatplans/")
-        self.assertContains(resp, "/new/treatplans/${p.id}/")
-        self.assertNotContains(resp, "/treatments/plans/${p.id}/")
+        self.assertEqual(self.client.get("/new/treatplans/").status_code, 200)
+        # ссылки собирает общий скрипт нового интерфейса (static/newui/app.js)
+        js = (Path(settings.BASE_DIR) / "static" / "newui" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("/new/treatplans/${p.id}/", js)
+        self.assertNotIn("/treatments/plans/${p.id}/", js)
 
     def test_stage_visit_sent_as_raw_number_not_prebaked_russian_label(self):
         """Аудит переводов: раньше бэкенд слал уже готовый русский текст

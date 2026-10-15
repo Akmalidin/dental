@@ -162,8 +162,12 @@ def _ensure_patient(ctx, full_name, phone=""):
         from apps.patients.models import normalize_phone
         other = Patient.objects.filter(phone_norm=normalize_phone(digits)).exclude(pk=ctx.patient.pk).first()
         if other is not None:
-            ctx.patient = merge_tg_card(ctx.patient, other)
-            return ctx.patient, None
+            # Номер уже в базе: не сливаем карточки по названному в переписке
+            # номеру (его мог назвать кто угодно) — только кнопкой «Поделиться
+            # номером», где Telegram подтверждает, что номер принадлежит писавшему.
+            return None, ("Этот номер уже есть в клинике. Попроси пациента нажать в боте кнопку "
+                          "«Поделиться номером» (/start) — так подтверждается, что номер его, "
+                          "и после этого можно записать. Не называй данные пациента с этим номером.")
         parts = name.split(None, 1)
         ctx.patient.last_name, ctx.patient.first_name = parts[0][:100], parts[1][:100]
         ctx.patient.phone = "+" + digits
