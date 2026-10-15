@@ -3718,13 +3718,6 @@ def login_view(request):
     if request.method == "POST" and form.is_valid():
         user = form.get_user()
         login(request, user)
-        # Слабый пароль (1111, 123456, только цифры, < 8 символов) — не
-        # сбрасываем, а требуем сменить сразу после входа
-        # (apps.users.passwords.ForcePasswordChangeMiddleware).
-        from .passwords import is_weak, SESSION_FLAG, CHANGE_URL
-        if is_weak(request.POST.get("password", ""), user):
-            request.session[SESSION_FLAG] = True
-            return redirect(CHANGE_URL)
         # Вход в программу — всегда сразу в новый интерфейс (строгое правило,
         # без исключений); на старый интерфейс переходят только явным кликом
         # «Старый интерфейс» в сайдбаре нового (newui_use_old_interface,
