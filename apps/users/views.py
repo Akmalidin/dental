@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 from django.contrib.auth import login, logout
 from apps.users.utils import safe_referer
 from django.contrib.auth.decorators import login_required
@@ -3580,7 +3581,6 @@ def profile_view(request):
 @login_required
 def profile_send_daily_report(request):
     """Сформировать краткий отчёт за сегодня и отправить в WhatsApp текущему пользователю."""
-    from datetime import date
     from django.db.models import Sum, Count
     from decimal import Decimal
     from apps.notifications.whatsapp import wa_send_text, wa_enabled
@@ -3596,7 +3596,7 @@ def profile_send_daily_report(request):
         messages.error(request, _("WhatsApp не настроен (Green-API). Обратитесь к администратору."))
         return redirect("profile")
 
-    today = date.today()
+    today = dj_tz.localdate()
     appts = Appointment.objects.filter(start_at__date=today).exclude(
         status__in=[Appointment.STATUS_CANCELLED])
     appts_total = appts.count()
@@ -3869,7 +3869,7 @@ def clinic_access_request(request):
 
 @login_required
 def dashboard_view(request):
-    from datetime import date, timedelta
+    from datetime import timedelta
     from django.db.models import Sum, Count
     from decimal import Decimal
     user = request.user
@@ -3890,7 +3890,7 @@ def dashboard_view(request):
         from apps.finance.models import Payment, Expense
         from apps.finance.views import payments_visible_to as _visible_payments_for
         from apps.treatments.models import Treatment
-        today = date.today()
+        today = dj_tz.localdate()
         year_start = today.replace(month=1, day=1)
         income_today = _visible_payments_for(Payment.objects.filter(
             created_at__date=today, type="income"
@@ -3934,7 +3934,7 @@ def dashboard_view(request):
         from apps.appointments.models import Appointment
         from apps.tasks.models import Task
         from apps.treatments.models import Treatment
-        today = date.today()
+        today = dj_tz.localdate()
         today_appts = Appointment.objects.filter(start_at__date=today).select_related(
             "patient", "doctor", "service"
         ).order_by("start_at")
@@ -3970,7 +3970,7 @@ def dashboard_view(request):
         from apps.appointments.models import Appointment
         from apps.patients.models import Patient
         from apps.tasks.models import Task
-        today = date.today()
+        today = dj_tz.localdate()
         my_tasks = Task.objects.filter(
             assigned_to=user, status__in=["pending", "in_progress"]
         ).order_by("-priority", "due_date")
@@ -4444,7 +4444,6 @@ def _newui_salary_data():
     ссылка «Excel»). Сохранение схемы — существующий POST
     /users/salary/<pk>/scheme/ (см. salary_scheme_edit), просто вызывается
     через fetch() с этой страницы, как и «Кабинеты и график» в Настройках."""
-    from datetime import date
     from .models_salary import SalaryScheme
 
     from django.utils import timezone
@@ -4494,9 +4493,9 @@ def _newui_salary_data():
 @login_required
 @role_required("superadmin", "admin_main")
 def salary_report(request):
-    from datetime import date, datetime, timedelta
+    from datetime import datetime, timedelta
 
-    today = date.today()
+    today = dj_tz.localdate()
     month_start = today.replace(day=1)
     # диапазон дат: ?from=&to= (по умолчанию текущий месяц)
     def _pd(v, default):
@@ -4527,7 +4526,7 @@ def salary_report(request):
 @login_required
 def my_earnings(request):
     """Заработок текущего врача за день/неделю/месяц/год."""
-    from datetime import date, timedelta
+    from datetime import timedelta
     from decimal import Decimal
     from django.db.models import Sum
     from apps.treatments.models import Treatment
@@ -4535,7 +4534,7 @@ def my_earnings(request):
 
     doc = request.user
     scheme = getattr(doc, "salary_scheme", None)
-    today = date.today()
+    today = dj_tz.localdate()
     periods = [
         ("Сегодня", today),
         ("Неделя", today - timedelta(days=today.weekday())),
@@ -4566,10 +4565,10 @@ def my_earnings(request):
 @role_required("superadmin", "admin_main")
 def salary_export(request):
     """Экспорт зарплатной ведомости в Excel."""
-    from datetime import date, datetime
+    from datetime import datetime
     from openpyxl import Workbook
     from django.http import HttpResponse
-    today = date.today()
+    today = dj_tz.localdate()
     def _pd(v, default):
         try:
             return datetime.fromisoformat(v).date()

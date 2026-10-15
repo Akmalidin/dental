@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -14,7 +15,7 @@ from apps.users.decorators import require_permission
 
 @login_required
 def patient_list(request):
-    from datetime import date, timedelta
+    from datetime import timedelta
     from django.db.models import Sum
     from decimal import Decimal
 
@@ -40,7 +41,7 @@ def patient_list(request):
     pin_f = G.get("pin", "")
     dupes_f = G.get("dupes", "")
 
-    today = date.today()
+    today = dj_tz.localdate()
     week_ago = today - timedelta(days=7)
 
     def years_ago(n):

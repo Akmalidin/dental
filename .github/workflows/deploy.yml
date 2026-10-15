@@ -3,7 +3,12 @@ name: Deploy to server
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Экстренный деплой без тестов (yes)"
+        required: false
+        default: "no"
 
 # Один деплой за раз: следующий ждёт окончания предыдущего, а не идёт параллельно.
 concurrency:
@@ -15,7 +20,31 @@ permissions:
   issues: write
 
 jobs:
+  # Тесты перед деплоем: красные тесты — в прод не уходит.
+  tests:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements_server.txt
+      - name: Зависимости
+        run: python -m pip install -q -r requirements_server.txt
+      - name: manage.py check и тесты
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test --noinput
+
   deploy:
+    needs: tests
+    if: always() && (needs.tests.result == 'success' || needs.tests.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Безопасный деплой (проверка → бэкап → миграции → плавный перезапуск → проверка → откат при сбое)

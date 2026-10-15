@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 from django.contrib.auth.decorators import login_required
 from apps.users.utils import safe_referer
 from django.contrib import messages
@@ -109,7 +110,7 @@ def entry_create(request):
         def _num(v):
             return (str(v).replace(",", ".").strip() or "0")
         supplier_id = request.POST.get("supplier") or None
-        the_date = request.POST.get("date") or _date.today()
+        the_date = request.POST.get("date") or dj_tz.localdate()
         notes = request.POST.get("notes", "")
         products = request.POST.getlist("product")
         quantities = request.POST.getlist("quantity")

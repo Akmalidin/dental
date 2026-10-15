@@ -1,3 +1,4 @@
+from django.utils import timezone as dj_tz
 import json
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -315,7 +316,6 @@ def _auto_writeoff_materials(service, qty, branch, user):
     """Automatically write off warehouse materials based on service norms."""
     try:
         from apps.warehouse.models import WarehouseDistribution
-        from datetime import date
         norms = service.material_norms.select_related("product").all()
         for norm in norms:
             WarehouseDistribution.objects.create(
@@ -323,7 +323,7 @@ def _auto_writeoff_materials(service, qty, branch, user):
                 quantity=norm.quantity * qty,
                 branch=branch,
                 issued_to=user,
-                date=date.today(),
+                date=dj_tz.localdate(),
                 notes=f"Автосписание: {service.name}",
             )
     except Exception:
@@ -473,7 +473,7 @@ def plan_create(request):
                 PatientMedicine.objects.create(
                     patient=patient, treatment_id=treatment_id, medicine=medicine,
                     dosage=m.get("dosage", ""), duration=m.get("duration", ""),
-                    doctor=doctor, date=_date.today(), notes=m.get("notes", ""),
+                    doctor=doctor, date=dj_tz.localdate(), notes=m.get("notes", ""),
                 )
         return JsonResponse({"ok": True, "plan_id": plan.pk})
     except Exception as e:
@@ -839,11 +839,13 @@ def treatment_set_discount(request, pk):
         d = clamp_discount(treatment, request.POST.get("discount", "0") or "0")
         if d is None:
             raise InvalidOperation
-        treatment.discount = d
-        treatment.save(update_fields=["discount", "updated_at"])
-        treatment.recalculate_total()
-        if treatment.patient_id:
-            treatment.patient.recalc_balance()
+        from django.db import transaction
+        with transaction.atomic():
+            treatment.discount = d
+            treatment.save(update_fields=["discount", "updated_at"])
+            treatment.recalculate_total()
+            if treatment.patient_id:
+                treatment.patient.recalc_balance()
         messages.success(request, f"Скидка обновлена: {d:,.0f} сом")
     except (InvalidOperation, Exception):
         messages.error(request, "Неверное значение скидки")

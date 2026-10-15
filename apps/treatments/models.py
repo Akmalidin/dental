@@ -88,6 +88,7 @@ class Treatment(ClinicSoftDeleteModel):
         # Назначаем порядковый номер в пределах клиники при первом сохранении
         # (см. Patient.save() — та же логика: clinic нужен заранее, до того как
         # его проставит _ClinicSaveMixin.save через super()).
+        saved = False
         if self.number is None:
             from apps.tenancy import get_current_clinic
             from django.db.models import Max
@@ -96,10 +97,19 @@ class Treatment(ClinicSoftDeleteModel):
                 if cur is not None:
                     self.clinic = cur
             if self.clinic_id is not None:
-                last = (Treatment.all_objects.filter(clinic_id=self.clinic_id)
-                        .aggregate(m=Max("number"))["m"] or 0)
-                self.number = last + 1
-        super().save(*args, **kwargs)
+                # Номер выдаётся под блокировкой строки клиники: два
+                # одновременных создания не получат одинаковый номер.
+                from django.db import transaction
+                from apps.users.models import Clinic
+                with transaction.atomic():
+                    list(Clinic._base_manager.select_for_update().filter(pk=self.clinic_id).values_list("pk", flat=True))
+                    last = (Treatment.all_objects.filter(clinic_id=self.clinic_id)
+                            .aggregate(m=Max("number"))["m"] or 0)
+                    self.number = last + 1
+                    super().save(*args, **kwargs)
+                    saved = True
+        if not saved:
+            super().save(*args, **kwargs)
         # Баланс пациента должен оставаться свежим при ЛЮБОМ сохранении приёма
         # (создание, правка суммы/скидки/статуса, soft-delete/восстановление через
         # save(update_fields=...)) — раньше это делали только отдельные пути в views.py
