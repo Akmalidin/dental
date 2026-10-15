@@ -393,8 +393,22 @@ class Ctx:
         self.trace = []   # какие инструменты вызывались — сохраняется в истории для разбора
 
 
+_NO_PATIENTS = {"error": "Нет доступа к разделу «Пациенты» — скажи пользователю, что эти данные ему недоступны"}
+_NO_SCHEDULE = {"error": "Нет доступа к расписанию — скажи пользователю, что эти данные ему недоступны"}
+
+
+def _can_patients(ctx):
+    return ctx.user.is_superadmin or ctx.user.can_access("patients")
+
+
+def _can_schedule(ctx):
+    return ctx.user.is_superadmin or ctx.user.can_access("calendar") or ctx.user.can_access("appointments")
+
+
 def _tool_search_patients(ctx, query="", **_):
     from apps.notifications.views import _voice_search_patients
+    if not _can_patients(ctx):
+        return _NO_PATIENTS
     return [_patient_brief(p) for p in _voice_search_patients(query, limit=8)]
 
 
@@ -402,6 +416,8 @@ def _tool_patient_details(ctx, patient_id=None, **_):
     from apps.appointments.models import Appointment
     from apps.patients.models import Patient
     from apps.treatments.models import Treatment
+    if not _can_patients(ctx):
+        return _NO_PATIENTS
     p = Patient.objects.filter(pk=patient_id).first()
     if p is None:
         return {"error": "Пациент не найден"}
@@ -430,6 +446,8 @@ def _tool_list_doctors(ctx, **_):
 
 def _tool_doctor_day(ctx, date=None, doctor_id=None, **_):
     from apps.appointments.models import Appointment
+    if not _can_schedule(ctx):
+        return _NO_SCHEDULE
     day = _parse_date(date)
     if day is None:
         return {"error": "Неверная дата"}

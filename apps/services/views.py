@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from apps.users.decorators import require_permission
 from apps.users.utils import safe_referer
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -16,6 +17,7 @@ def service_export(request):
 
 @login_required
 @require_POST
+@require_permission("finance.edit_payment")
 def service_import(request):
     from .excel_io import import_services_xlsx
     f = request.FILES.get("file")
@@ -73,6 +75,7 @@ def category_create(request):
 
 
 @login_required
+@require_permission("finance.edit_payment")
 def service_create(request):
     form = ServiceForm(request.POST or None)
     if form.is_valid():
@@ -83,6 +86,7 @@ def service_create(request):
 
 
 @login_required
+@require_permission("finance.edit_payment")
 def service_edit(request, pk):
     from .models import ServiceMaterialNorm
     from apps.warehouse.models import Product
@@ -112,6 +116,7 @@ def service_edit(request, pk):
 
 
 @login_required
+@require_permission("finance.edit_payment")
 def service_delete(request, pk):
     service = get_object_or_404(Service, pk=pk)
     if request.method == "POST":

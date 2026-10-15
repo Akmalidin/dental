@@ -444,6 +444,7 @@ def cashshift_open(request):
 
 @login_required
 @require_POST
+@require_permission("finance.accept_payments")
 def cashshift_close(request, pk):
     """Закрыть кассовую смену вручную. Пересчёт наличных руками больше не
     вводят: «по факту» = ожидаемые по Z-отчёту. Ночью в 02:00 смена

@@ -979,6 +979,7 @@ def patient_export(request):
 
 @login_required
 @require_POST
+@require_permission("patients.export")
 def patient_import(request):
     from .excel_io import import_patients_xlsx
     f = request.FILES.get("file")
