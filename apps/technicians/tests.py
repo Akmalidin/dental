@@ -368,3 +368,38 @@ class TechnicianCabinetTestCase(TestCase):
         self.assertTrue(a.post(url + f"warranty/{w.pk}/resolve/").json()["tech"]["warranty"][0]["resolved"])
         # техник сам эту страницу не открывает
         self.assertEqual(self.c.get(url).get("Location"), "/new/lab/my/")
+
+
+class LabFileCompressionTestCase(TestCase):
+    """Фото, прикреплённые лаборантом, сжимаются; 3D-скан/PDF — как есть."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        self._media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        self._media.enable()
+
+    def tearDown(self):
+        self._media.disable()
+
+    def test_photo_compressed_scan_kept(self):
+        import io
+        import os
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.technicians.models import ExternalClinic, ExternalOrder, ExternalOrderFile
+        img = Image.effect_noise((4000, 3000), 80).convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        big = buf.getvalue()
+        owner = User.objects.create(login="lab_owner_cmp", name="Лаборант")
+        ext = ExternalClinic.objects.create(owner=owner, name="Клиника")
+        order = ExternalOrder.objects.create(owner=owner, clinic=ext)
+        photo = ExternalOrderFile.objects.create(order=order, file=SimpleUploadedFile("slepok.png", big), name="slepok")
+        self.assertTrue(photo.file.name.endswith(".jpg"))
+        self.assertLess(os.path.getsize(photo.file.path), len(big))
+        with Image.open(photo.file.path) as im:
+            self.assertLessEqual(max(im.size), 2560)
+        scan = ExternalOrderFile.objects.create(order=order, file=SimpleUploadedFile("jaw.stl", b"solid x\n" * 100000))
+        self.assertTrue(scan.file.name.endswith(".stl"))
+        self.assertEqual(os.path.getsize(scan.file.path), 800000)
