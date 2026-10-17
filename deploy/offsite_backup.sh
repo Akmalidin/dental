@@ -31,6 +31,7 @@ export RCLONE_CONFIG_B2_PROVIDER=Other
 export RCLONE_CONFIG_B2_ACCESS_KEY_ID="$B2_KEY_ID"
 export RCLONE_CONFIG_B2_SECRET_ACCESS_KEY="$B2_APP_KEY"
 export RCLONE_CONFIG_B2_ENDPOINT="https://${B2_ENDPOINT#https://}"
+export RCLONE_CONFIG_B2_NO_CHECK_BUCKET=true   # ключ ограничен одним бакетом — создавать/проверять бакет нельзя
 export RCLONE_CONFIG_ENC_TYPE=crypt
 export RCLONE_CONFIG_ENC_REMOTE="b2:$B2_BUCKET/sadaf"
 RCLONE_CONFIG_ENC_PASSWORD=$(rclone obscure "$BACKUP_PASSWORD")
