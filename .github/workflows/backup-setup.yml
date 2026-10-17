@@ -1,0 +1,69 @@
+name: Offsite backup (Backblaze)
+
+# Ключи Backblaze из секретов GitHub → $APP/.backup.env на сервере (только
+# владелец www-data может читать), установка rclone, отправка копии и проверка.
+# В лог — только итог (размер, число таблиц/файлов), без ключей и данных.
+#   action=setup  — записать ключи + сделать копию + проверить (первый запуск)
+#   action=run    — сделать копию сейчас
+#   action=verify — проверить последнюю копию в облаке
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "setup / run / verify"
+        required: true
+        default: "setup"
+  schedule:
+    - cron: "30 3 * * 0"   # еженедельная проверка копии (воскресенье, 09:30 Бишкек)
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APP_KEY: ${{ secrets.B2_APP_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+          ACTION: ${{ github.event.inputs.action || 'verify' }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          command_timeout: 120m
+          envs: B2_KEY_ID,B2_APP_KEY,B2_BUCKET,B2_ENDPOINT,BACKUP_PASSWORD,ACTION
+          script: |
+            set -e
+            cd /var/www/sadaf
+            git fetch -q origin main
+            git show origin/main:deploy/offsite_backup.sh > /tmp/sadaf_offsite.sh
+            if ! command -v rclone >/dev/null; then
+              echo ">>> устанавливаю rclone"
+              curl -fsSL https://rclone.org/install.sh | bash >/dev/null 2>&1 || true
+              command -v rclone >/dev/null || { echo "!!! rclone не установился"; exit 1; }
+            fi
+            echo ">>> $(rclone version | head -n 1)"
+            if [ "$ACTION" = "setup" ]; then
+              for v in B2_KEY_ID B2_APP_KEY B2_BUCKET B2_ENDPOINT BACKUP_PASSWORD; do
+                [ -n "${!v}" ] || { echo "!!! секрет $v пустой — добавьте его в GitHub"; exit 1; }
+              done
+              umask 077
+              {
+                printf 'B2_KEY_ID=%q\n' "$B2_KEY_ID"
+                printf 'B2_APP_KEY=%q\n' "$B2_APP_KEY"
+                printf 'B2_BUCKET=%q\n' "$B2_BUCKET"
+                printf 'B2_ENDPOINT=%q\n' "$B2_ENDPOINT"
+                printf 'BACKUP_PASSWORD=%q\n' "$BACKUP_PASSWORD"
+              } > .backup.env
+              chown www-data:www-data .backup.env
+              chmod 600 .backup.env
+              echo ">>> ключи записаны в .backup.env"
+              ls backups/sadaf_backup_*.gz >/dev/null 2>&1 || \
+                runuser -u www-data -- env DJANGO_SETTINGS_MODULE=config.settings.server ./venv/bin/python manage.py backup_database
+            fi
+            if [ "$ACTION" = "setup" ] || [ "$ACTION" = "run" ]; then
+              runuser -u www-data -- bash /tmp/sadaf_offsite.sh
+            fi
+            runuser -u www-data -- bash /tmp/sadaf_offsite.sh verify

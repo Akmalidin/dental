@@ -204,6 +204,12 @@ echo ">>> резервные копии: папка + ночной cron (00:00 �
   INST_CMD="cd $APP && set -a && . ./.env && set +a && DJANGO_SETTINGS_MODULE=config.settings.server flock -n /tmp/sadaf_installments.lock $APP/venv/bin/python manage.py installment_reminders >> $APP/backups/installments.log 2>&1"
   ( crontab -l -u www-data 2>/dev/null | grep -vF "manage.py installment_reminders" || true; echo "7 * * * * $INST_CMD" ) | crontab -u www-data -
   echo ">>> cron напоминаний по рассрочкам установлен"
+  # Копия вне сервера (Backblaze, зашифровано): через 40 минут после ночного
+  # дампа. Пока workflow backup-setup.yml не записал .backup.env — скрипт
+  # просто пишет в лог «не настроено» и выходит.
+  OFFSITE_CMD="cd $APP && flock -n /tmp/sadaf_offsite.lock bash $APP/deploy/offsite_backup.sh >> $APP/backups/offsite.log 2>&1"
+  ( crontab -l -u www-data 2>/dev/null | grep -vF "offsite_backup.sh" || true; echo "40 18 * * * $OFFSITE_CMD" ) | crontab -u www-data -
+  echo ">>> cron копии в облако установлен"
   echo ">>> cron бэкапа установлен"
 ) || echo "!!! не удалось установить cron бэкапа (см. вывод выше) — деплой продолжается, это не критично для работы сайта"
 echo ">>> pg_dump: $(command -v pg_dump || echo 'НЕ НАЙДЕН — бэкап Postgres не сработает, поставьте пакет postgresql-client на сервере')"

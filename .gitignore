@@ -72,3 +72,4 @@ backups/offline-*.sqlite3
 
 # версия кода на сервере (пишет deploy/update.sh, читает /healthz/)
 REVISION
+.backup.env
