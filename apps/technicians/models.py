@@ -175,7 +175,21 @@ class TechnicianOrderMessage(models.Model):
         ordering = ["created_at"]
 
 
-class TechnicianOrderFile(models.Model):
+class _CompressPhotoOnSave:
+    """Фото (слепок, цвет, готовая работа) сжимаются при загрузке так же, как
+    фото в карте приёма: до 2560 px, JPEG 85. 3D-сканы, PDF и прочие не-картинки
+    сохраняются как есть (compress_photo вернёт None)."""
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.file and not getattr(self.file, "_committed", True):
+            from apps.treatments.image_compress import compress_photo
+            small = compress_photo(self.file)
+            if small is not None:
+                self.file = small
+        super().save(*args, **kwargs)
+
+
+class TechnicianOrderFile(_CompressPhotoOnSave, models.Model):
     """Файлы заказа: фото слепка, готового изделия, 3D-скан."""
     task = models.ForeignKey(TechnicianTask, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="tech_orders/%Y/%m/")
@@ -263,7 +277,7 @@ class ExternalOrder(models.Model):
                     and self.expected_ready < timezone.localdate())
 
 
-class ExternalOrderFile(models.Model):
+class ExternalOrderFile(_CompressPhotoOnSave, models.Model):
     order = models.ForeignKey(ExternalOrder, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="tech_orders/ext/%Y/%m/")
     name = models.CharField(max_length=200, blank=True)
