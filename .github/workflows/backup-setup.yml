@@ -63,6 +63,11 @@ jobs:
               ls backups/sadaf_backup_*.gz >/dev/null 2>&1 || \
                 runuser -u www-data -- env DJANGO_SETTINGS_MODULE=config.settings.server ./venv/bin/python manage.py backup_database
             fi
+            if [ "$ACTION" = "run" ]; then
+              # «Сделать копию сейчас» — сначала свежий дамп базы.
+              runuser -u www-data -- env DJANGO_SETTINGS_MODULE=config.settings.server ./venv/bin/python manage.py backup_database
+            fi
+            echo ">>> последние дампы на сервере:"; ls -lt backups/ | grep sadaf_backup_ | head -n 3 || echo "    (нет)"
             if [ "$ACTION" = "setup" ] || [ "$ACTION" = "run" ]; then
               runuser -u www-data -- bash /tmp/sadaf_offsite.sh
             fi
