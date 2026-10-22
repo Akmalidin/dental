@@ -12,7 +12,7 @@ name: Daily media audit (auto-delete dangerous files, report the rest)
 #   .deb/.rpm/.appimage/.apks в media — тот же список, что уже блокирует
 #   их при приёме. Это ЯВНО не данные пациентов, чем бы они ни были.
 # - если системный журнал раздулся — journalctl --vacuum-size=200M
-# - ротация backups/ — оставляет 3 последних файла
+# - ротация backups/ — оставляет 14 последних дампов базы (sadaf_backup_*)
 #
 # Обычные вложения (фото/голосовые/видео/документы пациентов) НЕ удаляет
 # никогда — это чужие данные, для них только отчёт, решение остаётся за
@@ -62,10 +62,13 @@ jobs:
             journalctl --vacuum-size=200M 2>/dev/null || true
             echo
 
-            echo ">>> ротация backups: оставляем 3 последних файла"
+            # Только сами дампы базы (sadaf_backup_*). Раньше брались «3 последних
+            # файла» в папке — а туда каждую минуту пишут логи бота/кассы, и
+            # «последними» оказывались логи: дампы удалялись все до одного.
+            echo ">>> ротация backups: оставляем 14 последних дампов базы"
             if [ -d /var/www/sadaf/backups ]; then
               cd /var/www/sadaf/backups
-              ls -1t | grep -v -E '^(cron\.log|auto)$' | tail -n +4 | while read -r f; do
+              ls -1t sadaf_backup_* 2>/dev/null | tail -n +15 | while read -r f; do
                 echo "удаляю старый бэкап: $f"
                 rm -f -- "$f"
               done
