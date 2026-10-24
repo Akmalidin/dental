@@ -132,6 +132,23 @@ def wa_send_text(phone, text):
     return wa_send_chat(chat, text)
 
 
+def wa_send_platform(phone, text):
+    """Сообщение от имени ПЛАТФОРМЫ (ODONTIS), а не клиники: заявки с лендинга
+    stom.asia и т.п. Ключи — служебная запись настроек без клиники или
+    GREENAPI_* из окружения (см. _wa_config). Номер — полный, с кодом страны."""
+    from apps.tenancy import clear_current_clinic, get_current_clinic, set_current_clinic
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    if len(digits) < 11:
+        return False
+    prev = get_current_clinic()
+    clear_current_clinic()
+    try:
+        return wa_send_chat(digits + "@c.us", text)
+    finally:
+        if prev is not None:
+            set_current_clinic(prev)
+
+
 def notify_groups(text, clinic=None):
     """Разослать текст во все включённые WhatsApp-группы клиники (и в
     Telegram-группы персонала, подключённые через /group — см. tg_staff).

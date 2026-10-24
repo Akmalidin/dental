@@ -1,3 +1,4 @@
+import logging
 from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -189,5 +190,17 @@ def landing_lead(request):
             )
     except Exception:
         pass
+    # И сразу в WhatsApp владельцу платформы (номер — settings.LANDING_LEAD_WHATSAPP).
+    try:
+        from django.conf import settings as dj_settings
+        from apps.notifications.whatsapp import wa_send_platform
+        to = getattr(dj_settings, "LANDING_LEAD_WHATSAPP", "")
+        if to:
+            ok = wa_send_platform(to, "🦷 Новая заявка с stom.asia\nКлиника: %s\nТелефон: %s%s" % (
+                clinic_name, phone, ("\nГород: %s" % city) if city else ""))
+            if not ok:
+                logging.getLogger(__name__).warning("Заявка с лендинга: WhatsApp на %s не отправлен", to)
+    except Exception:
+        logging.getLogger(__name__).exception("Заявка с лендинга: ошибка отправки в WhatsApp")
     messages.success(request, "Заявка отправлена — свяжемся с вами в течение дня.")
     return redirect("/#contact")

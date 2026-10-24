@@ -299,3 +299,29 @@ class MarketingRobotsSitemapTestCase(TestCase):
         body = resp.content.decode()
         self.assertIn("<loc>http://stom.asia/</loc>", body)
         self.assertIn("<loc>http://stom.asia/book/</loc>", body)
+
+
+class LandingLeadWhatsAppTestCase(TestCase):
+    """Заявка с лендинга уходит в WhatsApp на номер из LANDING_LEAD_WHATSAPP."""
+
+    def test_lead_sent_to_whatsapp(self):
+        from unittest.mock import patch
+        from django.test import override_settings
+        with override_settings(LANDING_LEAD_WHATSAPP="+996553565674", CRM_BASE_DOMAIN="stom.asia"), \
+                patch("apps.notifications.whatsapp.wa_send_platform", return_value=True) as send:
+            r = self.client.post("/lead/", {"clinic_name": "Улыбка", "phone": "0700123456", "city": "Ош"},
+                                 HTTP_HOST="stom.asia")
+        self.assertEqual(r.status_code, 302)
+        send.assert_called_once()
+        to, text = send.call_args[0]
+        self.assertEqual(to, "+996553565674")
+        self.assertIn("Улыбка", text)
+        self.assertIn("0700123456", text)
+        self.assertIn("Ош", text)
+
+    def test_platform_send_uses_full_number(self):
+        from unittest.mock import patch
+        from apps.notifications.whatsapp import wa_send_platform
+        with patch("apps.notifications.whatsapp.wa_send_chat", return_value=True) as chat:
+            self.assertTrue(wa_send_platform("+996 553 565 674", "x"))
+        chat.assert_called_once_with("996553565674@c.us", "x")

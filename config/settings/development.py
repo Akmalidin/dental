@@ -222,6 +222,8 @@ GREENAPI_ID_INSTANCE = os.environ.get("GREENAPI_ID_INSTANCE", "")
 GREENAPI_TOKEN = os.environ.get("GREENAPI_TOKEN", "")
 GREENAPI_API_URL = os.environ.get("GREENAPI_API_URL", "https://api.greenapi.com")
 GREENAPI_WEBHOOK_KEY = os.environ.get("GREENAPI_WEBHOOK_KEY", "")  # секрет в URL вебхука
+# Куда в WhatsApp присылать заявки с лендинга stom.asia (форма «Подключить клинику»).
+LANDING_LEAD_WHATSAPP = os.environ.get("LANDING_LEAD_WHATSAPP", "+996553565674")
 
 # ─── Telegram через Green-API (обычный аккаунт, привязка по QR) ───────────────
 # Это НЕ бот: бот живёт отдельно, на токене от @BotFather, и остаётся для

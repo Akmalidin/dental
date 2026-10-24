@@ -1,0 +1,43 @@
+name: Diag landing WhatsApp
+
+# Проверка: настроен ли WhatsApp платформы (через него уходят заявки с
+# лендинга stom.asia на LANDING_LEAD_WHATSAPP). send=yes — тестовое сообщение.
+# В лог — только да/нет, без ключей.
+on:
+  workflow_dispatch:
+    inputs:
+      send:
+        description: "Отправить тестовое сообщение (yes/no)"
+        required: true
+        default: "no"
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          SEND: ${{ github.event.inputs.send }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: SEND
+          command_timeout: 5m
+          script: |
+            cd /var/www/sadaf
+            set -a; . ./.env; set +a
+            DJANGO_SETTINGS_MODULE=config.settings.server SEND="$SEND" ./venv/bin/python manage.py shell -c "
+            import os
+            from django.conf import settings
+            from apps.tenancy import clear_current_clinic
+            from apps.notifications import whatsapp as wa
+            clear_current_clinic()
+            enabled, idi, token, url = wa._wa_config()
+            print('номер для заявок:', settings.LANDING_LEAD_WHATSAPP)
+            print('WhatsApp платформы включён:', bool(enabled), '| инстанс задан:', bool(idi), '| токен задан:', bool(token))
+            print('состояние инстанса:', wa.wa_state() if enabled and idi and token else '—')
+            if os.environ.get('SEND') == 'yes':
+                ok = wa.wa_send_platform(settings.LANDING_LEAD_WHATSAPP, '✅ Проверка: заявки с stom.asia будут приходить сюда.')
+                print('тестовое сообщение отправлено:', ok)
+            "
